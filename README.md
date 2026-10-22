@@ -19,7 +19,8 @@ la idea es que el modelo de OPEN-RVT alimente cantidades y conceptos al presupue
 ## Carpetas
 - `docs/` — visión, alcance, decisiones de arquitectura (ADR).
 - `ideas/` — buzón: cada idea o pedido en su archivo, sin filtro.
-- `referencias/` — proyectos, bibliotecas y formatos a evaluar.
+- `referencias/` — proyectos, bibliotecas y formatos a reciclar (con licencias).
+- `docs/caminos-posibles.md` — opciones de arquitectura, sin decidir.
 
 ## Licencia
 Por ahora privado y con todos los derechos reservados. Al publicar se decide la licencia libre
