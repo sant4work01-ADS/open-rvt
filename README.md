@@ -11,8 +11,9 @@ la idea es que el modelo de OPEN-RVT alimente cantidades y conceptos al presupue
 ## Principios
 - **Ligero y rápido**: que abra en segundos, como PresupuestosPro (OPUS tarda minutos).
 - **Formato abierto**: IFC como formato de intercambio de primera clase; nada de formatos cerrados.
-- **Sin reinventar lo que ya existe**: usar proyectos libres como bibliotecas o refacciones, no
-  trabajar dentro de ellos.
+- **Sin reinventar lo que ya existe**: lo libre se usa; lo que por licencia nos limite u obligue, se
+  construye. Proyectos libres como bibliotecas o refacciones, no trabajar dentro de ellos.
+- **Core primero**: cuando el núcleo sea usable se le añaden visibilidad, edición, etc.
 - **Fácil para quien viene de Revit**: conceptos, atajos y flujo reconocibles.
 - **En español primero**, con normativa y unidades de México.
 
@@ -20,6 +21,7 @@ la idea es que el modelo de OPEN-RVT alimente cantidades y conceptos al presupue
 - `docs/` — visión, alcance, decisiones de arquitectura (ADR).
 - `ideas/` — buzón: cada idea o pedido en su archivo, sin filtro.
 - `referencias/` — proyectos, bibliotecas y formatos a reciclar (con licencias).
+- `docs/flujo-de-trabajo.md` — cómo se trabajaría (borrador v0).
 - `docs/caminos-posibles.md` — opciones de arquitectura, sin decidir.
 
 ## Licencia
