@@ -72,3 +72,10 @@ OpenStudio/EnergyPlus (energía), BlenderBIM drawings como referencia de lámina
 - https://wiki.freecad.org/Manual:BIM_modeling/en · https://en.wikipedia.org/wiki/FreeCAD
 - https://github.com/ricosjp/truck · https://github.com/xeokit/xeokit-sdk
 - https://alternativeto.net/software/blenderbim-add-on/about (renombre BlenderBIM → Bonsai, 2024)
+
+## ArtCraft · CADCraft (revisado 2026-10-23)
+- https://github.com/storytold/cadcraft — CAD 2D tipo AutoCAD en Rust puro (egui), **MIT OR Apache-2.0** (compatible con GPL-3).
+- Pre-alpha (~38 % «listo para trabajo real», según su ROADMAP). DXF R12–2018 lee/escribe; DWG lee vía `acadrust` (MPL-2.0) y escribe R2000 con pérdidas; plot a PDF; MCP + CLI.
+- Crates reutilizables: `geom` (arcos, splines, intersecciones, offsets), `dxf`, `doc` (base de dibujo con deshacer barato), `render`, `io`.
+- Idea: OPEN-RVT no rehace el dibujo 2D; usa estas crates para planos, cortes y exportar DXF/DWG, y se concentra en BIM + IFC.
+- Ojo: proyecto de dos semanas, ~900 issues abiertos, UI en egui (distinta a Tauri+React).
