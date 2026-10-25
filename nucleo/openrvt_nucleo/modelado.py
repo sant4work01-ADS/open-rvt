@@ -335,15 +335,99 @@ class ModeladoMixin:
         nivel = self._nivel_por_gid(globalid)
         if nombre is None and elevacion is None:
             raise self._error("No hay cambios para el nivel.", -32602)
+        delta = 0.0
+        if elevacion is not None:
+            try:
+                elevacion = float(elevacion)
+            except (TypeError, ValueError) as exc:
+                raise self._error("La elevación del nivel no es un número.", -32602) from exc
+            delta = elevacion - float(nivel.Elevation or 0.0)
         self._instantanea()
         if nombre is not None:
             if not str(nombre).strip():
                 raise self._error("El nivel necesita un nombre.", -32602)
             nivel.Name = str(nombre).strip()
+        modificados: list[Any] = [nivel]
         if elevacion is not None:
-            nivel.Elevation = float(elevacion)
+            nivel.Elevation = elevacion
+            # O006a: los elementos contenidos acompañan al nivel. En las muestras y en
+            # las casas de O003b las colocaciones son independientes del storey, así que
+            # se desplazan una sola vez (nunca se mueve también el ObjectPlacement del
+            # nivel, que podría duplicar el movimiento).
+            if abs(delta) > TOLERANCIA_CALCULO:
+                modificados.extend(self._mover_elementos_nivel(nivel, delta))
         self.con_cambios = True
-        return self._resultado(modificados=[nivel], mensaje="Nivel actualizado.")
+        return self._resultado(modificados=modificados, mensaje="Nivel actualizado.")
+
+    def _mover_elementos_nivel(self, nivel: Any, dz: float) -> list[Any]:
+        """Desplaza en Z los elementos del nivel y sus vanos (sin instantánea)."""
+        productos: list[Any] = []
+        vistos: set[int] = set()
+        for elemento in self._elementos_de_nivel(nivel):
+            for producto in self._productos_de(_gid(elemento)):
+                if id(producto) not in vistos:
+                    vistos.add(id(producto))
+                    productos.append(producto)
+        self._mover_productos(productos, 0.0, 0.0, dz)
+        return [p for p in productos if not p.is_a("IfcOpeningElement")]
+
+    def _mover_productos(self, productos: list[Any], dx: float, dy: float, dz: float) -> None:
+        """Aplica una traslación en mundo a una lista de productos, sin deshacer."""
+        matrices = {
+            id(producto): self._matriz_traslado(producto, dx, dy, dz)
+            for producto in productos
+        }
+        for producto in productos:
+            geometry_api.edit_object_placement(
+                self.modelo,
+                product=producto,
+                matrix=matrices[id(producto)],
+                is_si=True,
+                should_transform_children=False,
+            )
+
+    def niveles_separacion(
+        self, inferior: str, superior: str, altura: float, cadena: bool = True
+    ) -> dict[str, Any]:
+        """O006a: fija la altura entre dos niveles y, en cadena, arrastra los de arriba."""
+        self._exigir_modelo()
+        if inferior == superior:
+            raise self._error("El nivel inferior y el superior deben ser distintos.", -32602)
+        nivel_inferior = self._nivel_por_gid(inferior)
+        nivel_superior = self._nivel_por_gid(superior)
+        try:
+            altura = float(altura)
+        except (TypeError, ValueError) as exc:
+            raise self._error("La altura entre niveles no es un número.", -32602) from exc
+        if altura <= 0:
+            raise self._error("La altura entre niveles debe ser mayor que cero.", -32602)
+        base = float(nivel_inferior.Elevation or 0.0)
+        anterior = float(nivel_superior.Elevation or 0.0)
+        destino = base + altura
+        delta = destino - anterior
+        self._instantanea()
+        modificados: list[Any] = [nivel_superior]
+        nivel_superior.Elevation = destino
+        if abs(delta) > TOLERANCIA_CALCULO:
+            modificados.extend(self._mover_elementos_nivel(nivel_superior, delta))
+        if cadena:
+            arrastrados = [
+                n
+                for n in self.modelo.by_type("IfcBuildingStorey")
+                if n != nivel_superior
+                and float(n.Elevation or 0.0) > anterior + TOLERANCIA_CALCULO
+            ]
+            arrastrados.sort(key=lambda n: float(n.Elevation or 0.0))
+            for nivel in arrastrados:
+                nivel.Elevation = float(nivel.Elevation or 0.0) + delta
+                modificados.append(nivel)
+                if abs(delta) > TOLERANCIA_CALCULO:
+                    modificados.extend(self._mover_elementos_nivel(nivel, delta))
+        self.con_cambios = True
+        return self._resultado(
+            modificados=modificados,
+            mensaje=f"Separación entre niveles fijada en {altura:.2f} m.",
+        )
 
     def nivel_borrar(self, globalid: str) -> dict[str, Any]:
         self._exigir_modelo()
@@ -509,6 +593,207 @@ class ModeladoMixin:
         grid_api.remove_grid_axis(self.modelo, axis=eje)
         self.con_cambios = True
         return self._resultado(borrados=[globalid], mensaje="Eje borrado.")
+
+    # ------------------------------------------------------- O006a: cotas de ejes
+    def _eje_por_gid(self, globalid: str) -> tuple[Any, Any]:
+        for grid in self.modelo.by_type("IfcGrid"):
+            for eje in self._ejes(grid):
+                if self._id_eje(grid, eje) == globalid:
+                    return grid, eje
+        raise self._error(f"No existe el eje {globalid}.", -32005)
+
+    def _puntos_curva_eje(self, eje: Any) -> list[Any]:
+        curva = getattr(eje, "AxisCurve", None)
+        puntos = list(getattr(curva, "Points", ()) or ())
+        if len(puntos) < 2:
+            raise self._error("El eje no tiene una curva de dos puntos editable.", -32028)
+        return puntos
+
+    def _direccion_eje(self, eje: Any) -> tuple[float, float, float, float, float, float, float]:
+        """Devuelve (x1, y1, x2, y2, ux, uy, largo) de un IfcGridAxis."""
+        puntos = self._puntos_curva_eje(eje)
+        c1 = list(getattr(puntos[0], "Coordinates", ()) or ())
+        c2 = list(getattr(puntos[-1], "Coordinates", ()) or ())
+        x1, y1 = float(c1[0]), float(c1[1])
+        x2, y2 = float(c2[0]), float(c2[1])
+        largo = math.hypot(x2 - x1, y2 - y1)
+        if largo <= TOLERANCIA_CALCULO:
+            raise self._error("El eje no tiene longitud.", -32028)
+        return x1, y1, x2, y2, (x2 - x1) / largo, (y2 - y1) / largo, largo
+
+    def _desplazar_eje(self, eje: Any, nx: float, ny: float, distancia: float) -> None:
+        for punto in self._puntos_curva_eje(eje):
+            coords = list(getattr(punto, "Coordinates", ()) or ())
+            coords[0] = float(coords[0]) + nx * distancia
+            coords[1] = float(coords[1]) + ny * distancia
+            punto.Coordinates = tuple(coords)
+
+    def ejes_mover(self, globalid: str, desplazamiento: float) -> dict[str, Any]:
+        """O006a: desplaza un eje en perpendicular a su dirección (signo incluido)."""
+        self._exigir_modelo()
+        try:
+            desplazamiento = float(desplazamiento)
+        except (TypeError, ValueError) as exc:
+            raise self._error("El desplazamiento del eje no es un número.", -32602) from exc
+        _grid, eje = self._eje_por_gid(globalid)
+        _x1, _y1, _x2, _y2, ux, uy, _largo = self._direccion_eje(eje)
+        # Normal derecha de la dirección: positiva hacia la derecha del eje dibujado.
+        nx, ny = uy, -ux
+        self._instantanea()
+        self._desplazar_eje(eje, nx, ny, desplazamiento)
+        self.con_cambios = True
+        return self._resultado(
+            modificados=[globalid],
+            mensaje=f"Eje desplazado {desplazamiento:.2f} m.",
+        )
+
+    def ejes_separacion(
+        self,
+        referencia: str,
+        mover: str,
+        distancia: float,
+        cadena: bool = True,
+    ) -> dict[str, Any]:
+        """O006a: deja `mover` a `distancia` de `referencia`; el resto conserva sus huecos."""
+        self._exigir_modelo()
+        if referencia == mover:
+            raise self._error("El eje de referencia y el que se mueve deben ser distintos.", -32602)
+        try:
+            distancia = float(distancia)
+        except (TypeError, ValueError) as exc:
+            raise self._error("La distancia entre ejes no es un número.", -32602) from exc
+        if distancia <= 0:
+            raise self._error("La distancia entre ejes debe ser mayor que cero.", -32602)
+        grid, eje_ref = self._eje_por_gid(referencia)
+        _g, eje_mover = self._eje_por_gid(mover)
+        xr, yr, _xr2, _yr2, ux, uy, _lr = self._direccion_eje(eje_ref)
+        xm, ym, _xm2, _ym2, umx, umy, _lm = self._direccion_eje(eje_mover)
+        if abs(ux * umy - uy * umx) > 1e-6:
+            raise self._error(
+                "Los ejes deben ser paralelos para acotar la separación entre ellos.",
+                -32027,
+            )
+        nx, ny = uy, -ux
+        s_ref = xr * nx + yr * ny
+        s_mover = xm * nx + ym * ny
+        lado = 1.0 if s_mover - s_ref >= 0 else -1.0
+        objetivo = s_ref + distancia * lado
+        delta = objetivo - s_mover
+        self._instantanea()
+        modificados = [mover]
+        self._desplazar_eje(eje_mover, nx, ny, delta)
+        if cadena:
+            for candidato in self._ejes(grid):
+                if candidato == eje_mover:
+                    continue
+                try:
+                    cx1, cy1, _cx2, _cy2, cux, cuy, _cl = self._direccion_eje(candidato)
+                except Exception:
+                    continue
+                if abs(ux * cuy - uy * cux) > 1e-6:
+                    continue
+                s_c = cx1 * nx + cy1 * ny
+                # «Más allá» de mover: del lado contrario a la referencia.
+                if (s_c - s_mover) * lado > 1e-6:
+                    self._desplazar_eje(candidato, nx, ny, delta)
+                    modificados.append(self._id_eje(grid, candidato))
+        self.con_cambios = True
+        return self._resultado(
+            modificados=modificados,
+            mensaje=f"Separación entre ejes fijada en {distancia:.2f} m.",
+        )
+
+    def _etiqueta_siguiente(self, primera: str, indice: int) -> str:
+        if primera.isdigit():
+            return str(int(primera) + indice)
+        if len(primera) == 1 and primera.isalpha():
+            return chr(ord(primera.upper()) + indice)
+        raise self._error(
+            "La primera etiqueta debe ser un número (1) o una letra (A).", -32602
+        )
+
+    def ejes_crear_por_separaciones(
+        self,
+        direccion: str,
+        origen: float,
+        separaciones: Any,
+        longitud: float,
+        primera_etiqueta: str,
+    ) -> dict[str, Any]:
+        """O006a: crea una retícula a partir de las separaciones entre ejes."""
+        self._exigir_modelo()
+        direccion = (direccion or "").strip().casefold()
+        if direccion not in ("vertical", "horizontal"):
+            raise self._error("La dirección debe ser «vertical» u «horizontal».", -32602)
+        try:
+            origen = float(origen)
+            longitud = float(longitud)
+        except (TypeError, ValueError) as exc:
+            raise self._error("El origen y la longitud deben ser números.", -32602) from exc
+        if longitud <= 0:
+            raise self._error("La longitud de los ejes debe ser mayor que cero.", -32602)
+        if isinstance(separaciones, str):
+            crudas = [s for s in separaciones.replace(";", ",").split(",")]
+        elif isinstance(separaciones, (list, tuple)):
+            crudas = list(separaciones)
+        else:
+            raise self._error("Las separaciones deben ser una lista de números.", -32602)
+        distancias: list[float] = []
+        for cruda in crudas:
+            texto = str(cruda).strip()
+            if not texto:
+                continue
+            try:
+                valor = float(texto.replace(",", "."))
+            except ValueError as exc:
+                raise self._error(
+                    f"La separación «{texto}» no es un número.", -32602
+                ) from exc
+            if valor <= 0:
+                raise self._error("Las separaciones deben ser mayores que cero.", -32602)
+            distancias.append(valor)
+        if not distancias:
+            raise self._error("Indique al menos una separación entre ejes.", -32602)
+        primera = (primera_etiqueta or "").strip()
+        if not primera:
+            primera = "1" if direccion == "vertical" else "A"
+        etiquetas = [self._etiqueta_siguiente(primera, i) for i in range(len(distancias) + 1)]
+        grid = self._grid()
+        usadas = {_etiqueta_eje(a).casefold() for a in self._ejes(grid)}
+        repetidas = [e for e in etiquetas if e.casefold() in usadas]
+        if repetidas:
+            raise self._error(
+                f"Ya existe un eje con la etiqueta «{repetidas[0]}».", -32026
+            )
+        self._instantanea()
+        creados: list[str] = []
+        posicion = origen
+        for indice, etiqueta in enumerate(etiquetas):
+            if indice > 0:
+                posicion += distancias[indice - 1]
+            eje = grid_api.create_grid_axis(
+                self.modelo,
+                grid=grid,
+                axis_tag=etiqueta,
+                uvw_axes="UAxes" if direccion == "vertical" else "VAxes",
+            )
+            if direccion == "vertical":
+                p1 = (posicion, 0.0, 0.0)
+                p2 = (posicion, longitud, 0.0)
+            else:
+                p1 = (0.0, posicion, 0.0)
+                p2 = (longitud, posicion, 0.0)
+            grid_api.create_axis_curve(
+                self.modelo, p1=p1, p2=p2, grid_axis=eje, is_si=True
+            )
+            creados.append(self._id_eje(grid, eje))
+        self.con_cambios = True
+        return self._resultado(
+            creados=creados,
+            etiquetas=etiquetas,
+            mensaje=f"{len(creados)} eje(s) creado(s) por separaciones.",
+        )
+
 
     # ------------------------------------------------------------------ muros
     def _datos_muro(self, muro: Any) -> dict[str, Any]:
