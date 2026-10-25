@@ -1,14 +1,16 @@
 // O006c: serialización de eventos, truncado de parámetros y listener global de clics.
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   agregarEvento,
   etiquetaDeControl,
   eventosBitacora,
   instalarEscuchasParaPruebas,
+  llamarConBitacora,
   reiniciarBitacoraParaPruebas,
   resumenResultado,
   truncarParams,
 } from "./bitacora";
+import { ipc, ErrorIpc } from "./ipc";
 
 let quitar: (() => void) | undefined;
 
@@ -40,8 +42,55 @@ describe("eventos", () => {
   });
 });
 
-describe("truncarParams", () => {
-  it("deja intactos los parámetros pequeños", () => {
+describe("llamadas al núcleo", () => {
+  it("registra la acción y el resultado correcto con el mismo id", async () => {
+    const espia = vi
+      .spyOn(ipc, "nucleoLlamar")
+      .mockResolvedValueOnce({ creados: ["gid-1"], modificados: [], mensaje: "Eje creado." });
+    const resultado = await llamarConBitacora<{ creados: string[] }>("ejes.crear", {
+      etiqueta: "1",
+      x1: 0,
+    });
+    espia.mockRestore();
+    expect(resultado.creados).toEqual(["gid-1"]);
+
+    const accion = eventosBitacora().find((e) => e.tipo === "accion");
+    const respuesta = eventosBitacora().find((e) => e.tipo === "resultado");
+    expect(accion?.metodo).toBe("ejes.crear");
+    expect(accion?.params).toEqual({ etiqueta: "1", x1: 0 });
+    expect(respuesta?.id).toBe(accion?.id);
+    expect(respuesta?.ok).toBe(true);
+    expect(respuesta?.resumen).toEqual({
+      creados: ["gid-1"],
+      modificados: [],
+      mensaje: "Eje creado.",
+    });
+    expect(typeof respuesta?.duracion_ms).toBe("number");
+  });
+
+  it("en un error guarda el mensaje original, el código y la traza de Python", async () => {
+    const traza = "Traceback (most recent call last):\nValueError: no paralelos";
+    const espia = vi
+      .spyOn(ipc, "nucleoLlamar")
+      .mockRejectedValueOnce(
+        new ErrorIpc({
+          tipo: "Io",
+          mensaje: "Los ejes deben ser paralelos.",
+          codigo: "-32027",
+          traza,
+        }),
+      );
+    await expect(llamarConBitacora("ejes.separacion", {})).rejects.toThrow();
+    espia.mockRestore();
+    const respuesta = eventosBitacora().find((e) => e.tipo === "resultado");
+    expect(respuesta?.ok).toBe(false);
+    expect(respuesta?.mensaje).toBe("Los ejes deben ser paralelos.");
+    expect(respuesta?.codigo).toBe("-32027");
+    expect(respuesta?.traza).toBe(traza);
+  });
+});
+
+describe("truncarParams", () => {  it("deja intactos los parámetros pequeños", () => {
     const params = { x: 1, etiqueta: "1" };
     expect(truncarParams(params)).toEqual(params);
   });

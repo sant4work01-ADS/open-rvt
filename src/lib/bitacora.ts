@@ -292,7 +292,7 @@ export async function llamarConBitacora<T>(
       id,
       ok: false,
       duracion_ms: Math.round(performance.now() - inicio),
-      mensaje: error instanceof Error ? error.message : String(error),
+      mensaje: detalle?.mensaje ?? (error instanceof Error ? error.message : String(error)),
       codigo: detalle?.codigo ?? null,
       traza: detalle?.traza ?? null,
     });
