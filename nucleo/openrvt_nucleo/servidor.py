@@ -135,7 +135,20 @@ class Servidor:
                 params.get("separaciones"),
                 params.get("longitud", 0.0),
                 str(params.get("primera_etiqueta") or ""),
+                str(params.get("modo") or "origen"),
+                params.get("rebase", 1.5),
             )
+        if metodo == "ejes.crear_reticula":
+            return self._exigir().ejes_crear_reticula(
+                params.get("vertical"),
+                params.get("horizontal"),
+                str(params.get("modo") or "rebase"),
+                params.get("rebase", 1.5),
+            )
+        if metodo == "ejes.reticula":
+            return self._exigir().ejes_reticula()
+        if metodo == "ejes.rebase":
+            return self._exigir().ejes_rebase(params.get("rebase", 1.5))
         if metodo == "ejes.mover":
             return self._exigir().ejes_mover(
                 str(params.get("globalid") or ""), params.get("desplazamiento", 0.0)

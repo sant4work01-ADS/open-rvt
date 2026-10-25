@@ -116,12 +116,24 @@ async function dialogoEjes(
     10_000,
     "no abrió el diálogo de ejes por separaciones",
   );
-  await fijarValor(ses, "eje-sep-direccion", direccion);
-  await fijarValor(ses, "eje-sep-origen", String(origen));
-  await fijarValor(ses, "eje-sep-separaciones", separaciones);
-  await fijarValor(ses, "eje-sep-longitud", String(longitud));
-  await fijarValor(ses, "eje-sep-etiqueta", etiqueta);
-  await activar(ses, "eje-sep-aceptar");
+  // O006d: el diálogo pide las dos familias; aquí se deja vacía la que no toca y se
+  // usa el modo origen con su longitud.
+  if (direccion === "vertical") {
+    await fijarValor(ses, "eje-sep-horizontal-separaciones", "");
+    await fijarValor(ses, "eje-sep-vertical-separaciones", separaciones);
+    await fijarValor(ses, "eje-sep-vertical-etiqueta", etiqueta);
+    await fijarValor(ses, "eje-sep-vertical-origen", String(origen));
+    await fijarValor(ses, "eje-sep-vertical-longitud", String(longitud));
+  } else {
+    await fijarValor(ses, "eje-sep-vertical-separaciones", "");
+    await fijarValor(ses, "eje-sep-horizontal-separaciones", separaciones);
+    await fijarValor(ses, "eje-sep-horizontal-etiqueta", etiqueta);
+    await fijarValor(ses, "eje-sep-horizontal-origen", String(origen));
+    await fijarValor(ses, "eje-sep-horizontal-longitud", String(longitud));
+  }
+  await ses.driver.executeScript(() => {
+    document.querySelector('[data-testid="eje-sep-aceptar"]')?.click();
+  });
   await ses.driver.wait(
     async () => (await ses.driver.findElements(By.css('[data-testid="dialogo-ejes-separaciones"]'))).length === 0,
     10_000,

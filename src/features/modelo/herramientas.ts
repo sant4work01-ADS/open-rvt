@@ -36,6 +36,8 @@ export interface Referencias {
   medios: Punto2[];
   ejes: EjeReferencia[];
   intersecciones: Punto2[];
+  /** O006d: modo y rebase de la retícula guardados en el IfcGrid. */
+  reticula?: { modo: "origen" | "rebase"; rebase: number };
 }
 
 export interface Enganche {
@@ -53,6 +55,7 @@ export const REFERENCIAS_VACIAS: Referencias = {
   medios: [],
   ejes: [],
   intersecciones: [],
+  reticula: { modo: "origen", rebase: 1.5 },
 };
 
 export function distancia(a: Punto2, b: Punto2): number {
@@ -191,6 +194,142 @@ export function siguienteEtiquetaEje(ejes: EjeReferencia[], vertical: boolean): 
   return String.fromCharCode(65 + indice);
 }
 
+/** O006d: restricciones iniciales al dibujar un eje junto a una familia existente. */
+export interface EjeRestringido {
+  inicio: Punto2;
+  fin: Punto2;
+  vertical: boolean;
+  referencia: EjeReferencia;
+  /** Distancia perpendicular al eje de referencia (m). */
+  distancia: number;
+}
+
+const TOLERANCIA_PARALELO_EJE = (15 * Math.PI) / 180;
+
+/**
+ * O006d: si el trazo forma menos de 15° con una familia existente, devuelve el eje
+ * forzado paralelo, con los extremos de esa familia y la posición perpendicular del
+ * cursor. Con `libre` (Ctrl o Alt) no restringe. Sin ejes previos tampoco.
+ */
+export function restringirEje(
+  origen: Punto2,
+  raton: Punto2,
+  ejes: EjeReferencia[],
+  libre = false,
+): EjeRestringido | null {
+  if (libre || ejes.length === 0) return null;
+  const dx = raton[0] - origen[0];
+  const dy = raton[1] - origen[1];
+  const largo = Math.hypot(dx, dy);
+  if (largo < 1e-9) return null;
+  const trazo: [number, number] = [dx / largo, dy / largo];
+  let referencia: EjeReferencia | null = null;
+  let mejorAngulo = TOLERANCIA_PARALELO_EJE;
+  for (const eje of ejes) {
+    const ex = eje.x2 - eje.x1;
+    const ey = eje.y2 - eje.y1;
+    const le = Math.hypot(ex, ey);
+    if (le < 1e-9) continue;
+    const coseno = Math.abs(trazo[0] * (ex / le) + trazo[1] * (ey / le));
+    const angulo = Math.acos(Math.min(1, coseno));
+    if (angulo <= mejorAngulo) {
+      mejorAngulo = angulo;
+      referencia = eje;
+    }
+  }
+  if (!referencia) return null;
+  return ejeEnFamilia(referencia, ejes, raton[0], raton[1]);
+}
+
+/** Construye el eje con los extremos de `referencia` y la posición pedida. */
+function ejeEnFamilia(
+  referencia: EjeReferencia,
+  ejes: EjeReferencia[],
+  x: number,
+  y: number,
+): EjeRestringido {
+  const vertical = Math.abs(referencia.x2 - referencia.x1) <
+    Math.abs(referencia.y2 - referencia.y1);
+  const familia = ejes.filter(
+    (e) => Math.abs(e.x2 - e.x1) < Math.abs(e.y2 - e.y1) === vertical,
+  );
+  const cercano = familia.reduce(
+    (a, b) => {
+      const da = Math.abs((vertical ? a.x1 : a.y1) - (vertical ? x : y));
+      const db = Math.abs((vertical ? b.x1 : b.y1) - (vertical ? x : y));
+      return db < da ? b : a;
+    },
+    referencia,
+  );
+  if (vertical) {
+    const inicio: Punto2 = [Number(x.toFixed(6)), cercano.y1];
+    const fin: Punto2 = [Number(x.toFixed(6)), cercano.y2];
+    return {
+      inicio,
+      fin,
+      vertical: true,
+      referencia: cercano,
+      distancia: Math.abs(x - cercano.x1),
+    };
+  }
+  const inicio: Punto2 = [cercano.x1, Number(y.toFixed(6))];
+  const fin: Punto2 = [cercano.x2, Number(y.toFixed(6))];
+  return {
+    inicio,
+    fin,
+    vertical: false,
+    referencia: cercano,
+    distancia: Math.abs(y - cercano.y1),
+  };
+}
+
+/**
+ * O006d: eje restringido a una distancia tecleada del paralelo más cercano. El lado
+ * lo decide la posición del cursor. Devuelve `null` si no hay familia aplicable.
+ */
+export function ejeConDistancia(
+  origen: Punto2,
+  raton: Punto2,
+  ejes: EjeReferencia[],
+  distancia: number,
+  libre = false,
+): EjeRestringido | null {
+  const base = restringirEje(origen, raton, ejes, libre);
+  if (!base || distancia <= 0) return null;
+  const vertical = base.vertical;
+  const ref = base.referencia;
+  const posRef = vertical ? ref.x1 : ref.y1;
+  const posRaton = vertical ? raton[0] : raton[1];
+  const lado = posRaton - posRef >= 0 ? 1 : -1;
+  return ejeEnFamilia(ref, ejes, vertical ? posRef + lado * distancia : raton[0],
+    vertical ? raton[1] : posRef + lado * distancia);
+}
+
+/** Distancia al eje paralelo más cercano de la familia que marca `vertical`. */
+export function distanciaAEjeParalelo(
+  punto: Punto2,
+  ejes: EjeReferencia[],
+  vertical: boolean,
+): { referencia: EjeReferencia; distancia: number } | null {
+  let mejor: { referencia: EjeReferencia; distancia: number } | null = null;
+  for (const eje of ejes) {
+    const esVertical = Math.abs(eje.x2 - eje.x1) < Math.abs(eje.y2 - eje.y1);
+    if (esVertical !== vertical) continue;
+    const distancia = Math.abs((vertical ? punto[0] : punto[1]) -
+      (vertical ? eje.x1 : eje.y1));
+    if (!mejor || distancia < mejor.distancia) mejor = { referencia: eje, distancia };
+  }
+  return mejor;
+}
+
+export interface AberturaColocada {
+  muro: MuroReferencia;
+  distancia: number;
+  punto: Punto2;
+  desdeInicio: number;
+  hastaFin: number;
+}
+
 /** Muro más cercano a un punto (para colocar puertas y ventanas). */
 export function muroBajoPunto(
   refs: Referencias,
@@ -207,14 +346,6 @@ export function muroBajoPunto(
     }
   }
   return mejor;
-}
-
-export interface AberturaColocada {
-  muro: MuroReferencia;
-  distancia: number;
-  punto: Punto2;
-  desdeInicio: number;
-  hastaFin: number;
 }
 
 /**

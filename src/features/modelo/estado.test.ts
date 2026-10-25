@@ -179,6 +179,46 @@ describe("herramienta Eje", () => {
     expect(etiquetas).toEqual(["1", "A"]);
     expect(useModelo.getState().referencias.ejes.map((e) => e.etiqueta)).toEqual(["1", "A"]);
   });
+
+  it("el segundo eje se fuerza paralelo, toma la longitud de la familia y la distancia tecleada", async () => {
+    useModelo.getState().activarHerramienta("eje");
+    await useModelo.getState().clicEnPlanta([0, 0]);
+    useModelo.getState().fijarRatonHerramienta([0, 10]);
+    await useModelo.getState().clicEnPlanta([0, 10]);
+    // Trazo casi vertical lejos del eje 1: se restringe a su familia.
+    await useModelo.getState().clicEnPlanta([20, 2]);
+    useModelo.getState().fijarRatonHerramienta([20.1, 7]);
+    useModelo.getState().teclearLongitud("6");
+    await useModelo.getState().confirmarLongitud();
+
+    const llamadas = nucleo.mock.calls.filter(([metodo]) => metodo === "ejes.crear");
+    const llamada = llamadas[llamadas.length - 1];
+    expect(llamada[1]).toEqual({
+      etiqueta: "2",
+      x1: 6,
+      y1: 0,
+      x2: 6,
+      y2: 10,
+    });
+  });
+
+  it("con Ctrl el eje se dibuja libre, sin forzar la familia", async () => {
+    useModelo.getState().activarHerramienta("eje");
+    await useModelo.getState().clicEnPlanta([0, 0]);
+    useModelo.getState().fijarRatonHerramienta([0, 10]);
+    await useModelo.getState().clicEnPlanta([0, 10]);
+    await useModelo.getState().clicEnPlanta([2, 2]);
+    useModelo.getState().fijarRatonHerramienta([4, 2.5]);
+    await useModelo.getState().clicEnPlanta([4, 2.5], false, true);
+
+    const llamadas = nucleo.mock.calls.filter(([metodo]) => metodo === "ejes.crear");
+    const params = llamadas[llamadas.length - 1][1] as Record<string, number>;
+    expect(params.x1).not.toBe(params.x2);
+    expect(params.y1).not.toBe(params.y2);
+    // Sin Ctrl el mismo trazo habría quedado vertical en x = 4.
+    expect(params.x2).toBeCloseTo(3.989, 2);
+    expect(params.y2).toBeCloseTo(2.532, 2);
+  });
 });
 
 describe("herramienta Losa", () => {

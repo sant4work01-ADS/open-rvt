@@ -3,12 +3,16 @@ import { describe, expect, test } from "vitest";
 import {
   buscarEnganche,
   colocarAbertura,
+  distanciaAEjeParalelo,
+  ejeConDistancia,
   fijarAngulo,
   puntoConLongitud,
   puntoDibujo,
   redondearCuadricula,
   REFERENCIAS_VACIAS,
+  restringirEje,
   siguienteEtiquetaEje,
+  type EjeReferencia,
   type Referencias,
 } from "./herramientas";
 
@@ -125,6 +129,56 @@ describe("etiquetas de ejes", () => {
   test("no reutiliza una etiqueta aunque sea de la otra dirección", () => {
     expect(siguienteEtiquetaEje([eje("1", false)], true)).toBe("2");
     expect(siguienteEtiquetaEje([eje("A", true)], false)).toBe("B");
+  });
+});
+
+describe("restricciones iniciales del eje (O006d)", () => {
+  const vertical: EjeReferencia = {
+    globalid: "g1",
+    etiqueta: "1",
+    x1: 0,
+    y1: -1.5,
+    x2: 0,
+    y2: 9.5,
+    vertical: true,
+  };
+  const horizontal: EjeReferencia = {
+    globalid: "gA",
+    etiqueta: "A",
+    x1: -1.5,
+    y1: 0,
+    x2: 16,
+    y2: 0,
+    vertical: false,
+  };
+
+  test("un trazo casi vertical se fuerza paralelo con los extremos de la familia", () => {
+    const r = restringirEje([3, 2], [3.1, 7], [vertical, horizontal]);
+    expect(r).not.toBeNull();
+    expect(r!.vertical).toBe(true);
+    expect(r!.inicio).toEqual([3.1, -1.5]);
+    expect(r!.fin).toEqual([3.1, 9.5]);
+    expect(r!.distancia).toBeCloseTo(3.1, 6);
+  });
+
+  test("un trazo a más de 15° no se restringe; Ctrl/Alt tampoco", () => {
+    expect(restringirEje([3, 2], [5, 6], [vertical, horizontal])).toBeNull();
+    expect(restringirEje([3, 2], [3.1, 7], [vertical, horizontal], true)).toBeNull();
+  });
+
+  test("la distancia tecleada fija el paralelo del lado del cursor", () => {
+    const r = ejeConDistancia([20, 2], [20.1, 7], [vertical, horizontal], 6);
+    expect(r).not.toBeNull();
+    expect(r!.vertical).toBe(true);
+    expect(r!.inicio).toEqual([6, -1.5]);
+    expect(r!.fin).toEqual([6, 9.5]);
+    expect(r!.distancia).toBeCloseTo(6, 6);
+  });
+
+  test("la distancia al paralelo más cercano se mide en perpendicular", () => {
+    const d = distanciaAEjeParalelo([8.4, 3], [vertical, horizontal], true);
+    expect(d!.referencia.etiqueta).toBe("1");
+    expect(d!.distancia).toBeCloseTo(8.4, 6);
   });
 });
 

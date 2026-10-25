@@ -27,9 +27,11 @@ import {
 import {
   areaPoligono,
   colocarAbertura,
+  ejeConDistancia,
   puntoConLongitud,
   puntoDibujo,
   REFERENCIAS_VACIAS,
+  restringirEje,
   siguienteEtiquetaEje,
   type Enganche,
   type Punto2,
@@ -53,6 +55,14 @@ export interface OpcionesMuro {
   tipo: string;
   altura: number;
   alineacion: AlineacionMuro;
+}
+
+/** O006d: un bloque de la retícula (vertical u horizontal). */
+export interface BloqueEjesReticula {
+  separaciones: number[];
+  origen: number;
+  longitud: number;
+  primeraEtiqueta: string;
 }
 
 export interface RespuestaComando {
@@ -110,6 +120,8 @@ interface EstadoModelo {
   ratonHerramienta: Punto2 | null;
   engancheHerramienta: Enganche | null;
   longitudTecleada: string;
+  /** O006d: el trazo de eje actual se dibuja libre (Ctrl o Alt). */
+  ejeLibre: boolean;
   voltearSiguiente: boolean;
   etiquetaEje: string;
   activarHerramienta: (herramienta: Herramienta) => void;
@@ -143,6 +155,15 @@ interface EstadoModelo {
     longitud: number,
     primeraEtiqueta: string,
   ) => Promise<boolean>;
+  /** O006d: retícula en ambos sentidos, desde el origen o rebasando la opuesta. */
+  crearReticula: (
+    vertical: BloqueEjesReticula | null,
+    horizontal: BloqueEjesReticula | null,
+    modo: "origen" | "rebase",
+    rebase: number,
+  ) => Promise<boolean>;
+  /** O006d: cambia el rebase de la retícula y recalcula los extremos. */
+  editarRebase: (rebase: number) => Promise<boolean>;
   /** O006a: la cota manda; mueve el eje (y la cadena) a la distancia pedida. */
   separarEjes: (
     referencia: string,
@@ -481,31 +502,43 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     engancheHerramienta: null,
   });
 
-  const crearEjeEntre = async (origen: Punto2, destino: Punto2): Promise<boolean> => {
-    if (Math.hypot(destino[0] - origen[0], destino[1] - origen[1]) < 0.01) {
+  const crearEjeEntre = async (
+    origen: Punto2,
+    destino: Punto2,
+    libre = false,
+  ): Promise<boolean> => {
+    // O006d: con ejes previos y sin Ctrl/Alt, el eje se fuerza paralelo a la familia
+    // más cercana y toma sus extremos; el segundo punto solo fija la distancia.
+    const restriccion = restringirEje(origen, destino, get().referencias.ejes, libre);
+    const inicio = restriccion?.inicio ?? origen;
+    const fin = restriccion?.fin ?? destino;
+    if (Math.hypot(fin[0] - inicio[0], fin[1] - inicio[1]) < 0.01) {
       set({ aviso: "El eje necesita dos puntos distintos." });
       return false;
     }
-    const vertical = Math.abs(destino[0] - origen[0]) < Math.abs(destino[1] - origen[1]);
+    const vertical =
+      restriccion?.vertical ??
+      Math.abs(fin[0] - inicio[0]) < Math.abs(fin[1] - inicio[1]);
     // La etiqueta depende de la orientación del eje (números o letras), no de la
     // etiqueta que se mostrara para el eje anterior.
     const etiqueta = siguienteEtiquetaEje(get().referencias.ejes, vertical);
     const ok = await ejecutar("ejes.crear", {
       etiqueta,
-      x1: origen[0],
-      y1: origen[1],
-      x2: destino[0],
-      y2: destino[1],
+      x1: inicio[0],
+      y1: inicio[1],
+      x2: fin[0],
+      y2: fin[1],
     });
     if (ok) {
       const siguiente = siguienteEtiquetaEje(get().referencias.ejes, vertical);
       set({
         puntosHerramienta: [],
         etiquetaEje: siguiente,
+        ejeLibre: false,
         ...limpiarTrazoExtra(),
         aviso: `Eje «${etiqueta}» creado. Siguiente: ${siguiente}.`,
       });
-      bitacoraHerramienta("eje", "terminar", { x: destino[0], y: destino[1] });
+      bitacoraHerramienta("eje", "terminar", { x: fin[0], y: fin[1] });
     }
     return ok;
   };
@@ -567,6 +600,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     ratonHerramienta: null,
     engancheHerramienta: null,
     longitudTecleada: "",
+    ejeLibre: false,
     voltearSiguiente: false,
     etiquetaEje: "",
     cotasMoverSiguientes: true,
@@ -782,6 +816,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         ratonHerramienta: null,
         engancheHerramienta: null,
         longitudTecleada: "",
+        ejeLibre: false,
         modoCorte: false,
         puntoCorte: null,
         ...(conservarSeleccion
@@ -800,6 +835,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         ratonHerramienta: null,
         engancheHerramienta: null,
         longitudTecleada: "",
+        ejeLibre: false,
         etiquetaEje: "",
         aviso: null,
       });
@@ -824,6 +860,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         ratonHerramienta: null,
         engancheHerramienta: null,
         longitudTecleada: "",
+        ejeLibre: false,
         aviso: nombres[herramienta],
       });
       bitacoraHerramienta(herramienta, "cancelar_trazo");
@@ -899,7 +936,22 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         return;
       }
       if (herramienta === "eje") {
-        await crearEjeEntre(puntos[0], destino);
+        const libre = get().ejeLibre || shift;
+        if (tieneLongitud) {
+          // O006d: la distancia tecleada manda respecto del paralelo más cercano.
+          const restriccion = ejeConDistancia(
+            origen,
+            raton ?? origen,
+            get().referencias.ejes,
+            longitud,
+            libre,
+          );
+          if (restriccion) {
+            await crearEjeEntre(restriccion.inicio, restriccion.fin, true);
+            return;
+          }
+        }
+        await crearEjeEntre(puntos[0], destino, libre);
         return;
       }
       if (herramienta === "mover" || herramienta === "copiar") {
@@ -953,10 +1005,16 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       }
       if (herramienta === "eje") {
         if (puntos.length === 0) {
-          set({ puntosHerramienta: [p], aviso: "Eje: segundo punto, longitud y Enter, o doble clic." });
+          set({
+            puntosHerramienta: [p],
+            ejeLibre: agregar,
+            aviso: agregar
+              ? "Eje libre: segundo punto."
+              : "Eje: segundo punto, longitud y Enter, o doble clic.",
+          });
           return;
         }
-        await crearEjeEntre(puntos[0], p);
+        await crearEjeEntre(puntos[0], p, agregar || get().ejeLibre);
         return;
       }
       if (herramienta === "puerta" || herramienta === "ventana") {
@@ -1012,7 +1070,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         if (puntos.length === 0) return;
         const destino = get().ratonHerramienta;
         if (!destino) return;
-        await crearEjeEntre(puntos[0], destino);
+        await crearEjeEntre(puntos[0], destino, get().ejeLibre);
         return;
       }
       if (herramienta === "mover" || herramienta === "copiar") {
@@ -1183,6 +1241,29 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         primera_etiqueta: primeraEtiqueta,
       });
       return ok;
+    },
+
+    crearReticula: async (vertical, horizontal, modo, rebase) => {
+      const bloque = (b: BloqueEjesReticula | null) =>
+        b
+          ? {
+              separaciones: b.separaciones,
+              origen: b.origen,
+              longitud: b.longitud,
+              primera_etiqueta: b.primeraEtiqueta,
+            }
+          : null;
+      const ok = await ejecutar("ejes.crear_reticula", {
+        vertical: bloque(vertical),
+        horizontal: bloque(horizontal),
+        modo,
+        rebase,
+      });
+      return ok;
+    },
+
+    editarRebase: async (rebase) => {
+      return ejecutar("ejes.rebase", { rebase });
     },
 
     separarEjes: async (referencia, mover, distancia, cadena) => {

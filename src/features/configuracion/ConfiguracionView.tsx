@@ -9,6 +9,7 @@ import { Languages, Info, Monitor, Moon, Palette, Sun } from "lucide-react";
 import type { Idioma } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { ESCALA_OPCIONES, useTema, type PreferenciaTema } from "@/lib/tema";
+import { useRueda, type PreferenciaRueda } from "@/lib/rueda";
 import { AcercaDeActualizaciones } from "@/features/actualizaciones/Actualizaciones";
 
 const SECCIONES = () =>
@@ -114,6 +115,48 @@ export function IdiomaSelector() {
   );
 }
 
+/** O006d: qué hace la rueda del ratón o el desplazamiento de dos dedos del touchpad. */
+function RuedaTouchpad() {
+  const preferencia = useRueda((s) => s.preferencia);
+  const fijar = useRueda((s) => s.fijarPreferencia);
+  const opciones: Array<{ id: PreferenciaRueda; nombre: string; ayuda: string }> = [
+    { id: "auto", nombre: "Automático", ayuda: "Detecta ratón o touchpad" },
+    { id: "zoom", nombre: "Zoom", ayuda: "Siempre acerca y aleja" },
+    { id: "paneo", nombre: "Paneo", ayuda: "Siempre mueve la vista" },
+  ];
+  return (
+    <section aria-labelledby="rueda-touchpad">
+      <h2 id="rueda-touchpad" className="mb-2 text-sm font-medium">
+        Rueda/touchpad: zoom o paneo
+      </h2>
+      <p className="mb-3 text-xs text-muted-foreground">
+        El pellizco del touchpad siempre hace zoom y Shift + rueda desplaza en
+        horizontal. En «Automático» los saltos grandes de la rueda hacen zoom y los
+        desplazamientos pequeños de dos dedos, paneo.
+      </p>
+      <div role="radiogroup" aria-label="Rueda/touchpad" className="flex flex-wrap gap-1">
+        {opciones.map(({ id, nombre, ayuda }) => (
+          <button
+            key={id}
+            type="button"
+            role="radio"
+            aria-checked={preferencia === id}
+            data-testid={`rueda-${id}`}
+            title={ayuda}
+            onClick={() => fijar(id)}
+            className={cn(
+              "rounded-md border px-3 py-1.5 text-sm hover:bg-muted",
+              preferencia === id && "border-accent bg-accent text-accent-foreground hover:bg-accent",
+            )}
+          >
+            {nombre}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /** Configuración de la aplicación: apariencia (tema y escala) e idioma. */
 export function ConfiguracionView({
   seccionInicial = "apariencia",
@@ -165,6 +208,7 @@ export function ConfiguracionView({
               ))}
             </div>
             <TamanoInterfaz />
+            <RuedaTouchpad />
           </section>
         )}
         {seccion === "idioma" && (

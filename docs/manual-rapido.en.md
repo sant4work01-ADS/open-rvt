@@ -16,6 +16,18 @@ PresupuestosPro.
 The **New**, **Open** and **Save** commands on the Home tab are disabled with the
 description "Available soon": there is no file to open yet.
 
+### Viewer navigation
+
+- **Mouse wheel**: zoom towards the cursor. On a touchpad, **pinch** (Ctrl + wheel)
+  also zooms.
+- **Two fingers on the touchpad**: pan. Use `Shift` + wheel to pan horizontally.
+- **Middle button** or **Space + drag**: move the view.
+- **F**, middle-button double click or the **Fit** button: frame the view.
+- **+** and **−**: zoom in and out.
+- The discreet help at the bottom right of the viewer can be closed and will not come
+  back. **Settings → Appearance** offers "Wheel/touchpad: zoom or pan": Automatic
+  detects mouse or touchpad; Zoom and Pan force it.
+
 ### Shortcuts
 
 | Shortcut | Action |
