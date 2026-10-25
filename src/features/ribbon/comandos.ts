@@ -7,19 +7,29 @@
 // 16 px con texto a la derecha. Los tooltips dicen «Nombre (atajo) — qué hace».
 import type { LucideIcon } from "lucide-react";
 import {
+  BrickWall,
   ChevronDown,
+  Copy,
+  DoorOpen,
   FolderOpen,
+  Grid3X3,
+  Layers,
   Monitor,
   Moon,
+  Move,
+  Redo2,
   Save,
   SaveAll,
   Scissors,
+  Square,
   SquarePlus,
   Sun,
+  Trash2,
+  Undo2,
 } from "lucide-react";
 import { tr } from "@/i18n";
 
-export type PestanaRibbon = "archivo" | "principal" | "herramientas" | "vista";
+export type PestanaRibbon = "archivo" | "principal" | "modelar" | "herramientas" | "vista";
 /** Tamaño en el ribbon normal: grande (ícono 24 px + texto abajo) o chico (16 px + texto). */
 export type TamanoRibbon = "grande" | "chico";
 
@@ -28,6 +38,7 @@ export interface SubitemRibbon {
   texto: string;
   icono?: LucideIcon;
   atajo?: string;
+  descripcion?: string;
   desactivado?: boolean;
   accion: () => void;
 }
@@ -72,6 +83,20 @@ export interface AccionesRibbon {
   temaActivo: "sistema" | "claro" | "oscuro";
   /** Nueva vista de corte (pestaña Vista). */
   nuevaVistaCorte: () => void;
+  // OPEN-RVT: herramientas de modelado (spec O003b).
+  nuevoNivel: () => void;
+  nuevoEje: () => void;
+  herramientaMuro: () => void;
+  herramientaLosa: () => void;
+  losaDesdeMuros: () => void;
+  herramientaPuerta: () => void;
+  herramientaVentana: () => void;
+  herramientaMover: () => void;
+  herramientaCopiar: () => void;
+  borrarSeleccion: () => void;
+  deshacer: () => void;
+  rehacer: () => void;
+  herramientaActiva: string | null;
 }
 
 /**
@@ -141,6 +166,156 @@ export function construirComandosRibbon(a: AccionesRibbon): ComandoRibbon[] {
       habilitado: true,
       descripcion: "Dibuje una línea con dos clics en una planta",
       accion: a.nuevaVistaCorte,
+    },
+
+    // ---------- Modelar (O003b) ----------
+    {
+      id: "nivel",
+      texto: "Nivel",
+      icono: Layers,
+      atajo: "LL",
+      grupo: "Datos",
+      pestana: "modelar",
+      tamano: "grande",
+      habilitado: true,
+      descripcion: "Crear un nivel y su vista de planta",
+      accion: a.nuevoNivel,
+    },
+    {
+      id: "eje",
+      texto: "Eje",
+      icono: Grid3X3,
+      atajo: "GR",
+      grupo: "Datos",
+      pestana: "modelar",
+      tamano: "grande",
+      habilitado: true,
+      activo: a.herramientaActiva === "eje",
+      descripcion: "Dibujar un eje con dos clics",
+      accion: a.nuevoEje,
+    },
+    {
+      id: "muro",
+      texto: "Muro",
+      icono: BrickWall,
+      atajo: "WA",
+      grupo: "Construir",
+      pestana: "modelar",
+      tamano: "grande",
+      habilitado: true,
+      activo: a.herramientaActiva === "muro",
+      descripcion: "Dibujar muros encadenados",
+      accion: a.herramientaMuro,
+    },
+    {
+      id: "losa",
+      texto: "Losa",
+      icono: Square,
+      atajo: "SB",
+      grupo: "Construir",
+      pestana: "modelar",
+      tamano: "grande",
+      habilitado: true,
+      activo: a.herramientaActiva === "losa",
+      descripcion: "Dibujar una losa por vértices o desde muros",
+      accion: a.herramientaLosa,
+      subitems: [
+        {
+          id: "losa-desde-muros",
+          texto: "Desde muros",
+          icono: Square,
+          descripcion: "Crear la losa del circuito de muros seleccionado",
+          accion: a.losaDesdeMuros,
+        },
+      ],
+    },
+    {
+      id: "puerta",
+      texto: "Puerta",
+      icono: DoorOpen,
+      atajo: "DR",
+      grupo: "Construir",
+      pestana: "modelar",
+      tamano: "grande",
+      habilitado: true,
+      activo: a.herramientaActiva === "puerta",
+      descripcion: "Colocar una puerta sobre un muro",
+      accion: a.herramientaPuerta,
+    },
+    {
+      id: "ventana",
+      texto: "Ventana",
+      icono: DoorOpen,
+      atajo: "WN",
+      grupo: "Construir",
+      pestana: "modelar",
+      tamano: "grande",
+      habilitado: true,
+      activo: a.herramientaActiva === "ventana",
+      descripcion: "Colocar una ventana sobre un muro",
+      accion: a.herramientaVentana,
+    },
+    {
+      id: "mover",
+      texto: "Mover",
+      icono: Move,
+      atajo: "MV",
+      grupo: "Modificar",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      activo: a.herramientaActiva === "mover",
+      descripcion: "Mover la selección entre dos puntos",
+      accion: a.herramientaMover,
+    },
+    {
+      id: "copiar",
+      texto: "Copiar",
+      icono: Copy,
+      atajo: "CO",
+      grupo: "Modificar",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      activo: a.herramientaActiva === "copiar",
+      descripcion: "Copiar la selección entre dos puntos",
+      accion: a.herramientaCopiar,
+    },
+    {
+      id: "borrar",
+      texto: "Borrar",
+      icono: Trash2,
+      atajo: "Supr",
+      grupo: "Modificar",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      descripcion: "Borrar los elementos seleccionados",
+      accion: a.borrarSeleccion,
+    },
+    {
+      id: "deshacer",
+      texto: "Deshacer",
+      icono: Undo2,
+      atajo: "Ctrl+Z",
+      grupo: "Historial",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      descripcion: "Deshacer el último comando",
+      accion: a.deshacer,
+    },
+    {
+      id: "rehacer",
+      texto: "Rehacer",
+      icono: Redo2,
+      atajo: "Ctrl+Y",
+      grupo: "Historial",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      descripcion: "Rehacer el último comando deshecho",
+      accion: a.rehacer,
     },
 
     // ---------- Tema ----------

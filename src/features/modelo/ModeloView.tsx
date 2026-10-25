@@ -8,15 +8,18 @@ import { useModelo } from "./estado";
 import { Visor3D } from "./Visor3D";
 import { NavegadorVistas } from "./NavegadorVistas";
 import { PanelPropiedades } from "./PanelPropiedades";
+import { BarraHerramienta } from "./BarraHerramienta";
 
 export function ModeloView() {
   const ruta = useModelo((s) => s.ruta);
+  const esquema = useModelo((s) => s.esquema);
   const mallas = useModelo((s) => s.mallas);
   const vistas = useModelo((s) => s.vistas);
   const vistaActivaId = useModelo((s) => s.vistaActivaId);
   const caja = useModelo((s) => s.caja);
   const niveles = useModelo((s) => s.niveles);
   const seleccion = useModelo((s) => s.seleccion);
+  const seleccionados = useModelo((s) => s.seleccionados);
   const modoCorte = useModelo((s) => s.modoCorte);
   const puntoCorte = useModelo((s) => s.puntoCorte);
   const cargando = useModelo((s) => s.cargando);
@@ -28,7 +31,8 @@ export function ModeloView() {
 
   const vista = vistas.find((v) => v.id === vistaActivaId) ?? vistas[0];
 
-  if (!ruta && mallas.length === 0 && !cargando) {
+  // Un modelo nuevo no tiene ruta ni mallas, pero sí esquema: debe mostrar el editor.
+  if (!ruta && !esquema && mallas.length === 0 && !cargando) {
     return (
       <div
         data-testid="area-trabajo"
@@ -68,6 +72,7 @@ export function ModeloView() {
             Propiedades
           </button>
         </div>
+        <BarraHerramienta />
         <div className="relative flex min-h-0 flex-1">
           {vista ? (
             <Visor3D
@@ -77,13 +82,26 @@ export function ModeloView() {
               mallas={mallas}
               caja={caja}
               seleccion={seleccion}
+              seleccionados={seleccionados}
               modoCorte={modoCorte}
               puntoCorte={puntoCorte}
-              onSeleccionar={(gid) => void seleccionar(gid)}
+              onSeleccionar={(gid, agregar) => void seleccionar(gid, agregar)}
+              onSeleccionarVarios={(gids) => {
+                if (gids.length === 0) void seleccionar(null);
+                else void seleccionar(gids[0], false).then(() => {
+                  for (const gid of gids.slice(1)) {
+                    useModelo.setState((s) => ({
+                      seleccionados: [...s.seleccionados, gid],
+                    }));
+                  }
+                });
+              }}
               onPuntoCorte={(punto) => void anadirPuntoCorte(punto)}
               onEscape={() => {
-                if (useModelo.getState().modoCorte) useModelo.getState().cancelarCorte();
-                else void useModelo.getState().seleccionar(null);
+                const estado = useModelo.getState();
+                if (estado.modoCorte) estado.cancelarCorte();
+                else if (estado.herramienta) estado.cancelarHerramienta();
+                else void estado.seleccionar(null);
               }}
             />
           ) : (

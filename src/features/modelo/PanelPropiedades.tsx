@@ -217,11 +217,67 @@ function PropiedadesVista({ vista }: { vista: Vista }) {
   );
 }
 
+/** Campo editable que guarda con Enter o al perder el foco (spec O003b). */
+function CampoEditable({
+  etiqueta,
+  valor,
+  testid,
+  numerico,
+  paso,
+  onGuardar,
+}: {
+  etiqueta: string;
+  valor: string | number | undefined;
+  testid: string;
+  numerico?: boolean;
+  paso?: number;
+  onGuardar: (valor: string | number) => void;
+}) {
+  const guardar = (texto: string) => {
+    if (numerico) {
+      const numero = Number(texto);
+      if (Number.isFinite(numero)) onGuardar(numero);
+    } else if (texto.trim()) {
+      onGuardar(texto.trim());
+    }
+  };
+  return (
+    <label className="flex items-center justify-between gap-2 text-xs">
+      <span className="text-muted-foreground">{etiqueta}</span>
+      <input
+        key={String(valor)}
+        data-testid={testid}
+        type={numerico ? "number" : "text"}
+        step={paso}
+        defaultValue={valor ?? ""}
+        onBlur={(e) => guardar(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            guardar((e.target as HTMLInputElement).value);
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        className="w-28 rounded border bg-background px-2 py-1 text-right"
+      />
+    </label>
+  );
+}
+
 function PropiedadesElemento() {
   const propiedades = useModelo((s) => s.propiedades);
+  const editar = useModelo((s) => s.editarElemento);
+  const tipos = useModelo((s) => s.tiposMuro);
   if (!propiedades) {
     return <div className="p-3 text-xs text-muted-foreground">Cargando propiedades…</div>;
   }
+  const gid = propiedades.globalid;
+  const esMuro = propiedades.clase === "IfcWall" || propiedades.clase === "IfcWallStandardCase";
+  const esLosa = propiedades.clase === "IfcSlab";
+  const esAbertura = propiedades.clase === "IfcDoor" || propiedades.clase === "IfcWindow";
+  const atributos = propiedades.atributos;
+  const ancho = Number(atributos.OverallWidth ?? 0);
+  const alto = Number(atributos.OverallHeight ?? 0);
   return (
     <div data-testid="propiedades-elemento" className="flex flex-col gap-3 p-3 text-xs">
       <div>
@@ -234,6 +290,76 @@ function PropiedadesElemento() {
           {propiedades.tipo ? ` · ${propiedades.tipo}` : ""}
         </div>
       </div>
+      <fieldset className="flex flex-col gap-2 border-y py-2">
+        <legend className="font-semibold">Propiedades editables</legend>
+        <CampoEditable
+          etiqueta="Nombre"
+          testid="elemento-nombre"
+          valor={propiedades.nombre}
+          onGuardar={(nombre) => void editar(gid, { nombre })}
+        />
+        {esMuro && (
+          <>
+            <label className="flex items-center justify-between gap-2 text-xs">
+              <span className="text-muted-foreground">Tipo</span>
+              <select
+                key={propiedades.tipo}
+                data-testid="elemento-tipo"
+                defaultValue={propiedades.tipo}
+                onChange={(e) => void editar(gid, { tipo: e.target.value })}
+                className="w-28 rounded border bg-background px-2 py-1"
+              >
+                {tipos.map((tipo) => (
+                  <option key={tipo.globalid} value={tipo.nombre}>
+                    {tipo.nombre}
+                  </option>
+                ))}
+                {!tipos.some((t) => t.nombre === propiedades.tipo) && (
+                  <option value={propiedades.tipo}>{propiedades.tipo || "(sin tipo)"}</option>
+                )}
+              </select>
+            </label>
+            <CampoEditable
+              etiqueta="Altura (m)"
+              testid="elemento-altura"
+              numerico
+              paso={0.05}
+              valor={Number((propiedades.psets?.OPENRVT_Muro as Record<string, unknown>)?.Altura ?? 2.6)}
+              onGuardar={(altura) => void editar(gid, { altura })}
+            />
+          </>
+        )}
+        {esLosa && (
+          <CampoEditable
+            etiqueta="Espesor (m)"
+            testid="elemento-espesor"
+            numerico
+            paso={0.01}
+            valor={Number((propiedades.psets?.OPENRVT_Losa as Record<string, unknown>)?.Espesor ?? 0.12)}
+            onGuardar={(espesor) => void editar(gid, { espesor })}
+          />
+        )}
+        {esAbertura && (
+          <>
+            <CampoEditable
+              etiqueta="Ancho (m)"
+              testid="elemento-ancho"
+              numerico
+              paso={0.05}
+              valor={ancho || (propiedades.clase === "IfcDoor" ? 0.9 : 1.2)}
+              onGuardar={(valor) => void editar(gid, { ancho: valor })}
+            />
+            <CampoEditable
+              etiqueta="Alto (m)"
+              testid="elemento-alto"
+              numerico
+              paso={0.05}
+              valor={alto || (propiedades.clase === "IfcDoor" ? 2.1 : 1.2)}
+              onGuardar={(valor) => void editar(gid, { alto: valor })}
+            />
+          </>
+        )}
+      </fieldset>
       <details open>
         <summary className="cursor-pointer font-semibold">Atributos</summary>
         <dl className="mt-1 grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-x-2 gap-y-1">

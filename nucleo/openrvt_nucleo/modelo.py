@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Any
 
 import ifcopenshell
+from .modelado import ModeladoMixin
+
 import ifcopenshell.api.aggregate as aggregate
 import ifcopenshell.api.context as context
 import ifcopenshell.api.project as project
@@ -135,7 +137,7 @@ def _categoria(clase: str) -> str:
     return "otros"
 
 
-class ModeloNucleo:
+class ModeloNucleo(ModeladoMixin):
     """Estado del modelo abierto en el proceso Python."""
 
     def __init__(self) -> None:
@@ -207,11 +209,17 @@ class ModeloNucleo:
         )
 
     def _tipo_de(self, elemento: Any) -> str:
-        for rel in getattr(elemento, "IsDefinedBy", ()) or ():
-            if rel.is_a("IfcRelDefinesByType"):
-                tipo = getattr(rel, "RelatingType", None)
-                if tipo is not None:
-                    return _texto(tipo.Name) or tipo.is_a()
+        # En IFC4 la relación de tipo llega por IsTypedBy; en IFC2X3 por IsDefinedBy.
+        relaciones = list(getattr(elemento, "IsTypedBy", ()) or ())
+        relaciones += [
+            rel
+            for rel in (getattr(elemento, "IsDefinedBy", ()) or ())
+            if rel.is_a("IfcRelDefinesByType")
+        ]
+        for rel in relaciones:
+            tipo = getattr(rel, "RelatingType", None)
+            if tipo is not None:
+                return _texto(tipo.Name) or tipo.is_a()
         predefinido = getattr(elemento, "PredefinedType", None)
         return _texto(predefinido)
 
@@ -243,6 +251,8 @@ class ModeloNucleo:
         self.con_cambios = True
         self._deshacer.clear()
         self._rehacer.clear()
+        # O003b: los cinco tipos de muro con sus capas de material.
+        self.crear_tipos_muro()
         return self.info()
 
     def abrir(self, ruta: str) -> dict[str, Any]:

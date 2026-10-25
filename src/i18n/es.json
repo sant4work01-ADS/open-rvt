@@ -35,12 +35,17 @@
     "pestanasNombres": {
       "inicio": "Inicio",
       "principal": "Inicio",
-      "vista": "Vista"
+      "vista": "Vista",
+      "modelar": "Modelar"
     },
     "grupos": {
       "Archivo": "Archivo",
       "Modelo": "Modelo",
-      "Tema": "Tema"
+      "Tema": "Tema",
+      "Datos": "Datos",
+      "Construir": "Construir",
+      "Modificar": "Modificar",
+      "Historial": "Historial"
     },
     "comandos": {
       "nuevo": "Nuevo",
@@ -54,7 +59,17 @@
       "deshacer": "Deshacer",
       "cortar": "Cortar",
       "copiar": "Copiar",
-      "pegar": "Pegar"
+      "pegar": "Pegar",
+      "nivel": "Nivel",
+      "eje": "Eje",
+      "muro": "Muro",
+      "losa": "Losa",
+      "losa-desde-muros": "Desde muros",
+      "puerta": "Puerta",
+      "ventana": "Ventana",
+      "mover": "Mover",
+      "borrar": "Borrar",
+      "rehacer": "Rehacer"
     },
     "descripciones": {
       "nuevo": "Crear un modelo IFC vacío",
@@ -64,7 +79,19 @@
       "nuevo-corte": "Dibuje una línea con dos clics en una planta",
       "tema-sistema": "Seguir el tema del sistema",
       "tema-claro": "Tema claro",
-      "tema-oscuro": "Tema oscuro"
+      "tema-oscuro": "Tema oscuro",
+      "nivel": "Crear un nivel y su vista de planta",
+      "eje": "Dibujar un eje con dos clics",
+      "muro": "Dibujar muros encadenados",
+      "losa": "Dibujar una losa por vértices o desde muros",
+      "losa-desde-muros": "Crear la losa del circuito de muros seleccionado",
+      "puerta": "Colocar una puerta sobre un muro",
+      "ventana": "Colocar una ventana sobre un muro",
+      "mover": "Mover la selección entre dos puntos",
+      "copiar": "Copiar la selección entre dos puntos",
+      "borrar": "Borrar los elementos seleccionados",
+      "deshacer": "Deshacer el último comando",
+      "rehacer": "Rehacer el último comando deshecho"
     },
     "masOpciones": "Más opciones"
   },
