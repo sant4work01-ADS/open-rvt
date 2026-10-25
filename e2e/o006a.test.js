@@ -30,6 +30,22 @@ async function atributoVisor(ses, atributo) {
   return (await ses.porTestid("visor")).getAttribute(`data-${atributo}`);
 }
 
+/** Proyecta un punto del modelo a la pantalla con la cámara real del visor. */
+async function puntoPantalla(ses, x, y, z = 1.2) {
+  return ses.driver.executeScript(
+    (x, y, z) => {
+      const visor = document.querySelector('[data-testid="visor"]');
+      if (!visor || typeof visor.__openrvtMundoAPantalla !== "function") {
+        throw new Error("el visor no expone __openrvtMundoAPantalla");
+      }
+      return visor.__openrvtMundoAPantalla(x, y, z);
+    },
+    x,
+    y,
+    z,
+  );
+}
+
 async function activar(ses, testid) {
   await (await ses.porTestid(testid)).click();
   await esperar(150);
@@ -211,6 +227,33 @@ test("O006a: cotas de ejes, edición con cadena, deshacer y Ctrl+Z", async () =>
     });
     assert.equal(await atributoVisor(ses, "ejes-etiquetas"), "1,2,3,4,A,B,C");
 
+    // O006b: la planta no está girada. En pantalla el 1 queda a la izquierda del 4
+    // y la A (y = 0) abajo de la C (y = 8), con +Y arriba.
+    const ejesCreados = await invocar(ses, "ejes.listar");
+    const posEje = async (etiqueta) => {
+      const eje = ejesCreados.find((e) => e.etiqueta === etiqueta);
+      assert.ok(eje, `falta el eje ${etiqueta}`);
+      return puntoPantalla(ses, eje.x2, eje.y2);
+    };
+    const [p1, p4, pA, pC] = await Promise.all([
+      posEje("1"),
+      posEje("4"),
+      posEje("A"),
+      posEje("C"),
+    ]);
+    assert.ok(
+      p1.x < p4.x - 1,
+      `el eje 1 debe quedar a la izquierda del 4 (x ${p1.x} vs ${p4.x})`,
+    );
+    assert.ok(
+      pA.y > pC.y + 1,
+      `el eje A debe quedar abajo del C (y ${pA.y} vs ${pC.y})`,
+    );
+    const ejeUno = ejesCreados.find((e) => e.etiqueta === "1");
+    const ejeCuatro = ejesCreados.find((e) => e.etiqueta === "4");
+    assert.equal(ejeUno.x1, 0);
+    assert.equal(ejeCuatro.x1, 14.5);
+
     const familias = await cotas(ses);
     assert.equal(familias.length, 2, "deben ser dos familias paralelas");
     const vertical = familias.find((f) => f.vertical);
@@ -332,6 +375,12 @@ test("O006a: el entrepiso manda y los muros del nivel superior suben", async () 
     assert.match(textos, /Nivel 0/);
     assert.match(textos, /Nivel 1/);
     assert.match(textos, /2\.70/);
+    // O006b: con un solo entrepiso no se repite la total «2.70».
+    const filasNiveles = JSON.parse((await atributoVisor(ses, "niveles-cotas")) || "[]");
+    const filaNiveles = filasNiveles.find((f) => f.nombre === "Niveles");
+    assert.ok(filaNiveles, "faltan las cotas de niveles");
+    assert.deepEqual(filaNiveles.parciales, ["2.70"]);
+    assert.equal(filaNiveles.total, null);
     const capturaAlzado = path.join(CAPTURAS, "o006a_alzado_niveles.png");
     await ses.captura(capturaAlzado);
     assert.deepEqual(dimensionesPng(capturaAlzado), { ancho: 1600, alto: 900 });

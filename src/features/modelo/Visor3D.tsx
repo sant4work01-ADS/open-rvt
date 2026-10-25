@@ -23,6 +23,7 @@ import {
   grosorMm,
   materialPorCapa,
   mmAMundo,
+  mmAMundoConMinimoPx,
   mmAPx,
   PATRONES_LINEA_DASH,
   type Estilos,
@@ -1309,10 +1310,13 @@ export function Visor3D({
         });
         const altoBurbuja = Math.max(tamano * 0.035, 0.35);
         const separacion = mmAMundo(1, vista.escala);
-        const marca = mmAMundo(2, vista.escala);
-        const altoTexto = mmAMundo(2.5, vista.escala);
-        const sepParcial = altoBurbuja / 2 + mmAMundo(5, vista.escala);
-        const sepTotal = sepParcial + mmAMundo(6, vista.escala);
+        // O006b: el texto conserva 2,5 mm de papel, pero en pantalla nunca baja de
+        // 11 px (y las marcas oblicuas, de 6 px) para que se lea al alejar la vista.
+        const marca = mmAMundoConMinimoPx(2, vista.escala, mundoPorPx, 6);
+        const altoTexto = mmAMundoConMinimoPx(2.5, vista.escala, mundoPorPx, 11);
+        const sepParcial = altoBurbuja / 2 + Math.max(mmAMundo(5, vista.escala), altoTexto * 0.6);
+        // La total se separa de la cadena de parciales al menos 1,5 veces el texto.
+        const sepTotal = sepParcial + Math.max(mmAMundo(6, vista.escala), altoTexto * 1.5);
         const exceso = mmAMundo(2, vista.escala);
         const fondo = oscuro ? "#1f2328" : "#ffffff";
         const zCota = corteZ + 0.06;
@@ -1353,6 +1357,38 @@ export function Visor3D({
             );
           };
           const textos = { vertical: familia.ejes[0].vertical, parciales: [] as string[], total: null as string | null };
+          // O006b: coloca el texto sobre la línea de cota. Si no cabe entre las dos
+          // marcas, se saca afuera del tramo con una línea guía en vez de encimarse.
+          const colocarTextoCota = (
+            etiqueta: string,
+            desde: number,
+            hasta: number,
+            t: number,
+            datos: { tipo: CotaInteractiva["tipo"]; valor: number; referencia?: string; mover?: string },
+          ): void => {
+            const sprite = textoCota(etiqueta, colorCota, fondo, altoTexto);
+            if (!sprite) return;
+            const ancho = sprite.scale.x;
+            const largo = Math.abs(hasta - desde);
+            const medio = (desde + hasta) / 2;
+            let s = medio;
+            if (ancho + marca > largo) {
+              // Fuera del tramo, pegado a la marca de la derecha, con línea guía.
+              const borde = Math.max(desde, hasta);
+              s = borde + ancho / 2 + marca;
+              lineaCerrada(
+                [punto(medio, t), punto(borde + marca * 0.6, t + altoTexto * 0.15)],
+                materialCota,
+                1.4,
+                grupoLocal,
+              );
+            }
+            const pos = punto(s, t + altoTexto * 0.9);
+            sprite.position.set(pos[0], pos[1], zCota + 0.01);
+            sprite.renderOrder = 20;
+            grupoLocal.add(sprite);
+            cotasInteraccion.current.push({ ...datos, texto: etiqueta, punto: pos });
+          };
           // Cadena de parciales.
           for (const cota of familia.parciales) {
             const t = tBase + sepParcial;
@@ -1365,22 +1401,12 @@ export function Visor3D({
             marcar(cota.desde, t);
             marcar(cota.hasta, t);
             const etiqueta = formatearCota(cota.valor);
-            const sprite = textoCota(etiqueta, colorCota, fondo, altoTexto);
-            if (sprite) {
-              const sm = (cota.desde + cota.hasta) / 2;
-              const pos = punto(sm, t + altoTexto * 0.9);
-              sprite.position.set(pos[0], pos[1], zCota + 0.01);
-              sprite.renderOrder = 20;
-              grupoLocal.add(sprite);
-              cotasInteraccion.current.push({
-                tipo: "parcial",
-                texto: etiqueta,
-                valor: cota.valor,
-                punto: pos,
-                referencia: cota.referencia,
-                mover: cota.mover,
-              });
-            }
+            colocarTextoCota(etiqueta, cota.desde, cota.hasta, t, {
+              tipo: "parcial",
+              valor: cota.valor,
+              referencia: cota.referencia,
+              mover: cota.mover,
+            });
             textos.parciales.push(etiqueta);
           }
           // Cota total, más afuera y de lectura.
@@ -1394,20 +1420,13 @@ export function Visor3D({
           marcar(familia.total.desde, tTotal);
           marcar(familia.total.hasta, tTotal);
           const etiquetaTotal = formatearCota(familia.total.valor);
-          const spriteTotal = textoCota(etiquetaTotal, colorCota, fondo, altoTexto);
-          if (spriteTotal) {
-            const sm = (familia.total.desde + familia.total.hasta) / 2;
-            const pos = punto(sm, tTotal + altoTexto * 0.9);
-            spriteTotal.position.set(pos[0], pos[1], zCota + 0.01);
-            spriteTotal.renderOrder = 20;
-            grupoLocal.add(spriteTotal);
-            cotasInteraccion.current.push({
-              tipo: "total",
-              texto: etiquetaTotal,
-              valor: familia.total.valor,
-              punto: pos,
-            });
-          }
+          colocarTextoCota(
+            etiquetaTotal,
+            familia.total.desde,
+            familia.total.hasta,
+            tTotal,
+            { tipo: "total", valor: familia.total.valor },
+          );
           textos.total = etiquetaTotal;
           datosCotas.push(textos);
         }
@@ -1480,8 +1499,8 @@ export function Visor3D({
         const zMin = Math.min(caja.min[2], ...niveles.map((n) => n.elevacion));
         const zMax = Math.max(caja.max[2], ...niveles.map((n) => n.elevacion));
         const ordenados = [...niveles].sort((a, b) => a.elevacion - b.elevacion);
-        const marca = mmAMundo(2, vista.escala);
-        const altoTexto = mmAMundo(2.5, vista.escala);
+        const marca = mmAMundoConMinimoPx(2, vista.escala, mundoPorPx, 6);
+        const altoTexto = mmAMundoConMinimoPx(2.5, vista.escala, mundoPorPx, 11);
         const fondo = oscuro ? "#1f2328" : "#ffffff";
         const firmado = (z: number) => `${z >= 0 ? "+" : ""}${z.toFixed(2)}`;
         const marcarHZ = (t: number, z: number) => {
@@ -1540,9 +1559,10 @@ export function Visor3D({
           }
         }
 
-        if (ordenados.length >= 2) {
+        if (ordenados.length >= 3) {
           const tParcial = tMax + 1.5;
-          const tTotal = tMax + 2.5;
+          // La total se separa de la cadena al menos 1,5 veces la altura del texto.
+          const tTotal = tParcial + Math.max(1, altoTexto * 1.5);
           const textos = {
             nombre: "Niveles",
             elevacion: "",

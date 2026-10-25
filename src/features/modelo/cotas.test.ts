@@ -76,6 +76,23 @@ describe("familias de cotas de ejes", () => {
     expect(familia.parciales).toEqual([]);
     expect(familia.total).toBeNull();
   });
+
+  it("con un solo tramo parcial no dibuja la total, que repetiría la medida", () => {
+    const [familia] = calcularFamiliasCotas([
+      eje("A", 0, 0, 12, 0),
+      eje("B", 0, 4, 12, 4),
+    ]);
+    expect(familia.parciales.map((c) => c.valor)).toEqual([4]);
+    expect(familia.total).toBeNull();
+    // Con dos tramos sí hay total.
+    const [conDos] = calcularFamiliasCotas([
+      eje("A", 0, 0, 12, 0),
+      eje("B", 0, 4, 12, 4),
+      eje("C", 0, 8, 12, 8),
+    ]);
+    expect(conDos.parciales.map((c) => c.valor)).toEqual([4, 4]);
+    expect(formatearCota(conDos.total!.valor)).toBe("8.00");
+  });
 });
 
 describe("texto de las cotas", () => {

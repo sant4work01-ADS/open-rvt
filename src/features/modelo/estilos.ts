@@ -248,6 +248,19 @@ export function mmAMundo(mm: number, escala: EscalaVista): number {
   return ((mm / 1000) * 100 * factorEscala(escala));
 }
 
+/**
+ * O006b: tamaño en mundo de un texto o marca de cota. Conserva su medida de papel,
+ * pero en pantalla nunca baja del mínimo en píxeles (así sigue legible al alejar).
+ */
+export function mmAMundoConMinimoPx(
+  mm: number,
+  escala: EscalaVista,
+  mundoPorPx: number,
+  minimoPx: number,
+): number {
+  return Math.max(mmAMundo(mm, escala), minimoPx * Math.max(mundoPorPx, 0));
+}
+
 /** Grosor de una categoría ya con la escala y la sobrescritura de la vista. */
 export function grosorMm(
   estilos: Estilos,

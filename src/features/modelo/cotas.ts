@@ -61,7 +61,8 @@ function cota(
 
 /**
  * Agrupa los ejes en familias paralelas y arma la cadena de parciales y la cota
- * total de cada familia. Con un solo eje no hay cotas (la familia queda vacía).
+ * total de cada familia. Con un solo eje no hay cotas; con un único tramo parcial
+ * tampoco hay total (repetiría la parcial).
  */
 export function calcularFamiliasCotas(ejes: EjeReferencia[]): FamiliaCotas[] {
   const familias: Array<{ direccion: [number, number]; ejes: EjeReferencia[] }> = [];
@@ -101,8 +102,10 @@ export function calcularFamiliasCotas(ejes: EjeReferencia[]): FamiliaCotas[] {
         ),
       );
     }
+    // La cota total solo aporta información con dos o más tramos parciales; con uno
+    // solo repetiría la misma medida.
     const total =
-      ordenados.length >= 2
+      parciales.length >= 2
         ? cota(
             "total",
             ordenados[0],
