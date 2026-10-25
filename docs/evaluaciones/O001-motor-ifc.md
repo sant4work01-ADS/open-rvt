@@ -185,7 +185,7 @@ Tamaño de lo que habría que empaquetar en Windows:
 
 | Ruta | Qué se distribuye | Tamaño comprimido | Tamaño instalado aprox. |
 |---|---|---:|---:|
-| web-ifc | `web-ifc.wasm` (1 320 042 B) + bundle JS | **1.26 MiB** wasm (0.46 MiB gzip); el paquete npm completo son 24 MB, pero no todo se envía | ~2–3 MB en el instalador |
+| web-ifc | `web-ifc.wasm` (1 320 042 B) + `web-ifc-api.js` (5.7 MB sin minificar) | **1.26 MiB** wasm (0.46 MiB gzip) + **5.7 MB** de JS (0.48 MB gzip); el paquete npm completo son 24 MB, pero no todo se envía | ~7 MB sin minificar; ~1 MB comprimido |
 | IfcOpenShell | wheel Windows `ifcopenshell 0.9.0.post1` cp314 (42 967 662 B) + numpy (12 703 552 B) + shapely (1 843 568 B) + 5 dependencias pequeñas + Python embeddable 3.14 amd64 (11 994 671 B) | **~66.7 MB** (55.2 MB de wheels + 11.4 MB de Python) | **~254 MB** medidos en el venv Linux con las mismas dependencias |
 
 Caminos de integración:
@@ -216,8 +216,9 @@ MPL solo alcanza a los archivos de web-ifc.
 
 1. **Velocidad:** B fue 4.4–6.2× más rápido en total y 5.4–23× en teselado puro. A tarda 2.08 s en
    la casa, 4.34 s en el edificio de oficinas y 0.23 s en el IFC2X3; B, 0.34 s, 0.99 s y 0.04 s.
-2. **Tamaño de distribución:** la ruta web-ifc suma ~1.3 MB de WASM; la ruta IfcOpenShell suma
-   ~67 MB comprimidos (wheel de 43 MB + numpy + Python embebido) y ~254 MB instalados.
+2. **Tamaño de distribución:** la ruta web-ifc suma ~1.3 MB de WASM (0.46 MiB gzip) más 5.7 MB de
+   JS sin minificar (0.48 MB gzip); la ruta IfcOpenShell suma ~67 MB comprimidos (wheel de 43 MB +
+   numpy + Python embebido) y ~254 MB instalados.
 3. **Precisión de volumen:** coinciden al 100 % en FZK-Haus y en el IFC2X3 y al 98.6 % en Institute;
    las únicas diferencias >1 % son 2 columnas circulares (4.74 %) y 4 escaleras (~2 %).
 4. **Malla cerrada:** A cerró las 11 ventanas de FZK-Haus; B dejó 9 abiertas por aristas de borde,
