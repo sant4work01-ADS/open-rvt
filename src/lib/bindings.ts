@@ -25,6 +25,13 @@ export interface ErrorDatos {
   traza?: string;
 }
 
+/** O006c: sesión actual de la bitácora. */
+export interface DatosSesionBitacora {
+  sesion: string;
+  ruta: string | null;
+  carpeta: string | null;
+}
+
 /** Conflicto al copiar elementos entre modelos (diálogo común copiado de PP). */
 export type Estrategia = "Reutilizar" | "Renombrar" | "Sobrescribir";
 
@@ -68,6 +75,7 @@ export function normalizarError(e: unknown): ErrorDatos {
 }
 
 export const commands = {
+  versionApp: () => envolver(invoke<string>("version_app")),
   obtenerConfig: () => envolver(invoke<Config>("obtener_config")),
   migrarTemaLocal: (tema: string) => envolver(invoke<Config>("migrar_tema_local", { tema })),
   guardarTema: (tema: string) => envolver(invoke<void>("guardar_tema", { tema })),
@@ -95,4 +103,17 @@ export const commands = {
   // el método JSON-RPC; los tipos concretos viven en src/features/modelo/tipos.ts.
   nucleoLlamar: (metodo: string, params: unknown) =>
     envolver(invoke<unknown>("nucleo_llamar", { metodo, params })),
+  // O006c: bitácora de la sesión (lotes JSONL y exportación .zip).
+  bitacoraAgregar: (eventos: unknown[]) =>
+    envolver(invoke<void>("bitacora_agregar", { eventos })),
+  bitacoraSesion: () => envolver(invoke<DatosSesionBitacora>("bitacora_sesion")),
+  bitacoraExportar: (
+    destino: string,
+    todas: boolean,
+    incluirIfc: boolean,
+    rutaIfc: string | null,
+  ) =>
+    envolver(
+      invoke<string>("bitacora_exportar", { destino, todas, incluirIfc, rutaIfc }),
+    ),
 };

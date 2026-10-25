@@ -67,9 +67,12 @@ class Servidor:
                 }
             import ifcopenshell
 
+            import platform
+
             return {
                 "disponible": True,
                 "ifcopenshell": getattr(ifcopenshell, "version", "desconocida"),
+                "python": platform.python_version(),
             }
         if metodo == "proyecto.nuevo":
             return self._exigir().nuevo(str(params.get("nombre") or "Modelo sin título"))

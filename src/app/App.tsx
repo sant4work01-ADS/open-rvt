@@ -13,6 +13,7 @@ import { AyudaView } from "@/features/ayuda/AyudaView";
 import { ModeloView } from "@/features/modelo/ModeloView";
 import { NivelesView } from "@/features/modelo/NivelesView";
 import { useModelo } from "@/features/modelo/estado";
+import { bitacoraAviso, bitacoraVista } from "@/lib/bitacora";
 import { Ribbon } from "@/features/ribbon/Ribbon";
 import { construirComandosRibbon } from "@/features/ribbon/comandos";
 import {
@@ -75,6 +76,23 @@ export function App() {
   useEffect(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
     void useModelo.getState().comprobarNucleo();
+  }, []);
+
+  // O006c: avisos, errores y cambios de vista/archivo van a la bitácora.
+  useEffect(() => {
+    const desuscribir = useModelo.subscribe((estado, anterior) => {
+      if (estado.aviso !== anterior.aviso && estado.aviso) {
+        bitacoraAviso(estado.aviso, "info");
+      }
+      if (estado.error !== anterior.error && estado.error) {
+        bitacoraAviso(estado.error, "error");
+      }
+      if (estado.vistaActivaId !== anterior.vistaActivaId || estado.ruta !== anterior.ruta) {
+        const vista = estado.vistas.find((v) => v.id === estado.vistaActivaId);
+        bitacoraVista(vista?.nombre ?? "Sin vista", estado.ruta);
+      }
+    });
+    return desuscribir;
   }, []);
 
   // Con la preferencia «sistema», seguir los cambios de tema del equipo.
@@ -146,6 +164,7 @@ export function App() {
   // Cambiar de módulo.
   const irAModulo = useCallback((id: string) => {
     setActivo(id);
+    bitacoraVista(id, useModelo.getState().ruta);
   }, []);
 
   // Alt+1…9: cambiar de módulo.

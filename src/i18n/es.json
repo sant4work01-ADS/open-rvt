@@ -121,6 +121,9 @@
     "acercaActualizaciones": "Acerca de / Actualizaciones"
   },
   "ayuda": {
+    "pestanas": "Ayuda",
+    "manual": "Manual",
+    "bitacora": "Bitácora",
     "indice-del-manual": "Índice del manual",
     "buscar-en-el-manual": "Buscar en el manual",
     "buscar-en-la-ayuda": "Buscar en la ayuda…",
@@ -169,6 +172,24 @@
     "io": "No se pudo completar la operación: {{mensaje}}",
     "validacion": "Datos no válidos: {{mensaje}}",
     "no_encontrado": "No se encontró: {{mensaje}}"
+  },
+  "bitacora": {
+    "filtrar-por-tipo": "Filtrar por tipo",
+    "todos": "Todos los tipos",
+    "solo-errores": "Solo errores",
+    "eventos": "eventos",
+    "exportar": "Exportar bitácora…",
+    "detalle-del-error": "Detalle del error",
+    "copiar-detalle": "Copiar detalle",
+    "sin-traza": "Este error no trae traza de Python.",
+    "acciones-previas": "20 acciones previas",
+    "sin-acciones-previas": "No hay acciones anteriores.",
+    "exportar-titulo": "Exportar bitácora",
+    "exportar-explicacion": "El .zip incluye las sesiones, OPEN-RVT.log y sistema.json.",
+    "todas-las-sesiones": "Todas las sesiones (no solo las últimas 3)",
+    "incluir-ifc": "Incluir el modelo IFC abierto",
+    "guardar-zip": "Guardar .zip…",
+    "sin-eventos": "Sin eventos que coincidan con el filtro."
   },
   "actualizaciones": {
     "seActualizaSolo": "OPEN-RVT se actualiza solo cuando hay una versión nueva.",

@@ -8,6 +8,7 @@ import { ErrorBoundary } from "@/app/ErrorBoundary";
 import { aplicarTema } from "@/lib/tema";
 import { instalarComportamientoNativo } from "@/app/comportamientoNativo";
 import { instalarErroresGlobales } from "@/lib/errores-globales";
+import { iniciarBitacora } from "@/lib/bitacora";
 
 // Hasta leer config.json se sigue el tema del sistema (evita el parpadeo).
 aplicarTema("sistema");
@@ -16,6 +17,8 @@ aplicarTema("sistema");
 instalarComportamientoNativo();
 // Spec 077: los errores no capturados de la interfaz también van al log de la app.
 instalarErroresGlobales();
+// O006c: bitácora de la sesión (clics, teclas, acciones, errores y vistas).
+iniciarBitacora();
 
 const clienteConsultas = new QueryClient({
   defaultOptions: { queries: { staleTime: Infinity, refetchOnWindowFocus: false } },
