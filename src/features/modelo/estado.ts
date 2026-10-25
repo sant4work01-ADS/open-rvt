@@ -243,7 +243,6 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       const migracion = migrarNivelesVisibles(vistas, niveles);
       vistas = migracion.vistas;
       migradas = migracion.cambiadas;
-      if (migradas) await persistirVistas(vistas);
     }
     const activa =
       vistas.find((v) => v.tipo === "planta") ?? vistas[0] ?? null;
@@ -285,6 +284,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       },
       tiempoCargaMs: Math.round(performance.now() - inicio),
     });
+    // La migración queda en memoria y se persiste en el siguiente guardado; no se
+    // bloquea la apertura con una escritura extra del pset.
   };
 
   const persistirVistas = async (vistas: Vista[]) => {

@@ -511,6 +511,11 @@ export function migrarNivelesVisibles(
       vista.nivelesVisibles.length === todos.size &&
       vista.nivelesVisibles.every((id) => todos.has(id));
     if (!sinNiveles && !conTodos) return vista;
+    // Si ya mostraba exactamente su nivel no hay nada que migrar: no se marca la
+    // obra como modificada al abrirla.
+    if (vista.nivelesVisibles.length === 1 && vista.nivelesVisibles[0] === vista.nivel) {
+      return vista;
+    }
     cambiadas = true;
     return { ...vista, nivelesVisibles: [vista.nivel] };
   });
