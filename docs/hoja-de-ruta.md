@@ -15,4 +15,4 @@ Orden decidido por el supervisor después de O004 (0.2.0). Cada tarea deja la ap
 ## Reglas que siguen vigentes
 - IfcOpenShell es el núcleo, y toda edición pasa por comandos del núcleo.
 - La interfaz es la de PresupuestosPro. Los archivos copiados llevan `// OPEN-RVT:`.
-- Al cerrar cada tarea: pruebas en verde, capturas de la app real y un instalador nuevo en `instaladores/` (versión menor +1).
+- Al cerrar cada tarea: pruebas en verde, capturas de la app real y publicación con el actualizador. Versión: solo sube el último número (0.5.1, 0.5.2…), como PresupuestosPro; el segundo número cambia solo en hitos grandes.
