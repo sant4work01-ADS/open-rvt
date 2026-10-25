@@ -6,9 +6,11 @@ import {
   distanciaAEjeParalelo,
   ejeConDistancia,
   fijarAngulo,
+  interseccionesDeEjes,
   puntoConLongitud,
   puntoDibujo,
   redondearCuadricula,
+  referenciasAlDia,
   REFERENCIAS_VACIAS,
   restringirEje,
   siguienteEtiquetaEje,
@@ -89,8 +91,8 @@ describe("ángulo a 15°", () => {
   });
 
   test("puntoDibujo aplica enganche y ángulo", () => {
-    const e = puntoDibujo([7.9, 0.03], refs, [0, 0]);
-    expect(e.punto).toEqual([8, 0]);
+    const e = puntoDibujo([7.9, 6.03], refs, [0, 0]);
+    expect(e.punto).toEqual([8, 6]);
     expect(e.tipo).toBe("extremo");
   });
 });
@@ -195,5 +197,102 @@ describe("colocación de puertas y ventanas", () => {
   test("no coloca fuera de un muro", () => {
     expect(colocarAbertura(refs, [8, 3.5], 1.2)).not.toBeNull();
     expect(colocarAbertura(refs, [20, 20], 1.2)).toBeNull();
+  });
+});
+
+describe("enganches O006e: tolerancia en píxeles", () => {
+  const cruce: Referencias = {
+    ...REFERENCIAS_VACIAS,
+    intersecciones: [[3, 5]],
+  };
+
+  test.each([0.002, 0.02, 0.2])(
+    "a %f m/px un clic a 8 px engancha y a 16 px no",
+    (metrosPorPixel) => {
+      const aOcho = buscarEnganche(
+        [3 + 8 * metrosPorPixel, 5],
+        cruce,
+        null,
+        metrosPorPixel,
+      );
+      expect(aOcho.tipo).toBe("interseccion");
+      expect(aOcho.punto).toEqual([3, 5]);
+
+      const aDieciseis = buscarEnganche(
+        [3 + 16 * metrosPorPixel, 5],
+        cruce,
+        null,
+        metrosPorPixel,
+      );
+      expect(aDieciseis.tipo).not.toBe("interseccion");
+    },
+  );
+
+  test("con el ángulo a 15° activo el cruce a 37° no se mueve", () => {
+    const r: Referencias = { ...REFERENCIAS_VACIAS, intersecciones: [[4, 3]] };
+    const e = puntoDibujo([4.02, 3.01], r, [0, 0], false, 0.02);
+    expect(e.tipo).toBe("interseccion");
+    expect(e.punto[0]).toBeCloseTo(4, 9);
+    expect(e.punto[1]).toBeCloseTo(3, 9);
+  });
+
+  test("un medio a 10 px no le gana a un cruce a 2 px", () => {
+    const r: Referencias = {
+      ...REFERENCIAS_VACIAS,
+      medios: [[4, 0]],
+      intersecciones: [[4.2, 0]],
+    };
+    const e = buscarEnganche([4.2, 0.04], r, null, 0.02);
+    expect(e.tipo).toBe("interseccion");
+    expect(e.punto).toEqual([4.2, 0]);
+  });
+
+  test("al mover un eje 1 m el cruce nuevo engancha y el viejo ya no", () => {
+    const eje = (globalid: string, x: number, vertical: boolean): EjeReferencia => ({
+      globalid,
+      etiqueta: vertical ? "1" : "A",
+      x1: vertical ? x : 0,
+      y1: vertical ? 0 : 0,
+      x2: vertical ? x : 8,
+      y2: vertical ? 6 : 0,
+      vertical,
+    });
+    const antes = referenciasAlDia({
+      ...REFERENCIAS_VACIAS,
+      ejes: [eje("v1", 0, true), eje("v2", 4, true), eje("h", 0, false)],
+    });
+    expect(antes.intersecciones).toEqual([
+      [0, 0],
+      [4, 0],
+    ]);
+    const despues = referenciasAlDia({
+      ...REFERENCIAS_VACIAS,
+      ejes: [eje("v1", 1, true), eje("v2", 4, true), eje("h", 0, false)],
+    });
+    expect(despues.intersecciones).toEqual([
+      [1, 0],
+      [4, 0],
+    ]);
+    expect(buscarEnganche([1.01, 0.01], despues, null, 0.02)).toMatchObject({
+      tipo: "interseccion",
+      punto: [1, 0],
+    });
+    expect(buscarEnganche([0.01, 0.01], despues, null, 0.02).tipo).toBe("cuadricula");
+  });
+
+  test("las intersecciones incluyen los cruces de todos los pares no paralelos", () => {
+    const ejes: EjeReferencia[] = [
+      { globalid: "v0", etiqueta: "1", x1: 0, y1: -1, x2: 0, y2: 7, vertical: true },
+      { globalid: "v4", etiqueta: "2", x1: 4, y1: -1, x2: 4, y2: 7, vertical: true },
+      { globalid: "h0", etiqueta: "A", x1: -1, y1: 0, x2: 9, y2: 0, vertical: false },
+      { globalid: "h3", etiqueta: "B", x1: -1, y1: 3, x2: 9, y2: 3, vertical: false },
+      { globalid: "h9", etiqueta: "C", x1: 9, y1: 10, x2: 20, y2: 10, vertical: false },
+    ];
+    expect(interseccionesDeEjes(ejes)).toEqual([
+      [0, 0],
+      [0, 3],
+      [4, 0],
+      [4, 3],
+    ]);
   });
 });

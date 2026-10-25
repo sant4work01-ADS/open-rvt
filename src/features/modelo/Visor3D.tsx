@@ -12,7 +12,13 @@ import type { Abertura, Caja, ElementoMalla, Nivel, Vista } from "./tipos";
 import { categoriaVisible, dibujaSiluetaSobreCorte } from "./vistas";
 import { useModelo } from "./estado";
 import { clasificarRueda, factorRueda, useRueda } from "@/lib/rueda";
-import { colocarAbertura, distanciaAEjeParalelo, restringirEje, type Punto2 } from "./herramientas";
+import {
+  colocarAbertura,
+  describirEnganche,
+  distanciaAEjeParalelo,
+  restringirEje,
+  type Punto2,
+} from "./herramientas";
 import {
   calcularFamiliasCotas,
   formatearCota,
@@ -755,6 +761,26 @@ export function Visor3D({
     }
     camera.updateMatrixWorld();
   }, [cajaVista]);
+  // O006e: metros de mundo por píxel de pantalla en la cámara actual. Es la base
+  // de la tolerancia de enganche (12 px) y del tamaño de su marca (10 px).
+  const metrosPorPixelActual = useCallback(() => {
+    const camera = camara.current;
+    const nodo = contenedor.current;
+    if (!camera || !nodo) return 0.02;
+    const alto = Math.max(nodo.clientHeight, 1);
+    if (camera instanceof THREE.OrthographicCamera) {
+      return Math.max((camera.top - camera.bottom) / alto, 1e-6);
+    }
+    if (camera instanceof THREE.PerspectiveCamera) {
+      const nav = navegacion.current;
+      return Math.max(
+        (2 * (nav?.distancia ?? 10) * Math.tan((camera.fov * Math.PI) / 360)) / alto,
+        1e-6,
+      );
+    }
+    return 0.02;
+  }, []);
+
 
   // Cámara de la vista activa (solo se reencuadra al cambiar de vista o de modelo).
   useEffect(() => {
@@ -2049,6 +2075,7 @@ export function Visor3D({
     }
     if (vista.tipo !== "planta" || !herramienta) return;
     const z = (vista.alturaPlano ?? caja.max[2]) + 0.03;
+    const metrosPorPixel = metrosPorPixelActual();
     const escala = Math.max(diagonalCaja(cajaVista), 2);
     const tamano = Math.max(escala * 0.018, 0.06);
     const colorPuntos = new THREE.Color(0xd97706);
@@ -2200,7 +2227,8 @@ export function Visor3D({
 
     if (engancheHerramienta) {
       const [x, y] = engancheHerramienta.punto;
-      const r = tamano * 0.75;
+      // O006e: símbolo de 10 px de pantalla, independiente del zoom.
+      const r = Math.max(metrosPorPixel * 5, 1e-5);
       const puntosForma: Record<string, THREE.Vector3[]> = {
         extremo: [
           new THREE.Vector3(x - r, y - r, z),
@@ -2221,12 +2249,7 @@ export function Visor3D({
           new THREE.Vector3(x + r, y - r, z),
           new THREE.Vector3(x - r, y + r, z),
         ],
-        cuadricula: [
-          new THREE.Vector3(x - r, y, z),
-          new THREE.Vector3(x + r, y, z),
-          new THREE.Vector3(x, y - r, z),
-          new THREE.Vector3(x, y + r, z),
-        ],
+        cuadricula: [],
         perpendicular: [
           new THREE.Vector3(x, y, z),
           new THREE.Vector3(x, y + r, z),
@@ -2235,15 +2258,31 @@ export function Visor3D({
           new THREE.Vector3(x, y, z),
         ],
       };
-      const geometria = new THREE.BufferGeometry().setFromPoints(
-        puntosForma[engancheHerramienta.tipo] ?? puntosForma.cuadricula,
+      const forma = puntosForma[engancheHerramienta.tipo] ?? [];
+      if (forma.length >= 2) {
+        const geometria = new THREE.BufferGeometry().setFromPoints(forma);
+        const marcador = new THREE.Line(
+          geometria,
+          new THREE.LineBasicMaterial({ color: colorSnap, depthTest: false }),
+        );
+        marcador.renderOrder = 15;
+        grupoLocal.add(marcador);
+      }
+      const etiqueta = etiquetaCota(
+        describirEnganche(engancheHerramienta, referencias),
+        "#0ea5e9",
+        oscuro ? "#141416" : "#ffffff",
+        Math.max(metrosPorPixel * 10, 1e-4),
       );
-      const marcador = new THREE.Line(
-        geometria,
-        new THREE.LineBasicMaterial({ color: colorSnap, depthTest: false }),
-      );
-      marcador.renderOrder = 15;
-      grupoLocal.add(marcador);
+      if (etiqueta) {
+        etiqueta.position.set(
+          x + metrosPorPixel * 10,
+          y - metrosPorPixel * 13,
+          z + 0.002,
+        );
+        etiqueta.renderOrder = 16;
+        grupoLocal.add(etiqueta);
+      }
     }
   }, [
     herramienta,
@@ -2256,6 +2295,7 @@ export function Visor3D({
     cajaVista,
     oscuro,
     ejeLibre,
+    metrosPorPixelActual,
   ]);
 
   // Ajustar la cámara a la vista (botón y Z luego A).
@@ -2490,7 +2530,7 @@ export function Visor3D({
       if (!nav || !camera) return;
       if (herramienta && vista.tipo === "planta") {
         const punto = puntoPlanta(evento);
-        if (punto) fijarRaton(punto, evento.shiftKey);
+        if (punto) fijarRaton(punto, evento.shiftKey, metrosPorPixelActual());
       }
       const arr = arrastre.current;
       if (!arr) return;
@@ -2592,6 +2632,7 @@ export function Visor3D({
               punto,
               evento.shiftKey,
               evento.ctrlKey || evento.metaKey || evento.altKey,
+              metrosPorPixelActual(),
             );
           return;
         }
@@ -2738,6 +2779,7 @@ export function Visor3D({
     dobleClicEnPlanta,
     ventanaSeleccion,
     fijarAviso,
+    metrosPorPixelActual,
   ]);
 
   useEffect(() => {
