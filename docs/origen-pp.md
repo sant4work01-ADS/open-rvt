@@ -14,6 +14,9 @@ commit **`fd60cde`** («Ayuda: novedades de la versión 0.13.18»).
 | --- | --- | --- | --- |
 | `package.json` | `package.json` | adaptado | Nombre `open-rvt`; se quitaron glide-data-grid, marked, lodash, zod, react-hook-form, react-hotkeys-hook, pdfjs-dist, selenium y demás dependencias que ya no usa nadie. |
 | `vite.config.ts` | `vite.config.ts` | adaptado | Se quitó la deduplicación y los comentarios de Glide; el resto (alias `@`, jsdom, setup) es igual. |
+| `.gitignore` | `.gitignore` | adaptado | Se añadieron las salidas de `dist`, `target`, `src-tauri/gen` y `e2e/salida`. |
+| `Cargo.toml` | `Cargo.toml` | adaptado | Workspace con el único miembro `src-tauri`; sin los crates de PP. |
+| `rust-toolchain.toml` | `rust-toolchain.toml` | intacto | — |
 | `tsconfig.json` | `tsconfig.json` | intacto | — |
 | `tailwind.config.ts` | `tailwind.config.ts` | intacto | — |
 | `postcss.config.js` | `postcss.config.js` | intacto | — |
@@ -37,7 +40,10 @@ commit **`fd60cde`** («Ayuda: novedades de la versión 0.13.18»).
 | `src/app/PaletaComandos.tsx` | `src/app/PaletaComandos.tsx` | intacto | — |
 | `src/app/DialogoAtajos.tsx` | `src/app/DialogoAtajos.tsx` | intacto | — |
 | `src/app/ListasScroll.test.tsx` | `src/app/ListasScroll.test.tsx` | adaptado | Se conservaron las pruebas de listas, paleta y atajos; se quitó el buscador de PP. |
+| `src/app/Iconos.test.tsx` | `src/app/Iconos.test.tsx` | adaptado | Compara el ribbon normal (no hay barra compacta activa) con el sidebar. |
 | `src/app/ErrorBoundary.tsx` | `src/app/ErrorBoundary.tsx` | adaptado | Sin `useSesion`; la recuperación solo limpia el error. |
+| `src/app/ErrorBoundary.test.tsx` | `src/app/ErrorBoundary.test.tsx` | intacto | — |
+| `src/app/comportamientoNativo.test.ts` | `src/app/comportamientoNativo.test.ts` | intacto | — |
 | `src/app/comportamientoNativo.ts` | `src/app/comportamientoNativo.ts` | adaptado | La tabla de atajos solo tiene los generales. |
 | `src/app/iconos.ts` | `src/app/iconos.ts` | intacto | — |
 | `src/app/modulos.ts` | `src/app/modulos.ts` | adaptado | Módulos de OPEN-RVT y sus iconos. |
@@ -75,6 +81,7 @@ commit **`fd60cde`** («Ayuda: novedades de la versión 0.13.18»).
 | `src/i18n/i18n.test.ts` | `src/i18n/i18n.test.ts` | intacto | — |
 | `src/i18n/es.json` | `src/i18n/es.json` | adaptado | Solo las claves que usan los archivos copiados y las nuevas de OPEN-RVT. |
 | `src/i18n/en.json` | `src/i18n/en.json` | adaptado | Las mismas claves que `es.json`, traducidas. |
+| `src/i18n/pantallas-en.test.tsx` | `src/i18n/pantallas-en.test.tsx` | adaptado | Recorre los cuatro módulos del esqueleto en inglés. |
 | `src/features/configuracion/ConfiguracionView.tsx` | `src/features/configuracion/ConfiguracionView.tsx` | adaptado | Solo Apariencia (tema y escala) e Idioma; sin obra, biblioteca, respaldos, asistente ni color. |
 | `src/features/configuracion/Configuracion.test.tsx` | `src/features/configuracion/Configuracion.test.tsx` | adaptado | Prueba tema, escala e idioma. |
 | `src/features/ayuda/AyudaView.tsx` | `src/features/ayuda/AyudaView.tsx` | intacto | — |
