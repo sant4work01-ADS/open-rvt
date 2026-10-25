@@ -1,0 +1,186 @@
+import { describe, expect, it } from "vitest";
+import type { Caja, ElementoMalla, Nivel } from "./tipos";
+import {
+  camaraOrtografica,
+  camaraPerspectiva,
+  cajaDeMallas,
+  crearVistaCorte,
+  crearVistas,
+  direccionAlzado,
+  leerVistas,
+  normalizarVista,
+  serializarVistas,
+  vectorIso,
+  vectorPerspectiva,
+} from "./vistas";
+
+const CAJA: Caja = { min: [-5, -3, 0], max: [5, 3, 6] };
+
+const NIVELES: Nivel[] = [
+  { globalid: "nivel-0", nombre: "Nivel 0", elevacion: 0 },
+  { globalid: "nivel-1", nombre: "Nivel 1", elevacion: 3 },
+];
+
+describe("cámaras de las vistas", () => {
+  it("cada alzado mira desde su lado con el norte del IFC en −Y", () => {
+    expect(direccionAlzado("norte")).toEqual([0, -1, 0]);
+    expect(direccionAlzado("sur")).toEqual([0, 1, 0]);
+    expect(direccionAlzado("este")).toEqual([1, 0, 0]);
+    expect(direccionAlzado("oeste")).toEqual([-1, 0, 0]);
+
+    const norte = camaraOrtografica(CAJA, direccionAlzado("norte"));
+    expect(norte.posicion[1]).toBeLessThan(CAJA.min[1]);
+    expect(norte.objetivo).toEqual([0, 0, 3]);
+    expect(norte.arriba).toEqual([0, 0, 1]);
+    // De frente, el ancho es el eje X (10 m) y el alto el Z (6 m).
+    expect(norte.ancho).toBeCloseTo(10, 6);
+    expect(norte.alto).toBeCloseTo(6, 6);
+    expect(norte.derecha - norte.izquierda).toBeGreaterThanOrEqual(10);
+    expect(norte.arribaPlano - norte.abajo).toBeGreaterThanOrEqual(6);
+  });
+
+  it("la isométrica queda a 35.26° de elevación y 45° de azimut", () => {
+    const iso = vectorIso();
+    const elevacion = (Math.asin(iso[2]) * 180) / Math.PI;
+    const azimut = (Math.atan2(iso[1], iso[0]) * 180) / Math.PI;
+    expect(elevacion).toBeCloseTo(35.264, 3);
+    expect(azimut).toBeCloseTo(45, 6);
+
+    const camara = camaraOrtografica(CAJA, iso);
+    expect(camara.posicion[0]).toBeGreaterThan(CAJA.max[0]);
+    expect(camara.posicion[1]).toBeGreaterThan(CAJA.max[1]);
+    expect(camara.posicion[2]).toBeGreaterThan(CAJA.max[2]);
+    expect(camara.lejos).toBeGreaterThan(camara.cerca);
+  });
+
+  it("la planta mira hacia abajo y deja el norte arriba de la pantalla", () => {
+    const planta = camaraOrtografica(CAJA, [0, 0, 1], { arriba: [0, -1, 0] });
+    expect(planta.posicion[2]).toBeGreaterThan(CAJA.max[2]);
+    expect(planta.arriba).toEqual([0, -1, 0]);
+    expect(planta.ancho).toBeCloseTo(10, 6);
+    expect(planta.alto).toBeCloseTo(6, 6);
+  });
+
+  it("la perspectiva usa 50° de campo de visión", () => {
+    const camara = camaraPerspectiva(CAJA, { aspecto: 16 / 9 });
+    expect(camara.fov).toBe(50);
+    expect(camara.distancia).toBeGreaterThan(0);
+    expect(vectorPerspectiva()[2]).toBeGreaterThan(0);
+    expect(Math.hypot(...vectorPerspectiva())).toBeCloseTo(1, 6);
+  });
+});
+
+describe("creación automática de vistas", () => {
+  it("crea una planta por nivel, cuatro alzados, iso y perspectiva", () => {
+    const vistas = crearVistas(NIVELES);
+    expect(vistas.map((v) => v.tipo)).toEqual([
+      "planta",
+      "planta",
+      "alzado",
+      "alzado",
+      "alzado",
+      "alzado",
+      "iso",
+      "perspectiva",
+    ]);
+    const plantas = vistas.filter((v) => v.tipo === "planta");
+    expect(plantas[0].nombre).toBe("Planta Nivel 0");
+    expect(plantas[0].alturaPlano).toBe(1.2);
+    expect(plantas[0].profundidad).toBe(-1);
+    expect(plantas[1].alturaPlano).toBe(4.2);
+    expect(plantas[1].profundidad).toBe(0);
+    for (const planta of plantas) {
+      expect(planta.nivelesVisibles).toEqual(["nivel-0", "nivel-1"]);
+      expect(Object.values(planta.categorias).every(Boolean)).toBe(true);
+    }
+    expect(vistas.filter((v) => v.tipo === "alzado").map((v) => v.orientacion)).toEqual([
+      "norte",
+      "sur",
+      "este",
+      "oeste",
+    ]);
+    expect(vistas.find((v) => v.tipo === "iso")?.nombre).toBe("3D Isométrica");
+    expect(vistas.find((v) => v.tipo === "perspectiva")?.nombre).toBe("3D Perspectiva");
+  });
+
+  it("el corte es perpendicular a la línea y conserva la altura de la planta", () => {
+    const corte = crearVistaCorte({
+      puntoA: [0, 0],
+      puntoB: [0, 10],
+      alturaPlano: 1.2,
+      nivelesVisibles: ["nivel-0"],
+      indice: 1,
+    });
+    expect(corte.nombre).toBe("Corte 1");
+    expect(corte.direccion).toEqual([-1, 0]);
+    expect(corte.profundidad).toBe(10);
+    expect(corte.alturaPlano).toBe(1.2);
+    // Producto punto con la traza = 0.
+    expect(corte.direccion![0] * 0 + corte.direccion![1] * 10).toBe(0);
+    expect(corte.puntoA).toEqual([0, 0]);
+    expect(corte.puntoB).toEqual([0, 10]);
+  });
+});
+
+describe("OPENRVT_Vistas", () => {
+  it("serializa y vuelve a leer las vistas sin perder la altura del corte", () => {
+    const corte = crearVistaCorte({
+      puntoA: [1.25, -3.5],
+      puntoB: [8.75, 4.25],
+      alturaPlano: 1.75,
+      nivelesVisibles: ["nivel-0", "nivel-1"],
+      indice: 1,
+    });
+    const vistas = [...crearVistas(NIVELES), corte];
+    const texto = serializarVistas(vistas);
+    expect(texto).not.toContain("Float32Array");
+    const leidas = leerVistas(texto);
+    expect(leidas).toHaveLength(vistas.length);
+    expect(leidas[0].nombre).toBe("Planta Nivel 0");
+    expect(leidas[0].alturaPlano).toBe(1.2);
+    const corteLeido = leidas.find((v) => v.tipo === "corte");
+    expect(corteLeido?.alturaPlano).toBe(1.75);
+    expect(corteLeido?.profundidad).toBe(10);
+    expect(corteLeido?.puntoA).toEqual([1.25, -3.5]);
+    expect(corteLeido?.direccion![0]).toBeCloseTo(corte.direccion![0], 12);
+    expect(corteLeido?.direccion![1]).toBeCloseTo(corte.direccion![1], 12);
+  });
+
+  it("un JSON roto o una vista inválida no rompen la lectura", () => {
+    expect(leerVistas("{no es json")).toEqual([]);
+    expect(leerVistas('"texto"')).toEqual([]);
+    expect(normalizarVista(null)).toBeNull();
+    expect(normalizarVista({ tipo: "inventado" })).toBeNull();
+    const completada = normalizarVista({ tipo: "planta", nombre: "P", escala: 300 });
+    expect(completada?.escala).toBe(100);
+    expect(completada?.estilo).toBe("sombreado");
+    expect(completada?.categorias.muros).toBe(true);
+    expect(completada?.nivelesVisibles).toEqual([]);
+  });
+});
+
+describe("caja de las mallas", () => {
+  it("calcula los límites de todos los vértices decodificados", () => {
+    const malla = (vertices: number[]): ElementoMalla => ({
+      globalid: "g",
+      clase: "IfcWall",
+      nombre: "Muro",
+      nivel: "Nivel 0",
+      color: "#cccccc",
+      opacidad: 1,
+      categoria: "muros",
+      vertices: new Float32Array(vertices),
+      indices: new Uint32Array([0, 1, 2]),
+    });
+    const caja = cajaDeMallas([
+      malla([-2, 1, 0, 3, -4, 5]),
+      malla([0, 0, 0, 1, 1, 1]),
+    ]);
+    expect(caja.min).toEqual([-2, -4, 0]);
+    expect(caja.max).toEqual([3, 1, 5]);
+  });
+
+  it("sin mallas devuelve una caja unitaria para no romper la cámara", () => {
+    expect(cajaDeMallas([])).toEqual({ min: [-1, -1, -1], max: [1, 1, 1] });
+  });
+});

@@ -8,9 +8,11 @@
 //! endpoint y su llave pública; no se dejan ni endpoint ni llave en este esqueleto.
 
 mod estado;
+mod nucleo;
 
 use estado::{guardar_config, leer_config, Config, EstadoApp, Rutas};
-use tauri::{Manager, State};
+use nucleo::EstadoNucleo;
+use tauri::{Emitter, Manager, State};
 
 /// Versión de la aplicación; comando de prueba para validar el puente IPC.
 #[tauri::command]
@@ -179,6 +181,21 @@ fn registrar_error_comando(comando: String, mensaje: String) {
     log::error!("error en el comando {comando}: {mensaje}");
 }
 
+/// Único comando del núcleo IFC: reenvía una llamada JSON-RPC al proceso Python.
+#[tauri::command]
+fn nucleo_llamar(
+    app: tauri::AppHandle,
+    estado: State<'_, EstadoNucleo>,
+    metodo: String,
+    params: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let resultado = estado.0.llamar(&metodo, params);
+    for aviso in estado.0.tomar_avisos() {
+        let _ = app.emit("nucleo-aviso", aviso);
+    }
+    resultado.map_err(|e| e.to_string())
+}
+
 pub fn run() {
     log::info!(
         "OPEN-RVT {} arranca en {}",
@@ -195,6 +212,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(EstadoApp::default())
+        .manage(EstadoNucleo::default())
         .invoke_handler(tauri::generate_handler![
             version_app,
             obtener_config,
@@ -211,8 +229,13 @@ pub fn run() {
             fijar_titulo_ventana,
             registrar_error_ui,
             registrar_error_comando,
+            nucleo_llamar,
         ])
         .setup(|app| {
+            // El proceso Python se lanza al arrancar y queda vivo. Si no hay
+            // IfcOpenShell, la app abre igual y el error se muestra en la barra de estado.
+            app.state::<EstadoNucleo>().0.precalentar();
+
             // Preferencias guardadas; si no hayconfig.json se usan las de fábrica.
             let rutas = Rutas::de(app.handle())?;
             let config = leer_config(&rutas.config());
@@ -239,7 +262,11 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error al ejecutar OPEN-RVT")
-        .run(|_app, _evento| {});
+        .run(|app, evento| {
+            if let tauri::RunEvent::Exit = evento {
+                app.state::<EstadoNucleo>().0.detener();
+            }
+        });
 }
 
 /// Capa A de la spec 021 (solo Windows / WebView2): la ventana no ofrece menús,

@@ -86,7 +86,7 @@ class Sesion {
     }
   }
 
-  static async abrir({ prueba = "e2e", tamano, lateralExpandido = false } = {}) {
+  static async abrir({ prueba = "e2e", tamano, lateralExpandido = false, compositar = false } = {}) {
     // Se resuelve antes de arrancar tauri-driver: si falta el binario, no queda un proceso suelto.
     const binario = rutaBinario();
     const datos = fs.mkdtempSync(path.join(os.tmpdir(), "openrvt-e2e-"));
@@ -102,9 +102,11 @@ class Sesion {
     const entorno = {
       ...process.env,
       OPENRVT_DATOS_DIR: datos,
-      WEBKIT_DISABLE_COMPOSITING_MODE: "1",
       GDK_BACKEND: "x11",
     };
+    // WebGL necesita composición: en las pruebas con visor se deja activa.
+    if (!compositar) entorno.WEBKIT_DISABLE_COMPOSITING_MODE = "1";
+    else delete entorno.WEBKIT_DISABLE_COMPOSITING_MODE;
     delete entorno.WAYLAND_DISPLAY;
     if (tamano && Number.isFinite(tamano.ancho) && Number.isFinite(tamano.alto)) {
       entorno.OPENRVT_TAMANO_VENTANA = `${Math.round(tamano.ancho)}x${Math.round(tamano.alto)}`;

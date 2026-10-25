@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openrvt-nucleo"
+version = "0.1.0"
+description = "Núcleo IFC de OPEN-RVT basado en IfcOpenShell"
+requires-python = ">=3.10"
+dependencies = [
+  "ifcopenshell==0.9.0.post1",
+  "numpy",
+]
+
+[project.optional-dependencies]
+pruebas = ["pytest"]
+
+[tool.setuptools]
+packages = ["openrvt_nucleo"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -35,11 +35,11 @@ describe("App", () => {
       "Aquí irá el editor (planta y 3D)",
     );
     expect(screen.getByTestId("estado-modelo")).toHaveTextContent("Sin modelo abierto");
-    // La cinta arranca en Inicio con los comandos de archivo deshabilitados.
+    // La cinta arranca en Inicio con los comandos de archivo habilitados.
     expect(screen.getByRole("tab", { name: "Inicio" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("button", { name: /Nuevo \(Ctrl\+N\) — Disponible pronto/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Abrir \(Ctrl\+O\) — Disponible pronto/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Guardar \(Ctrl\+S\) — Disponible pronto/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Nuevo \(Ctrl\+N\) — Crear un modelo IFC vacío/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Abrir \(Ctrl\+O\) — Abrir un modelo IFC/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Guardar \(Ctrl\+S\) — Guardar el modelo/ })).toBeEnabled();
   });
 
   it("cambia de módulo con Alt+4 y muestra la ayuda", async () => {

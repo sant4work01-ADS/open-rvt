@@ -3,6 +3,9 @@
     "app": "OPEN-RVT",
     "obra": "Model",
     "noHayObra": "No model open",
+    "abrir-modelo": "Open IFC model",
+    "guardar-modelo": "Save IFC model",
+    "modelo-ifc": "IFC model",
     "espanol": "Spanish",
     "ingles": "English"
   },
@@ -36,12 +39,15 @@
     },
     "grupos": {
       "Archivo": "File",
+      "Modelo": "Model",
       "Tema": "Theme"
     },
     "comandos": {
       "nuevo": "New",
       "abrir": "Open",
       "guardar": "Save",
+      "guardar-como": "Save as",
+      "nuevo-corte": "New section view",
       "tema-sistema": "System",
       "tema-claro": "Light",
       "tema-oscuro": "Dark",
@@ -51,9 +57,11 @@
       "pegar": "Paste"
     },
     "descripciones": {
-      "nuevo": "Available soon",
-      "abrir": "Available soon",
-      "guardar": "Available soon",
+      "nuevo": "Create an empty IFC model",
+      "abrir": "Open an IFC model",
+      "guardar": "Save the model",
+      "guardar-como": "Save the model to another file",
+      "nuevo-corte": "Draw a line with two clicks on a plan",
       "tema-sistema": "Follow the system theme",
       "tema-claro": "Light theme",
       "tema-oscuro": "Dark theme"
@@ -65,7 +73,8 @@
     "minimizar": "Minimize",
     "maximizar": "Maximize",
     "restaurar": "Restore",
-    "cerrar": "Close"
+    "cerrar": "Close",
+    "cambios-sin-guardar": "Unsaved changes"
   },
   "barraEstado": {
     "barra": "Status bar"

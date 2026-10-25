@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Minus, Minimize2, Square, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useModelo } from "@/features/modelo/estado";
 
 /** Bordes desde los que se puede redimensionar (mismo tipo que la API de Tauri). */
 type ResizeDirection =
@@ -118,6 +119,8 @@ export function BarraTitulo() {
   };
 
   const titulo = t("comun.app", "OPEN-RVT");
+  const nombreArchivo = useModelo((s) => s.nombreArchivo);
+  const conCambios = useModelo((s) => s.conCambios);
 
   return (
     <>
@@ -142,7 +145,17 @@ export function BarraTitulo() {
           className="truncate px-3 font-medium"
         >
           {titulo}
+          {nombreArchivo && <span className="font-normal"> — {nombreArchivo}</span>}
         </span>
+        {conCambios && nombreArchivo && (
+          <span
+            data-testid="titulo-cambios"
+            title={t("barraTitulo.cambios-sin-guardar", "Cambios sin guardar")}
+            className="text-amber-500"
+          >
+            ●
+          </span>
+        )}
         <div className="ml-auto flex h-full items-stretch">
           <button
             type="button"
