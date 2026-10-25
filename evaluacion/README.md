@@ -41,3 +41,33 @@ Escribe `resultados/<muestra>_b.csv` y `.json` con el mismo criterio de mediana.
 La comparación marca diferencias de volumen de malla mayores al 1 % y diferencias contra la
 cantidad base del archivo mayores al 2 %. Los umbrales se pueden cambiar con
 `--umbral-volumen` y `--umbral-qto`.
+
+## O001b — edición
+
+Los dos guiones crean el mismo modelo desde cero, lo editan, lo guardan y lo
+vuelven a abrir con el otro motor. El modelo tiene 4 muros, 1 losa, 1 puerta y
+1 vano; tras la edición el rectángulo pasa de 8 × 6 a 9 × 6 m y el espesor del
+tipo «Block 15» pasa de 0.15 a 0.20 m.
+
+```bash
+# Motor A: IfcOpenShell. Escribe resultados/edicion_a.ifc y .json.
+~/.venvs/openrvt/bin/python evaluacion/a_editar.py
+
+# Motor B: web-ifc. Escribe resultados/edicion_b.ifc y .json.
+node evaluacion/b_editar.mjs
+
+# 3 corridas de cada motor, medianas y volúmenes cruzados.
+~/.venvs/openrvt/bin/python evaluacion/resumir_edicion.py
+
+# Pruebas de la edición (conteos, vano, volúmenes y validación).
+~/.venvs/openrvt/bin/python -m pytest evaluacion/test_editar.py -q
+```
+
+Los guiones también aceptan `--medir <ifc> --json <salida>` para que el otro
+motor los use, y `a_editar.py --validar <ifc> --json <salida>` para pasar
+`ifcopenshell.validate` sin errores de esquema.
+
+La edición se interpreta así: el muro este se desplaza 1 m hacia el este (la
+dimensión este-oeste pasa de 8 a 9 m) y el sur y el norte se estiran a 9 m.
+Las uniones son a eje: cada muro conserva su largo nominal y se solapa con los
+perpendiculares en las esquinas.
