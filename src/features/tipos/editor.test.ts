@@ -5,6 +5,7 @@ import {
   espesorCm,
   nombreDuplicado,
   posicionesCapas,
+  posicionesVarillas,
   totalCapas,
   validarCapas,
 } from "./editor";
@@ -89,6 +90,35 @@ describe("vista previa", () => {
   it("no dibuja nada sin capas o sin ancho", () => {
     expect(posicionesCapas([], 360)).toEqual([]);
     expect(posicionesCapas(CAPAS, 0)).toEqual([]);
+  });
+});
+
+describe("reparto de varillas (O007b)", () => {
+  it("cuatro varillas van a las cuatro esquinas", () => {
+    const barras = posicionesVarillas(0.30, 0.30, 4, 0.025);
+    expect(barras).toHaveLength(4);
+    expect(barras).toEqual([
+      [-0.125, -0.125],
+      [0.125, -0.125],
+      [0.125, 0.125],
+      [-0.125, 0.125],
+    ]);
+  });
+
+  it("seis varillas añaden una en cada cara H", () => {
+    const barras = posicionesVarillas(0.30, 0.40, 6, 0.025);
+    expect(barras).toHaveLength(6);
+    expect(barras.slice(0, 4)).toEqual([
+      [-0.125, -0.175],
+      [0.125, -0.175],
+      [0.125, 0.175],
+      [-0.125, 0.175],
+    ]);
+    expect(barras.slice(4)).toEqual([
+      [0, -0.175],
+      [0, 0.175],
+    ]);
+    expect(new Set(barras.map(([x, y]) => `${x},${y}`)).size).toBe(6);
   });
 });
 

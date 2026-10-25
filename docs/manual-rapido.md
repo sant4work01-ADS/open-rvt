@@ -35,7 +35,8 @@ El editor se abre con **Modelar → Tipos**, con la entrada **Tipos y materiales
 barra lateral o con doble clic sobre un elemento del modelo.
 
 - **Árbol de tipos:** busca, crea, duplica y borra tipos. Muros ya tiene los tipos
-  base y tres ejemplos multicapa; Estructura e Instalaciones muestran «Próximamente».
+  base y tres ejemplos multicapa; Estructura trae zapatas, contratrabes, columnas,
+  castillos, trabes, cerramientos y dalas; Instalaciones muestra «Próximamente».
 - **Capas del muro:** se ordenan de exterior a interior. Cada capa lleva función
   (núcleo, acabado, aislante o membrana), material de la biblioteca y espesor en
   centímetros. Debe haber exactamente un núcleo, aunque puede ocupar varias capas
@@ -52,6 +53,41 @@ barra lateral o con doble clic sobre un elemento del modelo.
 
 En planta a **1:50** o mayor se dibujan las líneas entre capas y el contorno grueso y
 rayado del núcleo; a **1:100** o menor solo queda el contorno exterior.
+
+### Estructura
+
+Todo elemento estructural sale de un tipo con **sección** y **armado**. La cinta
+**Modelar → Estructura** trae Zapata, Zapata corrida, Contratrabe, Columna, Castillo,
+Trabe, Cerramiento y Dala.
+
+- **Zapata, columna y castillo:** un clic. El cursor se engancha al **cruce de dos
+  ejes**, con prioridad sobre la cuadrícula; la tecla **R** gira 90°.
+- **Zapata corrida, contratrabe, trabe, cerramiento y dala:** dos clics como el muro.
+  Se puede escribir la longitud y pulsar Enter.
+- **Zapatas:** el desplante es la profundidad desde el nivel de piso. La plantilla de
+  concreto pobre va debajo de la zapata y el dado se centra encima.
+- **Dala de desplante:** su lecho bajo apoya en la elevación del nivel; las demás vigas
+  dejan el lecho alto en la elevación del nivel más el desfase.
+- **Editor de tipos:** para las clases de estructura muestra la sección en centímetros
+  (el núcleo la guarda en metros) y el armado: longitudinal, estribos, parrilla de
+  zapatas, recubrimiento y armex. La vista previa dibuja la sección con el estribo, las
+  varillas y las cotas B y H; en las zapatas muestra la parrilla y el corte del peralte.
+- **Acero estimado:** el pie del editor indica los kg/m de una pieza lineal o los kg de
+  una zapata. Al seleccionar un elemento, el panel de propiedades muestra «Acero
+  estimado» y permite editar desplante, desfase, altura y nivel superior.
+- **Planta:** columnas y castillos se rellenan con el rayado de concreto; trabes,
+  cerramientos, dalas, zapatas y contratrabes se dibujan con líneas discontinuas.
+
+### Novedades de la versión 0.5.3
+
+- Nuevos elementos estructurales: zapata aislada y corrida, contratrabe, columna,
+  castillo, trabe, cerramiento y dala, con sus tipos semilla.
+- Sección y armado editables por tipo, con regeneración de todas las instancias en un
+  solo paso de deshacer.
+- Acero estimado por pieza con la tabla de varillas #2 a #8 y la tabla de armex.
+- Herramientas de colocación con enganche al cruce de ejes y giro con R.
+- Vista previa de la sección armada en el editor de tipos y acero estimado en el panel
+  de propiedades.
 
 ### Atajos
 

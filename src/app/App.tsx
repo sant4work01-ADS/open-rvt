@@ -13,7 +13,7 @@ import { AyudaView } from "@/features/ayuda/AyudaView";
 import { ModeloView } from "@/features/modelo/ModeloView";
 import { EditorTipos } from "@/features/tipos/EditorTipos";
 import { NivelesView } from "@/features/modelo/NivelesView";
-import { useModelo } from "@/features/modelo/estado";
+import { esHerramientaPuntual, useModelo } from "@/features/modelo/estado";
 import { bitacoraAviso, bitacoraVista, vaciarBitacora } from "@/lib/bitacora";
 import { Ribbon } from "@/features/ribbon/Ribbon";
 import { construirComandosRibbon } from "@/features/ribbon/comandos";
@@ -232,6 +232,15 @@ export function App() {
         estado.voltearAbertura();
         return;
       }
+      // O007b: R gira 90° la columna, el castillo o la zapata siguiente.
+      if (
+        e.key.toLowerCase() === "r" &&
+        esHerramientaPuntual(estado.herramienta)
+      ) {
+        e.preventDefault();
+        estado.girar90();
+        return;
+      }
       if (
         estado.herramienta &&
         estado.herramienta !== "puerta" &&
@@ -324,6 +333,18 @@ export function App() {
         herramientaVentana: () => useModelo.getState().activarHerramienta("ventana"),
         herramientaMover: () => useModelo.getState().activarHerramienta("mover"),
         herramientaCopiar: () => useModelo.getState().activarHerramienta("copiar"),
+        // O007b: herramientas de estructura.
+        herramientaZapata: () => useModelo.getState().activarHerramienta("zapata"),
+        herramientaZapataCorrida: () =>
+          useModelo.getState().activarHerramienta("zapata_corrida"),
+        herramientaContratrabe: () =>
+          useModelo.getState().activarHerramienta("contratrabe"),
+        herramientaColumna: () => useModelo.getState().activarHerramienta("columna"),
+        herramientaCastillo: () => useModelo.getState().activarHerramienta("castillo"),
+        herramientaTrabe: () => useModelo.getState().activarHerramienta("trabe"),
+        herramientaCerramiento: () =>
+          useModelo.getState().activarHerramienta("cerramiento"),
+        herramientaDala: () => useModelo.getState().activarHerramienta("dala"),
         // O007a: el editor vive en el módulo Modelo; la cinta cambia de módulo.
         abrirTipos: () => {
           irAModulo("modelo");

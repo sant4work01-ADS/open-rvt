@@ -47,7 +47,8 @@
       "Construir": "Build",
       "Modificar": "Modify",
       "Historial": "History",
-      "Editor": "Editor"
+      "Editor": "Editor",
+      "Estructura": "Structure"
     },
     "comandos": {
       "nuevo": "New",
@@ -72,7 +73,15 @@
       "mover": "Move",
       "borrar": "Delete",
       "rehacer": "Redo",
-      "tipos": "Types"
+      "tipos": "Types",
+      "zapata": "Footing",
+      "zapata-corrida": "Strip footing",
+      "contratrabe": "Grade beam",
+      "columna": "Column",
+      "castillo": "Tie column",
+      "trabe": "Beam",
+      "cerramiento": "Lintel beam",
+      "dala": "Sill beam"
     },
     "descripciones": {
       "nuevo": "Create an empty IFC model",
@@ -94,7 +103,15 @@
       "copiar": "Copy the selection between two points",
       "borrar": "Delete the selected elements",
       "deshacer": "Undo the last command",
-      "rehacer": "Redo the last undone command"
+      "rehacer": "Redo the last undone command",
+      "zapata": "Place an isolated footing at a grid intersection",
+      "zapata-corrida": "Draw a strip footing between two points",
+      "contratrabe": "Draw a grade beam between two footings",
+      "columna": "Place a column at a grid intersection; R rotates 90°",
+      "castillo": "Place a tie column at a grid intersection; R rotates 90°",
+      "trabe": "Draw a beam between two columns",
+      "cerramiento": "Draw the lintel beam that caps a wall",
+      "dala": "Draw the sill beam on the foundation"
     },
     "masOpciones": "More options"
   },

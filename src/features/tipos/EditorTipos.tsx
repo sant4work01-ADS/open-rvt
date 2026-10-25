@@ -33,6 +33,7 @@ import {
   LINEAS_UBICACION,
   nombreDuplicado,
   posicionesCapas,
+  posicionesVarillas,
   RAYADOS,
   totalCapas,
   UNIDADES,
@@ -44,6 +45,15 @@ interface ResumenTipo {
   nombre: string;
   clase: string;
   espesor?: number;
+  alias?: string;
+  seccion?: Record<string, number | string>;
+  armado?: Record<string, number | string>;
+  acero?: {
+    unidad: string;
+    total_kg: number;
+    longitudinal_kg: number;
+    estribos_kg: number;
+  };
   instancias: number;
 }
 
@@ -51,7 +61,68 @@ interface Borrador {
   nombre: string;
   capas: CapaMuro[];
   linea: LineaUbicacion;
+  clase: string;
+  alias?: string;
+  seccion: Record<string, string>;
+  armado: Record<string, string>;
+  acero?: ResumenTipo["acero"];
 }
+
+const GRUPOS_ESTRUCTURA: ReadonlyArray<{ id: string; nombre: string; alias: string[] }> = [
+  { id: "zapatas", nombre: "Zapatas", alias: ["zapata", "zapata_corrida"] },
+  { id: "contratrabes", nombre: "Contratrabes", alias: ["contratrabe"] },
+  { id: "columnas", nombre: "Columnas", alias: ["columna"] },
+  { id: "castillos", nombre: "Castillos", alias: ["castillo"] },
+  { id: "trabes", nombre: "Trabes", alias: ["trabe"] },
+  { id: "cerramientos", nombre: "Cerramientos y dalas", alias: ["cerramiento", "dala"] },
+];
+
+const CAMPOS_SECCION_CM: Record<string, ReadonlyArray<{ id: string; nombre: string }>> = {
+  zapata: [
+    { id: "Largo", nombre: "Largo" },
+    { id: "Ancho", nombre: "Ancho" },
+    { id: "Peralte", nombre: "Peralte" },
+    { id: "DadoB", nombre: "Dado B" },
+    { id: "DadoH", nombre: "Dado H" },
+    { id: "DadoAlto", nombre: "Alto del dado" },
+    { id: "Plantilla", nombre: "Plantilla" },
+  ],
+  zapata_corrida: [
+    { id: "Ancho", nombre: "Ancho" },
+    { id: "Peralte", nombre: "Peralte" },
+    { id: "Corona", nombre: "Corona (0 = rectangular)" },
+    { id: "Plantilla", nombre: "Plantilla" },
+  ],
+  lineal: [
+    { id: "B", nombre: "B (ancho)" },
+    { id: "H", nombre: "H (peralte)" },
+    { id: "D", nombre: "D (diámetro, solo circular)" },
+  ],
+};
+
+function cmTexto(metros: number | string | undefined): string {
+  const numero = Number(metros);
+  if (!Number.isFinite(numero)) return "0";
+  return String(Math.round(numero * 100 * 1000) / 1000);
+}
+
+function mDeCm(texto: string): number {
+  return (Number(String(texto).replace(",", ".")) || 0) / 100;
+}
+
+function camposSeccion(alias: string | undefined): ReadonlyArray<{ id: string; nombre: string }> {
+  return CAMPOS_SECCION_CM[alias ?? ""] ?? CAMPOS_SECCION_CM.lineal;
+}
+
+/** Campos de armado que la interfaz muestra en centímetros y el núcleo guarda en m. */
+const ARMADO_CM = new Set([
+  "EstSepExtremos",
+  "EstSepCentro",
+  "EstLongConfinamiento",
+  "ParrillaSepX",
+  "ParrillaSepY",
+  "Recubrimiento",
+]);
 
 type Dialogo =
   | { modo: "crear" }
@@ -61,7 +132,7 @@ type Dialogo =
 
 const CATEGORIAS = [
   { id: "muros", nombre: "Muros", proximamente: false },
-  { id: "estructura", nombre: "Estructura", proximamente: true },
+  { id: "estructura", nombre: "Estructura", proximamente: false },
   { id: "instalaciones", nombre: "Instalaciones", proximamente: true },
 ];
 
@@ -89,6 +160,228 @@ function claseCategoria(clase: string): string {
   return clase.replace(/^Ifc/, "").replace(/Type$/, "");
 }
 
+function PreviewEstructura({ borrador }: { borrador: Borrador }) {
+  const alias = borrador.alias ?? "columna";
+  const numero = (campo: string, respaldo = 0) => {
+    const valor = borrador.seccion[campo];
+    return valor === undefined || valor === "" ? respaldo : Number(valor);
+  };
+  if (alias === "zapata") {
+    const largo = numero("Largo", 120);
+    const ancho = numero("Ancho", 120);
+    const peralte = numero("Peralte", 25);
+    const dadoB = numero("DadoB", 0);
+    const dadoH = numero("DadoH", 0);
+    const dadoAlto = numero("DadoAlto", 0);
+    const recubrimiento = Number(borrador.armado.Recubrimiento ?? 5);
+    const sepX = Number(borrador.armado.ParrillaSepX ?? 20);
+    const sepY = Number(borrador.armado.ParrillaSepY ?? 20);
+    const escala = 220 / Math.max(largo, ancho);
+    const anchoDibujo = largo * escala;
+    const altoDibujo = ancho * escala;
+    const x0 = 70;
+    const y0 = 30;
+    const barrasX = Math.max(1, Math.floor((ancho - 2 * recubrimiento) / sepX) + 1);
+    const barrasY = Math.max(1, Math.floor((largo - 2 * recubrimiento) / sepY) + 1);
+    return (
+      <svg
+        data-testid="vista-previa-zapata"
+        viewBox="0 0 420 430"
+        className="w-full rounded border bg-white"
+        role="img"
+        aria-label="Planta y corte de la zapata"
+      >
+        <text x={x0} y={18} fontSize="11" fill="#333">Planta</text>
+        <rect
+          x={x0} y={y0} width={anchoDibujo} height={altoDibujo}
+          fill="#eceff1" stroke="#1f2328" strokeWidth="1.6"
+        />
+        {Array.from({ length: barrasY }, (_, i) => (
+          <line
+            key={`x-${i}`}
+            x1={x0 + recubrimiento * escala}
+            y1={y0 + recubrimiento * escala + (i * (ancho - 2 * recubrimiento) * escala) / Math.max(barrasY - 1, 1)}
+            x2={x0 + anchoDibujo - recubrimiento * escala}
+            y2={y0 + recubrimiento * escala + (i * (ancho - 2 * recubrimiento) * escala) / Math.max(barrasY - 1, 1)}
+            stroke="#c0392b" strokeWidth="1"
+          />
+        ))}
+        {Array.from({ length: barrasX }, (_, i) => (
+          <line
+            key={`y-${i}`}
+            x1={x0 + recubrimiento * escala + (i * (largo - 2 * recubrimiento) * escala) / Math.max(barrasX - 1, 1)}
+            y1={y0 + recubrimiento * escala}
+            x2={x0 + recubrimiento * escala + (i * (largo - 2 * recubrimiento) * escala) / Math.max(barrasX - 1, 1)}
+            y2={y0 + altoDibujo - recubrimiento * escala}
+            stroke="#c0392b" strokeWidth="1"
+          />
+        ))}
+        {dadoB > 0 && dadoH > 0 && (
+          <rect
+            x={x0 + anchoDibujo / 2 - (dadoB * escala) / 2}
+            y={y0 + altoDibujo / 2 - (dadoH * escala) / 2}
+            width={dadoB * escala}
+            height={dadoH * escala}
+            fill="none" stroke="#1f2328" strokeWidth="1"
+          />
+        )}
+        <text x={x0 + anchoDibujo / 2} y={y0 + altoDibujo + 16} textAnchor="middle" fontSize="9">
+          {largo.toFixed(0)} cm
+        </text>
+        <text x={x0 - 6} y={y0 + altoDibujo / 2} textAnchor="end" fontSize="9">
+          {ancho.toFixed(0)}
+        </text>
+        <text x={x0} y={y0 + altoDibujo + 42} fontSize="11" fill="#333">Corte</text>
+        {(() => {
+          const base = 400;
+          const escalaCorte = 1.2;
+          const altoPeralte = Math.max(peralte * escalaCorte, 10);
+          const altoDado = dadoAlto * escalaCorte;
+          return (
+            <>
+              <rect
+                x={x0} y={base - altoPeralte} width={anchoDibujo}
+                height={altoPeralte} fill="#eceff1" stroke="#1f2328" strokeWidth="1.6"
+              />
+              {dadoB > 0 && dadoH > 0 && (
+                <rect
+                  x={x0 + anchoDibujo / 2 - (dadoB * escala) / 2}
+                  y={base - altoPeralte - altoDado}
+                  width={dadoB * escala}
+                  height={altoDado}
+                  fill="#eceff1" stroke="#1f2328" strokeWidth="1"
+                />
+              )}
+              <text x={x0 + anchoDibujo / 2} y={base + 16} textAnchor="middle" fontSize="9">
+                Peralte {peralte.toFixed(0)} cm
+              </text>
+            </>
+          );
+        })()}
+      </svg>
+    );
+  }
+  if (alias === "zapata_corrida") {
+    const ancho = numero("Ancho", 60);
+    const peralte = numero("Peralte", 20);
+    const corona = numero("Corona", 0);
+    const escala = 240 / Math.max(ancho, 1);
+    const altoDibujo = Math.max(peralte * escala, 12);
+    const x0 = 90;
+    const y0 = 55;
+    const mitadSup = (corona > 0 ? corona : ancho) * escala / 2;
+    const mitadInf = ancho * escala / 2;
+    return (
+      <svg
+        data-testid="vista-previa-zapata-corrida"
+        viewBox="0 0 420 220"
+        className="w-full rounded border bg-white"
+        role="img"
+        aria-label="Sección de la zapata corrida"
+      >
+        <polygon
+          points={`${x0 - mitadInf},${y0 + altoDibujo} ${x0 + mitadInf},${y0 + altoDibujo} ${x0 + mitadSup},${y0} ${x0 - mitadSup},${y0}`}
+          fill="#eceff1" stroke="#1f2328" strokeWidth="1.6"
+        />
+        <text x={x0} y={y0 + altoDibujo + 22} textAnchor="middle" fontSize="9">
+          {ancho.toFixed(0)} cm {corona > 0 ? `· corona ${corona.toFixed(0)}` : "· rectangular"}
+        </text>
+        <text x={x0 + mitadInf + 8} y={y0 + altoDibujo / 2} fontSize="9">
+          {peralte.toFixed(0)} cm
+        </text>
+      </svg>
+    );
+  }
+  const forma = borrador.seccion.Forma ?? "rectangular";
+  const ancho = forma === "circular" ? numero("D", 30) : numero("B", 30);
+  const peralte = forma === "circular" ? ancho : numero("H", 30);
+  const recubrimiento = Number(borrador.armado.Recubrimiento ?? 2.5);
+  const cantidad = Number(borrador.armado.LongCantidad ?? 4);
+  const escala = 170 / Math.max(ancho, peralte, 1);
+  const anchoDibujo = ancho * escala;
+  const altoDibujo = peralte * escala;
+  const cx = 145;
+  const cy = 115;
+  const barras = forma === "circular"
+    ? Array.from({ length: Math.max(cantidad, 4) }, (_, i) => {
+        const angulo = (i / Math.max(cantidad, 4)) * Math.PI * 2;
+        const radio = Math.max(ancho / 2 - recubrimiento, 0);
+        return [
+          Math.cos(angulo) * radio,
+          Math.sin(angulo) * radio,
+        ] as [number, number];
+      })
+    : posicionesVarillas(
+        ancho / 100,
+        peralte / 100,
+        cantidad,
+        recubrimiento / 100,
+      ).map(([x, y]) => [x * 100, y * 100] as [number, number]);
+  const armex = String(borrador.armado.Armex ?? "");
+  return (
+    <svg
+      data-testid="vista-previa-estructura"
+      viewBox="0 0 420 300"
+      className="w-full rounded border bg-white"
+      role="img"
+      aria-label="Sección con estribo y varillas"
+    >
+      {forma === "circular" ? (
+        <>
+          <circle cx={cx} cy={cy} r={anchoDibujo / 2} fill="#eceff1" stroke="#1f2328" strokeWidth="1.6" />
+          <circle
+            cx={cx} cy={cy}
+            r={Math.max(anchoDibujo / 2 - recubrimiento * escala, 2)}
+            fill="none" stroke="#555" strokeWidth="1"
+          />
+          {barras.map(([bx, by], i) => (
+            <circle
+              key={`barra-${i}`} data-testid={`varilla-${i}`}
+              cx={cx + bx * escala} cy={cy - by * escala} r="3.2"
+              fill="#c0392b"
+            />
+          ))}
+        </>
+      ) : (
+        <>
+          <rect
+            x={cx - anchoDibujo / 2} y={cy - altoDibujo / 2}
+            width={anchoDibujo} height={altoDibujo}
+            fill="#eceff1" stroke="#1f2328" strokeWidth="1.6"
+          />
+          <rect
+            x={cx - anchoDibujo / 2 + recubrimiento * escala}
+            y={cy - altoDibujo / 2 + recubrimiento * escala}
+            width={Math.max(anchoDibujo - 2 * recubrimiento * escala, 1)}
+            height={Math.max(altoDibujo - 2 * recubrimiento * escala, 1)}
+            fill="none" stroke="#555" strokeWidth="1"
+          />
+          {barras.map(([bx, by], i) => (
+            <circle
+              key={`barra-${i}`} data-testid={`varilla-${i}`}
+              cx={cx + bx * escala} cy={cy - by * escala} r="3.2"
+              fill="#c0392b"
+            />
+          ))}
+        </>
+      )}
+      <line x1={cx - anchoDibujo / 2} y1={262} x2={cx + anchoDibujo / 2} y2={262} stroke="#333" strokeWidth="0.8" />
+      <text x={cx} y={276} textAnchor="middle" fontSize="9">
+        B = {ancho.toFixed(0)} cm
+      </text>
+      <line x1={cx + anchoDibujo / 2 + 34} y1={cy - altoDibujo / 2} x2={cx + anchoDibujo / 2 + 34} y2={cy + altoDibujo / 2} stroke="#333" strokeWidth="0.8" />
+      <text x={cx + anchoDibujo / 2 + 40} y={cy + 3} fontSize="9">
+        H = {peralte.toFixed(0)} cm
+      </text>
+      {armex && (
+        <text data-testid="previa-armex" x={20} y={24} fontSize="11" fill="#333">
+          Armex {armex}
+        </text>
+      )}
+    </svg>
+  );
+}
+
 export function EditorTipos({
   onCerrar,
   tipoInicial = null,
@@ -107,6 +400,9 @@ export function EditorTipos({
   const [nombreDialogo, setNombreDialogo] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [instancias, setInstancias] = useState(0);
+  const [aceroTipo, setAceroTipo] = useState<ResumenTipo["acero"]>();
+  const [varillas, setVarillas] = useState<Array<{ id: string; peso: number }>>([]);
+  const [armex, setArmex] = useState<string[]>([]);
   const cargado = useRef(false);
 
   const cerrar = useCallback(() => {
@@ -120,7 +416,11 @@ export function EditorTipos({
   }, []);
 
   const cargarTipos = useCallback(async () => {
-    const lista = await rpc<ResumenTipo[]>("tipos.listar", { clase: "IfcWallType" });
+    const clases = ["IfcWallType", "IfcFootingType", "IfcColumnType", "IfcBeamType"];
+    const listas = await Promise.all(
+      clases.map((clase) => rpc<ResumenTipo[]>("tipos.listar", { clase })),
+    );
+    const lista = listas.flat().sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
     setTipos(lista);
     // La lista del panel de propiedades también debe ver los tipos nuevos.
     await useModelo.getState().recargarTipos();
@@ -131,10 +431,26 @@ export function EditorTipos({
     const tipo = await rpc<TipoElemento>("tipos.obtener", { globalid });
     setSeleccion(globalid);
     setInstancias(tipo.instancias);
+    setAceroTipo(tipo.acero as ResumenTipo["acero"]);
+    const seccion: Record<string, string> = {};
+    for (const [clave, valor] of Object.entries(tipo.seccion ?? {})) {
+      seccion[clave] = clave === "Forma" ? String(valor) : cmTexto(Number(valor));
+    }
+    const armado: Record<string, string> = {};
+    for (const [clave, valor] of Object.entries(tipo.armado ?? {})) {
+      armado[clave] = ARMADO_CM.has(clave)
+        ? cmTexto(Number(valor))
+        : String(valor ?? "");
+    }
     setBorrador({
       nombre: tipo.nombre,
       capas: tipo.capas.map((capa) => ({ ...capa })),
       linea: (tipo.parametros.LineaUbicacion as LineaUbicacion) ?? "eje_nucleo",
+      clase: tipo.clase,
+      alias: tipo.alias,
+      seccion,
+      armado,
+      acero: tipo.acero as ResumenTipo["acero"],
     });
   }, []);
 
@@ -143,10 +459,21 @@ export function EditorTipos({
     cargado.current = true;
     void (async () => {
       try {
-        const [listaMateriales, listaTipos] = await Promise.all([
+        const [listaMateriales, listaTipos, catalogo] = await Promise.all([
           cargarMateriales(),
           cargarTipos(),
+          rpc<{
+            varillas: Record<string, { diametro_mm: number; peso_kg_m: number }>;
+            armex: Record<string, number>;
+          }>("acero.varillas"),
         ]);
+        setVarillas(
+          Object.entries(catalogo.varillas).map(([id, datos]) => ({
+            id,
+            peso: datos.peso_kg_m,
+          })),
+        );
+        setArmex(Object.keys(catalogo.armex));
         const elegido =
           listaTipos.find((t) => t.globalid === tipoInicial) ?? listaTipos[0];
         if (elegido) await cargarTipo(elegido.globalid);
@@ -163,7 +490,8 @@ export function EditorTipos({
     return tipos.filter((t) => t.nombre.toLocaleLowerCase("es").includes(texto));
   }, [tipos, busqueda]);
 
-  const errorCapas = borrador ? validarCapas(borrador.capas) : null;
+  const esEstructural = !!borrador?.alias;
+  const errorCapas = borrador && !esEstructural ? validarCapas(borrador.capas) : null;
   const total = borrador ? totalCapas(borrador.capas) : 0;
 
   const cambiarBorrador = (cambios: Partial<Borrador>) => {
@@ -301,16 +629,41 @@ export function EditorTipos({
     abrirDialogo({ modo: "duplicar", globalid: seleccion, nombre }, nombre);
   };
 
+  const cambiarSeccion = (campo: string, valor: string) => {
+    if (!borrador) return;
+    setBorrador({ ...borrador, seccion: { ...borrador.seccion, [campo]: valor } });
+  };
+
+  const cambiarArmado = (campo: string, valor: string) => {
+    if (!borrador) return;
+    setBorrador({ ...borrador, armado: { ...borrador.armado, [campo]: valor } });
+  };
+
   const aplicar = async () => {
     if (!seleccion || !borrador || errorCapas) return;
     setOcupado(true);
     try {
-      const ok = await useModelo.getState().aplicarTipoEdicion(seleccion, {
-        nombre: borrador.nombre,
-        capas: borrador.capas,
-        linea_ubicacion: borrador.linea,
-        parametros: { LineaUbicacion: borrador.linea },
-      });
+      const seccion: Record<string, unknown> = {};
+      for (const [campo, valor] of Object.entries(borrador.seccion)) {
+        seccion[campo] = campo === "Forma" ? valor : mDeCm(valor);
+      }
+      const armado: Record<string, unknown> = {};
+      for (const [campo, valor] of Object.entries(borrador.armado)) {
+        armado[campo] = campo === "LongCantidad"
+          ? Math.round(Number(valor) || 0)
+          : ARMADO_CM.has(campo)
+            ? mDeCm(valor) || 0
+            : valor;
+      }
+      const datos = esEstructural
+        ? { nombre: borrador.nombre, seccion, armado }
+        : {
+            nombre: borrador.nombre,
+            capas: borrador.capas,
+            linea_ubicacion: borrador.linea,
+            parametros: { LineaUbicacion: borrador.linea },
+          };
+      const ok = await useModelo.getState().aplicarTipoEdicion(seleccion, datos);
       if (!ok) throw new Error("No se pudo aplicar el tipo.");
       setError(null);
       cerrar();
@@ -374,10 +727,37 @@ export function EditorTipos({
   };
 
   const bandaPreview = borrador ? posicionesCapas(borrador.capas, 360) : [];
+  const tiposMuro = filtrados.filter((t) => !t.alias);
+  const gruposEstructura = GRUPOS_ESTRUCTURA.map((grupo) => ({
+    ...grupo,
+    tipos: filtrados.filter((t) => t.alias && grupo.alias.includes(t.alias)),
+  }));
   const todosLosTipos = CATEGORIAS.map((categoria) => ({
     ...categoria,
-    tipos: categoria.id === "muros" ? filtrados : [],
+    tipos: categoria.id === "muros" ? tiposMuro : [],
   }));
+
+  const botonTipo = (tipo: ResumenTipo) => (
+    <button
+      key={tipo.globalid}
+      type="button"
+      data-testid={`tipo-${tipo.nombre}`}
+      onClick={() => void cargarTipo(tipo.globalid)}
+      className={`block w-full rounded px-2 py-1 text-left ${
+        seleccion === tipo.globalid
+          ? "bg-primary/15 font-medium"
+          : "hover:bg-muted"
+      }`}
+    >
+      <span className="block truncate">{tipo.nombre}</span>
+      <span className="text-[11px] text-muted-foreground">
+        {tipo.espesor !== undefined
+          ? `${(tipo.espesor * 100).toFixed(1)} cm`
+          : claseCategoria(tipo.clase)}
+        {tipo.instancias > 0 ? ` · ${tipo.instancias} inst.` : ""}
+      </span>
+    </button>
+  );
 
   return (
     <div
@@ -489,30 +869,23 @@ export function EditorTipos({
                       </span>
                     )}
                   </div>
-                  {categoria.tipos.map((tipo) => (
-                    <button
-                      key={tipo.globalid}
-                      type="button"
-                      data-testid={`tipo-${tipo.nombre}`}
-                      onClick={() => void cargarTipo(tipo.globalid)}
-                      className={`block w-full rounded px-2 py-1 text-left ${
-                        seleccion === tipo.globalid
-                          ? "bg-primary/15 font-medium"
-                          : "hover:bg-muted"
-                      }`}
-                    >
-                      <span className="block truncate">{tipo.nombre}</span>
-                      <span className="text-[11px] text-muted-foreground">
-                        {tipo.espesor !== undefined
-                          ? `${(tipo.espesor * 100).toFixed(1)} cm`
-                          : claseCategoria(tipo.clase)}
-                        {tipo.instancias > 0 ? ` · ${tipo.instancias} inst.` : ""}
-                      </span>
-                    </button>
-                  ))}
+                  {categoria.id === "estructura"
+                    ? gruposEstructura.map((grupo) => (
+                        <div
+                          key={grupo.id}
+                          data-testid={`grupo-${grupo.id}`}
+                          className="mb-2"
+                        >
+                          <div className="px-1 py-0.5 text-[11px] font-medium text-muted-foreground">
+                            {grupo.nombre}
+                          </div>
+                          {grupo.tipos.map(botonTipo)}
+                        </div>
+                      ))
+                    : categoria.tipos.map(botonTipo)}
                   {categoria.proximamente && (
                     <div className="px-2 py-1 text-xs text-muted-foreground">
-                      Los tipos de esta categoría llegarán en O007b y O008a.
+                      Los tipos de esta categoría llegarán en O008a.
                     </div>
                   )}
                 </div>
@@ -534,24 +907,215 @@ export function EditorTipos({
                       className="h-8 w-64 rounded border bg-background px-2 text-sm"
                     />
                   </label>
-                  <label className="flex flex-col gap-1 text-xs">
-                    <span className="text-muted-foreground">Línea de ubicación</span>
-                    <select
-                      data-testid="linea-ubicacion"
-                      value={borrador.linea}
-                      onChange={(e) =>
-                        cambiarBorrador({ linea: e.target.value as LineaUbicacion })
-                      }
-                      className="h-8 rounded border bg-background px-2 text-sm"
-                    >
-                      {LINEAS_UBICACION.map((linea) => (
-                        <option key={linea.id} value={linea.id}>
-                          {linea.nombre}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  {!esEstructural && (
+                    <label className="flex flex-col gap-1 text-xs">
+                      <span className="text-muted-foreground">Línea de ubicación</span>
+                      <select
+                        data-testid="linea-ubicacion"
+                        value={borrador.linea}
+                        onChange={(e) =>
+                          cambiarBorrador({ linea: e.target.value as LineaUbicacion })
+                        }
+                        className="h-8 rounded border bg-background px-2 text-sm"
+                      >
+                        {LINEAS_UBICACION.map((linea) => (
+                          <option key={linea.id} value={linea.id}>
+                            {linea.nombre}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                 </div>
+                {esEstructural ? (
+                  <div className="p-3" data-testid="formulario-estructura">
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
+                      {camposSeccion(borrador.alias).map((campo) => (
+                        <label key={campo.id} className="flex flex-col gap-1 text-xs">
+                          <span className="text-muted-foreground">{campo.nombre} (cm)</span>
+                          <input
+                            data-testid={`seccion-${campo.id}`}
+                            type="number"
+                            step="0.5"
+                            value={borrador.seccion[campo.id] ?? "0"}
+                            onChange={(e) => cambiarSeccion(campo.id, e.target.value)}
+                            className="h-8 rounded border bg-background px-2 text-right"
+                          />
+                        </label>
+                      ))}
+                      {borrador.alias !== "zapata" && borrador.alias !== "zapata_corrida" && (
+                        <label className="flex flex-col gap-1 text-xs">
+                          <span className="text-muted-foreground">Forma</span>
+                          <select
+                            data-testid="seccion-Forma"
+                            value={borrador.seccion.Forma ?? "rectangular"}
+                            onChange={(e) => cambiarSeccion("Forma", e.target.value)}
+                            className="h-8 rounded border bg-background px-2"
+                          >
+                            <option value="rectangular">Rectangular</option>
+                            {borrador.alias === "columna" && (
+                              <option value="circular">Circular</option>
+                            )}
+                          </select>
+                        </label>
+                      )}
+                    </div>
+                    <h3 className="mb-2 mt-4 text-sm font-semibold">Armado</h3>
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
+                      {borrador.alias !== "zapata" && (
+                        <>
+                          <label className="flex flex-col gap-1 text-xs">
+                            <span className="text-muted-foreground">Longitudinal</span>
+                            <input
+                              data-testid="armado-LongCantidad"
+                              type="number"
+                              min="0"
+                              value={borrador.armado.LongCantidad ?? "0"}
+                              onChange={(e) => cambiarArmado("LongCantidad", e.target.value)}
+                              className="h-8 rounded border bg-background px-2 text-right"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1 text-xs">
+                            <span className="text-muted-foreground">Varilla longitudinal</span>
+                            <select
+                              data-testid="armado-LongVarilla"
+                              value={borrador.armado.LongVarilla ?? "#3"}
+                              onChange={(e) => cambiarArmado("LongVarilla", e.target.value)}
+                              className="h-8 rounded border bg-background px-2"
+                            >
+                              {varillas.map((v) => (
+                                <option key={v.id} value={v.id}>{v.id}</option>
+                              ))}
+                            </select>
+                          </label>
+                        </>
+                      )}
+                      {(borrador.alias === "zapata" ||
+                        borrador.alias === "zapata_corrida") ? (
+                        <>
+                          <label className="flex flex-col gap-1 text-xs">
+                            <span className="text-muted-foreground">Varilla de parrilla</span>
+                            <select
+                              data-testid="armado-ParrillaVarilla"
+                              value={borrador.armado.ParrillaVarilla ?? "#4"}
+                              onChange={(e) => cambiarArmado("ParrillaVarilla", e.target.value)}
+                              className="h-8 rounded border bg-background px-2"
+                            >
+                              {varillas.map((v) => (
+                                <option key={v.id} value={v.id}>{v.id}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="flex flex-col gap-1 text-xs">
+                            <span className="text-muted-foreground">Sep. X (cm)</span>
+                            <input
+                              data-testid="armado-ParrillaSepX"
+                              type="number"
+                              step="1"
+                              value={borrador.armado.ParrillaSepX ?? "20"}
+                              onChange={(e) => cambiarArmado("ParrillaSepX", e.target.value)}
+                              className="h-8 rounded border bg-background px-2 text-right"
+                            />
+                          </label>
+                          {borrador.alias === "zapata" && (
+                            <label className="flex flex-col gap-1 text-xs">
+                              <span className="text-muted-foreground">Sep. Y (cm)</span>
+                              <input
+                                data-testid="armado-ParrillaSepY"
+                                type="number"
+                                step="1"
+                                value={borrador.armado.ParrillaSepY ?? "20"}
+                                onChange={(e) => cambiarArmado("ParrillaSepY", e.target.value)}
+                                className="h-8 rounded border bg-background px-2 text-right"
+                              />
+                            </label>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <label className="flex flex-col gap-1 text-xs">
+                            <span className="text-muted-foreground">Varilla de estribo</span>
+                            <select
+                              data-testid="armado-EstVarilla"
+                              value={borrador.armado.EstVarilla ?? "#2"}
+                              onChange={(e) => cambiarArmado("EstVarilla", e.target.value)}
+                              className="h-8 rounded border bg-background px-2"
+                            >
+                              {varillas.map((v) => (
+                                <option key={v.id} value={v.id}>{v.id}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="flex flex-col gap-1 text-xs">
+                            <span className="text-muted-foreground">Estribos en extremos (cm)</span>
+                            <input
+                              data-testid="armado-EstSepExtremos"
+                              type="number"
+                              step="1"
+                              value={borrador.armado.EstSepExtremos ?? "20"}
+                              onChange={(e) => cambiarArmado("EstSepExtremos", e.target.value)}
+                              className="h-8 rounded border bg-background px-2 text-right"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1 text-xs">
+                            <span className="text-muted-foreground">Estribos en centro (cm)</span>
+                            <input
+                              data-testid="armado-EstSepCentro"
+                              type="number"
+                              step="1"
+                              value={borrador.armado.EstSepCentro ?? "20"}
+                              onChange={(e) => cambiarArmado("EstSepCentro", e.target.value)}
+                              className="h-8 rounded border bg-background px-2 text-right"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1 text-xs">
+                            <span className="text-muted-foreground">Confinamiento (cm)</span>
+                            <input
+                              data-testid="armado-EstLongConfinamiento"
+                              type="number"
+                              step="1"
+                              value={borrador.armado.EstLongConfinamiento ?? "0"}
+                              onChange={(e) =>
+                                cambiarArmado("EstLongConfinamiento", e.target.value)
+                              }
+                              className="h-8 rounded border bg-background px-2 text-right"
+                            />
+                          </label>
+                        </>
+                      )}
+                      <label className="flex flex-col gap-1 text-xs">
+                        <span className="text-muted-foreground">Recubrimiento (cm)</span>
+                        <input
+                          data-testid="armado-Recubrimiento"
+                          type="number"
+                          step="0.5"
+                          value={borrador.armado.Recubrimiento ?? "2.5"}
+                          onChange={(e) => cambiarArmado("Recubrimiento", e.target.value)}
+                          className="h-8 rounded border bg-background px-2 text-right"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1 text-xs">
+                        <span className="text-muted-foreground">Armex</span>
+                        <select
+                          data-testid="armado-Armex"
+                          value={borrador.armado.Armex ?? ""}
+                          onChange={(e) => cambiarArmado("Armex", e.target.value)}
+                          className="h-8 rounded border bg-background px-2"
+                        >
+                          <option value="">Sin armex</option>
+                          {armex.map((a) => (
+                            <option key={a} value={a}>{a}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    {errorCapas && (
+                      <p data-testid="capas-error" className="mt-2 text-xs text-red-600">
+                        {errorCapas}
+                      </p>
+                    )}
+                  </div>
+                ) : (
                 <div className="p-3">
                   <div className="mb-2 flex items-center justify-between">
                     <h3 className="text-sm font-semibold">Capas (exterior → interior)</h3>
@@ -687,6 +1251,7 @@ export function EditorTipos({
                     </p>
                   )}
                 </div>
+                )}
               </>
             ) : (
               <div className="p-4 text-sm text-muted-foreground">
@@ -697,8 +1262,12 @@ export function EditorTipos({
 
           {/* Columna 3: vista previa en corte */}
           <section className="flex w-[440px] shrink-0 flex-col overflow-auto p-3">
-            <h3 className="mb-2 text-sm font-semibold">Vista previa del corte</h3>
-            {borrador && bandaPreview.length > 0 ? (
+            <h3 className="mb-2 text-sm font-semibold">
+              {esEstructural ? "Vista previa de la sección" : "Vista previa del corte"}
+            </h3>
+            {esEstructural && borrador ? (
+              <PreviewEstructura borrador={borrador} />
+            ) : borrador && bandaPreview.length > 0 ? (
               <svg
                 data-testid="vista-previa-capas"
                 viewBox="0 0 420 250"
@@ -808,11 +1377,23 @@ export function EditorTipos({
             {borrador && (
               <div className="mt-3 space-y-1 text-xs text-muted-foreground">
                 <div className="font-medium text-foreground">{borrador.nombre}</div>
-                <div>{borrador.capas.length} capa(s)</div>
-                <div>
-                  Línea de ubicación:{" "}
-                  {LINEAS_UBICACION.find((l) => l.id === borrador.linea)?.nombre}
-                </div>
+                {esEstructural ? (
+                  <div data-testid="acero-tipo">
+                    Acero estimado por pieza tipo:{" "}
+                    <span className="font-medium text-foreground">
+                      {(aceroTipo?.total_kg ?? borrador.acero?.total_kg ?? 0).toFixed(3)} kg
+                    </span>{" "}
+                    ({aceroTipo?.unidad ?? borrador.acero?.unidad ?? "kg/pieza"})
+                  </div>
+                ) : (
+                  <>
+                    <div>{borrador.capas.length} capa(s)</div>
+                    <div>
+                      Línea de ubicación:{" "}
+                      {LINEAS_UBICACION.find((l) => l.id === borrador.linea)?.nombre}
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </section>

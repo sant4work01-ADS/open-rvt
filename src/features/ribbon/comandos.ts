@@ -7,17 +7,23 @@
 // 16 px con texto a la derecha. Los tooltips dicen «Nombre (atajo) — qué hace».
 import type { LucideIcon } from "lucide-react";
 import {
+  Box,
   BrickWall,
   ChevronDown,
+  Columns2,
+  Columns3,
   Copy,
   DoorOpen,
   FolderOpen,
+  Frame,
   Grid3X3,
   Layers,
   LibraryBig,
   Monitor,
   Moon,
   Move,
+  PanelTop,
+  RectangleHorizontal,
   Redo2,
   Save,
   SaveAll,
@@ -98,6 +104,15 @@ export interface AccionesRibbon {
   herramientaVentana: () => void;
   herramientaMover: () => void;
   herramientaCopiar: () => void;
+  /** O007b: herramientas de estructura (un clic o dos, según el elemento). */
+  herramientaZapata: () => void;
+  herramientaZapataCorrida: () => void;
+  herramientaContratrabe: () => void;
+  herramientaColumna: () => void;
+  herramientaCastillo: () => void;
+  herramientaTrabe: () => void;
+  herramientaCerramiento: () => void;
+  herramientaDala: () => void;
   /** O007a: abre el editor de tipos y materiales. */
   abrirTipos: () => void;
   borrarSeleccion: () => void;
@@ -283,6 +298,103 @@ export function construirComandosRibbon(a: AccionesRibbon): ComandoRibbon[] {
       activo: a.herramientaActiva === "ventana",
       descripcion: "Colocar una ventana sobre un muro",
       accion: a.herramientaVentana,
+    },
+    // ---------- Estructura (O007b) ----------
+    {
+      id: "zapata",
+      texto: "Zapata",
+      icono: Box,
+      grupo: "Estructura",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      activo: a.herramientaActiva === "zapata",
+      descripcion: "Colocar una zapata aislada en un cruce de ejes",
+      accion: a.herramientaZapata,
+    },
+    {
+      id: "zapata-corrida",
+      texto: "Zapata corrida",
+      icono: RectangleHorizontal,
+      grupo: "Estructura",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      activo: a.herramientaActiva === "zapata_corrida",
+      descripcion: "Trazar una zapata corrida entre dos puntos",
+      accion: a.herramientaZapataCorrida,
+    },
+    {
+      id: "contratrabe",
+      texto: "Contratrabe",
+      icono: Frame,
+      grupo: "Estructura",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      activo: a.herramientaActiva === "contratrabe",
+      descripcion: "Trazar un contratrabe entre dos zapatas",
+      accion: a.herramientaContratrabe,
+    },
+    {
+      id: "columna",
+      texto: "Columna",
+      icono: Columns3,
+      grupo: "Estructura",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      activo: a.herramientaActiva === "columna",
+      descripcion: "Colocar una columna en un cruce de ejes; R gira 90°",
+      accion: a.herramientaColumna,
+    },
+    {
+      id: "castillo",
+      texto: "Castillo",
+      icono: Columns2,
+      grupo: "Estructura",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      activo: a.herramientaActiva === "castillo",
+      descripcion: "Colocar un castillo en un cruce de ejes; R gira 90°",
+      accion: a.herramientaCastillo,
+    },
+    {
+      id: "trabe",
+      texto: "Trabe",
+      icono: RectangleHorizontal,
+      grupo: "Estructura",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      activo: a.herramientaActiva === "trabe",
+      descripcion: "Trazar una trabe entre dos columnas",
+      accion: a.herramientaTrabe,
+    },
+    {
+      id: "cerramiento",
+      texto: "Cerramiento",
+      icono: PanelTop,
+      grupo: "Estructura",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      activo: a.herramientaActiva === "cerramiento",
+      descripcion: "Trazar el cerramiento que corona un muro",
+      accion: a.herramientaCerramiento,
+    },
+    {
+      id: "dala",
+      texto: "Dala",
+      icono: Frame,
+      grupo: "Estructura",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      activo: a.herramientaActiva === "dala",
+      descripcion: "Trazar la dala de desplante sobre el cimiento",
+      accion: a.herramientaDala,
     },
     {
       id: "mover",

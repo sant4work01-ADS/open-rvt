@@ -505,6 +505,25 @@ class ModeloNucleo(BibliotecaMixin, ModeladoMixin, AceroMixin):
                                         )
                         except Exception:
                             capas = []
+                        estructura = None
+                        try:
+                            if producto.is_a("IfcColumn") or producto.is_a(
+                                "IfcBeam"
+                            ) or producto.is_a("IfcFooting"):
+                                tipo = self._tipo_entidad(producto)
+                                alias, seccion, armado = self._seccion_y_armado(tipo)
+                                colocacion = self._leer_pset(
+                                    producto, "OPENRVT_Estructura"
+                                )
+                                if alias is not None and colocacion:
+                                    estructura = {
+                                        "alias": alias,
+                                        "seccion": seccion,
+                                        "armado": armado,
+                                        "datos": colocacion,
+                                    }
+                        except Exception:
+                            estructura = None
                         datos = {
                             "globalid": gid,
                             "clase": clase,
@@ -516,10 +535,15 @@ class ModeloNucleo(BibliotecaMixin, ModeladoMixin, AceroMixin):
                             "tipo": self._tipo_de(producto),
                             "capas": capas,
                             "eje": eje_muro,
+                            "estructura": estructura,
                             "vertices": [],
                             "indices": [],
                             "_base": 0,
                         }
+                        if estructura:
+                            material_concreto = self._material_entidad("Concreto armado")
+                            if material_concreto is not None:
+                                datos["color"] = self._material_datos(material_concreto)["color"]
                         por_id[forma.id] = datos
                     base = datos["_base"]
                     datos["vertices"].append(np.asarray(geo.verts, dtype="<f4"))

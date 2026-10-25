@@ -2333,6 +2333,7 @@ class ModeladoMixin:
                 is_si=True,
                 should_transform_children=False,
             )
+            self._desplazar_pset_estructura(producto, dx, dy, dz)
         for producto in afectados:
             if producto.is_a("IfcWall"):
                 self._unir_muros(producto)
@@ -2341,6 +2342,22 @@ class ModeladoMixin:
             modificados=[g for g in afectados if not g.is_a("IfcOpeningElement")],
             mensaje=f"{len(afectados)} elemento(s) movido(s).",
         )
+
+    def _desplazar_pset_estructura(
+        self, producto: Any, dx: float, dy: float, dz: float
+    ) -> None:
+        """Mantiene las coordenadas del pset al día para que regenerar no lo devuelva."""
+        datos = self._leer_pset(producto, "OPENRVT_Estructura")
+        if not datos:
+            return
+        for clave, delta in (
+            ("X", dx), ("X1", dx), ("X2", dx),
+            ("Y", dy), ("Y1", dy), ("Y2", dy),
+            ("Z", dz), ("Base", dz),
+        ):
+            if clave in datos:
+                datos[clave] = float(datos[clave] or 0.0) + delta
+        self._guardar_pset(producto, "OPENRVT_Estructura", datos)
 
     def _matriz_traslado(self, producto: Any, dx: float, dy: float, dz: float) -> np.ndarray:
         """Matriz de mundo del producto desplazada (no la delta sola)."""
@@ -2456,6 +2473,34 @@ class ModeladoMixin:
                     matrix=self._matriz_traslado(copia, dx, dy, dz),
                     is_si=True,
                 )
+                for rel in getattr(original, "ContainedInStructure", ()) or ():
+                    spatial_api.assign_container(
+                        self.modelo,
+                        products=[copia],
+                        relating_structure=rel.RelatingStructure,
+                    )
+                creados.append(copia)
+            elif self._es_clase_estructura(original.is_a()) and self._leer_pset(
+                original, "OPENRVT_Estructura"
+            ):
+                copia = self._copiar_entidad(original)
+                tipo = self._tipo_entidad(original)
+                if tipo is not None:
+                    type_api.assign_type(
+                        self.modelo, related_objects=[copia], relating_type=tipo
+                    )
+                self._guardar_pset(
+                    copia,
+                    "OPENRVT_Estructura",
+                    dict(self._leer_pset(original, "OPENRVT_Estructura")),
+                )
+                geometry_api.edit_object_placement(
+                    self.modelo,
+                    product=copia,
+                    matrix=self._matriz_traslado(copia, dx, dy, dz),
+                    is_si=True,
+                )
+                self._desplazar_pset_estructura(copia, dx, dy, dz)
                 for rel in getattr(original, "ContainedInStructure", ()) or ():
                     spatial_api.assign_container(
                         self.modelo,

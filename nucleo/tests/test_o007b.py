@@ -221,6 +221,32 @@ def test_editar_seccion_regenera_instancias_y_deshace_en_un_paso() -> None:
     assert max(xs) == pytest.approx(0.15)
 
 
+def test_copiar_y_mover_conservan_tipo_pset_y_geometria() -> None:
+    nucleo = _nuevo()
+    nivel = nucleo.niveles()[0]["globalid"]
+    original = nucleo.columna_crear("C-1 Columna 30×30", nivel, 0.0, 0.0)["creados"][0]
+    copia = nucleo.elementos_copiar([original], 4.0, 0.0, 0.0)["creados"][0]
+    entidad = nucleo._entidad_por_gid(copia)
+    datos = nucleo._leer_pset(entidad, "OPENRVT_Estructura")
+    assert datos["X"] == pytest.approx(4.0)
+    assert nucleo._tipo_de(entidad) == "C-1 Columna 30×30"
+    assert nucleo.acero_estimar(copia)["total_kg"] == pytest.approx(28.909, abs=1e-3)
+    nucleo.elementos_mover([copia], 1.0, 2.0, 0.0)
+    datos = nucleo._leer_pset(entidad, "OPENRVT_Estructura")
+    assert (datos["X"], datos["Y"]) == pytest.approx((5.0, 2.0))
+    # Regenerar el tipo respeta la nueva posición.
+    tipo = _tipo(nucleo, "IfcColumnType", "C-1 Columna 30×30")
+    nucleo.tipos_editar(tipo["globalid"], {"seccion": {"B": 0.35, "H": 0.35}})
+    import ifcopenshell.geom as geom
+
+    ajustes = geom.settings()
+    ajustes.set(ajustes.USE_WORLD_COORDS, True)
+    forma = geom.create_shape(ajustes, entidad)
+    xs = forma.geometry.verts[0::3]
+    assert min(xs) == pytest.approx(4.825)
+    assert max(xs) == pytest.approx(5.175)
+
+
 def test_guardar_reabrir_conserva_tipos_psets_perfil_y_armado(tmp_path: Path) -> None:
     nucleo = _nuevo()
     nivel = nucleo.niveles()[0]["globalid"]
