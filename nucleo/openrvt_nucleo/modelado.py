@@ -977,14 +977,26 @@ class ModeladoMixin:
             raise self._error("globalids debe ser una lista de muros.", -32602)
         nivel_entidad = self._nivel_por_gid(nivel)
         muros = self._circuito_muros([str(g) for g in globalids])
-        # Línea Media del circuito, con el desplazamiento exterior de cada muro.
+        # Línea Media del circuito, recorrida en el orden de la cadena y con cada
+        # muro orientado desde el vértice anterior al siguiente.
         puntos: list[tuple[float, float]] = []
         lados: list[tuple[float, float, float]] = []
+        primero = self._datos_muro(muros[0])
+        actual = (primero["x1"], primero["y1"])
         for muro in muros:
             datos = self._datos_muro(muro)
             if datos["longitud"] <= TOLERANCIA_CALCULO:
                 continue
-            lados.append((datos["x1"], datos["y1"], datos["espesor"]))
+            if math.hypot(datos["x1"] - actual[0], datos["y1"] - actual[1]) <= TOLERANCIA:
+                siguiente = (datos["x2"], datos["y2"])
+            elif math.hypot(datos["x2"] - actual[0], datos["y2"] - actual[1]) <= TOLERANCIA:
+                siguiente = (datos["x1"], datos["y1"])
+            else:
+                raise self._error(
+                    "Los muros seleccionados no forman un circuito cerrado.", -32022
+                )
+            lados.append((actual[0], actual[1], datos["espesor"]))
+            actual = siguiente
         if len(lados) < 3:
             raise self._error("El circuito no tiene muros suficientes.", -32022)
         area = _poligono_area([(x, y) for x, y, _ in lados])

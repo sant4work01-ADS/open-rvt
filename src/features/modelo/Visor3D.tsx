@@ -318,6 +318,24 @@ export function Visor3D({
     if (escena.current) escena.current.background = colorDeFondo(oscuro);
   }, [oscuro]);
 
+  const aplicarCamara = useCallback(() => {
+    const nav = navegacion.current;
+    const camera = camara.current;
+    if (!nav || !camera) return;
+    camera.up.copy(nav.arriba);
+    camera.position.copy(nav.objetivo).addScaledVector(nav.direccion, nav.distancia);
+    camera.lookAt(nav.objetivo);
+    if (camera instanceof THREE.OrthographicCamera) {
+      camera.near = 0.01;
+      camera.far = nav.distancia + diagonalCaja(caja) * 3 + 10;
+      camera.updateProjectionMatrix();
+    } else if (camera instanceof THREE.PerspectiveCamera) {
+      camera.far = nav.distancia + diagonalCaja(caja) * 4 + 10;
+      camera.updateProjectionMatrix();
+    }
+    camera.updateMatrixWorld();
+  }, [caja]);
+
   // Cámara de la vista activa (solo se reencuadra al cambiar de vista o de modelo).
   useEffect(() => {
     const nodo = contenedor.current;
@@ -360,24 +378,6 @@ export function Visor3D({
     // `aplicarCamara` es estable por referencia del componente; se usa a través de refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vista.id, vista.tipo, vista.orientacion, caja, dimensiones.ancho, dimensiones.alto]);
-
-  const aplicarCamara = useCallback(() => {
-    const nav = navegacion.current;
-    const camera = camara.current;
-    if (!nav || !camera) return;
-    camera.up.copy(nav.arriba);
-    camera.position.copy(nav.objetivo).addScaledVector(nav.direccion, nav.distancia);
-    camera.lookAt(nav.objetivo);
-    if (camera instanceof THREE.OrthographicCamera) {
-      camera.near = 0.01;
-      camera.far = nav.distancia + diagonalCaja(caja) * 3 + 10;
-      camera.updateProjectionMatrix();
-    } else if (camera instanceof THREE.PerspectiveCamera) {
-      camera.far = nav.distancia + diagonalCaja(caja) * 4 + 10;
-      camera.updateProjectionMatrix();
-    }
-    camera.updateMatrixWorld();
-  }, [caja]);
 
   // Vista activa y geometría: filtros de categorías/niveles, recorte y relleno.
   useEffect(() => {
