@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Caja, ElementoMalla, Nivel } from "./tipos";
 import {
+  ARRIBA_PLANTA,
   camaraOrtografica,
   camaraPerspectiva,
   cajaConEjes,
@@ -26,21 +27,32 @@ const NIVELES: Nivel[] = [
 ];
 
 describe("cámaras de las vistas", () => {
-  it("cada alzado mira desde su lado con el norte del IFC en −Y", () => {
-    expect(direccionAlzado("norte")).toEqual([0, -1, 0]);
-    expect(direccionAlzado("sur")).toEqual([0, 1, 0]);
+  it("cada alzado mira desde su lado con el norte del IFC en +Y", () => {
+    expect(direccionAlzado("norte")).toEqual([0, 1, 0]);
+    expect(direccionAlzado("sur")).toEqual([0, -1, 0]);
     expect(direccionAlzado("este")).toEqual([1, 0, 0]);
     expect(direccionAlzado("oeste")).toEqual([-1, 0, 0]);
 
     const norte = camaraOrtografica(CAJA, direccionAlzado("norte"));
-    expect(norte.posicion[1]).toBeLessThan(CAJA.min[1]);
+    // El observador está al norte (+Y) y mira hacia −Y: +X queda a la izquierda.
+    expect(norte.posicion[1]).toBeGreaterThan(CAJA.max[1]);
     expect(norte.objetivo).toEqual([0, 0, 3]);
-    expect(norte.arriba).toEqual([0, 0, 1]);
+    expect(norte.arriba[0]).toBeCloseTo(0, 9);
+    expect(norte.arriba[1]).toBeCloseTo(0, 9);
+    expect(norte.arriba[2]).toBeCloseTo(1, 9);
+    expect(norte.ejeDerecha[0]).toBeCloseTo(-1, 9);
+    expect(norte.ejeDerecha[1]).toBeCloseTo(0, 9);
     // De frente, el ancho es el eje X (10 m) y el alto el Z (6 m).
     expect(norte.ancho).toBeCloseTo(10, 6);
     expect(norte.alto).toBeCloseTo(6, 6);
     expect(norte.derecha - norte.izquierda).toBeGreaterThanOrEqual(10);
     expect(norte.arribaPlano - norte.abajo).toBeGreaterThanOrEqual(6);
+
+    const sur = camaraOrtografica(CAJA, direccionAlzado("sur"));
+    expect(sur.posicion[1]).toBeLessThan(CAJA.min[1]);
+    // Desde el sur, +X queda a la derecha.
+    expect(sur.ejeDerecha[0]).toBeCloseTo(1, 9);
+    expect(sur.ejeDerecha[1]).toBeCloseTo(0, 9);
   });
 
   it("la isométrica queda a 35.26° de elevación y 45° de azimut", () => {
@@ -57,12 +69,25 @@ describe("cámaras de las vistas", () => {
     expect(camara.lejos).toBeGreaterThan(camara.cerca);
   });
 
-  it("la planta mira hacia abajo y deja el norte arriba de la pantalla", () => {
-    const planta = camaraOrtografica(CAJA, [0, 0, 1], { arriba: [0, -1, 0] });
+  it("la planta mira hacia abajo con +Y arriba y +X a la derecha", () => {
+    const planta = camaraOrtografica(CAJA, [0, 0, 1], { arriba: ARRIBA_PLANTA });
     expect(planta.posicion[2]).toBeGreaterThan(CAJA.max[2]);
-    expect(planta.arriba).toEqual([0, -1, 0]);
+    expect(planta.arriba).toEqual([0, 1, 0]);
+    expect(planta.ejeDerecha[0]).toBeCloseTo(1, 9);
+    expect(planta.ejeDerecha[1]).toBeCloseTo(0, 9);
     expect(planta.ancho).toBeCloseTo(10, 6);
     expect(planta.alto).toBeCloseTo(6, 6);
+
+    // Proyección sobre la pantalla: (1,0,0) a la derecha y (0,1,0) arriba de (0,0,0).
+    const proyectar = (p: [number, number, number]) => ({
+      x: p[0] * planta.ejeDerecha[0] + p[1] * planta.ejeDerecha[1],
+      y: p[0] * planta.arriba[0] + p[1] * planta.arriba[1],
+    });
+    expect(proyectar([1, 0, 0]).x).toBeCloseTo(1, 9);
+    expect(proyectar([1, 0, 0]).y).toBeCloseTo(0, 9);
+    expect(proyectar([0, 0, 0]).x).toBeCloseTo(0, 9);
+    expect(proyectar([0, 1, 0]).y).toBeCloseTo(1, 9);
+    expect(proyectar([0, 1, 0]).x).toBeCloseTo(0, 9);
   });
 
   it("la perspectiva usa 50° de campo de visión", () => {

@@ -32,7 +32,7 @@ export function NavegadorVistas({ vistas, activaId, onElegir }: Props) {
             <section key={grupo.titulo} data-grupo={grupo.prueba}>
               <h3
                 className="px-1 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
-                title={grupo.titulo === "Alzados" ? "El norte del IFC es −Y" : undefined}
+                title={grupo.titulo === "Alzados" ? "El norte del IFC es +Y" : undefined}
               >
                 {grupo.titulo}
               </h3>

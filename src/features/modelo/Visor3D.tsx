@@ -43,6 +43,7 @@ import {
 } from "./seccion";
 import {
   ajustarAspecto,
+  ARRIBA_PLANTA,
   cajaConEjes,
   camaraOrtografica,
   camaraPerspectiva,
@@ -167,7 +168,7 @@ function crearNavegacion(vista: Vista, caja: Caja, aspecto: number): Navegacion 
   let centroVista = new THREE.Vector3(centro[0], centro[1], centro[2]);
   if (vista.tipo === "planta") {
     direccion = [0, 0, 1];
-    arriba = [0, -1, 0];
+    arriba = [...ARRIBA_PLANTA];
     centroVista = new THREE.Vector3(centro[0], centro[1], vista.alturaPlano ?? centro[2]);
   } else if (vista.tipo === "alzado") {
     direccion = direccionAlzado(vista.orientacion ?? "sur");
@@ -744,7 +745,7 @@ export function Visor3D({
               ? [-normalCorte(vista)[0], -normalCorte(vista)[1], 0]
               : vectorIso();
       const arriba: [number, number, number] =
-        vista.tipo === "planta" ? [0, -1, 0] : [0, 0, 1];
+        vista.tipo === "planta" ? [...ARRIBA_PLANTA] : [0, 0, 1];
       const inicial = camaraOrtografica(cajaVista, direccion, {
         arriba,
         centro: [centro.x, centro.y, centro.z],
