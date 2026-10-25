@@ -31,6 +31,7 @@ import {
   puntoConLongitud,
   puntoDibujo,
   REFERENCIAS_VACIAS,
+  referenciasAlDia,
   restringirEje,
   siguienteEtiquetaEje,
   type Enganche,
@@ -191,11 +192,20 @@ interface EstadoModelo {
   cancelarTrazo: () => boolean;
   fijarOpcionesMuro: (cambios: Partial<OpcionesMuro>) => void;
   fijarEtiquetaEje: (etiqueta: string) => void;
-  fijarRatonHerramienta: (punto: Punto2 | null, shift?: boolean) => void;
+  fijarRatonHerramienta: (
+    punto: Punto2 | null,
+    shift?: boolean,
+    metrosPorPixel?: number,
+  ) => void;
   teclearLongitud: (tecla: string) => void;
   confirmarLongitud: (shift?: boolean) => Promise<void>;
   cancelarLongitud: () => void;
-  clicEnPlanta: (punto: Punto2, shift?: boolean, agregar?: boolean) => Promise<void>;
+  clicEnPlanta: (
+    punto: Punto2,
+    shift?: boolean,
+    agregar?: boolean,
+    metrosPorPixel?: number,
+  ) => Promise<void>;
   dobleClicEnPlanta: () => Promise<void>;
   voltearAbertura: () => void;
   borrarSeleccion: () => Promise<void>;
@@ -383,7 +393,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
   const cargar = async (info: RespuestaInfo) => {
     const inicio = performance.now();
-    const [niveles, elementos, teselado, vistasCrudas, tipos, referencias, estilosCrudos,
+    const [niveles, elementos, teselado, vistasCrudas, tipos, referenciasCrudas, estilosCrudos,
       tiposEstructura] = await Promise.all([
         rpc<Nivel[]>("modelo.niveles"),
         rpc<Elemento[]>("modelo.elementos"),
@@ -398,6 +408,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       ]);
     const mallas = teselado.elementos.map(decodificarMalla);
     const caja = cajaDeMallas(mallas);
+    const referencias = referenciasAlDia(referenciasCrudas);
     const aberturas = await cargarAberturas(elementos, mallas, referencias);
     let vistas = normalizarVistas(vistasCrudas);
     let persistidas = vistas.length > 0;
@@ -513,7 +524,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
   const refrescarDeComando = async (resultado: RespuestaComando) => {
     const tocados = [...new Set([...(resultado.creados ?? []), ...(resultado.modificados ?? [])])];
     const borrados = new Set(resultado.borrados ?? []);
-    const [info, niveles, elementos, referencias, teselado] = await Promise.all([
+    const [info, niveles, elementos, referenciasCrudas, teselado] = await Promise.all([
       rpc<RespuestaInfo>("proyecto.info"),
       rpc<Nivel[]>("modelo.niveles"),
       rpc<Elemento[]>("modelo.elementos"),
@@ -526,6 +537,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       (m) => !borrados.has(m.globalid) && !tocados.includes(m.globalid),
     );
     if (teselado) mallas = [...mallas, ...teselado.elementos.map(decodificarMalla)];
+    const referencias = referenciasAlDia(referenciasCrudas);
     const aberturas = await cargarAberturas(elementos, mallas, referencias);
     const seleccionados = get().seleccionados.filter((g) => !borrados.has(g));
     const seleccion = seleccionados[0] ?? null;
@@ -1101,7 +1113,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
     fijarEtiquetaEje: (etiqueta) => set({ etiquetaEje: etiqueta }),
 
-    fijarRatonHerramienta: (punto, shift = false) => {
+    fijarRatonHerramienta: (punto, shift = false, metrosPorPixel) => {
       const herramienta = get().herramienta;
       if (!herramienta || !punto) {
         set({ ratonHerramienta: null, engancheHerramienta: null });
@@ -1117,6 +1129,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         get().referencias,
         puntos.length > 0 ? puntos[puntos.length - 1] : null,
         shift,
+        metrosPorPixel,
       );
       set({ ratonHerramienta: enganche.punto, engancheHerramienta: enganche });
     },
@@ -1196,7 +1209,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
     cancelarLongitud: () => set({ longitudTecleada: "" }),
 
-    clicEnPlanta: async (punto, shift = false, agregar = false) => {
+    clicEnPlanta: async (punto, shift = false, agregar = false, metrosPorPixel) => {
       const herramienta = get().herramienta;
       const vista = get().vistas.find((v) => v.id === get().vistaActivaId);
       if (!herramienta) {
@@ -1214,6 +1227,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         get().referencias,
         puntos.length > 0 ? puntos[puntos.length - 1] : null,
         shift,
+        metrosPorPixel,
       );
       const p = enganche.punto;
       bitacoraHerramienta(herramienta, "punto", { x: p[0], y: p[1] });

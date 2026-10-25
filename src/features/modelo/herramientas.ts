@@ -48,7 +48,10 @@ export interface Enganche {
 
 export const PASO_CUADRICULA = 0.05;
 export const PASO_ANGULO = Math.PI / 12; // 15°
-export const TOLERANCIA_ENGANCHE = 0.25;
+/** O006e: la tolerancia del enganche es de 12 px de pantalla, no de 25 cm. */
+export const TOLERANCIA_PX = 12;
+/** 0,02 m/px es el zoom de trabajo por omisión cuando no se conoce la cámara. */
+export const METROS_POR_PIXEL_POR_OMISION = 0.02;
 
 export const REFERENCIAS_VACIAS: Referencias = {
   muros: [],
@@ -124,15 +127,31 @@ export function crucesDeEjes(ejes: EjeReferencia[]): Punto2[] {
 }
 
 /**
- * Busca el enganche más cercano. Prioridad: extremo, punto medio, cruce de ejes,
- * intersección publicada, perpendicular a un muro y, por último, la cuadrícula.
+ * O006e: candidatos discretos dentro de la tolerancia en píxeles. Gana el más
+ * cercano; la prioridad solo desempata si la diferencia es de 3 px o menos.
+ */
+const PRIORIDAD_ENGANCHE: TipoEnganche[] = [
+  "interseccion",
+  "cruce",
+  "extremo",
+  "medio",
+  "perpendicular",
+];
+
+/**
+ * Busca el enganche más cercano. `metrosPorPixel` lo calcula el visor con la
+ * cámara actual; la tolerancia resultante es de 12 px en cualquier zoom.
  */
 export function buscarEnganche(
   raton: Punto2,
   refs: Referencias,
   desde: Punto2 | null = null,
-  tolerancia = TOLERANCIA_ENGANCHE,
+  metrosPorPixel = METROS_POR_PIXEL_POR_OMISION,
 ): Enganche {
+  const mpp = Number.isFinite(metrosPorPixel) && metrosPorPixel > 0
+    ? metrosPorPixel
+    : METROS_POR_PIXEL_POR_OMISION;
+  const tolerancia = TOLERANCIA_PX * mpp;
   const candidatos: Array<{ punto: Punto2; tipo: TipoEnganche }> = [];
   for (const p of refs.extremos) candidatos.push({ punto: p, tipo: "extremo" });
   for (const p of refs.medios) candidatos.push({ punto: p, tipo: "medio" });
@@ -145,42 +164,125 @@ export function buscarEnganche(
         [muro.x1, muro.y1],
         [muro.x2, muro.y2],
       );
-      const separacion = distancia(raton, proy.punto);
-      if (separacion <= tolerancia) {
+      if (distancia(raton, proy.punto) <= tolerancia) {
         candidatos.push({ punto: proy.punto, tipo: "perpendicular" });
       }
     }
   }
-  let mejor: Enganche | null = null;
-  const orden: TipoEnganche[] = [
-    "extremo",
-    "medio",
-    "cruce",
-    "interseccion",
-    "perpendicular",
-  ];
-  for (const tipo of orden) {
-    for (const candidato of candidatos) {
-      if (candidato.tipo !== tipo) continue;
-      if (distancia(raton, candidato.punto) > tolerancia) continue;
-      if (!mejor || distancia(raton, candidato.punto) < distancia(raton, mejor.punto)) {
-        mejor = candidato;
-      }
-    }
-    if (mejor) return mejor;
+  const validos = candidatos.filter((c) => distancia(raton, c.punto) <= tolerancia);
+  if (validos.length === 0) {
+    return { punto: redondearCuadricula(raton), tipo: "cuadricula" };
   }
-  return { punto: redondearCuadricula(raton), tipo: "cuadricula" };
+  const masCercano = Math.min(...validos.map((c) => distancia(raton, c.punto)));
+  const empate = 3 * mpp;
+  const finalistas = validos.filter(
+    (c) => distancia(raton, c.punto) <= masCercano + empate,
+  );
+  finalistas.sort((a, b) => {
+    const pa = PRIORIDAD_ENGANCHE.indexOf(a.tipo);
+    const pb = PRIORIDAD_ENGANCHE.indexOf(b.tipo);
+    if (pa !== pb) return pa - pb;
+    return distancia(raton, a.punto) - distancia(raton, b.punto);
+  });
+  return finalistas[0];
 }
 
-/** Aplica enganche y, si hay un punto de origen, el ángulo fijo a 15°. */
+/**
+ * O006e: intersecciones de todos los pares de ejes no paralelos dentro de sus
+ * segmentos, con 0,5 m de tolerancia en los extremos.
+ */
+export function interseccionesDeEjes(
+  ejes: EjeReferencia[],
+  toleranciaExtremos = 0.5,
+): Punto2[] {
+  const salida: Punto2[] = [];
+  for (let i = 0; i < ejes.length; i += 1) {
+    const a = ejes[i];
+    for (let j = i + 1; j < ejes.length; j += 1) {
+      const b = ejes[j];
+      const dxa = a.x2 - a.x1;
+      const dya = a.y2 - a.y1;
+      const dxb = b.x2 - b.x1;
+      const dyb = b.y2 - b.y1;
+      const den = dxa * dyb - dya * dxb;
+      if (Math.abs(den) < 1e-9) continue;
+      const t = ((b.x1 - a.x1) * dyb - (b.y1 - a.y1) * dxb) / den;
+      const u = ((b.x1 - a.x1) * dya - (b.y1 - a.y1) * dxa) / den;
+      const la = Math.hypot(dxa, dya);
+      const lb = Math.hypot(dxb, dyb);
+      if (la < 1e-9 || lb < 1e-9) continue;
+      const extraA = toleranciaExtremos / la;
+      const extraB = toleranciaExtremos / lb;
+      if (t < -extraA || t > 1 + extraA || u < -extraB || u > 1 + extraB) continue;
+      const punto: Punto2 = [
+        Number((a.x1 + t * dxa).toFixed(6)),
+        Number((a.y1 + t * dya).toFixed(6)),
+      ];
+      if (
+        !salida.some(
+          (p) => Math.hypot(p[0] - punto[0], p[1] - punto[1]) < 1e-6,
+        )
+      ) {
+        salida.push(punto);
+      }
+    }
+  }
+  return salida.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+}
+
+/** O006e: referencias con las intersecciones recalculadas a partir de sus ejes. */
+export function referenciasAlDia(refs: Referencias): Referencias {
+  if (refs.ejes.length === 0) return refs;
+  return { ...refs, intersecciones: interseccionesDeEjes(refs.ejes) };
+}
+
+/** O006e: texto del tipo de enganche junto al cursor. */
+export function describirEnganche(enganche: Enganche, refs: Referencias): string {
+  switch (enganche.tipo) {
+    case "interseccion": {
+      const [x, y] = enganche.punto;
+      const cercanos = refs.ejes
+        .map((eje) => ({
+          eje,
+          d: proyectarSobreSegmento([x, y], [eje.x1, eje.y1], [eje.x2, eje.y2])
+            .distancia,
+        }))
+        .filter((c) => c.d <= 0.01)
+        .sort((a, b) => a.d - b.d);
+      if (cercanos.length >= 2) {
+        const horizontales = cercanos.filter((c) => !c.eje.vertical);
+        const verticales = cercanos.filter((c) => c.eje.vertical);
+        const h = horizontales[0]?.eje.etiqueta;
+        const v = verticales[0]?.eje.etiqueta;
+        if (h && v) return `Intersección ${h}-${v}`;
+      }
+      return "Intersección";
+    }
+    case "extremo":
+      return "Extremo";
+    case "medio":
+      return "Punto medio";
+    case "perpendicular":
+      return "Perpendicular";
+    default:
+      return "Cuadrícula";
+  }
+}
+
+/**
+ * Aplica el enganche y, solo con la cuadrícula, el ángulo fijo a 15°. Los
+ * enganches discretos (extremo, medio, intersección, perpendicular) se respetan
+ * exactamente para no sacar el punto del cruce.
+ */
 export function puntoDibujo(
   raton: Punto2,
   refs: Referencias,
   desde: Punto2 | null,
   shift = false,
+  metrosPorPixel = METROS_POR_PIXEL_POR_OMISION,
 ): Enganche {
-  const enganche = buscarEnganche(raton, refs, desde);
-  if (!desde) return enganche;
+  const enganche = buscarEnganche(raton, refs, desde, metrosPorPixel);
+  if (!desde || enganche.tipo !== "cuadricula") return enganche;
   const conAngulo = fijarAngulo(desde, enganche.punto, shift);
   return {
     punto: [Number(conAngulo[0].toFixed(6)), Number(conAngulo[1].toFixed(6))],
