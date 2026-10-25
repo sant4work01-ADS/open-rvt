@@ -132,6 +132,21 @@ class ModeladoMixin:
         return ErrorNucleo(mensaje, codigo)
 
     def _pset(self, entidad: Any, nombre: str, crear: bool = False) -> Any:
+        # O007a: en IFC4 los materiales no son IfcObject; su pset es un
+        # IfcMaterialProperties enlazado por el atributo Material.
+        if entidad.is_a("IfcMaterial"):
+            for propiedades in getattr(entidad, "HasProperties", ()) or ():
+                if getattr(propiedades, "Name", "") == nombre:
+                    return propiedades
+            if not crear:
+                return None
+            return self.modelo.create_entity(
+                "IfcMaterialProperties",
+                Name=nombre,
+                Description="Datos de OPEN-RVT",
+                Properties=[],
+                Material=entidad,
+            )
         if entidad.is_a("IfcTypeObject"):
             # Los tipos guardan sus psets en HasPropertySets, no en IsDefinedBy.
             for pset in getattr(entidad, "HasPropertySets", ()) or ():
@@ -183,7 +198,10 @@ class ModeladoMixin:
         if pset is None:
             return {}
         salida: dict[str, Any] = {}
-        for prop in getattr(pset, "HasProperties", ()) or ():
+        propiedades = getattr(pset, "HasProperties", ()) or getattr(
+            pset, "Properties", ()
+        ) or ()
+        for prop in propiedades:
             valor = getattr(prop, "NominalValue", None)
             if valor is None:
                 continue
@@ -191,6 +209,9 @@ class ModeladoMixin:
         return salida
 
     def _guardar_pset(self, entidad: Any, nombre: str, valores: dict[str, Any]) -> None:
+        if entidad.is_a("IfcMaterial") and nombre == "OPENRVT_Material":
+            self._guardar_material_pset(entidad, valores)
+            return
         pset = self._pset(entidad, nombre, crear=True)
         existentes = {_nombre(p): p for p in (getattr(pset, "HasProperties", ()) or ())}
         for clave, valor in valores.items():
@@ -1143,13 +1164,16 @@ class ModeladoMixin:
     def _cuerpo_muro(self, muro: Any) -> Any:
         """Genera el cuerpo del muro con los vanos ya descontados."""
         datos = self._datos_muro(muro)
+        # O007a: el desplazamiento sale de la línea de ubicación del tipo (o de la
+        # alineación propia de la instancia cuando el usuario la eligió).
+        offset = self._desfase_de_muro(muro, datos["espesor"])
         cuerpo = geometry_api.add_wall_representation(
             self.modelo,
             context=self._contexto(),
             length=max(datos["longitud"], 0.001),
             height=max(datos["altura"], 0.001),
             thickness=max(datos["espesor"], 0.001),
-            offset=self._desfase_alineacion(datos["alineacion"], datos["espesor"]),
+            offset=offset,
         )
         vanos = []
         for rel in getattr(muro, "HasOpenings", ()) or ():
@@ -1166,7 +1190,7 @@ class ModeladoMixin:
                     datos["espesor"],
                     info["antepecho"],
                     info["distancia"],
-                    self._desfase_alineacion(datos["alineacion"], datos["espesor"]),
+                    offset,
                 )
             )
         cuerpo.RepresentationIdentifier = "Body"

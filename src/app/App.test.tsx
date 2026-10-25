@@ -42,9 +42,9 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: /Guardar \(Ctrl\+S\) — Guardar el modelo/ })).toBeEnabled();
   });
 
-  it("cambia de módulo con Alt+4 y muestra la ayuda", async () => {
+  it("cambia de módulo con Alt+5 y muestra la ayuda", async () => {
     montar();
-    fireEvent.keyDown(window, { key: "4", altKey: true });
+    fireEvent.keyDown(window, { key: "5", altKey: true });
     expect(screen.getByRole("button", { name: "Ayuda" })).toHaveAttribute("aria-current", "page");
     expect(await screen.findByText(/Manual rápido de OPEN-RVT/)).toBeInTheDocument();
   });

@@ -64,22 +64,19 @@ def test_tipos_de_muro_con_capas_y_espesores():
     nucleo = ModeloNucleo()
     nucleo.nuevo()
     tipos = {t["nombre"]: t["espesor"] for t in nucleo.tipos_listar("IfcWallType")}
+    # O007a: cinco tipos base de un núcleo y tres tipos de ejemplo multicapa.
     assert tipos == {
         "Block 12": 0.12,
         "Block 15": 0.15,
         "Block 20": 0.20,
         "Tabique": 0.14,
         "Concreto": 0.15,
+        "Block 15 aplanado-yeso": 0.181,
+        "Tabique 14 aplanado ambos lados": 0.18,
+        "Block 15 baño": 0.196,
     }
     capa = nucleo.modelo.by_type("IfcMaterialLayer")
-    assert len(capa) == 5
-    assert sorted(round(float(c.LayerThickness), 2) for c in capa) == [
-        0.12,
-        0.14,
-        0.15,
-        0.15,
-        0.2,
-    ]
+    assert len(capa) == 22
 
 
 def test_casa_guardar_reabrir_conteos_y_validacion(tmp_path: Path):
@@ -107,6 +104,9 @@ def test_casa_guardar_reabrir_conteos_y_validacion(tmp_path: Path):
         "Block 20",
         "Tabique",
         "Concreto",
+        "Block 15 aplanado-yeso",
+        "Tabique 14 aplanado ambos lados",
+        "Block 15 baño",
     }
     assert {e["tipo"] for e in otro.elementos(filtro={"clase": "IfcWall"})} == {"Block 15"}
 

@@ -14,6 +14,7 @@ import {
   FolderOpen,
   Grid3X3,
   Layers,
+  LibraryBig,
   Monitor,
   Moon,
   Move,
@@ -97,6 +98,8 @@ export interface AccionesRibbon {
   herramientaVentana: () => void;
   herramientaMover: () => void;
   herramientaCopiar: () => void;
+  /** O007a: abre el editor de tipos y materiales. */
+  abrirTipos: () => void;
   borrarSeleccion: () => void;
   deshacer: () => void;
   rehacer: () => void;
@@ -342,6 +345,19 @@ export function construirComandosRibbon(a: AccionesRibbon): ComandoRibbon[] {
       habilitado: true,
       descripcion: "Rehacer el último comando deshecho",
       accion: a.rehacer,
+    },
+
+    // ---------- Editor de tipos (O007a) ----------
+    {
+      id: "tipos",
+      texto: "Tipos",
+      icono: LibraryBig,
+      grupo: "Editor",
+      pestana: "modelar",
+      tamano: "grande",
+      habilitado: true,
+      descripcion: "Editar los tipos de elemento y la biblioteca de materiales",
+      accion: a.abrirTipos,
     },
 
     // ---------- Tema ----------

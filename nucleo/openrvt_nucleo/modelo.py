@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import ifcopenshell
+from .biblioteca import BibliotecaMixin
 from .modelado import ModeladoMixin
 
 import ifcopenshell.api.aggregate as aggregate
@@ -137,7 +138,7 @@ def _categoria(clase: str) -> str:
     return "otros"
 
 
-class ModeloNucleo(ModeladoMixin):
+class ModeloNucleo(BibliotecaMixin, ModeladoMixin):
     """Estado del modelo abierto en el proceso Python."""
 
     def __init__(self) -> None:
@@ -251,8 +252,10 @@ class ModeloNucleo(ModeladoMixin):
         self.con_cambios = True
         self._deshacer.clear()
         self._rehacer.clear()
-        # O003b: los cinco tipos de muro con sus capas de material.
+        # O007a: biblioteca de materiales y tipos de muro multicapa.
+        self._crear_materiales_semilla()
         self.crear_tipos_muro()
+        self.crear_tipos_ejemplo()
         return self.info()
 
     def abrir(self, ruta: str) -> dict[str, Any]:
@@ -270,6 +273,8 @@ class ModeloNucleo(ModeladoMixin):
         self.con_cambios = False
         self._deshacer.clear()
         self._rehacer.clear()
+        # O007a: si el archivo no trae biblioteca, se siembra al abrirlo.
+        self._asegurar_biblioteca()
         return self.info()
 
     def guardar(self, ruta: str | None = None) -> dict[str, Any]:
@@ -459,29 +464,42 @@ class ModeloNucleo(ModeladoMixin):
                         clase = producto.is_a()
                         categoria = _categoria(clase)
                         capas: list[dict[str, Any]] = []
+                        eje_muro: list[float] | None = None
                         try:
-                            import ifcopenshell.util.element as util_elemento
+                            if producto.is_a("IfcWall"):
+                                datos_muro = self._datos_muro(producto)
+                                capas = self.capas_con_posicion(
+                                    producto, datos_muro["espesor"]
+                                )
+                                eje_muro = [
+                                    datos_muro["x1"],
+                                    datos_muro["y1"],
+                                    datos_muro["x2"],
+                                    datos_muro["y2"],
+                                ]
+                            else:
+                                import ifcopenshell.util.element as util_elemento
 
-                            for material in util_elemento.get_materials(producto):
-                                for capa in (
-                                    getattr(material, "MaterialLayers", ())
-                                    or getattr(material, "Layers", ())
-                                    or ()
-                                ):
-                                    capas.append(
-                                        {
-                                            "material": _texto(
-                                                getattr(
-                                                    getattr(capa, "Material", None),
-                                                    "Name",
-                                                    "",
-                                                )
-                                            ),
-                                            "espesor": float(
-                                                getattr(capa, "LayerThickness", 0.0) or 0.0
-                                            ),
-                                        }
-                                    )
+                                for material in util_elemento.get_materials(producto):
+                                    for capa in (
+                                        getattr(material, "MaterialLayers", ())
+                                        or getattr(material, "Layers", ())
+                                        or ()
+                                    ):
+                                        capas.append(
+                                            {
+                                                "material": _texto(
+                                                    getattr(
+                                                        getattr(capa, "Material", None),
+                                                        "Name",
+                                                        "",
+                                                    )
+                                                ),
+                                                "espesor": float(
+                                                    getattr(capa, "LayerThickness", 0.0) or 0.0
+                                                ),
+                                            }
+                                        )
                         except Exception:
                             capas = []
                         datos = {
@@ -494,6 +512,7 @@ class ModeloNucleo(ModeladoMixin):
                             "categoria": categoria,
                             "tipo": self._tipo_de(producto),
                             "capas": capas,
+                            "eje": eje_muro,
                             "vertices": [],
                             "indices": [],
                             "_base": 0,

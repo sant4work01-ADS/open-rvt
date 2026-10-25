@@ -11,6 +11,7 @@ import { useTema, aplicarTema, ESCALA_DEFECTO, bajarEscala, subirEscala } from "
 import { ConfiguracionView } from "@/features/configuracion/ConfiguracionView";
 import { AyudaView } from "@/features/ayuda/AyudaView";
 import { ModeloView } from "@/features/modelo/ModeloView";
+import { EditorTipos } from "@/features/tipos/EditorTipos";
 import { NivelesView } from "@/features/modelo/NivelesView";
 import { useModelo } from "@/features/modelo/estado";
 import { bitacoraAviso, bitacoraVista, vaciarBitacora } from "@/lib/bitacora";
@@ -323,6 +324,11 @@ export function App() {
         herramientaVentana: () => useModelo.getState().activarHerramienta("ventana"),
         herramientaMover: () => useModelo.getState().activarHerramienta("mover"),
         herramientaCopiar: () => useModelo.getState().activarHerramienta("copiar"),
+        // O007a: el editor vive en el módulo Modelo; la cinta cambia de módulo.
+        abrirTipos: () => {
+          irAModulo("modelo");
+          useModelo.getState().abrirEditorTipos();
+        },
         borrarSeleccion: () => void useModelo.getState().borrarSeleccion(),
         deshacer: () => void useModelo.getState().deshacer(),
         rehacer: () => void useModelo.getState().rehacer(),
@@ -332,7 +338,7 @@ export function App() {
         temaOscuro: () => fijar("oscuro"),
         temaActivo: pref,
       }),
-    [fijar, pref, herramientaActiva],
+    [fijar, pref, herramientaActiva, irAModulo],
   );
 
   const comandos = useMemo<Comando[]>(() => {
@@ -397,6 +403,8 @@ export function App() {
           <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">
             {activo === "modelo" ? (
               <ModeloView />
+            ) : activo === "tipos" ? (
+              <EditorTipos onCerrar={() => irAModulo("modelo")} />
             ) : activo === "niveles" ? (
               <NivelesView />
             ) : activo === "configuracion" ? (

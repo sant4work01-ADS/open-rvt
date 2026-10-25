@@ -76,6 +76,42 @@ export interface Elemento {
   categoria: Categoria;
 }
 
+export type FuncionCapa = "núcleo" | "acabado" | "aislante" | "membrana";
+export type LineaUbicacion = "eje_nucleo" | "cara_exterior" | "cara_interior" | "centro";
+
+export interface CapaMuro {
+  funcion: FuncionCapa;
+  material: string;
+  espesor: number;
+  color?: string;
+  rayado?: string;
+  categoria?: string;
+  /** O007a: centro de la capa respecto al eje del muro (local +Y = exterior). */
+  centro?: number;
+  nucleo?: boolean;
+}
+
+export interface MaterialBiblioteca {
+  id: string;
+  nombre: string;
+  categoria: string;
+  color: string;
+  rayado: string;
+  unidad: string;
+  espesor_tipico: number;
+}
+
+export interface TipoElemento {
+  globalid: string;
+  nombre: string;
+  clase: string;
+  parametros: Record<string, unknown>;
+  capas: CapaMuro[];
+  instancias: number;
+}
+
+export type LineaMuro = [number, number, number, number];
+
 export interface ElementoMalla {
   globalid: string;
   clase: string;
@@ -87,7 +123,9 @@ export interface ElementoMalla {
   /** O005: tipo IFC del elemento (nombre del IfcWallType en muros de O003b). */
   tipo: string;
   /** O005: capas del IfcMaterialLayerSet, de exterior a interior. */
-  capas: Array<{ material: string; espesor: number }>;
+  capas: CapaMuro[];
+  /** O007a: eje del muro en planta [x1, y1, x2, y2]. */
+  eje?: LineaMuro | null;
   vertices: Float32Array;
   indices: Uint32Array;
 }
@@ -117,7 +155,8 @@ export interface ElementoMallaCrudo {
   opacidad: number;
   categoria: Categoria;
   tipo: string;
-  capas: Array<{ material: string; espesor: number }>;
+  capas: CapaMuro[];
+  eje?: LineaMuro | null;
   vertices: string;
   indices: string;
 }

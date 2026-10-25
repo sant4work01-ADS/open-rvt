@@ -886,6 +886,7 @@ export function Visor3D({
       : new THREE.Vector3(0, 0, 1);
 
     let polilineasSeccion = 0;
+    let lineasCapasPlanta = 0;
 
     /** Coloca un polígono de relleno en el plano de sección. */
     const agregarRelleno = (
@@ -938,9 +939,15 @@ export function Visor3D({
       const seleccionado =
         elemento.globalid === seleccion || seleccionados.includes(elemento.globalid);
       const opaco = elemento.opacidad >= 1;
+      // O007a: en 3D el sólido lleva el color de la capa exterior del muro; si la
+      // capa no trae color de biblioteca, se conserva el color de la categoría.
+      const colorExterior =
+        elemento.categoria === "muros" && elemento.capas.length > 0
+          ? elemento.capas[0].color
+          : undefined;
       const color = seleccionado
         ? new THREE.Color(0x2f7dd1)
-        : new THREE.Color(elemento.color);
+        : new THREE.Color(colorExterior || elemento.color);
 
       // Cota inferior/superior del elemento para separar lo que queda arriba del corte.
       let minZ = Infinity;
@@ -1130,7 +1137,10 @@ export function Visor3D({
               if (capas.length > 1) {
                 // Línea fina entre capas: contorno de cada banda con trazo de 0,1 mm.
                 for (const banda of bandas) {
-                  const mm = 0.1 * factorEscala(vista.escala);
+                  const esNucleo = elemento.capas.some(
+                    (capa) => capa.funcion === "núcleo" && capa.material === banda.material,
+                  );
+                  const mm = (esNucleo ? 0.35 : 0.1) * factorEscala(vista.escala);
                   const materialBanda = crearMaterialLinea({
                     mm,
                     escala: vista.escala,
@@ -1144,7 +1154,12 @@ export function Visor3D({
                     origenSeccion!.y + base.u[1] * u + base.v[1] * v + desplazamientoSeccion.y,
                     origenSeccion!.z + base.u[2] * u + base.v[2] * v + desplazamientoSeccion.z,
                   ] as [number, number, number]);
-                  lineaCerrada([...puntosBanda, puntosBanda[0]], materialBanda, 1.2, grupoLocal);
+                  lineaCerrada(
+                    [...puntosBanda, puntosBanda[0]],
+                    materialBanda,
+                    esNucleo ? 1.8 : 1.2,
+                    grupoLocal,
+                  );
                 }
               }
             }
@@ -1194,6 +1209,102 @@ export function Visor3D({
       tapa.renderOrder = 1.1;
       tapa.onAfterRender = (rendererLocal) => rendererLocal.clearStencil();
       grupoLocal.add(tapa);
+    }
+
+    // O007a: a 1:50 o mayor, en planta se dibujan las capas de los muros: línea fina
+    // entre capas, contorno grueso del núcleo y rayado diagonal dentro del núcleo.
+    if (vista.tipo === "planta" && vista.escala <= 50) {
+      const zCapas = corteZ + 0.035;
+      const colorCapas = oscuro ? "#e5e7eb" : estilos.categorias.muros.color;
+      const materialFino = crearMaterialLinea({
+        mm: 0.1,
+        escala: vista.escala,
+        color: colorCapas,
+        registro,
+        mundoPorPx,
+        profundidad: false,
+      });
+      const materialNucleo = crearMaterialLinea({
+        mm: 0.35,
+        escala: vista.escala,
+        color: colorCapas,
+        registro,
+        mundoPorPx,
+        profundidad: false,
+      });
+      const materialRaya = crearMaterialLinea({
+        mm: 0.08,
+        escala: vista.escala,
+        color: colorCapas,
+        registro,
+        mundoPorPx,
+        profundidad: false,
+      });
+      for (const elemento of visibles) {
+        if (
+          elemento.categoria !== "muros" ||
+          elemento.capas.length < 2 ||
+          !elemento.eje ||
+          categoriaOculta(vista, "muros")
+        ) {
+          continue;
+        }
+        const [x1, y1, x2, y2] = elemento.eje;
+        const largo = Math.hypot(x2 - x1, y2 - y1);
+        if (largo < 1e-6) continue;
+        const ux = (x2 - x1) / largo;
+        const uy = (y2 - y1) / largo;
+        // Normal local +Y: los centros de capa vienen del núcleo IFC.
+        const nx = -uy;
+        const ny = ux;
+        const punto = (t: number, off: number): [number, number, number] => [
+          x1 + ux * t + nx * off,
+          y1 + uy * t + ny * off,
+          zCapas,
+        ];
+        const cortes: Array<{ off: number; nucleo: boolean }> = [];
+        elemento.capas.forEach((capa, indice) => {
+          const centro = capa.centro;
+          if (centro === undefined) return;
+          const siguiente = elemento.capas[indice + 1];
+          if (siguiente && siguiente.centro !== undefined) {
+            const nucleo = capa.funcion === "núcleo" || siguiente.funcion === "núcleo";
+            cortes.push({ off: centro - capa.espesor / 2, nucleo });
+          }
+        });
+        for (const corte of cortes) {
+          lineaCerrada(
+            [punto(0, corte.off), punto(largo, corte.off)],
+            corte.nucleo ? materialNucleo : materialFino,
+            corte.nucleo ? 1.8 : 0.8,
+            grupoLocal,
+          );
+          lineasCapasPlanta += 1;
+        }
+        // Rayado del núcleo (una sola banda si hay varias capas contiguas).
+        const nucleos = elemento.capas.filter((c) => c.funcion === "núcleo");
+        if (nucleos.length > 0) {
+          const exterior = Math.max(
+            ...nucleos.map((c) => (c.centro ?? 0) + c.espesor / 2),
+          );
+          const interior = Math.min(
+            ...nucleos.map((c) => (c.centro ?? 0) - c.espesor / 2),
+          );
+          const banda = exterior - interior;
+          if (banda > 1e-5) {
+            const paso = 0.1;
+            for (let t = 0; t + banda <= largo; t += paso) {
+              lineaCerrada(
+                [punto(t, exterior), punto(t + banda, interior)],
+                materialRaya,
+                0.7,
+                grupoLocal,
+              );
+              lineasCapasPlanta += 1;
+            }
+          }
+        }
+      }
     }
 
     // O005: simbología 2D de puertas y ventanas, solo en plantas.
@@ -1820,6 +1931,7 @@ export function Visor3D({
       );
       nodoVisor.dataset.mallasDibujadas = String(visibles.length);
       nodoVisor.dataset.seccionPolilineas = String(polilineasSeccion);
+      nodoVisor.dataset.capasPlanta = String(lineasCapasPlanta);
       nodoVisor.dataset.estiloMurosCorte = String(
         grosorMm(estilos, vista, "muros", "corte") ?? "",
       );
@@ -2555,7 +2667,8 @@ export function Visor3D({
           return;
         }
       }
-      if (!herramienta) return;
+      // O007a: sin herramienta, el doble clic puede abrir «Editar tipo» del muro
+      // seleccionado; la decisión final vive en el estado del modelo.
       evento.preventDefault();
       void dobleClicEnPlanta();
     };

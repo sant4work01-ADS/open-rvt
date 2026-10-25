@@ -19,7 +19,8 @@
     "colapsar": "Collapse",
     "colapsarMenu": "Collapse side menu",
     "expandirMenu": "Expand side menu",
-    "redimensionar": "Resize the side panel"
+    "redimensionar": "Resize the side panel",
+    "tipos": "Types and materials"
   },
   "ribbon": {
     "cinta": "Command ribbon",
@@ -45,7 +46,8 @@
       "Datos": "Data",
       "Construir": "Build",
       "Modificar": "Modify",
-      "Historial": "History"
+      "Historial": "History",
+      "Editor": "Editor"
     },
     "comandos": {
       "nuevo": "New",
@@ -69,7 +71,8 @@
       "ventana": "Window",
       "mover": "Move",
       "borrar": "Delete",
-      "rehacer": "Redo"
+      "rehacer": "Redo",
+      "tipos": "Types"
     },
     "descripciones": {
       "nuevo": "Create an empty IFC model",

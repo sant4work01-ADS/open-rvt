@@ -10,6 +10,7 @@ import {
   ANCHO_EXPANDIDO_REM,
   anchoMinimoRem,
   estimarTextoBaseRem,
+  RELLENO_DEFECTO_REM,
 } from "./SidebarModulos";
 import { MODULOS } from "./modulos";
 
@@ -58,15 +59,20 @@ describe("Sidebar redimensionable (spec 044)", () => {
   });
 
   // CA-3
-  it("CA-3: el ancho por omisión se ajusta al contenido y es 35-40 % más angosto que 12rem", async () => {
+  it("CA-3: el ancho por omisión se ajusta al contenido más largo y queda bajo 12rem", async () => {
     montarApp({ lateralExpandido: true });
     await asaEsperada();
     const porDefecto = anchoRem();
-    expect(porDefecto).toBeGreaterThan(7.2);
-    expect(porDefecto).toBeLessThan(7.8);
+    // O007a añadió «Tipos y materiales»: el ancho sigue al texto más largo medido.
+    expect(porDefecto).toBeGreaterThan(8.4);
+    expect(porDefecto).toBeLessThan(9.4);
+    expect(porDefecto).toBeCloseTo(
+      anchoMinimoRem(textoMasLargo, 120) + RELLENO_DEFECTO_REM,
+      0,
+    );
     const recorte = (ANCHO_EXPANDIDO_REM - porDefecto) / ANCHO_EXPANDIDO_REM;
-    expect(recorte).toBeGreaterThanOrEqual(0.35);
-    expect(recorte).toBeLessThanOrEqual(0.41);
+    expect(recorte).toBeGreaterThanOrEqual(0.24);
+    expect(recorte).toBeLessThanOrEqual(0.31);
   });
 
   // CA-4
