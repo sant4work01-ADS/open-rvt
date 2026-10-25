@@ -133,3 +133,12 @@ def test_bloques_vacios_y_etiquetas_repetidas() -> None:
             {"separaciones": [4], "primera_etiqueta": "1"}, None, "rebase", 1.5
         )
     assert "ya existe" in str(exc.value).lower()
+
+
+def test_eje_suelto_ortogonal_alarga_la_familia_opuesta() -> None:
+    nucleo = _nuevo()
+    _reticula(nucleo)
+    nucleo.eje_crear("5", 20.5, -1.5, 20.5, 9.5)
+    ejes = _ejes(nucleo)
+    for etiqueta in ("A", "B", "C"):
+        assert ejes[etiqueta]["x2"] == pytest.approx(22.0)

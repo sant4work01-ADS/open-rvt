@@ -552,8 +552,15 @@ class ModeladoMixin:
             self.modelo, p1=(x1, y1, 0.0), p2=(x2, y2, 0.0), grid_axis=eje, is_si=True
         )
         self.con_cambios = True
+        modificados: list[str] = []
+        # Un eje ortogonal en una retícula con rebase alarga la familia opuesta.
+        if min(abs(x2 - x1), abs(y2 - y1)) <= TOLERANCIA_CALCULO:
+            gid = self._id_eje(grid, eje)
+            modificados = [g for g in self._recalcular_reticula(grid) if g != gid]
         return self._resultado(
-            [self._id_eje(grid, eje)], mensaje=f"Eje «{etiqueta}» creado."
+            [self._id_eje(grid, eje)],
+            modificados=modificados,
+            mensaje=f"Eje «{etiqueta}» creado.",
         )
 
     def eje_editar(self, globalid: str, etiqueta: str) -> dict[str, Any]:
