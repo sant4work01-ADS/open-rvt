@@ -338,3 +338,14 @@ describe("O005c: encuadre con ejes", () => {
     expect(cajaConEjes(caja, [])).toBe(caja);
   });
 });
+
+describe("O006a: cotas de ejes en la vista", () => {
+  it("vienen activadas por omisión y se conservan al guardar y reabrir", () => {
+    const porDefecto = normalizarVista({ tipo: "planta", nombre: "P" });
+    expect(porDefecto?.cotasEjes).toBe(true);
+    const apagada = normalizarVista({ tipo: "planta", nombre: "P", cotasEjes: false });
+    expect(apagada?.cotasEjes).toBe(false);
+    const leidas = leerVistas(serializarVistas([apagada!]));
+    expect(leidas[0].cotasEjes).toBe(false);
+  });
+});
