@@ -20,13 +20,16 @@ deshabilitados con la descripción «Disponible pronto»: todavía no hay archiv
 
 - **Rueda del ratón**: zoom hacia el cursor. En el touchpad, el **pellizco** (Ctrl +
   rueda) también hace zoom.
-- **Dos dedos del touchpad**: paneo. Con `Shift` + rueda se panea en horizontal.
+- **Dos dedos del touchpad**: paneo. Con `Shift` + dos dedos se orbita en 3D y se
+  panea en horizontal en planta.
+- **Pantalla táctil**: un dedo arrastra para mover la vista, dos dedos pellizcan y
+  panean, y un toque equivale a un clic.
 - **Botón medio** o **Espacio + arrastrar**: mover la vista.
 - **F**, doble clic con el botón medio o el botón **Ajustar**: encuadrar la vista.
-- **+** y **−**: acercar y alejar.
+- **+** y **−**: acercar y alejar. **Ctrl+Shift+D** muestra el diagnóstico de rueda.
 - La ayuda discreta de abajo a la derecha del visor se puede cerrar y no vuelve a
-  aparecer. En **Configuración → Apariencia** se elige «Rueda/touchpad: zoom o paneo»:
-  Automático detecta ratón o touchpad; Zoom y Paneo lo fuerzan.
+  aparecer. En **Configuración → Navegación** se elige el dispositivo: Automático,
+  Ratón o Touchpad. El detectado aparece entre paréntesis.
 
 ### Tipos y materiales
 
@@ -62,3 +65,31 @@ rayado del núcleo; a **1:100** o menor solo queda el contorno exterior.
 | Ctrl+F1 | Minimizar o restaurar la cinta |
 | Alt+1 … Alt+9 | Cambiar de módulo |
 | Ctrl+= / Ctrl+− / Ctrl+0 | Tamaño de la interfaz |
+
+## Navegación con touchpad
+
+El visor distingue la rueda del ratón del touchpad por la **ráfaga de eventos**, no por
+un solo evento. Un touchpad de Windows puede mandar saltos enteros de 100 o 120, así
+que también se reconocen más de tres eventos muy seguidos y los deltas fraccionarios.
+La detección dura 60 segundos desde el último gesto.
+
+- Dos dedos: paneo.
+- Pellizco o **Ctrl + rueda**: zoom hacia el cursor.
+- **Shift + dos dedos**: órbita en las vistas 3D y paneo horizontal en planta.
+- Configuración → Navegación: **Automático / Ratón / Touchpad**. La elección manual
+  manda siempre; «Automático» usa el último dispositivo detectado.
+- **Ctrl+Shift+D** abre un panel con los últimos 20 eventos `wheel` (deltaX, deltaY,
+  deltaMode, Ctrl y milisegundos entre eventos) y la clasificación de cada uno. Si el
+  touchpad sigue fallando, ese panel sirve para reportarlo.
+
+## Novedades de la versión 0.5.4
+
+- **Enganches fiables:** la tolerancia es de 12 píxeles en cualquier zoom, el enganche
+  más cercano gana y el ángulo a 15° ya no saca el punto de un cruce de ejes. Los
+  cruces se recalculan al mover, crear o borrar ejes.
+- **Touchpad:** detección por ráfagas, paneo con dos dedos, pellizco para zoom, órbita
+  con Shift en 3D, gestos táctiles y panel de diagnóstico.
+- **Esquinas limpias:** los muros se recortan o extienden al unirse y las plantas
+  dibujan el contorno unido, las capas recortadas y el rayado del núcleo sin líneas
+  dentro de la esquina. Un extremo a menos de 25 cm del eje de otro muro se lleva a su
+  eje para formar la unión.

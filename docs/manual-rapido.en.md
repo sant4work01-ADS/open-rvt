@@ -20,13 +20,16 @@ description "Available soon": there is no file to open yet.
 
 - **Mouse wheel**: zoom towards the cursor. On a touchpad, **pinch** (Ctrl + wheel)
   also zooms.
-- **Two fingers on the touchpad**: pan. Use `Shift` + wheel to pan horizontally.
+- **Two fingers on the touchpad**: pan. With `Shift` + two fingers you orbit in 3D and
+  pan horizontally in plan.
+- **Touch screen**: one finger drags the view, two fingers pinch and pan, and a tap is
+  a click.
 - **Middle button** or **Space + drag**: move the view.
 - **F**, middle-button double click or the **Fit** button: frame the view.
-- **+** and **−**: zoom in and out.
+- **+** and **−**: zoom in and out. **Ctrl+Shift+D** shows the wheel diagnostics.
 - The discreet help at the bottom right of the viewer can be closed and will not come
-  back. **Settings → Appearance** offers "Wheel/touchpad: zoom or pan": Automatic
-  detects mouse or touchpad; Zoom and Pan force it.
+  back. **Settings → Navigation** chooses the device: Automatic, Mouse or Touchpad.
+  The detected device appears in brackets.
 
 ### Types and materials
 
@@ -62,3 +65,31 @@ drawn; at **1:100** or smaller only the outer outline remains.
 | Ctrl+F1 | Minimize or restore the ribbon |
 | Alt+1 … Alt+9 | Switch module |
 | Ctrl+= / Ctrl+− / Ctrl+0 | Interface size |
+
+## Touchpad navigation
+
+The viewer tells the mouse wheel from the touchpad by the **event burst**, not by a
+single event. A Windows touchpad can send whole steps of 100 or 120, so more than
+three very close events and fractional deltas are also recognised as a touchpad. The
+detection lasts 60 seconds after the last gesture.
+
+- Two fingers: pan.
+- Pinch or **Ctrl + wheel**: zoom towards the cursor.
+- **Shift + two fingers**: orbit in 3D views and pan horizontally in plan.
+- Settings → Navigation: **Automatic / Mouse / Touchpad**. A manual choice always wins;
+  "Automatic" uses the last detected device.
+- **Ctrl+Shift+D** opens a panel with the last 20 `wheel` events (deltaX, deltaY,
+  deltaMode, Ctrl and milliseconds between events) and each one's classification. If
+  the touchpad still misbehaves, that panel is what to report.
+
+## What's new in version 0.5.4
+
+- **Reliable snaps:** the tolerance is 12 screen pixels at any zoom, the nearest snap
+  wins and the 15° angle no longer pulls the point off an axis crossing. Crossings are
+  recalculated when axes are created, moved or deleted.
+- **Touchpad:** burst detection, two-finger pan, pinch zoom, Shift orbit in 3D, touch
+  gestures and a diagnostics panel.
+- **Clean corners:** walls are trimmed or extended when joined and plans draw the
+  merged outline, trimmed layers and core hatch without lines inside the corner. An
+  endpoint within 25 cm of another wall's axis is snapped onto that axis to form the
+  joint.

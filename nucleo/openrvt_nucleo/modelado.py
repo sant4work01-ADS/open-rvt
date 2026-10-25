@@ -38,6 +38,8 @@ TIPOS_MURO = (
 ALINEACIONES = ("centro", "interior", "exterior")
 
 TOLERANCIA = 0.01  # unión automática de muros: ±1 cm
+# O006e: un extremo a menos de 25 cm de la cara o del eje de otro muro se lleva al eje.
+TOLERANCIA_UNION = 0.25
 TOLERANCIA_CALCULO = 1e-6
 
 
@@ -104,16 +106,27 @@ class ModeladoMixin:
         modelo = self.modelo
         import ifcopenshell.util.representation as representation
 
-        encontrado = representation.get_context(
-            modelo, "Model", identificador, vista
-        )
-        if encontrado is not None:
+        encontrado = representation.get_context(modelo, "Model", identificador, vista)
+        # El contexto base no tiene ContextIdentifier: hace falta un subcontexto real
+        # (Model/Body/MODEL_VIEW) para que la regeneración de muros pueda trabajar.
+        if encontrado is not None and getattr(encontrado, "ContextIdentifier", None) == identificador:
             return encontrado
+        padre = None
+        for candidato in modelo.by_type("IfcGeometricRepresentationContext"):
+            if (
+                getattr(candidato, "ContextType", None) == "Model"
+                and not getattr(candidato, "ContextIdentifier", None)
+            ):
+                padre = candidato
+                break
+        if padre is None:
+            padre = context_api.add_context(modelo, context_type="Model")
         return context_api.add_context(
             modelo,
             context_type="Model",
             context_identifier=identificador,
             target_view=vista,
+            parent=padre,
         )
 
     def _entidad_por_gid(self, globalid: str, clases: tuple[str, ...] | None = None) -> Any:
@@ -1247,6 +1260,7 @@ class ModeladoMixin:
         cuerpo.RepresentationIdentifier = "Body"
         geometry_api.assign_representation(self.modelo, product=muro, representation=cuerpo)
         self._regenerar_eje(muro)
+        self._unir_muros(muro)
 
     def _regenerar_eje(self, muro: Any) -> None:
         datos = self._datos_muro(muro)
@@ -1287,6 +1301,7 @@ class ModeladoMixin:
                 f"Alineación «{alineacion}» no válida; use centro, interior o exterior.",
                 -32602,
             )
+        x1, y1, x2, y2 = self._ajustar_extremos_a_ejes(x1, y1, x2, y2)
         largo = math.hypot(x2 - x1, y2 - y1)
         if largo <= TOLERANCIA_CALCULO:
             raise self._error("El muro necesita dos puntos distintos.", -32602)
@@ -1340,56 +1355,155 @@ class ModeladoMixin:
         datos = self._datos_muro(muro)
         return datos["x1"], datos["y1"], datos["x2"], datos["y2"], datos["espesor"]
 
-    def _unir_muros(self, muro: Any) -> list[Any]:
-        """Conecta con IfcRelConnectsPathElements los muros que tocan sus extremos."""
-        unidos: list[Any] = []
-        x1, y1, x2, y2, _ = self._extremos_muro(muro)
+    def _proyectar_en_eje(
+        self, px: float, py: float, ax: float, ay: float, bx: float, by: float
+    ) -> tuple[float, float, float, float] | None:
+        """Proyección de un punto sobre la recta de un eje; t y distancia perpendicular."""
+        dx, dy = bx - ax, by - ay
+        largo2 = dx * dx + dy * dy
+        if largo2 <= TOLERANCIA_CALCULO:
+            return None
+        t = ((px - ax) * dx + (py - ay) * dy) / largo2
+        qx, qy = ax + t * dx, ay + t * dy
+        return t, qx, qy, math.hypot(px - qx, py - qy)
+
+    def _ajustar_extremos_a_ejes(
+        self, x1: float, y1: float, x2: float, y2: float
+    ) -> tuple[float, float, float, float]:
+        """O006e: lleva al eje del muro vecino un extremo próximo a su cara o eje."""
+        extremos = [[x1, y1], [x2, y2]]
         for otro in self.modelo.by_type("IfcWall"):
-            if otro == muro:
+            ox1, oy1, ox2, oy2, espesor = self._extremos_muro(otro)
+            dx, dy = ox2 - ox1, oy2 - oy1
+            largo = math.hypot(dx, dy)
+            if largo <= TOLERANCIA_CALCULO:
                 continue
-            ox1, oy1, ox2, oy2, _ = self._extremos_muro(otro)
-            toca = False
-            tipo_muro = "NOTDEFINED"
-            tipo_otro = "NOTDEFINED"
-            for ax, ay, fin_a in ((x1, y1, "START"), (x2, y2, "END")):
-                for bx, by, fin_b in ((ox1, oy1, "START"), (ox2, oy2, "END")):
-                    if math.hypot(ax - bx, ay - by) <= TOLERANCIA:
-                        toca = True
-                        tipo_muro = "ATSTART" if fin_a == "START" else "ATEND"
-                        tipo_otro = "ATSTART" if fin_b == "START" else "ATEND"
-                        break
-                if toca:
-                    break
-            if not toca:
-                # Unión en T: el extremo de este muro toca el interior del otro.
-                for ax, ay, fin_a in ((x1, y1, "START"), (x2, y2, "END")):
-                    dx, dy = ox2 - ox1, oy2 - oy1
-                    largo2 = dx * dx + dy * dy
-                    if largo2 <= TOLERANCIA_CALCULO:
-                        continue
-                    t = ((ax - ox1) * dx + (ay - oy1) * dy) / largo2
-                    if t <= 0.01 or t >= 0.99:
-                        continue
-                    px, py = ox1 + t * dx, oy1 + t * dy
-                    if math.hypot(ax - px, ay - py) <= TOLERANCIA:
-                        toca = True
-                        tipo_muro = "ATSTART" if fin_a == "START" else "ATEND"
-                        tipo_otro = "ATSTART" if t < 0.5 else "ATEND"
-                        break
-            if not toca:
-                continue
-            ya_unido = False
-            for rel in list(getattr(muro, "ConnectedTo", ()) or ()) + list(
-                getattr(muro, "ConnectedFrom", ()) or ()
-            ):
-                if not rel.is_a("IfcRelConnectsPathElements"):
+            # Solo muros no paralelos: dos muros alineados no se enganchan al eje.
+            ux, uy = dx / largo, dy / largo
+            for indice, (px, py) in enumerate(extremos):
+                proyeccion = self._proyectar_en_eje(px, py, ox1, oy1, ox2, oy2)
+                if proyeccion is None:
                     continue
-                if (
-                    getattr(rel, "RelatedElement", None) == otro
-                    or getattr(rel, "RelatingElement", None) == otro
-                ):
-                    ya_unido = True
-            if ya_unido:
+                t, qx, qy, separacion = proyeccion
+                if t < -0.02 or t > 1.02:
+                    continue
+                if separacion > espesor / 2.0 + TOLERANCIA_UNION:
+                    continue
+                # El extremo del propio muro no debe ser el extremo del vecino.
+                if separacion <= TOLERANCIA_CALCULO:
+                    continue
+                extremos[indice] = [qx, qy]
+        return extremos[0][0], extremos[0][1], extremos[1][0], extremos[1][1]
+
+    def _conexion_entre(self, a: Any, b: Any) -> tuple[str, str] | None:
+        """Tipo de conexión (ATSTART/ATEND) entre dos muros, o None si no se tocan."""
+        ax1, ay1, ax2, ay2, _ = self._extremos_muro(a)
+        bx1, by1, bx2, by2, espesor_b = self._extremos_muro(b)
+        for px, py, fin_a in ((ax1, ay1, "ATSTART"), (ax2, ay2, "ATEND")):
+            for qx, qy, fin_b in ((bx1, by1, "ATSTART"), (bx2, by2, "ATEND")):
+                if math.hypot(px - qx, py - qy) <= TOLERANCIA:
+                    return fin_a, fin_b
+        # El extremo de `a` toca el interior de `b` (unión en T).
+        for px, py, fin_a in ((ax1, ay1, "ATSTART"), (ax2, ay2, "ATEND")):
+            proyeccion = self._proyectar_en_eje(px, py, bx1, by1, bx2, by2)
+            if proyeccion is None:
+                continue
+            t, _qx, _qy, separacion = proyeccion
+            if not (0.01 < t < 0.99):
+                continue
+            if separacion <= espesor_b / 2.0 + TOLERANCIA:
+                # `a` llega al interior de `b`: `b` es el pasante.
+                return fin_a, "ATPATH"
+        # El extremo de `b` toca el interior de `a`.
+        espesor_a = self._extremos_muro(a)[4]
+        for px, py, fin_b in ((bx1, by1, "ATSTART"), (bx2, by2, "ATEND")):
+            proyeccion = self._proyectar_en_eje(px, py, ax1, ay1, ax2, ay2)
+            if proyeccion is None:
+                continue
+            t, _qx, _qy, separacion = proyeccion
+            if not (0.01 < t < 0.99):
+                continue
+            if separacion <= espesor_a / 2.0 + TOLERANCIA:
+                return "ATSTART" if t < 0.5 else "ATEND", "ATPATH"
+        return None
+
+    def _descontar_vanos(self, muro: Any, cuerpo: Any) -> None:
+        """Vuelve a descontar las aberturas tras regenerar una unión."""
+        if cuerpo is None:
+            return
+        datos = self._datos_muro(muro)
+        offset = self._desfase_de_muro(muro, datos["espesor"])
+        vanos = []
+        for rel in getattr(muro, "HasOpenings", ()) or ():
+            vano = getattr(rel, "RelatedOpeningElement", None)
+            if vano is None:
+                continue
+            info = self._datos_abertura(vano)
+            if info is None:
+                continue
+            vanos.append(
+                self._cuerpo_hueco(
+                    info["ancho"],
+                    info["alto"],
+                    datos["espesor"],
+                    info["antepecho"],
+                    info["distancia"],
+                    offset,
+                )
+            )
+        if not vanos:
+            return
+        try:
+            item = cuerpo.Items[0]
+            geometry_api.add_boolean(
+                self.modelo, first_item=item, second_items=vanos, operator="DIFFERENCE"
+            )
+        except Exception:
+            LOG.warning("no se pudieron descontar los vanos al regenerar la unión", exc_info=True)
+
+    def _regenerar_representacion_unida(self, muro: Any) -> bool:
+        """O006e: recorta o extiende el cuerpo del muro según sus uniones IFC."""
+        try:
+            cuerpo = geometry_api.regenerate_wall_representation(self.modelo, muro)
+        except Exception:
+            LOG.warning("no se pudo regenerar la unión del muro %s", _gid(muro), exc_info=True)
+            return False
+        if cuerpo is None:
+            return False
+        self._descontar_vanos(muro, cuerpo)
+        return True
+
+    def _unir_muros(self, muro: Any) -> list[Any]:
+        """Une muros que tocan sus extremos (L) o el interior de otro (T) y regenera."""
+        unidos: list[Any] = []
+        muros = [otro for otro in self.modelo.by_type("IfcWall") if otro != muro]
+        existentes: dict[int, Any] = {}
+        for rel in list(getattr(muro, "ConnectedTo", ()) or ()) + list(
+            getattr(muro, "ConnectedFrom", ()) or ()
+        ):
+            if not rel.is_a("IfcRelConnectsPathElements"):
+                continue
+            otro = (
+                rel.RelatedElement
+                if getattr(rel, "RelatingElement", None) == muro
+                else rel.RelatingElement
+            )
+            existentes[id(otro)] = rel
+        afectados: list[Any] = []
+        for otro in muros:
+            conexion = self._conexion_entre(muro, otro)
+            if conexion is None:
+                # Al mover un muro, la unión vieja deja de ser válida.
+                rel = existentes.get(id(otro))
+                if rel is not None:
+                    try:
+                        self.modelo.remove(rel)
+                    except Exception:
+                        LOG.debug("no se pudo quitar una unión obsoleta", exc_info=True)
+                    afectados.append(otro)
+                continue
+            tipo_muro, tipo_otro = conexion
+            if id(otro) in existentes:
                 continue
             try:
                 geometry_api.connect_path(
@@ -1400,8 +1514,11 @@ class ModeladoMixin:
                     related_connection=tipo_otro,
                 )
                 unidos.append(otro)
+                afectados.append(otro)
             except Exception:
                 LOG.warning("no se pudo unir %s con %s", _gid(muro), _gid(otro), exc_info=True)
+        for afectado in [muro, *afectados]:
+            self._regenerar_representacion_unida(afectado)
         return unidos
 
     # ------------------------------------------------------------------ losas
@@ -1979,6 +2096,7 @@ class ModeladoMixin:
                         relating_structure=rel.RelatingStructure,
                     )
                 self._regenerar_eje(copia)
+                self._unir_muros(copia)
                 creados.append(copia)
             elif original.is_a("IfcSlab"):
                 copia = self._copiar_entidad(original)

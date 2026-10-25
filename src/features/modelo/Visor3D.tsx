@@ -11,6 +11,7 @@ import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeome
 import type { Abertura, Caja, ElementoMalla, Nivel, Vista } from "./tipos";
 import { categoriaVisible, dibujaSiluetaSobreCorte } from "./vistas";
 import { useModelo } from "./estado";
+import { calcularPlantaMuros, type MuroPlanta } from "./planta";
 import {
   detectorRueda,
   factorRueda,
@@ -1072,7 +1073,9 @@ export function Visor3D({
         } else if (!encimaDelCorte) {
           const bordes = new THREE.EdgesGeometry(geometria, 30);
           const mm = grosorDe(categoriaEstilo, "proyeccion");
-          if (mm !== null) {
+          // O006e: en planta los muros se dibujan con la huella unida, no con las
+          // aristas de cada cuerpo (que dejarían líneas dentro de la esquina).
+          if (mm !== null && !(vista.tipo === "planta" && categoriaEstilo === "muros")) {
             const materialLinea = crearMaterialLinea({
               mm,
               escala: vista.escala,
@@ -1091,7 +1094,11 @@ export function Visor3D({
           }
           bordes.dispose();
         }
-      } else if (vista.estilo !== "sombreado" && !encimaDelCorte) {
+      } else if (
+        vista.estilo !== "sombreado" &&
+        !encimaDelCorte &&
+        !(vista.tipo === "planta" && categoriaEstilo === "muros")
+      ) {
         const aristas = new THREE.LineSegments(
           new THREE.EdgesGeometry(geometria, 30),
           new THREE.LineBasicMaterial({
@@ -1128,7 +1135,8 @@ export function Visor3D({
               p[2] + desplazamientoSeccion.z,
             ] as [number, number, number]);
             if (puntos.length >= 2) {
-              if (mmCorte !== null) {
+              const esMuroEnPlanta = vista.tipo === "planta" && categoriaEstilo === "muros";
+              if (mmCorte !== null && !esMuroEnPlanta) {
                 const materialCorte = crearMaterialLinea({
                   mm: mmCorte,
                   escala: vista.escala,
@@ -1162,13 +1170,17 @@ export function Visor3D({
                   const dz = origenSeccion.z + base.u[2] * u + base.v[2] * v;
                   return [dx, dy, dz] as Punto3;
                 });
-                agregarRelleno(
-                  puntos3,
-                  materialPorCapa(banda.material),
-                  grupoLocal,
-                );
+                // O006e: en planta el relleno y el rayado del muro salen de la
+                // huella unida, no de cada banda de la sección 3D.
+                if (!(vista.tipo === "planta" && categoriaEstilo === "muros")) {
+                  agregarRelleno(
+                    puntos3,
+                    materialPorCapa(banda.material),
+                    grupoLocal,
+                  );
+                }
               }
-              if (capas.length > 1) {
+              if (capas.length > 1 && !esMuroEnPlanta) {
                 // Línea fina entre capas: contorno de cada banda con trazo de 0,1 mm.
                 for (const banda of bandas) {
                   const esNucleo = elemento.capas.some(
@@ -1245,97 +1257,86 @@ export function Visor3D({
       grupoLocal.add(tapa);
     }
 
-    // O007a: a 1:50 o mayor, en planta se dibujan las capas de los muros: línea fina
-    // entre capas, contorno grueso del núcleo y rayado diagonal dentro del núcleo.
-    if (vista.tipo === "planta" && vista.escala <= 50) {
-      const zCapas = corteZ + 0.035;
-      const colorCapas = oscuro ? "#e5e7eb" : estilos.categorias.muros.color;
-      const materialFino = crearMaterialLinea({
-        mm: 0.1,
-        escala: vista.escala,
-        color: colorCapas,
-        registro,
-        mundoPorPx,
-        profundidad: false,
-      });
-      const materialNucleo = crearMaterialLinea({
-        mm: 0.35,
-        escala: vista.escala,
-        color: colorCapas,
-        registro,
-        mundoPorPx,
-        profundidad: false,
-      });
-      const materialRaya = crearMaterialLinea({
-        mm: 0.08,
-        escala: vista.escala,
-        color: colorCapas,
-        registro,
-        mundoPorPx,
-        profundidad: false,
-      });
-      for (const elemento of visibles) {
-        if (
-          elemento.categoria !== "muros" ||
-          elemento.capas.length < 2 ||
-          !elemento.eje ||
-          categoriaOculta(vista, "muros")
-        ) {
-          continue;
-        }
-        const [x1, y1, x2, y2] = elemento.eje;
-        const largo = Math.hypot(x2 - x1, y2 - y1);
-        if (largo < 1e-6) continue;
-        const ux = (x2 - x1) / largo;
-        const uy = (y2 - y1) / largo;
-        // Normal local +Y: los centros de capa vienen del núcleo IFC.
-        const nx = -uy;
-        const ny = ux;
-        const punto = (t: number, off: number): [number, number, number] => [
-          x1 + ux * t + nx * off,
-          y1 + uy * t + ny * off,
-          zCapas,
-        ];
-        const cortes: Array<{ off: number; nucleo: boolean }> = [];
-        elemento.capas.forEach((capa, indice) => {
-          const centro = capa.centro;
-          if (centro === undefined) return;
-          const siguiente = elemento.capas[indice + 1];
-          if (siguiente && siguiente.centro !== undefined) {
-            const nucleo = capa.funcion === "núcleo" || siguiente.funcion === "núcleo";
-            cortes.push({ off: centro - capa.espesor / 2, nucleo });
-          }
+    // O006e: planta de muros limpia. El contorno es la unión de las huellas; las
+    // capas se recortan contra el núcleo vecino y el rayado no duplica traslapes.
+    if (vista.tipo === "planta" && !categoriaOculta(vista, "muros")) {
+      const murosPlanta: MuroPlanta[] = visibles
+        .filter((elemento) => elemento.categoria === "muros" && elemento.eje)
+        .map((elemento) => ({
+          globalid: elemento.globalid,
+          eje: elemento.eje as [number, number, number, number],
+          capas: elemento.capas,
+        }));
+      if (murosPlanta.length > 0) {
+        const planta = calcularPlantaMuros(murosPlanta);
+        const zPlantas = corteZ + 0.035;
+        const colorPlantas = oscuro ? "#e5e7eb" : estilos.categorias.muros.color;
+        const materialContorno = crearMaterialLinea({
+          mm: 0.35,
+          escala: vista.escala,
+          color: colorPlantas,
+          registro,
+          mundoPorPx,
+          profundidad: false,
         });
-        for (const corte of cortes) {
-          lineaCerrada(
-            [punto(0, corte.off), punto(largo, corte.off)],
-            corte.nucleo ? materialNucleo : materialFino,
-            corte.nucleo ? 1.8 : 0.8,
-            grupoLocal,
-          );
-          lineasCapasPlanta += 1;
+        for (const poligono of planta.contorno) {
+          for (const anillo of [poligono.exterior, ...poligono.huecos]) {
+            if (anillo.length < 3) continue;
+            lineaCerrada(
+              anillo.map(([x, y]) => [x, y, zPlantas] as [number, number, number]),
+              materialContorno,
+              2.1,
+              grupoLocal,
+            );
+          }
         }
-        // Rayado del núcleo (una sola banda si hay varias capas contiguas).
-        const nucleos = elemento.capas.filter((c) => c.funcion === "núcleo");
-        if (nucleos.length > 0) {
-          const exterior = Math.max(
-            ...nucleos.map((c) => (c.centro ?? 0) + c.espesor / 2),
-          );
-          const interior = Math.min(
-            ...nucleos.map((c) => (c.centro ?? 0) - c.espesor / 2),
-          );
-          const banda = exterior - interior;
-          if (banda > 1e-5) {
-            const paso = 0.1;
-            for (let t = 0; t + banda <= largo; t += paso) {
+        if (vista.escala <= 50) {
+          const materialFino = crearMaterialLinea({
+            mm: 0.1,
+            escala: vista.escala,
+            color: colorPlantas,
+            registro,
+            mundoPorPx,
+            profundidad: false,
+          });
+          const materialNucleo = crearMaterialLinea({
+            mm: 0.35,
+            escala: vista.escala,
+            color: colorPlantas,
+            registro,
+            mundoPorPx,
+            profundidad: false,
+          });
+          const materialRaya = crearMaterialLinea({
+            mm: 0.08,
+            escala: vista.escala,
+            color: colorPlantas,
+            registro,
+            mundoPorPx,
+            profundidad: false,
+          });
+          for (const capa of planta.capas) {
+            const material = capa.funcion === "núcleo" ? materialNucleo : materialFino;
+            for (const linea of capa.lineas) {
+              if (linea.length < 2) continue;
               lineaCerrada(
-                [punto(t, exterior), punto(t + banda, interior)],
-                materialRaya,
-                0.7,
+                linea.map(([x, y]) => [x, y, zPlantas] as [number, number, number]),
+                material,
+                capa.funcion === "núcleo" ? 1.8 : 0.8,
                 grupoLocal,
               );
               lineasCapasPlanta += 1;
             }
+          }
+          for (const linea of planta.rayado) {
+            if (linea.length < 2) continue;
+            lineaCerrada(
+              linea.map(([x, y]) => [x, y, zPlantas] as [number, number, number]),
+              materialRaya,
+              0.7,
+              grupoLocal,
+            );
+            lineasCapasPlanta += 1;
           }
         }
       }
