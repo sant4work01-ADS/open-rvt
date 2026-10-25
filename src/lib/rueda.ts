@@ -1,15 +1,16 @@
-// OPEN-RVT (O006d): heurística de la rueda y el touchpad del visor.
+// OPEN-RVT (O006e): clasificación por ráfaga de la rueda y el touchpad del visor.
 //
-// Un ratón manda saltos grandes: `deltaY` entero de ±100 o ±120, o `deltaMode=1`
-// (líneas). Un touchpad manda valores pequeños, fraccionarios y con `deltaMode=0`;
-// el pellizco llega como `wheel` con `ctrlKey`. Regla:
-//   1. Ctrl + rueda siempre es zoom (pellizco).
-//   2. Shift + rueda siempre es paneo horizontal.
-//   3. Según la preferencia del usuario: «auto», «zoom» o «paneo».
-//   4. En «auto», `deltaMode != 0` o un salto entero >= 100 es zoom; el resto paneo.
+// Un touchpad de Windows puede mandar `deltaY` entero de 100 o 120, igual que una
+// rueda. Por eso la decisión no se toma con un solo evento: se observa la ráfaga.
+//   · Un delta fraccionario o con `deltaX` marca touchpad durante 60 s.
+//   · Más de 3 eventos en menos de 40 ms con saltos pequeños también es touchpad.
+//   · Una rueda real manda eventos sueltos, con delta >= 100 y > 30 ms entre sí.
+// El último dispositivo detectado se guarda en localStorage; la preferencia del
+// usuario («ratón» o «touchpad») manda sobre la detección.
 import { create } from "zustand";
 
-export type PreferenciaRueda = "auto" | "zoom" | "paneo";
+export type PreferenciaRueda = "auto" | "raton" | "touchpad";
+export type DispositivoRueda = "raton" | "touchpad";
 export type AccionRueda = "zoom" | "paneo" | "paneo-horizontal";
 
 export interface EventoRueda {
@@ -20,15 +21,45 @@ export interface EventoRueda {
   shiftKey: boolean;
 }
 
+/** O006e: una fila del diagnóstico Ctrl+Shift+D. */
+export interface RegistroRueda {
+  ms: number;
+  deltaX: number;
+  deltaY: number;
+  deltaMode: number;
+  ctrlKey: boolean;
+  shiftKey: boolean;
+  intervaloMs: number | null;
+  dispositivo: DispositivoRueda;
+  accion: AccionRueda;
+}
+
 const CLAVE = "openrvt.rueda";
 const CLAVE_AYUDA = "openrvt.ayudaNavegacion";
+const CLAVE_DETECTADO = "openrvt.rueda.dispositivo";
+const VENTANA_TOUCHPAD_MS = 60_000;
+const RAFAGA_MS = 40;
+const MAX_REGISTROS = 20;
 
 function leerPreferencia(): PreferenciaRueda {
   try {
     const valor = localStorage.getItem(CLAVE);
-    return valor === "zoom" || valor === "paneo" ? valor : "auto";
+    if (valor === "raton" || valor === "touchpad") return valor;
+    // Migración de O006d: «zoom» y «paneo» eran preferencias de acción.
+    if (valor === "zoom") return "raton";
+    if (valor === "paneo") return "touchpad";
+    return "auto";
   } catch {
     return "auto";
+  }
+}
+
+function leerDetectado(): DispositivoRueda | null {
+  try {
+    const valor = localStorage.getItem(CLAVE_DETECTADO);
+    return valor === "raton" || valor === "touchpad" ? valor : null;
+  } catch {
+    return null;
   }
 }
 
@@ -41,25 +72,113 @@ function leerAyudaVisible(): boolean {
 }
 
 /**
- * Clasifica un evento `wheel`. No mira el elemento: el visor decide qué hacer con la
- * acción devuelta. La heurística está documentada arriba y en el manual de Ayuda.
+ * O006e: detector con estado. `ahora` permite probar secuencias con tiempos
+ * deterministas; en el visor se omite y se usa `Date.now()`.
  */
+export class DetectorRueda {
+  private detectado: DispositivoRueda | null;
+  private touchpadHasta = 0;
+  private ultimoMs: number | null = null;
+  private rafaga = 0;
+  private registros: RegistroRueda[] = [];
+
+  constructor(detectado: DispositivoRueda | null = null) {
+    this.detectado = detectado;
+  }
+
+  ultimoDispositivo(): DispositivoRueda | null {
+    return this.detectado;
+  }
+
+  ultimos(): RegistroRueda[] {
+    return [...this.registros];
+  }
+
+  private marcarTouchpad(ahora: number): void {
+    this.detectado = "touchpad";
+    this.touchpadHasta = ahora + VENTANA_TOUCHPAD_MS;
+  }
+
+  clasificar(
+    evento: EventoRueda,
+    preferencia: PreferenciaRueda = "auto",
+    ahora = Date.now(),
+  ): AccionRueda {
+    const intervaloMs = this.ultimoMs === null ? null : ahora - this.ultimoMs;
+    const dx = Math.abs(evento.deltaX);
+    const dy = Math.abs(evento.deltaY);
+    const enteros = Number.isInteger(evento.deltaX) && Number.isInteger(evento.deltaY);
+
+    // Delta fraccionario o desplazamiento horizontal: touchpad inequívoco.
+    if (!enteros || evento.deltaX !== 0) {
+      this.marcarTouchpad(ahora);
+    }
+
+    // Ráfaga de eventos muy seguidos: un touchpad que imita saltos de rueda.
+    if (intervaloMs !== null && intervaloMs < RAFAGA_MS && (dy < 50 || intervaloMs <= 12)) {
+      this.rafaga += 1;
+    } else {
+      this.rafaga = 1;
+    }
+    if (this.rafaga > 3) this.marcarTouchpad(ahora);
+
+    const vigenteTouchpad = this.touchpadHasta > ahora;
+    // Rueda real: eventos sueltos, enteros, con delta grande y sin ráfaga.
+    if (
+      !vigenteTouchpad &&
+      intervaloMs !== null &&
+      intervaloMs >= 30 &&
+      evento.deltaMode === 0 &&
+      enteros &&
+      evento.deltaX === 0 &&
+      dy >= 100
+    ) {
+      this.detectado = "raton";
+    }
+
+    const dispositivo: DispositivoRueda =
+      preferencia === "raton" || preferencia === "touchpad"
+        ? preferencia
+        : (this.detectado ?? "raton");
+
+    let accion: AccionRueda;
+    if (evento.ctrlKey) {
+      accion = "zoom";
+    } else if (evento.shiftKey) {
+      accion = "paneo-horizontal";
+    } else if (dispositivo === "touchpad") {
+      accion = "paneo";
+    } else {
+      accion = dy === 0 && dx > 0 ? "paneo" : "zoom";
+    }
+
+    this.ultimoMs = ahora;
+    this.registros.push({
+      ms: ahora,
+      deltaX: evento.deltaX,
+      deltaY: evento.deltaY,
+      deltaMode: evento.deltaMode,
+      ctrlKey: evento.ctrlKey,
+      shiftKey: evento.shiftKey,
+      intervaloMs,
+      dispositivo,
+      accion,
+    });
+    if (this.registros.length > MAX_REGISTROS) {
+      this.registros.splice(0, this.registros.length - MAX_REGISTROS);
+    }
+    return accion;
+  }
+}
+
+export const detectorRueda = new DetectorRueda(leerDetectado());
+
+/** Compatibilidad: clasifica un evento aislado con un detector nuevo. */
 export function clasificarRueda(
   evento: EventoRueda,
   preferencia: PreferenciaRueda = "auto",
 ): AccionRueda {
-  if (evento.ctrlKey) return "zoom";
-  if (evento.shiftKey) return "paneo-horizontal";
-  if (preferencia === "zoom") return "zoom";
-  if (preferencia === "paneo") return "paneo";
-  const dx = Math.abs(evento.deltaX);
-  const dy = Math.abs(evento.deltaY);
-  // Rueda de ratón: saltos enteros de una línea (100/120) o `deltaMode` de líneas.
-  if (evento.deltaMode !== 0) return "zoom";
-  const entero = Number.isInteger(evento.deltaX) && Number.isInteger(evento.deltaY);
-  if (dy === 0 && dx > 0) return "paneo";
-  if (dy >= 100 && entero && dx < 60) return "zoom";
-  return "paneo";
+  return new DetectorRueda().clasificar(evento, preferencia);
 }
 
 /** Factor de zoom de un `wheel`; el signo positivo acerca en la convención del visor. */
@@ -69,13 +188,16 @@ export function factorRueda(deltaY: number): number {
 
 interface EstadoRueda {
   preferencia: PreferenciaRueda;
+  detectado: DispositivoRueda | null;
   ayudaVisible: boolean;
   fijarPreferencia: (preferencia: PreferenciaRueda) => void;
+  fijarDetectado: (dispositivo: DispositivoRueda) => void;
   cerrarAyuda: () => void;
 }
 
-export const useRueda = create<EstadoRueda>((set) => ({
+export const useRueda = create<EstadoRueda>((set, get) => ({
   preferencia: leerPreferencia(),
+  detectado: leerDetectado(),
   ayudaVisible: leerAyudaVisible(),
   fijarPreferencia: (preferencia) => {
     try {
@@ -84,6 +206,15 @@ export const useRueda = create<EstadoRueda>((set) => ({
       /* sin almacenamiento disponible */
     }
     set({ preferencia });
+  },
+  fijarDetectado: (dispositivo) => {
+    if (dispositivo === get().detectado) return;
+    try {
+      localStorage.setItem(CLAVE_DETECTADO, dispositivo);
+    } catch {
+      /* sin almacenamiento disponible */
+    }
+    set({ detectado: dispositivo });
   },
   cerrarAyuda: () => {
     try {

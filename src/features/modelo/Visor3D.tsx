@@ -11,7 +11,12 @@ import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeome
 import type { Abertura, Caja, ElementoMalla, Nivel, Vista } from "./tipos";
 import { categoriaVisible, dibujaSiluetaSobreCorte } from "./vistas";
 import { useModelo } from "./estado";
-import { clasificarRueda, factorRueda, useRueda } from "@/lib/rueda";
+import {
+  detectorRueda,
+  factorRueda,
+  useRueda,
+  type RegistroRueda,
+} from "@/lib/rueda";
 import {
   colocarAbertura,
   describirEnganche,
@@ -605,8 +610,11 @@ export function Visor3D({
   const editarNivel = useModelo((s) => s.editarNivel);
   const fijarAviso = useModelo((s) => s.fijarAviso);
   const preferenciaRueda = useRueda((s) => s.preferencia);
+  const fijarDetectado = useRueda((s) => s.fijarDetectado);
   const ayudaVisible = useRueda((s) => s.ayudaVisible);
   const cerrarAyuda = useRueda((s) => s.cerrarAyuda);
+  const [diagnosticoRueda, setDiagnosticoRueda] = useState(false);
+  const [registrosRueda, setRegistrosRueda] = useState<RegistroRueda[]>([]);
 
   const nivelGlobalidPorNombre = useMemo(() => {
     const mapa = new Map<string, string>();
@@ -2411,7 +2419,10 @@ export function Visor3D({
       const camera = camara.current;
       const nav = navegacion.current;
       if (!camera || !nav) return;
-      const accion = clasificarRueda(evento, preferenciaRueda);
+      const accion = detectorRueda.clasificar(evento, preferenciaRueda);
+      const dispositivo = detectorRueda.ultimoDispositivo();
+      if (dispositivo) fijarDetectado(dispositivo);
+      if (diagnosticoRueda) setRegistrosRueda(detectorRueda.ultimos());
       if (accion === "zoom") {
         const factor = factorRueda(evento.deltaY);
         if (camera instanceof THREE.OrthographicCamera) {
@@ -2442,37 +2453,120 @@ export function Visor3D({
           nav.distancia = Math.max(0.5, nav.distancia * factor);
         }
       } else {
-        // Paneo con dos dedos (touchpad) o Shift + rueda horizontal.
-        const alto = Math.max(nodo.clientHeight, 1);
-        let escala = 1;
-        if (camera instanceof THREE.OrthographicCamera) {
-          escala = Math.max((camera.top - camera.bottom) / alto, 1e-6);
-        } else if (camera instanceof THREE.PerspectiveCamera) {
-          escala =
-            (2 * nav.distancia * Math.tan((camera.fov * Math.PI) / 360)) / alto;
+        // O006e: en 3D, Shift + dos dedos orbita; en planta panea en horizontal.
+        const es3d = vista.tipo === "iso" || vista.tipo === "perspectiva";
+        if (dispositivo === "touchpad" && evento.shiftKey && es3d) {
+          const yaw = new THREE.Quaternion().setFromAxisAngle(
+            new THREE.Vector3(0, 0, 1),
+            (evento.deltaX || evento.deltaY) * 0.006,
+          );
+          nav.direccion.applyQuaternion(yaw);
+          const derecha = new THREE.Vector3().crossVectors(ARRIBA, nav.direccion).normalize();
+          const pitch = new THREE.Quaternion().setFromAxisAngle(
+            derecha,
+            evento.deltaY * 0.006,
+          );
+          nav.direccion.applyQuaternion(pitch).normalize();
+          if (nav.direccion.z < 0.05) {
+            nav.direccion.z = 0.05;
+            nav.direccion.normalize();
+          }
+        } else {
+          const alto = Math.max(nodo.clientHeight, 1);
+          let escala = 1;
+          if (camera instanceof THREE.OrthographicCamera) {
+            escala = Math.max((camera.top - camera.bottom) / alto, 1e-6);
+          } else if (camera instanceof THREE.PerspectiveCamera) {
+            escala =
+              (2 * nav.distancia * Math.tan((camera.fov * Math.PI) / 360)) / alto;
+          }
+          const dx =
+            accion === "paneo-horizontal"
+              ? evento.deltaX || evento.deltaY
+              : evento.deltaX;
+          const dy = accion === "paneo-horizontal" ? 0 : evento.deltaY;
+          const derecha = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+          const arriba = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
+          nav.objetivo
+            .add(derecha.multiplyScalar(dx * escala))
+            .add(arriba.multiplyScalar(-dy * escala));
         }
-        const dx =
-          accion === "paneo-horizontal"
-            ? evento.deltaX || evento.deltaY
-            : evento.deltaX;
-        const dy = accion === "paneo-horizontal" ? 0 : evento.deltaY;
-        const derecha = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
-        const arriba = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
-        nav.objetivo
-          .add(derecha.multiplyScalar(dx * escala))
-          .add(arriba.multiplyScalar(-dy * escala));
       }
       aplicarCamara();
       actualizarGrosores();
     };
     nodo.addEventListener("wheel", alRodar, { passive: false });
     return () => nodo.removeEventListener("wheel", alRodar);
-  }, [aplicarCamara, cajaVista, preferenciaRueda]);
+  }, [
+    aplicarCamara,
+    cajaVista,
+    preferenciaRueda,
+    fijarDetectado,
+    diagnosticoRueda,
+    vista.tipo,
+  ]);
 
-  // Paneo, órbita, selección y puntos del corte.
+  // Paneo, órbita, selección, toques y puntos del corte.
   useEffect(() => {
     const nodo = contenedor.current;
     if (!nodo) return;
+    nodo.style.touchAction = "none";
+
+    // O006e: pantalla táctil. Un dedo arrastra para panear; dos dedos pellizcan
+    // (zoom) y panean; un toque limpio equivale a un clic.
+    const toques = new Map<number, { x: number; y: number }>();
+    let toqueInicial: { x: number; y: number; ms: number; movido: boolean } | null = null;
+    let pinza: { dist: number; cx: number; cy: number } | null = null;
+
+    const zoomEnPantalla = (factor: number, clientX: number, clientY: number) => {
+      const camera = camara.current;
+      const nav = navegacion.current;
+      if (!camera || !nav) return;
+      if (camera instanceof THREE.OrthographicCamera) {
+        const rect = nodo.getBoundingClientRect();
+        const raton = new THREE.Vector2(
+          ((clientX - rect.left) / rect.width) * 2 - 1,
+          -((clientY - rect.top) / rect.height) * 2 + 1,
+        );
+        const rayo = new THREE.Raycaster();
+        rayo.setFromCamera(raton, camera);
+        const direccionVista = new THREE.Vector3();
+        camera.getWorldDirection(direccionVista);
+        const plano = new THREE.Plane().setFromNormalAndCoplanarPoint(
+          direccionVista,
+          nav.objetivo,
+        );
+        const punto = new THREE.Vector3();
+        const hayPunto = rayo.ray.intersectPlane(plano, punto) !== null;
+        camera.left *= factor;
+        camera.right *= factor;
+        camera.top *= factor;
+        camera.bottom *= factor;
+        if (hayPunto) nav.objetivo.sub(punto).multiplyScalar(factor).add(punto);
+        camera.updateProjectionMatrix();
+      } else if (camera instanceof THREE.PerspectiveCamera) {
+        nav.distancia = Math.max(0.5, nav.distancia * factor);
+      }
+    };
+
+    const panearPixeles = (dx: number, dy: number) => {
+      const camera = camara.current;
+      const nav = navegacion.current;
+      if (!camera || !nav) return;
+      const alto = Math.max(nodo.clientHeight, 1);
+      let escala = 1;
+      if (camera instanceof THREE.OrthographicCamera) {
+        escala = Math.max((camera.top - camera.bottom) / alto, 1e-6);
+      } else if (camera instanceof THREE.PerspectiveCamera) {
+        escala = (2 * nav.distancia * Math.tan((camera.fov * Math.PI) / 360)) / alto;
+      }
+      const derecha = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+      const arriba = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
+      nav.objetivo
+        .add(derecha.multiplyScalar(-dx * escala))
+        .add(arriba.multiplyScalar(dy * escala));
+    };
+
     const puntoPlanta = (evento: PointerEvent): Punto2 | null => {
       const camera = camara.current;
       if (!camera || vista.tipo !== "planta") return null;
@@ -2489,7 +2583,71 @@ export function Visor3D({
       if (!rayo.ray.intersectPlane(plano, punto)) return null;
       return [punto.x, punto.y];
     };
+
+    const hacerClic = (
+      clientX: number,
+      clientY: number,
+      shift: boolean,
+      agregar: boolean,
+    ) => {
+      const camera = camara.current;
+      if (!camera) return;
+      const falso = { clientX, clientY } as PointerEvent;
+      if (herramienta && vista.tipo === "planta") {
+        const punto = puntoPlanta(falso);
+        if (punto) {
+          void clicEnPlanta(punto, shift, agregar, metrosPorPixelActual());
+        }
+        return;
+      }
+      const rect = nodo.getBoundingClientRect();
+      const raton = new THREE.Vector2(
+        ((clientX - rect.left) / rect.width) * 2 - 1,
+        -((clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      const rayo = new THREE.Raycaster();
+      rayo.setFromCamera(raton, camera);
+      if (modoCorte && vista.tipo === "planta") {
+        const z = vista.alturaPlano ?? caja.max[2] + 1;
+        const plano = new THREE.Plane(new THREE.Vector3(0, 0, 1), -z);
+        const punto = new THREE.Vector3();
+        if (rayo.ray.intersectPlane(plano, punto)) {
+          onPuntoCorte([punto.x, punto.y]);
+        }
+        return;
+      }
+      const impacto = rayo.intersectObjects(meshes.current, false)[0];
+      onSeleccionar(impacto?.object.userData.globalid ?? null, agregar);
+    };
+
     const alBajar = (evento: PointerEvent) => {
+      if (evento.pointerType === "touch") {
+        evento.preventDefault();
+        toques.set(evento.pointerId, { x: evento.clientX, y: evento.clientY });
+        try {
+          nodo.setPointerCapture(evento.pointerId);
+        } catch {
+          /* el puntero pudo terminar antes */
+        }
+        if (toques.size === 1) {
+          toqueInicial = {
+            x: evento.clientX,
+            y: evento.clientY,
+            ms: performance.now(),
+            movido: false,
+          };
+          pinza = null;
+        } else if (toques.size === 2) {
+          const [a, b] = [...toques.values()];
+          pinza = {
+            dist: Math.hypot(a.x - b.x, a.y - b.y),
+            cx: (a.x + b.x) / 2,
+            cy: (a.y + b.y) / 2,
+          };
+          if (toqueInicial) toqueInicial.movido = true;
+        }
+        return;
+      }
       const botonMedio = evento.button === 1;
       const izquierdo = evento.button === 0;
       if (!botonMedio && !izquierdo) return;
@@ -2528,6 +2686,35 @@ export function Visor3D({
       const nav = navegacion.current;
       const camera = camara.current;
       if (!nav || !camera) return;
+      if (evento.pointerType === "touch" && toques.has(evento.pointerId)) {
+        evento.preventDefault();
+        const anterior = toques.get(evento.pointerId)!;
+        toques.set(evento.pointerId, { x: evento.clientX, y: evento.clientY });
+        if (toques.size >= 2) {
+          const [a, b] = [...toques.values()];
+          const dist = Math.hypot(a.x - b.x, a.y - b.y);
+          const cx = (a.x + b.x) / 2;
+          const cy = (a.y + b.y) / 2;
+          if (pinza && dist > 1) {
+            zoomEnPantalla(pinza.dist / dist, cx, cy);
+            panearPixeles(cx - pinza.cx, cy - pinza.cy);
+          }
+          pinza = { dist, cx, cy };
+        } else {
+          panearPixeles(evento.clientX - anterior.x, evento.clientY - anterior.y);
+          if (
+            toqueInicial &&
+            Math.hypot(
+              evento.clientX - toqueInicial.x,
+              evento.clientY - toqueInicial.y,
+            ) > 4
+          ) {
+            toqueInicial.movido = true;
+          }
+        }
+        aplicarCamara();
+        return;
+      }
       if (herramienta && vista.tipo === "planta") {
         const punto = puntoPlanta(evento);
         if (punto) fijarRaton(punto, evento.shiftKey, metrosPorPixelActual());
@@ -2586,6 +2773,32 @@ export function Visor3D({
       aplicarCamara();
     };
     const alSoltar = (evento: PointerEvent) => {
+      if (evento.pointerType === "touch") {
+        const estaba = toques.get(evento.pointerId);
+        toques.delete(evento.pointerId);
+        if (toques.size === 0) {
+          const toque = toqueInicial;
+          toqueInicial = null;
+          pinza = null;
+          if (
+            toque &&
+            !toque.movido &&
+            estaba &&
+            performance.now() - toque.ms < 350
+          ) {
+            hacerClic(
+              evento.clientX,
+              evento.clientY,
+              evento.shiftKey,
+              evento.ctrlKey || evento.metaKey || evento.altKey,
+            );
+          }
+        } else if (toques.size === 1) {
+          pinza = null;
+          if (toqueInicial) toqueInicial.movido = true;
+        }
+        return;
+      }
       const arr = arrastre.current;
       arrastre.current = null;
       const rectangulo = ventanaSeleccion;
@@ -2623,40 +2836,11 @@ export function Visor3D({
         return;
       }
       if (evento.button === 0 && !espacio.current) {
-        const camera = camara.current;
-        if (!camera) return;
-        if (herramienta && vista.tipo === "planta") {
-          const punto = puntoPlanta(evento);
-          if (punto)
-            void clicEnPlanta(
-              punto,
-              evento.shiftKey,
-              evento.ctrlKey || evento.metaKey || evento.altKey,
-              metrosPorPixelActual(),
-            );
-          return;
-        }
-        // Clic limpio: punto del corte o selección de elemento.
-        const rect = nodo.getBoundingClientRect();
-        const raton = new THREE.Vector2(
-          ((evento.clientX - rect.left) / rect.width) * 2 - 1,
-          -((evento.clientY - rect.top) / rect.height) * 2 + 1,
-        );
-        const rayo = new THREE.Raycaster();
-        rayo.setFromCamera(raton, camera);
-        if (modoCorte && vista.tipo === "planta") {
-          const z = vista.alturaPlano ?? caja.max[2] + 1;
-          const plano = new THREE.Plane(new THREE.Vector3(0, 0, 1), -z);
-          const punto = new THREE.Vector3();
-          if (rayo.ray.intersectPlane(plano, punto)) {
-            onPuntoCorte([punto.x, punto.y]);
-          }
-          return;
-        }
-        const impacto = rayo.intersectObjects(meshes.current, false)[0];
-        onSeleccionar(
-          impacto?.object.userData.globalid ?? null,
-          evento.ctrlKey || evento.metaKey,
+        hacerClic(
+          evento.clientX,
+          evento.clientY,
+          evento.shiftKey,
+          evento.ctrlKey || evento.metaKey || evento.altKey,
         );
       }
     };
@@ -2721,8 +2905,15 @@ export function Visor3D({
         evento.preventDefault();
         return;
       }
-      if (evento.ctrlKey || evento.metaKey || evento.altKey) return;
       const tecla = evento.key.toLowerCase();
+      // O006e: diagnóstico de la rueda y el touchpad.
+      if (evento.ctrlKey && evento.shiftKey && tecla === "d") {
+        evento.preventDefault();
+        setDiagnosticoRueda((visible) => !visible);
+        setRegistrosRueda(detectorRueda.ultimos());
+        return;
+      }
+      if (evento.ctrlKey || evento.metaKey || evento.altKey) return;
       // O006d: + y − acercan y alejan; F ajusta la vista.
       if (tecla === "+" || tecla === "=") {
         evento.preventDefault();
@@ -2887,6 +3078,56 @@ export function Visor3D({
           >
             ×
           </button>
+        </div>
+      )}
+      {diagnosticoRueda && (
+        <div
+          data-testid="diagnostico-rueda"
+          className="absolute right-2 top-12 z-30 max-h-[60vh] w-[min(680px,92vw)] overflow-auto rounded border bg-background/95 p-2 text-[10px] shadow-lg"
+        >
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <strong>Diagnóstico de rueda/touchpad</strong>
+            <button
+              type="button"
+              data-testid="diagnostico-rueda-cerrar"
+              onClick={() => setDiagnosticoRueda(false)}
+              className="rounded px-1 text-sm leading-none hover:bg-muted"
+              aria-label="Cerrar el diagnóstico"
+            >
+              ×
+            </button>
+          </div>
+          <p className="mb-1 text-muted-foreground">
+            Últimos 20 eventos «wheel» · detectado: {detectorRueda.ultimoDispositivo() ?? "—"}
+          </p>
+          <table className="w-full border-collapse text-left">
+            <thead>
+              <tr className="border-b">
+                <th className="px-1">#</th>
+                <th className="px-1">ΔX</th>
+                <th className="px-1">ΔY</th>
+                <th className="px-1">modo</th>
+                <th className="px-1">ctrl</th>
+                <th className="px-1">ms</th>
+                <th className="px-1">dispositivo</th>
+                <th className="px-1">acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {registrosRueda.map((registro, indice) => (
+                <tr key={`${registro.ms}-${indice}`} className="border-b border-border/40">
+                  <td className="px-1">{indice + 1}</td>
+                  <td className="px-1">{registro.deltaX.toFixed(2)}</td>
+                  <td className="px-1">{registro.deltaY.toFixed(2)}</td>
+                  <td className="px-1">{registro.deltaMode}</td>
+                  <td className="px-1">{registro.ctrlKey ? "sí" : "no"}</td>
+                  <td className="px-1">{registro.intervaloMs ?? "—"}</td>
+                  <td className="px-1">{registro.dispositivo}</td>
+                  <td className="px-1">{registro.accion}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
       {cotaEditando && (

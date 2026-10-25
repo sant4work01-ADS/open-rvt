@@ -115,26 +115,33 @@ export function IdiomaSelector() {
   );
 }
 
-/** O006d: qué hace la rueda del ratón o el desplazamiento de dos dedos del touchpad. */
+/**
+ * O006e: dispositivo de navegación. «Automático» detecta por ráfagas de eventos;
+ * el usuario puede forzar ratón o touchpad y esa elección manda siempre.
+ */
 function RuedaTouchpad() {
   const preferencia = useRueda((s) => s.preferencia);
+  const detectado = useRueda((s) => s.detectado);
   const fijar = useRueda((s) => s.fijarPreferencia);
   const opciones: Array<{ id: PreferenciaRueda; nombre: string; ayuda: string }> = [
     { id: "auto", nombre: "Automático", ayuda: "Detecta ratón o touchpad" },
-    { id: "zoom", nombre: "Zoom", ayuda: "Siempre acerca y aleja" },
-    { id: "paneo", nombre: "Paneo", ayuda: "Siempre mueve la vista" },
+    { id: "raton", nombre: "Ratón", ayuda: "La rueda siempre hace zoom" },
+    { id: "touchpad", nombre: "Touchpad", ayuda: "Dos dedos siempre panean" },
   ];
+  const detectadoTexto =
+    detectado === "touchpad" ? "touchpad" : detectado === "raton" ? "ratón" : null;
   return (
     <section aria-labelledby="rueda-touchpad">
       <h2 id="rueda-touchpad" className="mb-2 text-sm font-medium">
-        Rueda/touchpad: zoom o paneo
+        Navegación — Dispositivo
       </h2>
       <p className="mb-3 text-xs text-muted-foreground">
-        El pellizco del touchpad siempre hace zoom y Shift + rueda desplaza en
-        horizontal. En «Automático» los saltos grandes de la rueda hacen zoom y los
-        desplazamientos pequeños de dos dedos, paneo.
+        El pellizco siempre hace zoom; en 3D, Shift + dos dedos orbita y en planta
+        desplaza en horizontal. En «Automático» se detecta el dispositivo por la
+        ráfaga de eventos
+        {detectadoTexto ? ` (detectado: ${detectadoTexto})` : " (aún sin detectar)"}.
       </p>
-      <div role="radiogroup" aria-label="Rueda/touchpad" className="flex flex-wrap gap-1">
+      <div role="radiogroup" aria-label="Dispositivo de navegación" className="flex flex-wrap gap-1">
         {opciones.map(({ id, nombre, ayuda }) => (
           <button
             key={id}
