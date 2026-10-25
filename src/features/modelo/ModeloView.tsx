@@ -11,6 +11,7 @@ import { PanelPropiedades } from "./PanelPropiedades";
 import { BarraHerramienta } from "./BarraHerramienta";
 import { DialogoEstilos } from "./DialogoEstilos";
 import { DialogoCotas } from "./DialogoCotas";
+import { EditorTipos } from "@/features/tipos/EditorTipos";
 
 export function ModeloView() {
   const ruta = useModelo((s) => s.ruta);
@@ -31,11 +32,18 @@ export function ModeloView() {
   const fijarVista = useModelo((s) => s.fijarVista);
   const dialogoEstilos = useModelo((s) => s.dialogoEstilos);
   const dialogoCotas = useModelo((s) => s.dialogoCotas);
+  const editorTipos = useModelo((s) => s.editorTipos);
+  const cerrarEditorTipos = useModelo((s) => s.cerrarEditorTipos);
   const seleccionar = useModelo((s) => s.seleccionar);
   const anadirPuntoCorte = useModelo((s) => s.anadirPuntoCorte);
   const [panelAbierto, setPanelAbierto] = useState(true);
 
   const vista = vistas.find((v) => v.id === vistaActivaId) ?? vistas[0];
+
+  // O007a: el editor de tipos ocupa toda el área de trabajo.
+  if (editorTipos) {
+    return <EditorTipos onCerrar={cerrarEditorTipos} />;
+  }
 
   // Un modelo nuevo no tiene ruta ni mallas, pero sí esquema: debe mostrar el editor.
   if (!ruta && !esquema && mallas.length === 0 && !cargando) {

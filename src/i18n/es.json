@@ -19,7 +19,8 @@
     "colapsar": "Colapsar",
     "colapsarMenu": "Colapsar menú lateral",
     "expandirMenu": "Expandir menú lateral",
-    "redimensionar": "Redimensionar el panel lateral"
+    "redimensionar": "Redimensionar el panel lateral",
+    "tipos": "Tipos y materiales"
   },
   "ribbon": {
     "cinta": "Cinta de comandos",
@@ -45,7 +46,8 @@
       "Datos": "Datos",
       "Construir": "Construir",
       "Modificar": "Modificar",
-      "Historial": "Historial"
+      "Historial": "Historial",
+      "Editor": "Editor"
     },
     "comandos": {
       "nuevo": "Nuevo",
@@ -69,7 +71,8 @@
       "ventana": "Ventana",
       "mover": "Mover",
       "borrar": "Borrar",
-      "rehacer": "Rehacer"
+      "rehacer": "Rehacer",
+      "tipos": "Tipos"
     },
     "descripciones": {
       "nuevo": "Crear un modelo IFC vacío",

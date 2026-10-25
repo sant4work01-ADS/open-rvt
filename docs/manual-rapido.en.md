@@ -28,6 +28,31 @@ description "Available soon": there is no file to open yet.
   back. **Settings → Appearance** offers "Wheel/touchpad: zoom or pan": Automatic
   detects mouse or touchpad; Zoom and Pan force it.
 
+### Types and materials
+
+Every element comes from a **type**: editing the type changes all of its instances.
+Open the editor with **Model → Types**, the **Types and materials** sidebar entry or by
+double-clicking an element in the model.
+
+- **Type tree:** search, create, duplicate and delete types. Walls already includes the
+  base types and three multilayer examples; Structure and MEP show "Coming soon".
+- **Wall layers:** ordered from exterior to interior. Each layer has a function (core,
+  finish, insulation or membrane), a library material and a thickness in centimetres.
+  There must be exactly one core, although it may span several contiguous layers. The
+  buttons move, insert and remove layers.
+- **Location line:** core axis (default), exterior face, interior face or wall centre.
+  Changing the thickness or layers keeps the wall axis fixed.
+- **Preview:** shows the section to scale with each layer's colour and hatch, every
+  thickness dimension and the total, and labels Exterior and Interior.
+- **Instances:** the footer shows how many there are and selects them in the model.
+  **Apply** saves the type and regenerates every instance's geometry; it can be undone
+  in one step.
+- **Materials:** editable library with category, colour, hatch, unit and typical
+  thickness. A material in use cannot be deleted.
+
+In plan at **1:50** or larger the layer lines and the thick, hatched core outline are
+drawn; at **1:100** or smaller only the outer outline remains.
+
 ### Shortcuts
 
 | Shortcut | Action |
@@ -35,5 +60,5 @@ description "Available soon": there is no file to open yet.
 | F1 or Ctrl+/ | Keyboard shortcuts |
 | Ctrl+K | Command palette |
 | Ctrl+F1 | Minimize or restore the ribbon |
-| Alt+1 … Alt+4 | Switch module |
+| Alt+1 … Alt+9 | Switch module |
 | Ctrl+= / Ctrl+− / Ctrl+0 | Interface size |

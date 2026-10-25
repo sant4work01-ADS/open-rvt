@@ -199,13 +199,13 @@ class Servidor:
         if metodo == "materiales.editar":
             return self._exigir().material_editar(
                 str(params.get("nombre") or params.get("id") or ""),
-                params.get("campos") or params,
+                params.get("campos") or params.get("datos") or params,
             )
         if metodo == "materiales.borrar":
             return self._exigir().material_borrar(
                 str(params.get("nombre") or params.get("id") or "")
             )
-        if metodo == "elementos.cambiar_tipo":
+        if metodo in ("elemento.cambiar_tipo", "elementos.cambiar_tipo"):
             return self._exigir().elemento_cambiar_tipo(
                 str(params.get("globalid") or ""),
                 params.get("tipo") or params.get("tipo_globalid") or "",

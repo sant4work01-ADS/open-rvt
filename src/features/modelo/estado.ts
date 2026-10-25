@@ -110,6 +110,8 @@ interface EstadoModelo {
   dialogoEstilos: boolean;
   /** O006a: diálogo «Crear ejes por separaciones». */
   dialogoCotas: boolean;
+  /** O007a: editor de tipos y materiales abierto dentro del área de trabajo. */
+  editorTipos: boolean;
 
   // O003b: herramientas de modelado.
   herramienta: Herramienta | null;
@@ -198,6 +200,14 @@ interface EstadoModelo {
   cerrarDialogoEstilos: () => void;
   abrirDialogoCotas: () => void;
   cerrarDialogoCotas: () => void;
+  abrirEditorTipos: () => void;
+  cerrarEditorTipos: () => void;
+  /** O007a: edita el tipo y regenera todas sus instancias (una sola operación). */
+  aplicarTipoEdicion: (
+    globalid: string,
+    datos: Record<string, unknown>,
+  ) => Promise<boolean>;
+  recargarTipos: () => Promise<void>;
   seleccionar: (globalid: string | null, agregar?: boolean) => Promise<void>;
   iniciarCorte: () => void;
   cancelarCorte: () => void;
@@ -232,6 +242,7 @@ function decodificarMalla(crudo: RespuestaTeselado["elementos"][number]): Elemen
     categoria: crudo.categoria,
     tipo: crudo.tipo ?? "",
     capas: crudo.capas ?? [],
+    eje: crudo.eje ?? null,
     vertices: new Float32Array(vertices.buffer, vertices.byteOffset, vertices.byteLength / 4),
     indices: new Uint32Array(indices.buffer, indices.byteOffset, indices.byteLength / 4),
   };
@@ -592,6 +603,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     vistasPersistidas: false,
     dialogoEstilos: false,
     dialogoCotas: false,
+  editorTipos: false,
     herramienta: null,
     opcionesMuro: { tipo: "", altura: 2.6, alineacion: "centro" },
     tiposMuro: [],
@@ -697,6 +709,35 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     cerrarDialogoEstilos: () => set({ dialogoEstilos: false }),
     abrirDialogoCotas: () => set({ dialogoCotas: true }),
     cerrarDialogoCotas: () => set({ dialogoCotas: false }),
+
+    // O007a: el editor de tipos sustituye el área de trabajo mientras está abierto.
+    abrirEditorTipos: () => set({ editorTipos: true }),
+    cerrarEditorTipos: () => set({ editorTipos: false }),
+    aplicarTipoEdicion: async (globalid, datos) => {
+      const ok = await ejecutar("tipos.editar", { globalid, datos });
+      if (ok) {
+        await get().recargarTipos();
+        const seleccion = get().seleccion;
+        if (seleccion) await get().seleccionar(seleccion);
+        set({ editorTipos: false });
+      }
+      return ok;
+    },
+    recargarTipos: async () => {
+      try {
+        const tipos = await rpc<Array<{ globalid: string; nombre: string; espesor: number }>>(
+          "tipos.listar",
+          { clase: "IfcWallType" },
+        );
+        set({ tiposMuro: tipos });
+        const actual = get().opcionesMuro;
+        if (!tipos.some((t) => t.nombre === actual.tipo) && tipos[0]) {
+          set({ opcionesMuro: { ...actual, tipo: tipos[0].nombre } });
+        }
+      } catch (e) {
+        set({ error: e instanceof Error ? e.message : String(e) });
+      }
+    },
 
     seleccionar: async (globalid, agregar = false) => {
       const token = ++tokenSeleccion;
@@ -1055,6 +1096,12 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
     dobleClicEnPlanta: async () => {
       const herramienta = get().herramienta;
+      // O007a: doble clic sobre un muro seleccionado abre «Editar tipo».
+      const elegido = get().elementos.find((e) => e.globalid === get().seleccion);
+      if (!herramienta && elegido?.clase === "IfcWall") {
+        set({ editorTipos: true });
+        return;
+      }
       if (herramienta === "muro") {
         set({
           puntosHerramienta: [],
