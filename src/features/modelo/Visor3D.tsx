@@ -2667,7 +2667,8 @@ export function Visor3D({
           return;
         }
       }
-      if (!herramienta) return;
+      // O007a: sin herramienta, el doble clic puede abrir «Editar tipo» del muro
+      // seleccionado; la decisión final vive en el estado del modelo.
       evento.preventDefault();
       void dobleClicEnPlanta();
     };

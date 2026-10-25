@@ -33,6 +33,7 @@ export function ModeloView() {
   const dialogoEstilos = useModelo((s) => s.dialogoEstilos);
   const dialogoCotas = useModelo((s) => s.dialogoCotas);
   const editorTipos = useModelo((s) => s.editorTipos);
+  const editorTipoInicial = useModelo((s) => s.editorTipoInicial);
   const cerrarEditorTipos = useModelo((s) => s.cerrarEditorTipos);
   const seleccionar = useModelo((s) => s.seleccionar);
   const anadirPuntoCorte = useModelo((s) => s.anadirPuntoCorte);
@@ -42,7 +43,7 @@ export function ModeloView() {
 
   // O007a: el editor de tipos ocupa toda el área de trabajo.
   if (editorTipos) {
-    return <EditorTipos onCerrar={cerrarEditorTipos} />;
+    return <EditorTipos onCerrar={cerrarEditorTipos} tipoInicial={editorTipoInicial} />;
   }
 
   // Un modelo nuevo no tiene ruta ni mallas, pero sí esquema: debe mostrar el editor.

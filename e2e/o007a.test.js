@@ -108,6 +108,27 @@ async function clicMundo(ses, x, y) {
   await esperar(250);
 }
 
+async function dobleClicMundo(ses, x, y) {
+  const punto = await proyectar(ses, x, y);
+  await ses.driver.executeScript(
+    (punto) => {
+      const canvas = document.querySelector('[data-testid="visor"] canvas');
+      if (!canvas) throw new Error("no hay canvas");
+      canvas.dispatchEvent(
+        new MouseEvent("dblclick", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          clientX: punto.x,
+          clientY: punto.y,
+        }),
+      );
+    },
+    punto,
+  );
+  await esperar(350);
+}
+
 async function tecla(ses, key, code) {
   await ses.driver.executeScript(
     (key, code) => {
@@ -305,6 +326,16 @@ test("O007a: duplica Block 15, arma seis capas, aplica y dibuja las capas en pla
     await ses.captura(path.join(CAPTURAS, "o007a_materiales.png"));
     const medidasEditor = dimensionesPng(path.join(CAPTURAS, "o007a_editor_tipos.png"));
     assert.ok(medidasEditor.ancho > 1000 && medidasEditor.alto > 600);
+    await activar(ses, "editor-cerrar");
+
+    // Doble clic sobre el muro: abre el editor con el tipo del muro preseleccionado.
+    await clicMundo(ses, 3, 0);
+    await dobleClicMundo(ses, 3, 0);
+    await ses.porTestid("editor-tipos");
+    const nombreTipo = await ses.driver.executeScript(
+      () => document.querySelector('[data-testid="tipo-nombre"]')?.value ?? null,
+    );
+    assert.equal(nombreTipo, "Block 15 aplanado");
     await activar(ses, "editor-cerrar");
   } finally {
     await ses.cerrar();

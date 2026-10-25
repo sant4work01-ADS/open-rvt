@@ -112,6 +112,8 @@ interface EstadoModelo {
   dialogoCotas: boolean;
   /** O007a: editor de tipos y materiales abierto dentro del área de trabajo. */
   editorTipos: boolean;
+  /** O007a: tipo que se abre preseleccionado (doble clic sobre un muro). */
+  editorTipoInicial: string | null;
 
   // O003b: herramientas de modelado.
   herramienta: Herramienta | null;
@@ -200,7 +202,7 @@ interface EstadoModelo {
   cerrarDialogoEstilos: () => void;
   abrirDialogoCotas: () => void;
   cerrarDialogoCotas: () => void;
-  abrirEditorTipos: () => void;
+  abrirEditorTipos: (tipoGlobalid?: string | null) => void;
   cerrarEditorTipos: () => void;
   /** O007a: edita el tipo y regenera todas sus instancias (una sola operación). */
   aplicarTipoEdicion: (
@@ -604,6 +606,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     dialogoEstilos: false,
     dialogoCotas: false,
   editorTipos: false,
+  editorTipoInicial: null,
     herramienta: null,
     opcionesMuro: { tipo: "", altura: 2.6, alineacion: "centro" },
     tiposMuro: [],
@@ -711,15 +714,16 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     cerrarDialogoCotas: () => set({ dialogoCotas: false }),
 
     // O007a: el editor de tipos sustituye el área de trabajo mientras está abierto.
-    abrirEditorTipos: () => set({ editorTipos: true }),
-    cerrarEditorTipos: () => set({ editorTipos: false }),
+    abrirEditorTipos: (tipoGlobalid = null) =>
+      set({ editorTipos: true, editorTipoInicial: tipoGlobalid }),
+    cerrarEditorTipos: () => set({ editorTipos: false, editorTipoInicial: null }),
     aplicarTipoEdicion: async (globalid, datos) => {
       const ok = await ejecutar("tipos.editar", { globalid, datos });
       if (ok) {
         await get().recargarTipos();
         const seleccion = get().seleccion;
         if (seleccion) await get().seleccionar(seleccion);
-        set({ editorTipos: false });
+        set({ editorTipos: false, editorTipoInicial: null });
       }
       return ok;
     },
@@ -1099,7 +1103,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       // O007a: doble clic sobre un muro seleccionado abre «Editar tipo».
       const elegido = get().elementos.find((e) => e.globalid === get().seleccion);
       if (!herramienta && elegido?.clase === "IfcWall") {
-        set({ editorTipos: true });
+        const tipo = get().tiposMuro.find((t) => t.nombre === elegido.tipo);
+        get().abrirEditorTipos(tipo?.globalid ?? null);
         return;
       }
       if (herramienta === "muro") {

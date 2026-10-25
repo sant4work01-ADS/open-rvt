@@ -89,7 +89,13 @@ function claseCategoria(clase: string): string {
   return clase.replace(/^Ifc/, "").replace(/Type$/, "");
 }
 
-export function EditorTipos({ onCerrar }: { onCerrar?: () => void }) {
+export function EditorTipos({
+  onCerrar,
+  tipoInicial = null,
+}: {
+  onCerrar?: () => void;
+  tipoInicial?: string | null;
+}) {
   const [pestana, setPestana] = useState<"capas" | "materiales">("capas");
   const [materiales, setMateriales] = useState<MaterialBiblioteca[]>([]);
   const [tipos, setTipos] = useState<ResumenTipo[]>([]);
@@ -141,13 +147,15 @@ export function EditorTipos({ onCerrar }: { onCerrar?: () => void }) {
           cargarMateriales(),
           cargarTipos(),
         ]);
-        if (listaTipos.length > 0) await cargarTipo(listaTipos[0].globalid);
+        const elegido =
+          listaTipos.find((t) => t.globalid === tipoInicial) ?? listaTipos[0];
+        if (elegido) await cargarTipo(elegido.globalid);
         void listaMateriales;
       } catch (e) {
         setError(textoDeError(e));
       }
     })();
-  }, [cargarMateriales, cargarTipos, cargarTipo]);
+  }, [cargarMateriales, cargarTipos, cargarTipo, tipoInicial]);
 
   const filtrados = useMemo(() => {
     const texto = busqueda.trim().toLocaleLowerCase("es");
@@ -588,6 +596,13 @@ export function EditorTipos({ onCerrar }: { onCerrar?: () => void }) {
                             </select>
                           </td>
                           <td className="py-1 pr-2">
+                            <div className="flex items-center gap-1">
+                            <span
+                              data-testid={`capa-color-${indice}`}
+                              className="h-4 w-4 shrink-0 rounded-sm border"
+                              style={{ backgroundColor: colorCapa(capa) }}
+                              title={`Color de ${capa.material}`}
+                            />
                             <select
                               data-testid={`capa-material-${indice}`}
                               aria-label={`Material de la capa ${indice + 1}`}
@@ -604,6 +619,7 @@ export function EditorTipos({ onCerrar }: { onCerrar?: () => void }) {
                                 </option>
                               ))}
                             </select>
+                            </div>
                           </td>
                           <td className="py-1 pr-2">
                             <input
