@@ -7,7 +7,8 @@
 set -euo pipefail
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NOTAS="${1:?uso: publicar-actualizacion.sh \"<notas>\"}"
-GITEA=https://gitea.spm.lat/api/v1; REPO=sant4/openrvt-actualizaciones
+# Directo por Tailscale: por Cloudflare las subidas largas fallan con 524.
+GITEA=${GITEA_API:-http://100.90.19.93:3000/api/v1}; REPO=sant4/openrvt-actualizaciones
 T=$(cat ~/.gitea-pp-token); UA="Mozilla/5.0 (OPEN-RVT-publicar)"
 api() { curl -sf -A "$UA" -H "Authorization: token $T" "$@"; }
 
