@@ -1,3 +1,4 @@
+// OPEN-RVT: adaptado de PresupuestosPro; dos pestañas y comandos nuevos.
 // Pruebas del ribbon común de OPEN-RVT (adaptadas de
 // src/features/presupuesto/ribbon/Ribbon.test.tsx de PresupuestosPro).
 import { fireEvent, render, screen, within } from "@testing-library/react";

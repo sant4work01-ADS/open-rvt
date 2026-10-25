@@ -1,3 +1,4 @@
+// OPEN-RVT: adaptado de PresupuestosPro; ancho en el store de tema.
 // Spec 044: sidebar expandido redimensionable en horizontal.
 import { cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { screen } from "@testing-library/dom";

@@ -1,3 +1,4 @@
+// OPEN-RVT: adaptado de PresupuestosPro; sin sesión de obra.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";

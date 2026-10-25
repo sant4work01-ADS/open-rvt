@@ -1,3 +1,4 @@
+// OPEN-RVT: adaptado de PresupuestosPro para el esqueleto sin presupuesto.
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { App } from "./App";

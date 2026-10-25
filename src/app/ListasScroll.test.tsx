@@ -1,3 +1,4 @@
+// OPEN-RVT: adaptado de PresupuestosPro; sin el buscador de PP.
 // Navegación con teclado en las listas (adaptada de src/app/ListasScroll.test.tsx de PP).
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

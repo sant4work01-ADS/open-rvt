@@ -1,3 +1,4 @@
+// OPEN-RVT: adaptado de PresupuestosPro; sin los simulacros de su backend.
 // Configuración común de las pruebas de OPEN-RVT (adaptada de la de PresupuestosPro).
 import "@testing-library/jest-dom/vitest";
 import { afterEach } from "vitest";

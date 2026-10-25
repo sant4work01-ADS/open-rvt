@@ -1,3 +1,4 @@
+// OPEN-RVT: adaptado de PresupuestosPro; se quitó lo específico de Glide.
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import path from "node:path";

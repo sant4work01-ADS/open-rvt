@@ -1,3 +1,4 @@
+// OPEN-RVT: adaptado de PresupuestosPro; preferencia en el store de tema.
 // Spec 030: sidebar plegable con preferencia recordada entre sesiones.
 import { cleanup, fireEvent } from "@testing-library/react";
 import { screen } from "@testing-library/dom";

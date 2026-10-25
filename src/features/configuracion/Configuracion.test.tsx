@@ -1,3 +1,4 @@
+// OPEN-RVT: adaptado de PresupuestosPro; solo tema, escala e idioma.
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { montarApp } from "@/test/utiles";

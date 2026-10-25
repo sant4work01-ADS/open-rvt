@@ -1,3 +1,4 @@
+// OPEN-RVT: adaptado de PresupuestosPro; módulos Modelo/Niveles.
 // Punto 6 de M4c-B: el sidebar escala ícono, botón y ancho con el tamaño de la interfaz
 // (×1.5 con la predeterminada de 120 %; los rem ya escalan con la fuente raíz).
 import { act } from "react";

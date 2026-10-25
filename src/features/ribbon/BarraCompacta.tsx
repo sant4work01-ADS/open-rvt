@@ -27,10 +27,10 @@ import {
   type SubitemRibbon,
 } from "./comandos";
 
+// OPEN-RVT: la barra compacta solo tiene Inicio (id «principal») y Vista.
 /** Pestañas que en la compacta viven como menús al inicio de la fila. */
 const PESTANAS_MENU = (): { id: PestanaRibbon; texto: string }[] => [
-  { id: "archivo", texto: tr("ribbon.pestanasNombres.archivo", "Archivo") },
-  { id: "herramientas", texto: tr("ribbon.pestanasNombres.herramientas", "Herramientas") },
+  { id: "principal", texto: tr("ribbon.pestanasNombres.inicio", "Inicio") },
   { id: "vista", texto: tr("ribbon.pestanasNombres.vista", "Vista") },
 ];
 

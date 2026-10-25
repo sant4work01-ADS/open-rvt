@@ -1,3 +1,4 @@
+// OPEN-RVT: adaptado de PresupuestosPro; monta el App del esqueleto.
 // Utilidades de prueba de OPEN-RVT (adaptadas de src/test/utiles.tsx de PresupuestosPro).
 import { render } from "@testing-library/react";
 import { App } from "@/app/App";

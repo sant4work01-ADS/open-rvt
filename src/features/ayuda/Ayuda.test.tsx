@@ -1,3 +1,4 @@
+// OPEN-RVT: adaptado de PresupuestosPro; manual de OPEN-RVT.
 // Pruebas de la ayuda (adaptadas de src/features/ayuda/Ayuda.test.tsx de PresupuestosPro).
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";

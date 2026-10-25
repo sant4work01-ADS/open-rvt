@@ -1,3 +1,4 @@
+// OPEN-RVT: adaptado de PresupuestosPro; sin barra compacta activa.
 // Spec 030: los iconos del ribbon y del sidebar comparten el token de tamaño.
 import { cleanup } from "@testing-library/react";
 import { screen } from "@testing-library/dom";

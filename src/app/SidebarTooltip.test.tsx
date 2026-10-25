@@ -1,3 +1,4 @@
+// OPEN-RVT: adaptado de PresupuestosPro; módulos de OPEN-RVT.
 // Fase M4c-B, punto 5: tooltip propio del sidebar (píldora con nombre y atajo).
 import { act, cleanup, fireEvent } from "@testing-library/react";
 import { screen } from "@testing-library/dom";

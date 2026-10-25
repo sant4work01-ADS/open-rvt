@@ -1,3 +1,4 @@
+// OPEN-RVT: adaptado de PresupuestosPro; cuatro módulos del esqueleto.
 // Adaptación de src/i18n/pantallas-en.test.tsx de PresupuestosPro: con la interfaz en
 // inglés no queda texto en español en los cuatro módulos del esqueleto.
 import { fireEvent, screen } from "@testing-library/react";
