@@ -7,6 +7,7 @@ import {
   leerEstilos,
   materialPorTipo,
   mmAPx,
+  mmAMundoConMinimoPx,
   normalizarEstilos,
   serializarEstilos,
 } from "./estilos";
@@ -72,6 +73,17 @@ describe("escala y zoom", () => {
     // 1:50 engrosa 1,4 veces.
     expect(mmAPx(0.5, 50, 10 / 900)).toBeCloseTo(6.3, 9);
     expect(mmAPx(0.5, 200, 10 / 900)).toBeCloseTo(3.15, 9);
+  });
+
+  it("O006b: el texto de cota no baja de 11 px ni las marcas de 6 px", () => {
+    // 1 px = 1 cm: 2,5 mm a 1:100 son 0,25 m, más que 11 px → manda el papel.
+    expect(mmAMundoConMinimoPx(2.5, 100, 0.01, 11)).toBeCloseTo(0.25, 9);
+    expect(mmAMundoConMinimoPx(2, 100, 0.01, 6)).toBeCloseTo(0.2, 9);
+    // Al alejar (1 px = 5 cm) el mínimo de pantalla manda: 11 px = 0,55 m.
+    expect(mmAMundoConMinimoPx(2.5, 100, 0.05, 11)).toBeCloseTo(0.55, 9);
+    expect(mmAMundoConMinimoPx(2, 100, 0.05, 6)).toBeCloseTo(0.3, 9);
+    // 1:50 agranda el papel: 2,5 mm → 0,35 m, todavía por encima de 11 px a 1 cm/px.
+    expect(mmAMundoConMinimoPx(2.5, 50, 0.01, 11)).toBeCloseTo(0.35, 9);
   });
 
   it("aplica la escala de la vista y la sobrescritura por vista", () => {

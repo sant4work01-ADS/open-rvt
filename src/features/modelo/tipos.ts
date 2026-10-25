@@ -57,6 +57,8 @@ export interface Vista {
   estilos?: Partial<Record<Categoria, EstiloCategoriaVista>>;
   /** O005: qué se proyecta por encima del corte en planta (m). */
   alturaArriba?: number;
+  /** O006a: cotas automáticas entre ejes en planta (activadas por omisión). */
+  cotasEjes?: boolean;
 }
 
 export interface Nivel {

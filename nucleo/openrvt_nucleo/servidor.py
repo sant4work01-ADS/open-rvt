@@ -110,6 +110,13 @@ class Servidor:
             )
         if metodo == "niveles.borrar":
             return self._exigir().nivel_borrar(str(params.get("globalid") or ""))
+        if metodo == "niveles.separacion":
+            return self._exigir().niveles_separacion(
+                str(params.get("inferior") or ""),
+                str(params.get("superior") or ""),
+                params.get("altura", 0.0),
+                bool(params.get("cadena", True)),
+            )
         if metodo == "ejes.crear":
             return self._exigir().eje_crear(
                 str(params.get("etiqueta") or ""),
@@ -117,6 +124,25 @@ class Servidor:
                 params.get("y1", 0.0),
                 params.get("x2", 0.0),
                 params.get("y2", 0.0),
+            )
+        if metodo == "ejes.crear_por_separaciones":
+            return self._exigir().ejes_crear_por_separaciones(
+                str(params.get("direccion") or "vertical"),
+                params.get("origen", 0.0),
+                params.get("separaciones"),
+                params.get("longitud", 0.0),
+                str(params.get("primera_etiqueta") or ""),
+            )
+        if metodo == "ejes.mover":
+            return self._exigir().ejes_mover(
+                str(params.get("globalid") or ""), params.get("desplazamiento", 0.0)
+            )
+        if metodo == "ejes.separacion":
+            return self._exigir().ejes_separacion(
+                str(params.get("referencia") or ""),
+                str(params.get("mover") or ""),
+                params.get("distancia", 0.0),
+                bool(params.get("cadena", True)),
             )
         if metodo == "ejes.editar":
             return self._exigir().eje_editar(

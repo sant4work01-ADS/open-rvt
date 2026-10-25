@@ -10,6 +10,7 @@ import { NavegadorVistas } from "./NavegadorVistas";
 import { PanelPropiedades } from "./PanelPropiedades";
 import { BarraHerramienta } from "./BarraHerramienta";
 import { DialogoEstilos } from "./DialogoEstilos";
+import { DialogoCotas } from "./DialogoCotas";
 
 export function ModeloView() {
   const ruta = useModelo((s) => s.ruta);
@@ -29,6 +30,7 @@ export function ModeloView() {
   const error = useModelo((s) => s.error);
   const fijarVista = useModelo((s) => s.fijarVista);
   const dialogoEstilos = useModelo((s) => s.dialogoEstilos);
+  const dialogoCotas = useModelo((s) => s.dialogoCotas);
   const seleccionar = useModelo((s) => s.seleccionar);
   const anadirPuntoCorte = useModelo((s) => s.anadirPuntoCorte);
   const [panelAbierto, setPanelAbierto] = useState(true);
@@ -125,6 +127,7 @@ export function ModeloView() {
       </div>
       {panelAbierto && <PanelPropiedades />}
       {dialogoEstilos && <DialogoEstilos />}
+      {dialogoCotas && <DialogoCotas />}
     </div>
   );
 }

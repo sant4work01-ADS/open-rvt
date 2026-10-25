@@ -199,6 +199,18 @@ function PropiedadesVista({ vista }: { vista: Vista }) {
         />
       )}
 
+      {vista.tipo === "planta" && (
+        <label className="flex items-center justify-between gap-2">
+          <span className="text-muted-foreground">Cotas de ejes</span>
+          <input
+            type="checkbox"
+            data-testid="vista-cotas-ejes"
+            checked={vista.cotasEjes !== false}
+            onChange={(e) => cambiar({ cotasEjes: e.target.checked })}
+          />
+        </label>
+      )}
+
       <fieldset
         data-testid="vista-estilos-categorias"
         className="flex flex-col gap-1 border-t pt-2"

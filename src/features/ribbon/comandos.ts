@@ -88,6 +88,8 @@ export interface AccionesRibbon {
   // OPEN-RVT: herramientas de modelado (spec O003b).
   nuevoNivel: () => void;
   nuevoEje: () => void;
+  /** O006a: retícula completa por separaciones. */
+  nuevosEjesPorSeparaciones: () => void;
   herramientaMuro: () => void;
   herramientaLosa: () => void;
   losaDesdeMuros: () => void;
@@ -206,6 +208,17 @@ export function construirComandosRibbon(a: AccionesRibbon): ComandoRibbon[] {
       activo: a.herramientaActiva === "eje",
       descripcion: "Dibujar un eje con dos clics",
       accion: a.nuevoEje,
+    },
+    {
+      id: "ejes-separaciones",
+      texto: "Ejes por separaciones",
+      icono: Grid3X3,
+      grupo: "Datos",
+      pestana: "modelar",
+      tamano: "grande",
+      habilitado: true,
+      descripcion: "Crear una retícula completa a partir de las distancias entre ejes",
+      accion: a.nuevosEjesPorSeparaciones,
     },
     {
       id: "muro",

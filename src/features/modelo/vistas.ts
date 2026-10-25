@@ -23,6 +23,8 @@ export interface CamaraOrtografica {
   posicion: Vector3;
   objetivo: Vector3;
   arriba: Vector3;
+  /** Eje +X de la pantalla en coordenadas del mundo. */
+  ejeDerecha: Vector3;
   izquierda: number;
   derecha: number;
   abajo: number;
@@ -58,16 +60,25 @@ const normalizar = (a: Vector3): Vector3 => {
   return largo > 1e-12 ? escalar(a, 1 / largo) : [0, 0, 1];
 };
 
-/** El IFC usa +Z arriba y el norte del proyecto en −Y. */
+/**
+ * El IFC usa +Z arriba y el norte del proyecto en +Y (el `TrueNorth` por omisión es
+ * (0, 1)). En planta mirando desde +Z, `arriba = +Y` deja el norte arriba y +X a la
+ * derecha.
+ */
 export const ARRIBA_IFC: Vector3 = [0, 0, 1];
+
+/** Arriba de la pantalla en planta: el norte del proyecto (+Y). */
+export const ARRIBA_PLANTA: Vector3 = [0, 1, 0];
 
 /** Dirección desde el modelo hacia la cámara de cada alzado. */
 export function direccionAlzado(orientacion: Orientacion): Vector3 {
   switch (orientacion) {
     case "norte":
-      return [0, -1, 0];
-    case "sur":
+      // Observador al norte (+Y) mirando hacia −Y: +X queda a la izquierda.
       return [0, 1, 0];
+    case "sur":
+      // Observador al sur (−Y) mirando hacia +Y: +X queda a la derecha.
+      return [0, -1, 0];
     case "este":
       return [1, 0, 0];
     case "oeste":
@@ -81,7 +92,7 @@ export function vectorIso(): Vector3 {
   return [Math.cos(elevacion) * Math.cos(Math.PI / 4), Math.cos(elevacion) * Math.sin(Math.PI / 4), Math.sin(elevacion)];
 }
 
-/** Perspectiva por defecto: desde el sureste (el norte queda a la izquierda). */
+/** Perspectiva por defecto: desde el sureste, mirando al noroeste. */
 export function vectorPerspectiva(): Vector3 {
   return normalizar([1, -1, 0.65]);
 }
@@ -120,7 +131,7 @@ export function esquinasCaja(caja: Caja): Vector3[] {
 /**
  * Cámara ortográfica que encuadra la caja envolvente desde `direccion` (vector del
  * modelo a la cámara). `arriba` fija la orientación de la pantalla; en planta se usa
- * (0, −1, 0) para que el norte del IFC quede arriba.
+ * (0, 1, 0) para que el norte del IFC (+Y) quede arriba y +X a la derecha.
  */
 export function camaraOrtografica(
   caja: Caja,
@@ -158,6 +169,7 @@ export function camaraOrtografica(
     posicion: sumar(centro, escalar(dir, distancia)),
     objetivo: centro,
     arriba: arribaReal,
+    ejeDerecha: derecha,
     izquierda: (-ancho / 2) * margen,
     derecha: (ancho / 2) * margen,
     abajo: (-alto / 2) * margen,
@@ -272,6 +284,7 @@ export function cajaConEjes(caja: Caja, ejes: EjeReferencia[]): Caja {
       estilo: "lineas-ocultas",
       escala: 100,
       alturaArriba: 3,
+      cotasEjes: true,
     });
   });
 
@@ -433,6 +446,7 @@ export function normalizarVista(valor: unknown): Vista | null {
       typeof v.alturaArriba === "number" && Number.isFinite(v.alturaArriba)
         ? v.alturaArriba
         : undefined,
+    cotasEjes: v.cotasEjes !== false,
   };
 }
 

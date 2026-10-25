@@ -294,6 +294,7 @@ export function App() {
           void estado.crearNivel(`Nivel ${estado.niveles.length}`, siguiente);
         },
         nuevoEje: () => useModelo.getState().activarHerramienta("eje"),
+        nuevosEjesPorSeparaciones: () => useModelo.getState().abrirDialogoCotas(),
         herramientaMuro: () => useModelo.getState().activarHerramienta("muro"),
         herramientaLosa: () => useModelo.getState().activarHerramienta("losa"),
         losaDesdeMuros: () => void useModelo.getState().losaDesdeMuros(),
