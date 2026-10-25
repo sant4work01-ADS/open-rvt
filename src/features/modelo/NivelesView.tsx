@@ -11,6 +11,7 @@ export function NivelesView() {
   const editarNivel = useModelo((s) => s.editarNivel);
   const borrarNivel = useModelo((s) => s.borrarNivel);
   const borrarEje = useModelo((s) => s.borrarEje);
+  const editarEje = useModelo((s) => s.editarEje);
   const error = useModelo((s) => s.error);
   const [nombre, setNombre] = useState("");
   const [elevacion, setElevacion] = useState("");
@@ -144,7 +145,23 @@ export function NivelesView() {
           <tbody>
             {referencias.ejes.map((eje) => (
               <tr key={eje.globalid} className="border-b">
-                <td className="py-1 pr-2 font-medium">{eje.etiqueta}</td>
+                <td className="py-1 pr-2 font-medium">
+                  <input
+                    key={`${eje.globalid}-${eje.etiqueta}`}
+                    data-testid={`eje-etiqueta-${eje.etiqueta}`}
+                    defaultValue={eje.etiqueta}
+                    onBlur={(e) => {
+                      const valor = e.target.value.trim();
+                      if (valor && valor !== eje.etiqueta) {
+                        void editarEje(eje.globalid, valor);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                    }}
+                    className="w-20 rounded border bg-background px-2 py-1"
+                  />
+                </td>
                 <td className="py-1 pr-2">
                   {eje.x1.toFixed(2)}, {eje.y1.toFixed(2)}
                 </td>

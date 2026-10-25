@@ -472,6 +472,29 @@ class ModeladoMixin:
             [self._id_eje(grid, eje)], mensaje=f"Eje «{etiqueta}» creado."
         )
 
+    def eje_editar(self, globalid: str, etiqueta: str) -> dict[str, Any]:
+        self._exigir_modelo()
+        etiqueta = (etiqueta or "").strip()
+        if not etiqueta:
+            raise self._error("La etiqueta del eje no puede quedar vacía.", -32602)
+        for grid in self.modelo.by_type("IfcGrid"):
+            for eje in self._ejes(grid):
+                if self._id_eje(grid, eje) != globalid:
+                    continue
+                for otro in self._ejes(grid):
+                    if otro != eje and _etiqueta_eje(otro).casefold() == etiqueta.casefold():
+                        raise self._error(
+                            f"Ya existe un eje con la etiqueta «{etiqueta}».", -32026
+                        )
+                self._instantanea()
+                eje.AxisTag = etiqueta
+                self.con_cambios = True
+                return self._resultado(
+                    modificados=[self._id_eje(grid, eje)],
+                    mensaje=f"Eje renombrado a «{etiqueta}».",
+                )
+        raise self._error(f"No existe el eje {globalid}.", -32005)
+
     def eje_borrar(self, globalid: str) -> dict[str, Any]:
         self._exigir_modelo()
         eje = None
@@ -812,6 +835,22 @@ class ModeladoMixin:
                         break
                 if toca:
                     break
+            if not toca:
+                # Unión en T: el extremo de este muro toca el interior del otro.
+                for ax, ay, fin_a in ((x1, y1, "START"), (x2, y2, "END")):
+                    dx, dy = ox2 - ox1, oy2 - oy1
+                    largo2 = dx * dx + dy * dy
+                    if largo2 <= TOLERANCIA_CALCULO:
+                        continue
+                    t = ((ax - ox1) * dx + (ay - oy1) * dy) / largo2
+                    if t <= 0.01 or t >= 0.99:
+                        continue
+                    px, py = ox1 + t * dx, oy1 + t * dy
+                    if math.hypot(ax - px, ay - py) <= TOLERANCIA:
+                        toca = True
+                        tipo_muro = "ATSTART" if fin_a == "START" else "ATEND"
+                        tipo_otro = "ATSTART" if t < 0.5 else "ATEND"
+                        break
             if not toca:
                 continue
             ya_unido = False
@@ -1487,41 +1526,8 @@ class ModeladoMixin:
             datos = self._datos_abertura(entidad) or {}
             ancho = float(cambios.get("ancho", cambios.get("Ancho", datos.get("ancho", 0.9))))
             alto = float(cambios.get("alto", cambios.get("Alto", datos.get("alto", 2.1))))
-            muro = self._entidad_por_gid(datos["muro"], ("IfcWall",))
-            info_muro = self._datos_muro(muro)
-            if datos["distancia"] + ancho > info_muro["longitud"] + TOLERANCIA:
-                raise self._error("La abertura no cabe en el muro.", -32023)
-            if datos["antepecho"] + alto > info_muro["altura"] + TOLERANCIA:
-                raise self._error("La abertura no cabe en altura.", -32023)
-            for otro, otros in self._aberturas_del_muro(muro, excluir=entidad):
-                if datos["distancia"] < otros["distancia"] + otros["ancho"] - TOLERANCIA and (
-                    datos["distancia"] + ancho > otros["distancia"] + TOLERANCIA
-                ):
-                    raise self._error("La abertura se traslapa con otra.", -32024)
-            datos.update({"ancho": ancho, "alto": alto})
-            self._guardar_pset(entidad, "OPENRVT_Abertura", {k: datos[k] for k in ("Distancia", "Ancho", "Alto", "Antepecho", "Muro")})
-            self._quitar_representaciones(entidad, "Body")
-            geometry_api.assign_representation(
-                self.modelo,
-                product=entidad,
-                representation=self._cuerpo_hueco(
-                    ancho,
-                    alto,
-                    info_muro["espesor"],
-                    datos["antepecho"],
-                    datos["distancia"],
-                    self._desfase_alineacion(
-                        info_muro["alineacion"], info_muro["espesor"]
-                    ),
-                ),
-            )
-            relleno = self._relleno_de(entidad)
-            if relleno is not None:
-                self._regenerar_relleno(relleno, entidad)
-                modificados.append(relleno)
-            self._regenerar_muro(muro)
-            modificados.append(muro)
-        elif entidad.is_a(("IfcDoor", "IfcWindow")):
+            modificados.extend(self._aplicar_medidas_abertura(entidad, ancho, alto))
+        elif entidad.is_a("IfcDoor") or entidad.is_a("IfcWindow"):
             for clave in ("ancho", "Ancho"):
                 if clave in cambios:
                     entidad.OverallWidth = float(cambios[clave])
@@ -1531,18 +1537,68 @@ class ModeladoMixin:
             for rel in getattr(entidad, "FillsVoids", ()) or ():
                 vano = getattr(rel, "RelatingOpeningElement", None)
                 if vano is not None:
-                    self.elemento_editar(
-                        _gid(vano),
-                        {
-                            "ancho": entidad.OverallWidth,
-                            "alto": entidad.OverallHeight,
-                        },
+                    modificados.extend(
+                        self._aplicar_medidas_abertura(
+                            vano,
+                            float(entidad.OverallWidth),
+                            float(entidad.OverallHeight),
+                        )
                     )
-                    modificados.append(vano)
         else:
             raise self._error("Este elemento no tiene propiedades editables.", -32025)
         self.con_cambios = True
         return self._resultado(modificados=modificados, mensaje="Elemento actualizado.")
+
+    def _aplicar_medidas_abertura(
+        self, entidad: Any, ancho: float, alto: float
+    ) -> list[Any]:
+        """Cambia el ancho/alto de un vano y regenera vano, relleno y muro."""
+        datos = self._datos_abertura(entidad) or {}
+        muro = self._entidad_por_gid(datos["muro"], ("IfcWall",))
+        info_muro = self._datos_muro(muro)
+        if datos["distancia"] + ancho > info_muro["longitud"] + TOLERANCIA:
+            raise self._error("La abertura no cabe en el muro.", -32023)
+        if datos["antepecho"] + alto > info_muro["altura"] + TOLERANCIA:
+            raise self._error("La abertura no cabe en altura.", -32023)
+        for _otro, otros in self._aberturas_del_muro(muro, excluir=entidad):
+            if datos["distancia"] < otros["distancia"] + otros["ancho"] - TOLERANCIA and (
+                datos["distancia"] + ancho > otros["distancia"] + TOLERANCIA
+            ):
+                raise self._error("La abertura se traslapa con otra.", -32024)
+        datos.update({"ancho": ancho, "alto": alto})
+        self._guardar_pset(
+            entidad,
+            "OPENRVT_Abertura",
+            {
+                "Distancia": datos["distancia"],
+                "Ancho": ancho,
+                "Alto": alto,
+                "Antepecho": datos["antepecho"],
+                "Muro": datos["muro"],
+                "Volteado": datos.get("volteado", False),
+            },
+        )
+        self._quitar_representaciones(entidad, "Body")
+        geometry_api.assign_representation(
+            self.modelo,
+            product=entidad,
+            representation=self._cuerpo_hueco(
+                ancho,
+                alto,
+                info_muro["espesor"],
+                datos["antepecho"],
+                datos["distancia"],
+                self._desfase_alineacion(info_muro["alineacion"], info_muro["espesor"]),
+            ),
+        )
+        modificados = [entidad]
+        relleno = self._relleno_de(entidad)
+        if relleno is not None:
+            self._regenerar_relleno(relleno, entidad)
+            modificados.append(relleno)
+        self._regenerar_muro(muro)
+        modificados.append(muro)
+        return modificados
 
     def _poligono_de_losa(self, losa: Any) -> list[tuple[float, float]]:
         from ifcopenshell.util.placement import get_local_placement

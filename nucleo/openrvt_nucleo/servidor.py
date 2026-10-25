@@ -112,6 +112,10 @@ class Servidor:
                 params.get("x2", 0.0),
                 params.get("y2", 0.0),
             )
+        if metodo == "ejes.editar":
+            return self._exigir().eje_editar(
+                str(params.get("globalid") or ""), str(params.get("etiqueta") or "")
+            )
         if metodo == "ejes.borrar":
             return self._exigir().eje_borrar(str(params.get("globalid") or ""))
         if metodo == "ejes.listar":

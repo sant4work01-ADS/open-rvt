@@ -118,6 +118,7 @@ interface EstadoModelo {
   editarNivel: (globalid: string, nombre: string, elevacion: number) => Promise<void>;
   borrarNivel: (globalid: string) => Promise<void>;
   crearEje: (etiqueta: string, x1: number, y1: number, x2: number, y2: number) => Promise<void>;
+  editarEje: (globalid: string, etiqueta: string) => Promise<void>;
   borrarEje: (globalid: string) => Promise<void>;
   losaDesdeMuros: () => Promise<void>;
   editarElemento: (globalid: string, cambios: Record<string, unknown>) => Promise<void>;
@@ -944,6 +945,10 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
     crearEje: async (etiqueta, x1, y1, x2, y2) => {
       await ejecutar("ejes.crear", { etiqueta, x1, y1, x2, y2 });
+    },
+
+    editarEje: async (globalid, etiqueta) => {
+      await ejecutar("ejes.editar", { globalid, etiqueta });
     },
 
     borrarEje: async (globalid) => {

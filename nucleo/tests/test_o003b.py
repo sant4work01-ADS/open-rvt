@@ -181,6 +181,20 @@ def test_uniones_en_l_quedan_conectadas():
         assert frozenset((muros[i], muros[(i + 1) % 4])) in pares
 
 
+def test_union_en_t_conecta_el_extremo_con_el_interior_del_otro_muro():
+    nucleo = ModeloNucleo()
+    nucleo.nuevo()
+    nivel = nucleo.niveles()[0]["globalid"]
+    largo = nucleo.muro_crear("Block 15", nivel, 0, 0, 8, 0)["creados"][0]
+    central = nucleo.muro_crear("Block 15", nivel, 4, 0, 4, 3)["creados"][0]
+    pares = {
+        frozenset((r.RelatingElement.GlobalId, r.RelatedElement.GlobalId))
+        for r in nucleo.modelo.by_type("IfcRelConnectsPathElements")
+    }
+    assert frozenset((largo, central)) in pares
+    assert len(pares) == 1  # el otro extremo del muro central no toca nada
+
+
 def test_mover_muro_mueve_sus_ventanas_y_deshacer_rehacer():
     nucleo, _nivel, muros = _casa()
     muro = muros[1]
@@ -253,6 +267,23 @@ def test_deshacer_tres_veces_y_rehacer_tres_deja_el_mismo_estado():
     for _ in range(3):
         assert nucleo.rehacer()["hecho"] is True
     assert firma() == final
+
+
+def test_editar_puerta_cambia_su_vano_y_se_deshace_en_un_solo_paso():
+    nucleo, _nivel, _muros = _casa()
+    puerta = nucleo.modelo.by_type("IfcDoor")[0]
+    vano = next(
+        rel.RelatingOpeningElement for rel in puerta.FillsVoids
+    )
+    assert nucleo._leer_pset(vano, "OPENRVT_Abertura")["Ancho"] == pytest.approx(0.90)
+    nucleo.elemento_editar(puerta.GlobalId, {"ancho": 1.10})
+    assert puerta.OverallWidth == pytest.approx(1.10)
+    assert nucleo._leer_pset(vano, "OPENRVT_Abertura")["Ancho"] == pytest.approx(1.10)
+    assert nucleo.deshacer()["hecho"] is True
+    assert nucleo.modelo.by_type("IfcDoor")[0].OverallWidth == pytest.approx(0.90)
+    assert nucleo._leer_pset(
+        nucleo.modelo.by_type("IfcOpeningElement")[0], "OPENRVT_Abertura"
+    )["Ancho"] == pytest.approx(0.90)
 
 
 def test_abertura_que_no_cabe_da_error_y_el_servidor_sigue_vivo():
