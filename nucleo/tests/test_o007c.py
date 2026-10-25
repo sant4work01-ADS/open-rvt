@@ -252,6 +252,31 @@ def test_acero_por_pieza_tipo_usa_largo_de_referencia() -> None:
     assert trabe["acero"]["kg_m"] == pytest.approx(trabe["acero"]["total_kg"] / 4.0)
 
 
+def test_cerramiento_en_nivel_superior_queda_en_la_cabeza_del_muro() -> None:
+    nucleo = _nuevo()
+    nivel = nucleo.nivel_crear("Nivel 1", 3.0)["creados"][0]
+    muro = nucleo.muro_crear("Block 15", nivel, 0, 0, 4, 0, 2.6)["creados"][0]
+    cerramiento = nucleo.cerramiento_crear_en_muro(
+        "CE-1 Cerramiento 15×20", muro
+    )["creados"][0]
+    datos = _pset(nucleo, cerramiento, "OPENRVT_Estructura")
+    assert datos["Z"] == pytest.approx(3.0 + 2.6 - 0.20 / 2.0)
+    assert datos["Longitud"] == pytest.approx(4.0)
+
+
+def test_zapata_corrida_expresa_kg_por_metro_sobre_referencia() -> None:
+    nucleo = _nuevo()
+    tipo = next(
+        t for t in nucleo.tipos_listar("IfcFootingType")
+        if t["nombre"] == "ZC-1 Zapata corrida 60"
+    )
+    assert tipo["acero"]["unidad"] == "kg/m"
+    assert tipo["acero"]["largo_referencia"] == pytest.approx(4.0)
+    assert tipo["acero"]["kg_m"] == pytest.approx(
+        tipo["acero"]["total_kg"] / 4.0, abs=1e-9
+    )
+
+
 def test_servidor_expone_las_interacciones() -> None:
     servidor = Servidor()
     servidor.despachar("proyecto.nuevo", {"nombre": "RPC"})

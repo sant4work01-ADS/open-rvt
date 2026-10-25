@@ -168,14 +168,11 @@ class AceroMixin:
         alias, seccion, armado = self._seccion_y_armado(tipo)
         if alias is None:
             return {}
-        if alias in ("zapata", "zapata_corrida"):
-            unidad = "kg/pieza"
-            largo_ref = LARGOS_REFERENCIA.get(alias, 4.0)
-            resultado = estimar(alias, seccion, armado, largo_ref if alias == "zapata_corrida" else 0.0)
+        if alias == "zapata":
             return {
-                "unidad": unidad,
-                "largo_referencia": largo_ref,
-                **resultado,
+                "unidad": "kg/pieza",
+                "largo_referencia": 0.0,
+                **estimar(alias, seccion, armado, 0.0),
             }
         unidad = "kg/m"
         largo_ref = LARGOS_REFERENCIA.get(alias, 3.0)

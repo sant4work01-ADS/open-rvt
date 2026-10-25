@@ -465,10 +465,19 @@ class InteraccionesMixin:
         viga = self._viga_nueva(
             tipo_entidad, nivel, datos["x1"], datos["y1"], datos["x2"], datos["y2"], desfase
         )
+        centro = (
+            datos["z"] + datos["altura"] - alto / 2.0
+            if esperado == "cerramiento"
+            else datos["z"] + alto / 2.0
+        )
         self._guardar_pset(
             viga,
             "OPENRVT_Estructura",
-            {**self._leer_pset(viga, "OPENRVT_Estructura"), "B": nucleo},
+            {
+                **self._leer_pset(viga, "OPENRVT_Estructura"),
+                "B": nucleo,
+                "Z": centro,
+            },
         )
         self._regenerar_estructura(viga)
         self._guardar_liga(viga, {"Muro": _gid(muro_entidad)})
