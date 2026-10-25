@@ -12,3 +12,7 @@ Esto cambia el orden de la ruta C de `docs/caminos-posibles.md`: el «visor + cu
   - por perfil de sección (área de sección × largo);
   - otros que se irán definiendo.
 - Cómo se mide depende de la plantilla, no del elemento suelto.
+
+## Interfaz (decisión del usuario, 2026-10-24)
+- Igual que PresupuestosPro: ribbon, sidebar y área de trabajo. Es una app propia de escritorio (Tauri), **no Blender**.
+- Blender queda solo como motor de render, si se usa.
