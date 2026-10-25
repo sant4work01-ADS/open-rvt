@@ -50,7 +50,7 @@ def area_planta(verts, faces, resolucion: int = 512, min_celdas: int = 16, max_c
     """Área de la unión de los triángulos proyectados al plano XY.
 
     Se rasteriza la caja envolvente y se rellenan por scanline las celdas
-    cubiertas. La resolución parte de 256 celdas en el lado mayor y se afina
+    cubiertas. La resolución parte de 512 celdas en el lado mayor y se afina
     hasta tener al menos 16 celdas en el lado menor (muros y trabes delgados),
     con un tope de 4 millones de celdas. Así una pared de 12 × 0.3 m no pierde
     precisión por el grosor y una losa grande no dispara el costo.
