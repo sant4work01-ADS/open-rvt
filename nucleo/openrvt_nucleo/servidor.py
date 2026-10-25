@@ -92,6 +92,12 @@ class Servidor:
             return self._exigir().leer_vistas()
         if metodo == "vistas.guardar":
             return self._exigir().guardar_vistas(params.get("lista", params.get("vistas")))
+        if metodo == "estilos.leer":
+            return self._exigir().leer_estilos()
+        if metodo == "estilos.guardar":
+            return self._exigir().guardar_estilos(
+                params.get("estilos", params.get("datos"))
+            )
         if metodo == "niveles.crear":
             return self._exigir().nivel_crear(
                 str(params.get("nombre") or ""), params.get("elevacion", 0.0)
