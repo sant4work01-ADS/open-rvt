@@ -250,7 +250,9 @@ class Servidor:
                 params.get("dz", 0.0),
             )
         if metodo == "elementos.borrar":
-            return self._exigir().elementos_borrar(params.get("globalids"))
+            return self._exigir().elementos_borrar(
+                params.get("globalids"), bool(params.get("dependientes", True))
+            )
         if metodo == "elementos.copiar":
             return self._exigir().elementos_copiar(
                 params.get("globalids"),
@@ -275,6 +277,57 @@ class Servidor:
                 params.get("rotacion", 0.0),
                 params.get("nivel_superior") or None,
                 params.get("altura"),
+                str(params.get("ejeA") or params.get("eje_a") or ""),
+                str(params.get("ejeB") or params.get("eje_b") or ""),
+            )
+        if metodo in ("castillos.crear_en_muro", "castillo.crear_en_muro"):
+            return self._exigir().castillo_crear_en_muro(
+                str(params.get("tipo") or ""),
+                str(params.get("muro") or ""),
+                params.get("distancia", 0.0),
+            )
+        if metodo in ("castillos.automaticos", "castillos.automáticos"):
+            return self._exigir().castillos_automaticos(
+                params.get("muros"),
+                params.get("separacion_max", 3.0),
+                params.get("nivel") or None,
+            )
+        if metodo in ("cerramientos.crear_en_muro", "cerramiento.crear_en_muro"):
+            return self._exigir().cerramiento_crear_en_muro(
+                str(params.get("tipo") or ""), str(params.get("muro") or "")
+            )
+        if metodo in ("dalas.crear_en_muro", "dala.crear_en_muro"):
+            return self._exigir().dala_crear_en_muro(
+                str(params.get("tipo") or ""), str(params.get("muro") or "")
+            )
+        if metodo in ("columnas.en_cruces", "columnas.en_cruces_de_ejes"):
+            return self._exigir().columnas_en_cruces(
+                str(params.get("tipo") or ""),
+                str(params.get("nivel") or ""),
+                params.get("ejes"),
+            )
+        if metodo in ("zapatas.bajo_columna", "zapata.bajo_columna"):
+            return self._exigir().zapata_bajo_columna(
+                str(params.get("tipo") or ""),
+                str(params.get("columna") or ""),
+                params.get("desplante", 1.00),
+                str(params.get("lindero") or ""),
+            )
+        if metodo in ("contratrabes.unir_zapatas", "contratrabe.unir_zapatas"):
+            return self._exigir().contratrabes_unir_zapatas(
+                str(params.get("tipo") or ""),
+                str(params.get("nivel") or ""),
+                params.get("desfase", -0.10),
+            )
+        if metodo in ("trabes.unir_columnas", "trabe.unir_columnas"):
+            return self._exigir().trabes_unir_columnas(
+                str(params.get("tipo") or ""),
+                str(params.get("nivel") or ""),
+                params.get("espesor_losa", 0.10),
+            )
+        if metodo in ("cantidades.estructura", "cantidades"):
+            return self._exigir().cantidades_estructura(
+                params.get("nivel") or None
             )
         if metodo in ("vigas.crear", "viga.crear"):
             return self._exigir().viga_crear(

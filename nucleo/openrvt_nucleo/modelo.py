@@ -17,6 +17,7 @@ from typing import Any
 import ifcopenshell
 from .acero import AceroMixin
 from .biblioteca import BibliotecaMixin
+from .interacciones import InteraccionesMixin
 from .modelado import ModeladoMixin
 
 import ifcopenshell.api.aggregate as aggregate
@@ -139,7 +140,7 @@ def _categoria(clase: str) -> str:
     return "otros"
 
 
-class ModeloNucleo(BibliotecaMixin, ModeladoMixin, AceroMixin):
+class ModeloNucleo(BibliotecaMixin, ModeladoMixin, InteraccionesMixin, AceroMixin):
     """Estado del modelo abierto en el proceso Python."""
 
     def __init__(self) -> None:
