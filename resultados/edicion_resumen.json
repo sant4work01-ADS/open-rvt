@@ -1,0 +1,185 @@
+{
+  "repeticiones": 3,
+  "esperados_m3": {
+    "Muro Sur": 5.022,
+    "Muro Norte": 5.4,
+    "Muro Este": 3.6,
+    "Muro Oeste": 3.6
+  },
+  "a": {
+    "medianas_s": {
+      "crear_modelo_s": 0.027899699998670258,
+      "editar_modelo_s": 0.005210299999816925,
+      "guardar_s": 0.00275580000015907,
+      "medir_propio_s": 0.012053399999786052,
+      "medir_otro_s": 0.32236260599893285,
+      "validar_s": 0.009869699999399018
+    },
+    "total_mediano_s": 0.40728340599889634,
+    "propagacion_tipo": {
+      "capa": 0.2,
+      "perfiles": [
+        0.2,
+        0.2,
+        0.2,
+        0.2
+      ],
+      "ok": true
+    },
+    "validacion": {
+      "errores": 0,
+      "avisos": 0,
+      "mensajes": [],
+      "ok": true
+    },
+    "volumenes_propio": {
+      "Muro Sur": 5.022,
+      "Muro Este": 3.6,
+      "Muro Norte": 5.400000000000006,
+      "Muro Oeste": 3.6
+    },
+    "volumenes_otro": {
+      "Muro Sur": 5.022000080555678,
+      "Muro Este": 3.6000000536441803,
+      "Muro Norte": 5.4000000804662704,
+      "Muro Oeste": 3.6000000536441803
+    },
+    "corridas_s": [
+      {
+        "operaciones": {
+          "crear_modelo_s": 0.027899699998670258,
+          "editar_modelo_s": 0.004931600000418257,
+          "guardar_s": 0.0024991000009322306,
+          "medir_propio_s": 0.012053399999786052,
+          "medir_otro_s": 0.35292649999973946,
+          "validar_s": 0.012060600000040722
+        },
+        "total": 0.412370899999587
+      },
+      {
+        "operaciones": {
+          "crear_modelo_s": 0.04211519999989832,
+          "editar_modelo_s": 0.00542940000013914,
+          "guardar_s": 0.004210600000078557,
+          "medir_propio_s": 0.023295900000448455,
+          "medir_otro_s": 0.32236260599893285,
+          "validar_s": 0.009869699999399018
+        },
+        "total": 0.40728340599889634
+      },
+      {
+        "operaciones": {
+          "crear_modelo_s": 0.025708901001053164,
+          "editar_modelo_s": 0.005210299999816925,
+          "guardar_s": 0.00275580000015907,
+          "medir_propio_s": 0.011934600001040963,
+          "medir_otro_s": 0.285393407999436,
+          "validar_s": 0.008957701000326779
+        },
+        "total": 0.3399607100018329
+      }
+    ]
+  },
+  "b": {
+    "medianas_s": {
+      "crear_modelo_s": 0.04414550099999997,
+      "editar_muro_s": 0.0015210999999999899,
+      "cambiar_tipo_s": 0.0006428999999999974,
+      "guardar_s": 0.0020751000000000202,
+      "medir_propio_s": 0.038608101000000034,
+      "medir_otro_s": 0.35394031000000004,
+      "validar_s": 0.327771509
+    },
+    "total_mediano_s": 0.7687045210000001,
+    "propagacion_tipo": {
+      "capa": 0.2,
+      "perfiles": [
+        0.2,
+        0.2,
+        0.2,
+        0.2
+      ],
+      "ok": true
+    },
+    "validacion": {
+      "errores": 0,
+      "avisos": 0,
+      "mensajes": [],
+      "ok": true
+    },
+    "volumenes_propio": {
+      "Muro Oeste": 3.6000000536441803,
+      "Muro Norte": 5.4000000804662704,
+      "Muro Este": 3.6000000536441803,
+      "Muro Sur": 5.022000080555678
+    },
+    "volumenes_otro": {
+      "Muro Sur": 5.022,
+      "Muro Este": 3.5999999999999837,
+      "Muro Norte": 5.400000000000009,
+      "Muro Oeste": 3.600000000000001
+    },
+    "corridas_s": [
+      {
+        "operaciones": {
+          "crear_modelo_s": 0.06533429999999998,
+          "editar_muro_s": 0.0020487999999999717,
+          "cambiar_tipo_s": 0.0009669000000000097,
+          "guardar_s": 0.002492999999999995,
+          "medir_propio_s": 0.04711020000000002,
+          "medir_otro_s": 0.41324320100000006,
+          "validar_s": 0.3638452999999999
+        },
+        "total": 0.895041701
+      },
+      {
+        "operaciones": {
+          "crear_modelo_s": 0.04414550099999997,
+          "editar_muro_s": 0.0015210999999999899,
+          "cambiar_tipo_s": 0.0006428999999999974,
+          "guardar_s": 0.0020751000000000202,
+          "medir_propio_s": 0.038608101000000034,
+          "medir_otro_s": 0.35394031000000004,
+          "validar_s": 0.327771509
+        },
+        "total": 0.7687045210000001
+      },
+      {
+        "operaciones": {
+          "crear_modelo_s": 0.041421502000000006,
+          "editar_muro_s": 0.0014944999999999596,
+          "cambiar_tipo_s": 0.000606899999999996,
+          "guardar_s": 0.0018548999999999864,
+          "medir_propio_s": 0.037626701000000026,
+          "medir_otro_s": 0.287593408,
+          "validar_s": 0.290005808
+        },
+        "total": 0.6606037189999999
+      }
+    ]
+  },
+  "loc": {
+    "a_editar.py": {
+      "fisicas": 414,
+      "codigo": 340
+    },
+    "b_editar.mjs": {
+      "fisicas": 616,
+      "codigo": 521
+    }
+  },
+  "diferencias_relativas": {
+    "a": {
+      "Muro Sur": 1.6040557085612636e-08,
+      "Muro Norte": 1.4901161128056662e-08,
+      "Muro Este": 1.4901161169176033e-08,
+      "Muro Oeste": 1.4901161169176033e-08
+    },
+    "b": {
+      "Muro Sur": 0.0,
+      "Muro Norte": 1.644774851296528e-15,
+      "Muro Este": 4.564250212347865e-15,
+      "Muro Oeste": 2.4671622769447924e-16
+    }
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "motor": "b",
+  "ifc": "resultados/edicion_b.ifc",
+  "esquema": "IFC4",
+  "operaciones_s": {
+    "crear_modelo_s": 0.041421502000000006,
+    "editar_muro_s": 0.0014944999999999596,
+    "cambiar_tipo_s": 0.000606899999999996,
+    "guardar_s": 0.0018548999999999864,
+    "medir_propio_s": 0.037626701000000026,
+    "medir_otro_s": 0.287593408,
+    "validar_s": 0.290005808
+  },
+  "total_s": 0.6606037189999999,
+  "propagacion_tipo": {
+    "capa": 0.2,
+    "perfiles": [
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ],
+    "ok": true
+  },
+  "medido_propio": {
+    "motor": "b",
+    "muros": [
+      {
+        "globalid": "30olZAQ7T5tOmH2w$4OX6J",
+        "nombre": "Muro Oeste",
+        "volumen_malla": 3.6000000536441803
+      },
+      {
+        "globalid": "3BIO9ER3L7kxgl_WsuUCRv",
+        "nombre": "Muro Norte",
+        "volumen_malla": 5.4000000804662704
+      },
+      {
+        "globalid": "1eK2Su3gTBcOPUXE$M$z8D",
+        "nombre": "Muro Este",
+        "volumen_malla": 3.6000000536441803
+      },
+      {
+        "globalid": "0vb_C2zLr9RfW7VT6o2wl4",
+        "nombre": "Muro Sur",
+        "volumen_malla": 5.022000080555678
+      }
+    ]
+  },
+  "medido_por_a": {
+    "motor": "a",
+    "esquema": "IFC4",
+    "conteo": {
+      "muros": 4,
+      "losas": 1,
+      "puertas": 1,
+      "vanos": 1
+    },
+    "muros": [
+      {
+        "globalid": "0vb_C2zLr9RfW7VT6o2wl4",
+        "nombre": "Muro Sur",
+        "volumen_malla": 5.022
+      },
+      {
+        "globalid": "1eK2Su3gTBcOPUXE$M$z8D",
+        "nombre": "Muro Este",
+        "volumen_malla": 3.5999999999999837
+      },
+      {
+        "globalid": "3BIO9ER3L7kxgl_WsuUCRv",
+        "nombre": "Muro Norte",
+        "volumen_malla": 5.400000000000009
+      },
+      {
+        "globalid": "30olZAQ7T5tOmH2w$4OX6J",
+        "nombre": "Muro Oeste",
+        "volumen_malla": 3.600000000000001
+      }
+    ]
+  },
+  "validacion": {
+    "errores": 0,
+    "avisos": 0,
+    "mensajes": [],
+    "ok": true
+  }
+}

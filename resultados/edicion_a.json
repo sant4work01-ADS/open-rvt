@@ -1,0 +1,87 @@
+{
+  "motor": "a",
+  "ifc": "resultados/edicion_a.ifc",
+  "esquema": "IFC4",
+  "operaciones_s": {
+    "crear_modelo_s": 0.025708901001053164,
+    "editar_modelo_s": 0.005210299999816925,
+    "guardar_s": 0.00275580000015907,
+    "medir_propio_s": 0.011934600001040963,
+    "medir_otro_s": 0.285393407999436,
+    "validar_s": 0.008957701000326779
+  },
+  "total_s": 0.3399607100018329,
+  "propagacion_tipo": {
+    "capa": 0.2,
+    "perfiles": [
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ],
+    "ok": true
+  },
+  "medido_propio": {
+    "motor": "a",
+    "esquema": "IFC4",
+    "conteo": {
+      "muros": 4,
+      "losas": 1,
+      "puertas": 1,
+      "vanos": 1
+    },
+    "muros": [
+      {
+        "globalid": "39PvfDsAP3m8F3H28gl8Pt",
+        "nombre": "Muro Sur",
+        "volumen_malla": 5.022
+      },
+      {
+        "globalid": "2mfTLa0J1FyQ$yWcJgL9h4",
+        "nombre": "Muro Este",
+        "volumen_malla": 3.6
+      },
+      {
+        "globalid": "05gojfXOb6uwbR93n0m5OG",
+        "nombre": "Muro Norte",
+        "volumen_malla": 5.400000000000006
+      },
+      {
+        "globalid": "3vASg4Msb3N94mu7uzf1TR",
+        "nombre": "Muro Oeste",
+        "volumen_malla": 3.6
+      }
+    ]
+  },
+  "medido_por_b": {
+    "motor": "b",
+    "muros": [
+      {
+        "globalid": "39PvfDsAP3m8F3H28gl8Pt",
+        "nombre": "Muro Sur",
+        "volumen_malla": 5.022000080555678
+      },
+      {
+        "globalid": "2mfTLa0J1FyQ$yWcJgL9h4",
+        "nombre": "Muro Este",
+        "volumen_malla": 3.6000000536441803
+      },
+      {
+        "globalid": "05gojfXOb6uwbR93n0m5OG",
+        "nombre": "Muro Norte",
+        "volumen_malla": 5.4000000804662704
+      },
+      {
+        "globalid": "3vASg4Msb3N94mu7uzf1TR",
+        "nombre": "Muro Oeste",
+        "volumen_malla": 3.6000000536441803
+      }
+    ]
+  },
+  "validacion": {
+    "errores": 0,
+    "avisos": 0,
+    "mensajes": [],
+    "ok": true
+  }
+}

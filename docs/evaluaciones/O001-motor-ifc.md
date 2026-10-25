@@ -284,3 +284,119 @@ Salidas versionadas:
   no de teselación.
 - **Tiempos:** una sola máquina Linux, 12 hilos; no se midió el arranque completo de Tauri ni el
   costo de serializar a través del puente Rust↔Python.
+
+## 11. Edición (O001b)
+
+Complemento de O001: el primer producto es un editor, así que se midió el mismo guion de creación y
+edición en los dos motores. Guiones: `evaluacion/a_editar.py` (IfcOpenShell, `ifcopenshell.api`) y
+`evaluacion/b_editar.mjs` (web-ifc). Cada guion crea su propio IFC4 desde cero, lo edita, lo guarda y
+lo vuelve a abrir con el **otro** motor para medir los muros. No se parte de un archivo común.
+
+### 11.1 Modelo y edición
+
+- IFC4 con proyecto, sitio, edificio, dos niveles (0.00 y 3.00 m) y unidades métricas (m, m², m³).
+- 4 muros de 0.15 × 3.00 m sobre ejes de 8 × 6 m, tipo `IfcWallType` «Block 15» y una capa de
+  material de 0.15 m.
+- Losa de 0.12 m con el contorno exterior de los muros; cara superior en 3.00 m (piso del nivel 2,
+  sobre el nivel 1).
+- Puerta de 0.90 × 2.10 m en el muro sur, con `IfcOpeningElement` y `IfcRelFillsElement`.
+- Edición: el muro este se desplaza 1 m hacia el este (la dimensión este-oeste pasa de 8 a 9 m) y el
+  sur y el norte se estiran a 9 m. El espesor del tipo «Block 15» pasa de 0.15 a 0.20 m y se
+  comprueba que los cuatro muros quedan con 0.20 m.
+- Uniones declaradas por el guion: **a eje**. Cada muro conserva su largo nominal (sur 9, norte 9,
+  este 6, oeste 6) y se solapa con los perpendiculares en las esquinas. No se recortan las esquinas,
+  porque el volumen esperado de la especificación para el muro sur supone largo 9.00 m completo.
+
+### 11.2 Qué resuelve el motor y qué hubo que programar
+
+| Paso | IfcOpenShell (A) | web-ifc (B) |
+|---|---|---|
+| Proyecto, unidades, contextos y árbol espacial | `ifcopenshell.api.project/unit/context/aggregate/spatial` | Entidades IFC escritas a mano (`IfcProject`, `IfcUnitAssignment`, `IfcGeometricRepresentationContext`, `IfcRelAggregates`, …) |
+| Geometría del muro desde eje y espesor | `geometry.create_2pt_wall` y `geometry.regenerate_wall_representation`: el motor arma el sólido desde el eje y la capa | `IfcExtrudedAreaSolid` + `IfcRectangleProfileDef` + `IfcLocalPlacement` + eje `IfcIndexedPolyCurve`, todo calculado a mano |
+| Vano que resta del muro | `feature.add_feature` crea el `IfcRelVoidsElement`; el teselador resta el vano | Se crea el sólido del vano y el `IfcRelVoidsElement` a mano; la resta la hace web-ifc al teselar |
+| Puerta y relleno del vano | `geometry.add_door_representation` + `feature.add_filling` | Caja manual de 0.90 × 0.05 × 2.10 + `IfcRelFillsElement` |
+| Conexiones entre muros | `geometry.connect_wall` y `regenerate_wall_representation` pueden crear uniones y recortes automáticos; el guion declara uniones a eje y no los usa | No hay API de uniones: los extremos y largos se corrigen a mano |
+| Propagación del cambio de tipo | Se edita `IfcMaterialLayer.LayerThickness` y se regeneran los 4 muros; la geometría se reconstruye desde la capa del tipo | Se edita la capa del tipo, se relee su espesor y se actualizan a mano los 4 perfiles |
+| Guardado | `model.write()` | `IfcAPI.SaveModel()` |
+| Validación | `ifcopenshell.validate` en proceso | No hay validador en web-ifc: se llama a A para validar |
+| Medición del resultado | Propia (IfcOpenShell) y cruzada (B) | Propia (web-ifc) y cruzada (A) |
+
+En A, la creación y edición ocupan **169 líneas físicas** (143 de código, sin blancos ni comentarios)
+en `crear_modelo`, `_rep_eje`, `_cambiar_largo_eje` y `editar_modelo`. En B, la clase de escritura,
+`crearModelo` y las funciones de edición ocupan **410 líneas físicas** (359 de código). El guion
+completo mide 414/340 (A) y 616/521 (B) líneas físicas/de código, respectivamente; la diferencia
+incluye la medición y la orquestación, que son parecidas en ambos.
+
+### 11.3 Volumen esperado contra medido
+
+Tolerancia pedida: 1 %. La columna «por el otro motor» es la reapertura cruzada: el IFC de A lo mide
+B y el de B lo mide A.
+
+| Muro | Largo de eje (m) | Esperado (m³) | A propio (m³) | A por B (m³) | B propio (m³) | B por A (m³) | Peor diferencia |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Sur (con vano) | 9.0 | 5.022 | 5.022000000 | 5.022000081 | 5.022000081 | 5.022000000 | 0.0000016 % |
+| Norte | 9.0 | 5.400 | 5.400000000 | 5.400000080 | 5.400000080 | 5.400000000 | 0.0000015 % |
+| Este | 6.0 | 3.600 | 3.600000000 | 3.600000054 | 3.600000054 | 3.600000000 | 0.0000015 % |
+| Oeste | 6.0 | 3.600 | 3.600000000 | 3.600000054 | 3.600000054 | 3.600000000 | 0.0000015 % |
+
+El muro sur cumple la fórmula de la especificación: `(9.0 × 3.0 − 0.9 × 2.1) × 0.20 = 5.022 m³`.
+Los cuatro muros quedan muy por debajo del 1 % de error. La diferencia de ~8 × 10⁻⁸ m³ en las
+mediciones hechas por web-ifc es ruido de `float32` del WASM; A mide en `float64` y da el valor
+exacto. Los volúmenes son positivos y ningún muro quedó sin malla.
+
+### 11.4 Validez y conteos
+
+| Comprobación | A | B |
+|---|---|---|
+| Esquema | IFC4 | IFC4 |
+| Muros / losas / puertas / vanos | 4 / 1 / 1 / 1 | 4 / 1 / 1 / 1 |
+| Abre en el otro motor | Sí (B lo tesela y mide) | Sí (A lo abre y mide) |
+| `ifcopenshell.validate` | 0 errores, 0 avisos | 0 errores, 0 avisos |
+| Espesor del tipo en los 4 muros | 0.20 m | 0.20 m |
+
+El IFC de B se genera con `IfcAPI.SaveModel()`; el de A, con `model.write()`. Ambos quedan
+versionados en `resultados/edicion_a.ifc` y `resultados/edicion_b.ifc`.
+
+### 11.5 Costo
+
+Medianas de 3 corridas medidas después de una corrida de calentamiento (Linux x86_64, Node 24,
+Python 3.14, IfcOpenShell 0.9.0.post1, web-ifc 0.0.74).
+
+| Operación | A (s) | B (s) |
+|---|---:|---:|
+| Crear el modelo completo | 0.0279 | 0.0441 |
+| Editar el muro y estirar sur/norte | 0.0052 | 0.0015 |
+| Cambiar el espesor del tipo y propagar | incluido en «editar» | 0.0006 |
+| Guardar | 0.0028 | 0.0021 |
+| Medir con el motor propio | 0.0121 | 0.0386 |
+| Medir con el otro motor | 0.3224 | 0.3539 |
+| Validar con `ifcopenshell.validate` | 0.0099 | 0.3278 |
+| **Total del guion** | **0.4073** | **0.7687** |
+
+Lectura:
+
+- La creación es 1.6× más lenta en B; la edición geométrica es más rápida porque son unas pocas
+  asignaciones de atributos, pero esa rapidez se paga con las ~2.4× líneas de código del núcleo.
+- La medición cruzada cuesta lo mismo en los dos (0.32–0.35 s): es el arranque del otro runtime, no
+  el motor.
+- El total de B incluye **dos** arranques de Python (medir y validar), porque web-ifc no trae
+  validador de esquema; el de A solo incluye un arranque de Node. Sin las llamadas al otro motor
+  (`medir_otro` y `validar`), el costo propio es **A 0.048 s** y **B 0.087 s**.
+- Los tiempos de edición son de milisegundos en ambos; la diferencia de producto no está en la
+  velocidad de edición, sino en cuánto hay que programar para editar.
+
+### 11.6 Hechos que deciden (edición)
+
+- **IfcOpenShell resuelve la edición semántica:** geometría desde eje + capa, vano que resta,
+  propagación del tipo y validador de esquema. El guion de edición es ~2.4× más corto.
+- **web-ifc no edita a alto nivel:** puede escribir y guardar IFC4 válido, y su teselador resta el
+  vano, pero la geometría, las uniones y la propagación del tipo se programan a mano. Es viable como
+  motor de visualización o de edición geométrica puntual, no como núcleo del editor.
+- **Los dos motores producen el mismo resultado geométrico** dentro de 2 × 10⁻⁶ %, y el IFC de cada
+  uno abre y valida en el otro. La elección no depende de la calidad del IFC resultante.
+- **No se usaron las uniones automáticas de A** (`connect_wall` + `regenerate_wall_representation`)
+  porque el volumen esperado de la especificación supone largos nominales completos. Queda medido
+  que la API existe; el recorte automático de esquinas cambiaría los volúmenes y se apartaría de la
+  fórmula pedida.
+- **Límites de esta prueba:** una sola máquina Linux; no se probó Windows, Tauri ni el puente
+  Rust↔Python. La validación de B se hace llamando a A, no con un validador propio de web-ifc.
