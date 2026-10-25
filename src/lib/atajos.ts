@@ -8,7 +8,11 @@ export type AccionGlobal =
   | "minimizarRibbon"
   | "escalaMas"
   | "escalaMenos"
-  | "escalaNormal";
+  | "escalaNormal"
+  | "nuevoArchivo"
+  | "abrirArchivo"
+  | "guardarArchivo"
+  | "guardarComo";
 
 export interface TeclaEv {
   key: string;
@@ -44,6 +48,38 @@ const ETIQUETA_TECLA: Record<string, string> = {
 };
 
 export const ATAJOS_GLOBALES: Atajo<AccionGlobal>[] = [
+  {
+    accion: "nuevoArchivo",
+    key: "n",
+    mods: { ctrl: true },
+    origen: "propio",
+    descripcion: "Nuevo modelo",
+    enTexto: true,
+  },
+  {
+    accion: "abrirArchivo",
+    key: "o",
+    mods: { ctrl: true },
+    origen: "propio",
+    descripcion: "Abrir modelo IFC",
+    enTexto: true,
+  },
+  {
+    accion: "guardarArchivo",
+    key: "s",
+    mods: { ctrl: true },
+    origen: "propio",
+    descripcion: "Guardar el modelo",
+    enTexto: true,
+  },
+  {
+    accion: "guardarComo",
+    key: "s",
+    mods: { ctrl: true, shift: true },
+    origen: "propio",
+    descripcion: "Guardar el modelo como…",
+    enTexto: true,
+  },
   {
     accion: "paleta",
     key: "k",

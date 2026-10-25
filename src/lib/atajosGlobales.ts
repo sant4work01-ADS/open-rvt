@@ -13,6 +13,11 @@ export interface AccionesGlobales {
   escalaMas: () => void;
   escalaMenos: () => void;
   escalaNormal: () => void;
+  /** Archivo (spec O003a). */
+  nuevoArchivo: () => void;
+  abrirArchivo: () => void;
+  guardarArchivo: () => void;
+  guardarComo: () => void;
 }
 
 const TIPOS_SIN_TEXTO = new Set([
@@ -63,6 +68,10 @@ export function useAtajosGlobales(acciones: AccionesGlobales) {
         escalaMas: a.escalaMas,
         escalaMenos: a.escalaMenos,
         escalaNormal: a.escalaNormal,
+        nuevoArchivo: a.nuevoArchivo,
+        abrirArchivo: a.abrirArchivo,
+        guardarArchivo: a.guardarArchivo,
+        guardarComo: a.guardarComo,
       };
       const ejecutar = f[atajo.accion];
       if (!ejecutar) return;

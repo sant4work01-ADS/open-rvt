@@ -21,7 +21,9 @@ export interface PeticionDialogo {
     | "carpeta"
     | "guardar-json"
     | "abrir-json"
-    | "guardar-zip";
+    | "guardar-zip"
+    | "abrir-ifc"
+    | "guardar-ifc";
   titulo: string;
   /** Nombre de archivo sugerido (solo en los de guardar). */
   predeterminado: string;
@@ -168,7 +170,7 @@ export async function elegirJsonParaAbrir(titulo: string): Promise<string | null
   return typeof r === "string" ? r : null;
 }
 
-/** Destino de la exportación del registro del asistente (.zip). */
+/** Destino de una exportación del registro del asistente (.zip). */
 export async function elegirDestinoZip(nombreSugerido: string): Promise<string | null> {
   const f = window.__PP_DIALOGO_PRUEBAS__;
   if (f)
@@ -183,4 +185,39 @@ export async function elegirDestinoZip(nombreSugerido: string): Promise<string |
   });
   if (!r) return null;
   return r.toLowerCase().endsWith(".zip") ? r : `${r}.zip`;
+}
+
+/** Archivo IFC para abrir (modelo del núcleo). */
+export async function elegirIfcParaAbrir(titulo?: string): Promise<string | null> {
+  const f = window.__PP_DIALOGO_PRUEBAS__;
+  if (f)
+    return f({
+      tipo: "abrir-ifc",
+      titulo: titulo ?? tr("comun.abrir-modelo", "Abrir modelo IFC"),
+      predeterminado: "",
+    });
+  const r = await open({
+    multiple: false,
+    directory: false,
+    title: titulo ?? tr("comun.abrir-modelo", "Abrir modelo IFC"),
+    filters: [{ name: tr("comun.modelo-ifc", "Modelo IFC"), extensions: ["ifc"] }],
+  });
+  return typeof r === "string" ? r : null;
+}
+
+/** Destino de un modelo IFC (.ifc). */
+export async function elegirDestinoIfc(nombreSugerido: string): Promise<string | null> {
+  const f = window.__PP_DIALOGO_PRUEBAS__;
+  if (f)
+    return f({
+      tipo: "guardar-ifc",
+      titulo: tr("comun.guardar-modelo", "Guardar modelo IFC"),
+      predeterminado: `${nombreSugerido}.ifc`,
+    });
+  const r = await save({
+    defaultPath: `${nombreSugerido}.ifc`,
+    filters: [{ name: tr("comun.modelo-ifc", "Modelo IFC"), extensions: ["ifc"] }],
+  });
+  if (!r) return null;
+  return r.toLowerCase().endsWith(".ifc") ? r : `${r}.ifc`;
 }

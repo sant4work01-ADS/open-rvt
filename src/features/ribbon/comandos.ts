@@ -6,7 +6,17 @@
 // llevan ícono de 24 px arriba y texto debajo (hasta 2 líneas) y los chicos ícono de
 // 16 px con texto a la derecha. Los tooltips dicen «Nombre (atajo) — qué hace».
 import type { LucideIcon } from "lucide-react";
-import { ChevronDown, FolderPlus, Monitor, Moon, Save, SquarePlus, Sun } from "lucide-react";
+import {
+  ChevronDown,
+  FolderOpen,
+  Monitor,
+  Moon,
+  Save,
+  SaveAll,
+  Scissors,
+  SquarePlus,
+  Sun,
+} from "lucide-react";
 import { tr } from "@/i18n";
 
 export type PestanaRibbon = "archivo" | "principal" | "herramientas" | "vista";
@@ -49,16 +59,19 @@ export interface ComandoRibbon {
 }
 
 export interface AccionesRibbon {
-  // OPEN-RVT: los comandos de archivo todavía no hacen nada; existen para que la cinta
-  // tenga la misma forma que la de PresupuestosPro desde el primer día.
+  // OPEN-RVT: comandos de archivo (spec O003a). Nuevo, Abrir, Guardar y Guardar como
+  // usan el diálogo nativo y el núcleo Python.
   nuevo: () => void;
   abrir: () => void;
   guardar: () => void;
+  guardarComo: () => void;
   temaSistema: () => void;
   temaClaro: () => void;
   temaOscuro: () => void;
   /** Preferencia de tema activa, para marcar el botón correspondiente. */
   temaActivo: "sistema" | "claro" | "oscuro";
+  /** Nueva vista de corte (pestaña Vista). */
+  nuevaVistaCorte: () => void;
 }
 
 /**
@@ -76,20 +89,20 @@ export function construirComandosRibbon(a: AccionesRibbon): ComandoRibbon[] {
       grupo: "Archivo",
       pestana: "principal",
       tamano: "grande",
-      habilitado: false,
-      descripcion: "Disponible pronto",
+      habilitado: true,
+      descripcion: "Crear un modelo IFC vacío",
       accion: a.nuevo,
     },
     {
       id: "abrir",
       texto: "Abrir",
-      icono: FolderPlus,
+      icono: FolderOpen,
       atajo: "Ctrl+O",
       grupo: "Archivo",
       pestana: "principal",
       tamano: "grande",
-      habilitado: false,
-      descripcion: "Disponible pronto",
+      habilitado: true,
+      descripcion: "Abrir un modelo IFC",
       accion: a.abrir,
     },
     {
@@ -100,9 +113,34 @@ export function construirComandosRibbon(a: AccionesRibbon): ComandoRibbon[] {
       grupo: "Archivo",
       pestana: "principal",
       tamano: "grande",
-      habilitado: false,
-      descripcion: "Disponible pronto",
+      habilitado: true,
+      descripcion: "Guardar el modelo",
       accion: a.guardar,
+    },
+    {
+      id: "guardar-como",
+      texto: "Guardar como",
+      icono: SaveAll,
+      atajo: "Ctrl+Shift+S",
+      grupo: "Archivo",
+      pestana: "principal",
+      tamano: "chico",
+      habilitado: true,
+      descripcion: "Guardar el modelo en otro archivo",
+      accion: a.guardarComo,
+    },
+
+    // ---------- Modelo / vistas ----------
+    {
+      id: "nuevo-corte",
+      texto: "Nueva vista de corte",
+      icono: Scissors,
+      grupo: "Modelo",
+      pestana: "vista",
+      tamano: "grande",
+      habilitado: true,
+      descripcion: "Dibuje una línea con dos clics en una planta",
+      accion: a.nuevaVistaCorte,
     },
 
     // ---------- Tema ----------

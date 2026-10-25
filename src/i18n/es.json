@@ -3,6 +3,9 @@
     "app": "OPEN-RVT",
     "obra": "Modelo",
     "noHayObra": "Sin modelo abierto",
+    "abrir-modelo": "Abrir modelo IFC",
+    "guardar-modelo": "Guardar modelo IFC",
+    "modelo-ifc": "Modelo IFC",
     "espanol": "Español",
     "ingles": "Inglés"
   },
@@ -36,12 +39,15 @@
     },
     "grupos": {
       "Archivo": "Archivo",
+      "Modelo": "Modelo",
       "Tema": "Tema"
     },
     "comandos": {
       "nuevo": "Nuevo",
       "abrir": "Abrir",
       "guardar": "Guardar",
+      "guardar-como": "Guardar como",
+      "nuevo-corte": "Nueva vista de corte",
       "tema-sistema": "Sistema",
       "tema-claro": "Claro",
       "tema-oscuro": "Oscuro",
@@ -51,9 +57,11 @@
       "pegar": "Pegar"
     },
     "descripciones": {
-      "nuevo": "Disponible pronto",
-      "abrir": "Disponible pronto",
-      "guardar": "Disponible pronto",
+      "nuevo": "Crear un modelo IFC vacío",
+      "abrir": "Abrir un modelo IFC",
+      "guardar": "Guardar el modelo",
+      "guardar-como": "Guardar el modelo en otro archivo",
+      "nuevo-corte": "Dibuje una línea con dos clics en una planta",
       "tema-sistema": "Seguir el tema del sistema",
       "tema-claro": "Tema claro",
       "tema-oscuro": "Tema oscuro"
@@ -65,7 +73,8 @@
     "minimizar": "Minimizar",
     "maximizar": "Maximizar",
     "restaurar": "Restaurar",
-    "cerrar": "Cerrar"
+    "cerrar": "Cerrar",
+    "cambios-sin-guardar": "Cambios sin guardar"
   },
   "barraEstado": {
     "barra": "Barra de estado"

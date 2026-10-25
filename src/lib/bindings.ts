@@ -69,4 +69,8 @@ export const commands = {
     envolver(invoke<void>("registrar_error_ui", { mensaje, detalle })),
   registrarErrorComando: (comando: string, mensaje: string) =>
     envolver(invoke<void>("registrar_error_comando", { comando, mensaje })),
+  // OPEN-RVT: único comando del núcleo IFC (spec O003a). La forma del valor lo define
+  // el método JSON-RPC; los tipos concretos viven en src/features/modelo/tipos.ts.
+  nucleoLlamar: (metodo: string, params: unknown) =>
+    envolver(invoke<unknown>("nucleo_llamar", { metodo, params })),
 };

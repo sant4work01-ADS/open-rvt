@@ -11,6 +11,8 @@ function montar(extra: Partial<Parameters<typeof construirComandosRibbon>[0]> = 
     nuevo: vi.fn(),
     abrir: vi.fn(),
     guardar: vi.fn(),
+    guardarComo: vi.fn(),
+    nuevaVistaCorte: vi.fn(),
     temaSistema: vi.fn(),
     temaClaro: vi.fn(),
     temaOscuro: vi.fn(),
@@ -31,16 +33,17 @@ describe("Ribbon", () => {
     expect(screen.getByRole("tab", { name: "Inicio" })).toHaveAttribute("aria-selected", "true");
   });
 
-  it("Inicio trae el grupo Archivo con Nuevo, Abrir y Guardar deshabilitados", () => {
+  it("Inicio trae el grupo Archivo con Nuevo, Abrir, Guardar y Guardar como", () => {
     montar();
     const panel = within(screen.getByRole("tabpanel", { name: "Pestaña Inicio" }));
     expect(panel.getByText("Archivo")).toBeInTheDocument();
     for (const nombre of [
-      /Nuevo \(Ctrl\+N\) — Disponible pronto/,
-      /Abrir \(Ctrl\+O\) — Disponible pronto/,
-      /Guardar \(Ctrl\+S\) — Disponible pronto/,
+      /Nuevo \(Ctrl\+N\) — Crear un modelo IFC vacío/,
+      /Abrir \(Ctrl\+O\) — Abrir un modelo IFC/,
+      /Guardar \(Ctrl\+S\) — Guardar el modelo/,
+      /Guardar como \(Ctrl\+Shift\+S\) — Guardar el modelo en otro archivo/,
     ]) {
-      expect(panel.getByRole("button", { name: nombre })).toBeDisabled();
+      expect(panel.getByRole("button", { name: nombre })).toBeEnabled();
     }
   });
 
@@ -69,6 +72,8 @@ describe("Ribbon", () => {
           nuevo: vi.fn(),
           abrir: vi.fn(),
           guardar: vi.fn(),
+          guardarComo: vi.fn(),
+          nuevaVistaCorte: vi.fn(),
           temaSistema: vi.fn(),
           temaClaro: vi.fn(),
           temaOscuro: vi.fn(),
