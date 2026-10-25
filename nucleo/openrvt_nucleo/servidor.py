@@ -250,16 +250,23 @@ class Servidor:
             return {
                 "jsonrpc": "2.0",
                 "id": identificador,
-                "error": {"code": exc.codigo, "message": exc.mensaje},
+                "error": {
+                    "code": exc.codigo,
+                    "message": exc.mensaje,
+                    # O006c: la interfaz muestra y exporta la traza completa.
+                    "data": {"traza": traceback.format_exc()},
+                },
             }
         except Exception as exc:  # el núcleo nunca se cae por un comando
-            LOG.error("fallo en %s:\n%s", metodo, traceback.format_exc())
+            traza = traceback.format_exc()
+            LOG.error("fallo en %s:\n%s", metodo, traza)
             return {
                 "jsonrpc": "2.0",
                 "id": identificador,
                 "error": {
                     "code": -32603,
                     "message": f"Error interno del núcleo IFC: {exc}",
+                    "data": {"traza": traza},
                 },
             }
 

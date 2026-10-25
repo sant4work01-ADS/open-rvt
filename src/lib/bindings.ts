@@ -21,6 +21,8 @@ export interface ErrorDatos {
   tipo: string;
   mensaje: string;
   codigo?: string;
+  /** O006c: traza de Python que devuelve el núcleo en los errores. */
+  traza?: string;
 }
 
 /** Conflicto al copiar elementos entre modelos (diálogo común copiado de PP). */
@@ -39,10 +41,30 @@ export type Resultado<T> =
 function envolver<T>(promesa: Promise<T>): Promise<Resultado<T>> {
   return promesa
     .then((data) => ({ status: "ok", data }) as Resultado<T>)
-    .catch((e: unknown) => ({
-      status: "error",
-      error: { tipo: "Io", mensaje: e instanceof Error ? e.message : String(e) },
-    }));
+    .catch((e: unknown) => ({ status: "error", error: normalizarError(e) }));
+}
+
+/**
+ * O006c: un error del puente llega como objeto `{mensaje, codigo, traza}`; si se
+ * convirtiera con `String(e)` se perdería el mensaje original («[object Object]»).
+ */
+export function normalizarError(e: unknown): ErrorDatos {
+  if (e && typeof e === "object") {
+    const datos = e as Record<string, unknown>;
+    if (typeof datos.mensaje === "string" && datos.mensaje) {
+      const error: ErrorDatos = { tipo: "Io", mensaje: datos.mensaje };
+      if (typeof datos.tipo === "string") error.tipo = datos.tipo;
+      if (datos.codigo !== undefined && datos.codigo !== null) {
+        error.codigo = String(datos.codigo);
+      }
+      if (typeof datos.traza === "string" && datos.traza) error.traza = datos.traza;
+      return error;
+    }
+    if (typeof datos.message === "string" && datos.message) {
+      return { tipo: "Io", mensaje: datos.message };
+    }
+  }
+  return { tipo: "Io", mensaje: e instanceof Error ? e.message : String(e) };
 }
 
 export const commands = {

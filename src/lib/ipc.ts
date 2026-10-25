@@ -2,7 +2,7 @@
 // desenvuelve `{status, data|error}`, el error tipado y `textoDeError`; se quitaron los
 // errores del motor de presupuesto y el progreso de OPUS, que no existen aquí.
 import { tr } from "@/i18n";
-import { commands, type ErrorDatos } from "./bindings";
+import { commands, normalizarError, type ErrorDatos } from "./bindings";
 
 export type { ErrorDatos };
 
@@ -16,6 +16,8 @@ const CODIGO_POR_TIPO: Record<string, string> = {
   NoEncontrado: "no_encontrado",
 };
 
+const CODIGOS_CON_TEXTO = new Set(Object.values(CODIGO_POR_TIPO));
+
 export class ErrorIpc extends Error {
   readonly detalle: DetalleError;
   constructor(detalle: DetalleError) {
@@ -25,10 +27,15 @@ export class ErrorIpc extends Error {
   }
 }
 
+/**
+ * Texto de un error para el usuario. O006c: el mensaje original nunca se pierde; solo
+ * se le añade el prefijo traducido cuando el código es uno de los conocidos.
+ */
 export function mensajeDeError(e: DetalleError): string {
   const codigo = e.codigo ?? CODIGO_POR_TIPO[e.tipo];
-  if (!codigo) return e.mensaje;
-  return tr(`errores.${codigo}`, e.mensaje, { mensaje: e.mensaje });
+  if (!codigo || !CODIGOS_CON_TEXTO.has(codigo)) return e.mensaje;
+  const texto = tr(`errores.${codigo}`, e.mensaje, { mensaje: e.mensaje });
+  return texto.includes(e.mensaje) ? texto : `${texto}: ${e.mensaje}`;
 }
 
 type Comandos = typeof commands;
@@ -55,13 +62,7 @@ function construir(): Ipc {
       try {
         return desenvolver(await (fn as (...a: unknown[]) => Promise<unknown>)(...args));
       } catch (e) {
-        const error =
-          e instanceof ErrorIpc
-            ? e
-            : new ErrorIpc({
-                tipo: "Io",
-                mensaje: e instanceof Error ? e.message : String(e),
-              });
+        const error = e instanceof ErrorIpc ? e : new ErrorIpc(normalizarError(e));
         // Los errores de la interfaz quedan en el log de la app. El propio registrador no
         // se registra para no hacer recursión.
         if (nombre !== "registrarErrorComando" && nombre !== "registrarErrorUi") {

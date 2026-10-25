@@ -245,12 +245,12 @@ fn nucleo_llamar(
     estado: State<'_, EstadoNucleo>,
     metodo: String,
     params: serde_json::Value,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, nucleo::ErrorNucleo> {
     let resultado = estado.0.llamar(&metodo, params);
     for aviso in estado.0.tomar_avisos() {
         let _ = app.emit("nucleo-aviso", aviso);
     }
-    resultado.map_err(|e| e.to_string())
+    resultado
 }
 
 pub fn run() {

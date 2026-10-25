@@ -18,22 +18,41 @@ use std::time::Duration;
 pub const TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_LINEAS_ERROR: usize = 6;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ErrorNucleo {
     pub mensaje: String,
+    /// Código JSON-RPC cuando el error viene del núcleo.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub codigo: Option<i64>,
+    /// Traza de Python (`traceback.format_exc()`), si el núcleo la envió.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub traza: Option<String>,
 }
 
 impl ErrorNucleo {
     fn nuevo(mensaje: impl Into<String>) -> Self {
         Self {
             mensaje: mensaje.into(),
+            codigo: None,
+            traza: None,
+        }
+    }
+
+    fn del_nucleo(mensaje: impl Into<String>, codigo: Option<i64>, traza: Option<String>) -> Self {
+        Self {
+            mensaje: mensaje.into(),
+            codigo,
+            traza,
         }
     }
 }
 
 impl std::fmt::Display for ErrorNucleo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.mensaje)
+        match self.codigo {
+            Some(codigo) => write!(f, "{} (código {codigo})", self.mensaje),
+            None => f.write_str(&self.mensaje),
+        }
     }
 }
 
@@ -369,10 +388,14 @@ impl Nucleo {
                 .and_then(Value::as_str)
                 .unwrap_or("error desconocido del núcleo IFC");
             let codigo = error.get("code").and_then(Value::as_i64);
-            return Err(ErrorNucleo::nuevo(match codigo {
-                Some(codigo) => format!("{mensaje} (código {codigo})"),
-                None => mensaje.to_string(),
-            }));
+            // O006c: se conserva la traza de Python hasta la interfaz.
+            let traza = error
+                .get("data")
+                .and_then(|datos| datos.get("traza"))
+                .or_else(|| error.get("traza"))
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            return Err(ErrorNucleo::del_nucleo(mensaje, codigo, traza));
         }
         Ok(respuesta.get("result").cloned().unwrap_or(Value::Null))
     }
@@ -604,6 +627,36 @@ for linea in sys.stdin:
         let error = nucleo.llamar("no.existe", json!({})).unwrap_err();
         assert!(error.to_string().contains("Método desconocido"));
         assert!(error.to_string().contains("-32601"));
+    }
+
+    #[test]
+    fn un_error_jsonrpc_conserva_codigo_y_traza() {
+        let ruta = script(
+            "error-traza.py",
+            r#"
+import json, sys
+for linea in sys.stdin:
+    peticion = json.loads(linea)
+    print(json.dumps({"jsonrpc": "2.0", "id": peticion["id"], "error": {
+        "code": -32027, "message": "Los ejes deben ser paralelos.",
+        "data": {"traza": "Traceback (most recent call last):\nValueError: no paralelos"}}}), flush=True)
+"#,
+        );
+        let nucleo = Nucleo::de_prueba(
+            "python3",
+            vec![ruta.into_os_string()],
+            Duration::from_secs(5),
+        );
+        let error = nucleo.llamar("ejes.separacion", json!({})).unwrap_err();
+        assert_eq!(error.mensaje, "Los ejes deben ser paralelos.");
+        assert_eq!(error.codigo, Some(-32027));
+        let traza = error.traza.as_deref().unwrap();
+        assert!(traza.contains("Traceback (most recent call last)"));
+        assert!(traza.contains("ValueError: no paralelos"));
+        let json = serde_json::to_value(&error).unwrap();
+        assert_eq!(json["mensaje"], "Los ejes deben ser paralelos.");
+        assert_eq!(json["codigo"], -32027);
+        assert!(json["traza"].as_str().unwrap().contains("ValueError"));
     }
 
     #[test]
