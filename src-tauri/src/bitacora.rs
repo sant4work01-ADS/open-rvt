@@ -382,7 +382,7 @@ mod tests {
         let bitacora = Bitacora::de_prueba(dir.clone(), "20260101_000000_04");
         bitacora
             .agregar(&[json!({
-                "tipo": "inicio", "version": "0.5.0", "so": "linux",
+                "tipo": "inicio", "version": "0.5.1", "so": "linux",
                 "arquitectura": "x86_64", "python": "3.12", "ifcopenshell": "0.9",
                 "idioma": "es", "pantalla": "1600x900"})])
             .unwrap();

@@ -120,6 +120,43 @@ describe("texto de las cotas", () => {
   });
 });
 
+describe("O006d: cota del rebase", () => {
+  const verticales = [
+    eje("1", 0, -1.5, 0, 9.5),
+    eje("2", 5, -1.5, 5, 9.5),
+    eje("3", 9.5, -1.5, 9.5, 9.5),
+    eje("4", 14.5, -1.5, 14.5, 9.5),
+  ];
+  const horizontales = [
+    eje("A", -1.5, 0, 16, 0),
+    eje("B", -1.5, 4, 16, 4),
+    eje("C", -1.5, 8, 16, 8),
+  ];
+
+  it("mide desde el eje opuesto extremo hasta la punta y es editable", () => {
+    const familias = calcularFamiliasCotas([...verticales, ...horizontales], {
+      modo: "rebase",
+      rebase: 1.5,
+    });
+    const v = familias.find((f) => f.ejes[0].vertical)!;
+    const h = familias.find((f) => !f.ejes[0].vertical)!;
+    expect(v.rebase).not.toBeNull();
+    expect(v.rebase!.valor).toBeCloseTo(1.5, 6);
+    expect(v.rebase!.desde).toBeCloseTo(8, 6);
+    expect(v.rebase!.hasta).toBeCloseTo(9.5, 6);
+    expect(cotaEditable(v.rebase!)).toBe(true);
+    expect(h.rebase!.valor).toBeCloseTo(1.5, 6);
+  });
+
+  it("en modo origen no se dibuja la cota del rebase", () => {
+    const familias = calcularFamiliasCotas([...verticales, ...horizontales], {
+      modo: "origen",
+      rebase: 1.5,
+    });
+    expect(familias.every((f) => f.rebase === null)).toBe(true);
+  });
+});
+
 describe("casilla «Mover los siguientes»", () => {
   it("viene marcada y recuerda la elección durante la sesión", () => {
     fijarMoverSiguientesCotas(true);

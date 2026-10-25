@@ -4,13 +4,13 @@
 import type { EjeReferencia } from "./herramientas";
 
 export interface CotaLinea {
-  tipo: "parcial" | "total";
+  tipo: "parcial" | "total" | "rebase";
   /** Eje de referencia (izquierda o inferior). */
   referencia: string;
   /** Eje que se movería al editar (derecha o superior). */
   mover: string;
   valor: number;
-  /** Solo las parciales se editan; la total es de lectura. */
+  /** Solo las parciales y el rebase se editan; la total es de lectura. */
   editable: boolean;
   /** Proyecciones sobre la normal de la familia (m). */
   desde: number;
@@ -28,6 +28,10 @@ export interface FamiliaCotas {
   ejes: EjeReferencia[];
   parciales: CotaLinea[];
   total: CotaLinea | null;
+  /** O006d: cota del rebase desde el eje opuesto extremo hasta la punta. */
+  rebase: CotaLinea | null;
+  /** O006d: familia perpendicular con la que se mide el rebase. */
+  opuesta: boolean;
 }
 
 const TOLERANCIA_PARALELO = 1e-6;
@@ -64,7 +68,10 @@ function cota(
  * total de cada familia. Con un solo eje no hay cotas; con un único tramo parcial
  * tampoco hay total (repetiría la parcial).
  */
-export function calcularFamiliasCotas(ejes: EjeReferencia[]): FamiliaCotas[] {
+export function calcularFamiliasCotas(
+  ejes: EjeReferencia[],
+  reticula?: { modo: "origen" | "rebase"; rebase: number },
+): FamiliaCotas[] {
   const familias: Array<{ direccion: [number, number]; ejes: EjeReferencia[] }> = [];
   for (const eje of ejes) {
     const dx = eje.x2 - eje.x1;
@@ -114,6 +121,33 @@ export function calcularFamiliasCotas(ejes: EjeReferencia[]): FamiliaCotas[] {
             proyeccion(ordenados[ordenados.length - 1], normal),
           )
         : null;
+    // O006d: el rebase se mide desde el eje opuesto más extremo hasta la punta.
+    let rebase: CotaLinea | null = null;
+    let opuesta = false;
+    const contraria = familias.find(
+      (f) => Math.abs(f.direccion[0] * familia.direccion[1] - f.direccion[1] * familia.direccion[0]) > 0.5,
+    );
+    if (reticula?.modo === "rebase" && contraria) {
+      opuesta = true;
+      const proyeccionDirFin = (eje: EjeReferencia) =>
+        eje.x2 * familia.direccion[0] + eje.y2 * familia.direccion[1];
+      const desde = Math.max(...contraria.ejes.map(proyeccionDirFin));
+      const hasta = Math.max(...familia.ejes.map(proyeccionDirFin));
+      if (hasta - desde > 1e-6) {
+        const referencia = contraria.ejes.reduce((a, b) =>
+          proyeccionDirFin(a) >= proyeccionDirFin(b) ? a : b,
+        );
+        rebase = {
+          tipo: "rebase",
+          referencia: referencia.globalid,
+          mover: referencia.globalid,
+          valor: hasta - desde,
+          editable: true,
+          desde,
+          hasta,
+        };
+      }
+    }
     return {
       direccion: familia.direccion,
       normal,
@@ -121,6 +155,8 @@ export function calcularFamiliasCotas(ejes: EjeReferencia[]): FamiliaCotas[] {
       ejes: ordenados,
       parciales,
       total,
+      rebase,
+      opuesta,
     };
   });
 }
@@ -153,7 +189,7 @@ export function parsearCota(texto: string): number | null {
 
 /** La cota total solo se lee; nunca se edita. */
 export function cotaEditable(cota: CotaLinea): boolean {
-  return cota.tipo === "parcial" && cota.editable;
+  return (cota.tipo === "parcial" || cota.tipo === "rebase") && cota.editable;
 }
 
 /**

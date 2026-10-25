@@ -16,6 +16,18 @@ mismo aspecto que en PresupuestosPro.
 Los comandos **Nuevo**, **Abrir** y **Guardar** de la pestaña Inicio aparecen
 deshabilitados con la descripción «Disponible pronto»: todavía no hay archivo que abrir.
 
+### Navegación del visor
+
+- **Rueda del ratón**: zoom hacia el cursor. En el touchpad, el **pellizco** (Ctrl +
+  rueda) también hace zoom.
+- **Dos dedos del touchpad**: paneo. Con `Shift` + rueda se panea en horizontal.
+- **Botón medio** o **Espacio + arrastrar**: mover la vista.
+- **F**, doble clic con el botón medio o el botón **Ajustar**: encuadrar la vista.
+- **+** y **−**: acercar y alejar.
+- La ayuda discreta de abajo a la derecha del visor se puede cerrar y no vuelve a
+  aparecer. En **Configuración → Apariencia** se elige «Rueda/touchpad: zoom o paneo»:
+  Automático detecta ratón o touchpad; Zoom y Paneo lo fuerzan.
+
 ### Atajos
 
 | Atajo | Acción |
