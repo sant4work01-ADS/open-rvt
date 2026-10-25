@@ -15,6 +15,7 @@ import {
   type Vista,
 } from "./tipos";
 import type { EstiloCategoriaVista } from "./estilos";
+import type { EjeReferencia } from "./herramientas";
 
 export type Vector3 = [number, number, number];
 
@@ -228,8 +229,29 @@ export function cajaDeMallas(mallas: ElementoMalla[]): Caja {
   return { min, max };
 }
 
-/** Crea las vistas que la aplicación muestra al abrir un modelo. */
-export function crearVistas(niveles: Nivel[]): Vista[] {
+/**
+ * O005c: caja de encuadre que incluye los ejes. Sin esto, en un modelo recién creado
+ * la cámara sigue encuadrando el cubo vacío y las burbujas quedan fuera de la planta.
+ */
+export function cajaConEjes(caja: Caja, ejes: EjeReferencia[]): Caja {
+  if (ejes.length === 0) return caja;
+  const min: Vector3 = [...caja.min];
+  const max: Vector3 = [...caja.max];
+  for (const eje of ejes) {
+    min[0] = Math.min(min[0], eje.x1, eje.x2);
+    min[1] = Math.min(min[1], eje.y1, eje.y2);
+    max[0] = Math.max(max[0], eje.x1, eje.x2);
+    max[1] = Math.max(max[1], eje.y1, eje.y2);
+  }
+  // Margen para las burbujas y sus etiquetas.
+  const margen = Math.max(0.6, (max[0] - min[0] + max[1] - min[1]) * 0.04);
+  return {
+    min: [min[0] - margen, min[1] - margen, min[2]],
+    max: [max[0] + margen, max[1] + margen, max[2]],
+  };
+}
+
+/** Crea las vistas que la aplicación muestra al abrir un modelo. */export function crearVistas(niveles: Nivel[]): Vista[] {
   const categorias = CATEGORIAS_TODAS();
   const idsNiveles = niveles.map((n) => n.globalid);
   const vistas: Vista[] = [];

@@ -175,6 +175,22 @@ export function puntoConLongitud(
   ];
 }
 
+/**
+ * O005c: siguiente etiqueta libre de eje, igual que el núcleo. Los ejes verticales
+ * llevan números (1, 2, 3…) y los horizontales letras (A, B, C…).
+ */
+export function siguienteEtiquetaEje(ejes: EjeReferencia[], vertical: boolean): string {
+  const usadas = new Set(ejes.map((eje) => eje.etiqueta.trim().toLowerCase()));
+  if (vertical) {
+    let numero = 1;
+    while (usadas.has(String(numero))) numero += 1;
+    return String(numero);
+  }
+  let indice = 0;
+  while (usadas.has(String.fromCharCode(65 + indice).toLowerCase())) indice += 1;
+  return String.fromCharCode(65 + indice);
+}
+
 /** Muro más cercano a un punto (para colocar puertas y ventanas). */
 export function muroBajoPunto(
   refs: Referencias,

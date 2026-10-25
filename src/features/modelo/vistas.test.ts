@@ -3,6 +3,7 @@ import type { Caja, ElementoMalla, Nivel } from "./tipos";
 import {
   camaraOrtografica,
   camaraPerspectiva,
+  cajaConEjes,
   cajaDeMallas,
   crearVistaCorte,
   crearVistas,
@@ -311,5 +312,29 @@ describe("sobrescritura de estilos por vista (O005)", () => {
     const leidas = leerVistas(serializarVistas([planta]));
     expect(leidas[0].estilos).toEqual(planta.estilos);
     expect(leidas[0].alturaArriba).toBe(4.5);
+  });
+});
+
+describe("O005c: encuadre con ejes", () => {
+  it("amplía la caja vacía para que quepan los ejes y sus burbujas", () => {
+    const caja = cajaConEjes(
+      { min: [-1, -1, -1], max: [1, 1, 1] },
+      [
+        { globalid: "1", etiqueta: "1", x1: 0, y1: 0, x2: 0, y2: 6, vertical: true },
+        { globalid: "A", etiqueta: "A", x1: 0, y1: 3, x2: 6, y2: 3, vertical: false },
+      ],
+    );
+    expect(caja.min[0]).toBeLessThanOrEqual(-0.6);
+    expect(caja.min[1]).toBeLessThanOrEqual(-0.6);
+    expect(caja.max[0]).toBeGreaterThanOrEqual(6.6);
+    expect(caja.max[1]).toBeGreaterThanOrEqual(6.6);
+    // El eje Z (altura del modelo) no cambia.
+    expect(caja.min[2]).toBe(-1);
+    expect(caja.max[2]).toBe(1);
+  });
+
+  it("sin ejes devuelve la misma caja", () => {
+    const caja = { min: [-1, -2, -3] as [number, number, number], max: [4, 5, 6] as [number, number, number] };
+    expect(cajaConEjes(caja, [])).toBe(caja);
   });
 });

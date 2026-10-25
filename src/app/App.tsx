@@ -15,6 +15,10 @@ import { NivelesView } from "@/features/modelo/NivelesView";
 import { useModelo } from "@/features/modelo/estado";
 import { Ribbon } from "@/features/ribbon/Ribbon";
 import { construirComandosRibbon } from "@/features/ribbon/comandos";
+import {
+  DialogoActualizacion,
+  useComprobacionAutomatica,
+} from "@/features/actualizaciones/Actualizaciones";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { PaletaComandos, type Comando } from "./PaletaComandos";
@@ -50,6 +54,8 @@ export function App() {
   const permitirCierre = useRef(false);
   const modulo = MODULOS().find((m) => m.id === activo) ?? MODULOS()[0];
   const nombreModulo = t(`modulos.${modulo.id}`, modulo.nombre);
+  // O005c: comprobación automática no intrusiva de actualizaciones.
+  useComprobacionAutomatica();
 
   // La cinta minimizada se recuerda entre sesiones (preferencia local del equipo).
   useEffect(() => {
@@ -168,8 +174,12 @@ export function App() {
             )));
       const estado = useModelo.getState();
       if (e.key === "Escape") {
-        if (estado.herramienta) {
-          estado.cancelarHerramienta();
+        if (estado.modoCorte) {
+          estado.cancelarCorte();
+          e.preventDefault();
+        } else if (estado.herramienta) {
+          // O005c: el primer Esc cancela el trazo en curso; el segundo sale de la herramienta.
+          if (!estado.cancelarTrazo()) estado.cancelarHerramienta();
           e.preventDefault();
         } else if (estado.seleccionados.length > 0) {
           void estado.seleccionar(null);
@@ -200,7 +210,12 @@ export function App() {
         estado.voltearAbertura();
         return;
       }
-      if (estado.herramienta === "muro" && estado.puntosHerramienta.length > 0) {
+      if (
+        estado.herramienta &&
+        estado.herramienta !== "puerta" &&
+        estado.herramienta !== "ventana" &&
+        estado.puntosHerramienta.length > 0
+      ) {
         if (e.key === "Enter") {
           e.preventDefault();
           void estado.confirmarLongitud(e.shiftKey);
@@ -385,6 +400,7 @@ export function App() {
 
       {paleta && <PaletaComandos comandos={comandos} onCerrar={() => setPaleta(false)} />}
       {atajos && <DialogoAtajos onCerrar={() => setAtajos(false)} />}
+      <DialogoActualizacion />
       <DialogoGuardarCambios />
     </div>
   );

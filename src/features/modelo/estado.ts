@@ -30,6 +30,7 @@ import {
   puntoConLongitud,
   puntoDibujo,
   REFERENCIAS_VACIAS,
+  siguienteEtiquetaEje,
   type Enganche,
   type Punto2,
   type Referencias,
@@ -111,6 +112,8 @@ interface EstadoModelo {
   etiquetaEje: string;
   activarHerramienta: (herramienta: Herramienta) => void;
   cancelarHerramienta: () => void;
+  /** O005c: Esc cancela el trazo en curso; devuelve false si no había nada que cancelar. */
+  cancelarTrazo: () => boolean;
   fijarOpcionesMuro: (cambios: Partial<OpcionesMuro>) => void;
   fijarEtiquetaEje: (etiqueta: string) => void;
   fijarRatonHerramienta: (punto: Punto2 | null, shift?: boolean) => void;
@@ -391,6 +394,85 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     }
   };
 
+  const nivelActivo = () => {
+    const vista = get().vistas.find((v) => v.id === get().vistaActivaId);
+    return vista?.nivel ?? get().niveles[0]?.globalid;
+  };
+
+  const crearMuroEntre = async (origen: Punto2, destino: Punto2): Promise<boolean> => {
+    if (Math.hypot(destino[0] - origen[0], destino[1] - origen[1]) < 0.01) return false;
+    const nivel = nivelActivo();
+    if (!nivel) {
+      set({ aviso: "Cree antes un nivel." });
+      return false;
+    }
+    const opciones = get().opcionesMuro;
+    const ok = await ejecutar("muros.crear", {
+      tipo: opciones.tipo,
+      nivel,
+      x1: origen[0],
+      y1: origen[1],
+      x2: destino[0],
+      y2: destino[1],
+      altura: opciones.altura,
+      alineacion: opciones.alineacion,
+    });
+    if (ok) set({ puntosHerramienta: [destino], ...limpiarTrazoExtra() });
+    return ok;
+  };
+
+  const limpiarTrazoExtra = () => ({
+    longitudTecleada: "",
+    ratonHerramienta: null,
+    engancheHerramienta: null,
+  });
+
+  const crearEjeEntre = async (origen: Punto2, destino: Punto2): Promise<boolean> => {
+    if (Math.hypot(destino[0] - origen[0], destino[1] - origen[1]) < 0.01) {
+      set({ aviso: "El eje necesita dos puntos distintos." });
+      return false;
+    }
+    const vertical = Math.abs(destino[0] - origen[0]) < Math.abs(destino[1] - origen[1]);
+    // La etiqueta depende de la orientación del eje (números o letras), no de la
+    // etiqueta que se mostrara para el eje anterior.
+    const etiqueta = siguienteEtiquetaEje(get().referencias.ejes, vertical);
+    const ok = await ejecutar("ejes.crear", {
+      etiqueta,
+      x1: origen[0],
+      y1: origen[1],
+      x2: destino[0],
+      y2: destino[1],
+    });
+    if (ok) {
+      const siguiente = siguienteEtiquetaEje(get().referencias.ejes, vertical);
+      set({
+        puntosHerramienta: [],
+        etiquetaEje: siguiente,
+        ...limpiarTrazoExtra(),
+        aviso: `Eje «${etiqueta}» creado. Siguiente: ${siguiente}.`,
+      });
+    }
+    return ok;
+  };
+
+  const moverSeleccion = async (origen: Punto2, destino: Punto2): Promise<boolean> => {
+    const herramienta = get().herramienta;
+    if (herramienta !== "mover" && herramienta !== "copiar") return false;
+    if (get().seleccionados.length === 0) {
+      set({ aviso: "Seleccione uno o varios elementos antes de mover o copiar." });
+      return false;
+    }
+    const metodo = herramienta === "mover" ? "elementos.mover" : "elementos.copiar";
+    const ok = await ejecutar(metodo, {
+      globalids: get().seleccionados,
+      dx: destino[0] - origen[0],
+      dy: destino[1] - origen[1],
+      dz: 0,
+    });
+    if (ok) set({ puntosHerramienta: [], ...limpiarTrazoExtra() });
+    return ok;
+  };
+
   return {
     ruta: null,
     nombreArchivo: "",
@@ -652,8 +734,32 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         ratonHerramienta: null,
         engancheHerramienta: null,
         longitudTecleada: "",
+        etiquetaEje: "",
         aviso: null,
       }),
+
+    cancelarTrazo: () => {
+      const herramienta = get().herramienta;
+      if (!herramienta) return false;
+      if (get().puntosHerramienta.length === 0 && !get().longitudTecleada) return false;
+      const nombres: Record<Herramienta, string> = {
+        muro: "Muro: primer punto en la planta.",
+        losa: "Losa: clic por vértice y doble clic para cerrar.",
+        puerta: "Puerta: clic sobre un muro. Espacio voltea el lado.",
+        ventana: "Ventana: clic sobre un muro. Espacio voltea el lado.",
+        eje: "Eje: dos clics. La etiqueta se asigna sola.",
+        mover: "Mover: punto base y punto destino.",
+        copiar: "Copiar: punto base y punto destino.",
+      };
+      set({
+        puntosHerramienta: [],
+        ratonHerramienta: null,
+        engancheHerramienta: null,
+        longitudTecleada: "",
+        aviso: nombres[herramienta],
+      });
+      return true;
+    },
 
     fijarOpcionesMuro: (cambios) =>
       set({ opcionesMuro: { ...get().opcionesMuro, ...cambios } }),
@@ -681,7 +787,9 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     },
 
     teclearLongitud: (tecla) => {
-      if (get().herramienta !== "muro") return;
+      const herramienta = get().herramienta;
+      if (!herramienta || herramienta === "puerta" || herramienta === "ventana") return;
+      if (get().puntosHerramienta.length === 0) return;
       if (tecla === "Backspace") {
         set({ longitudTecleada: get().longitudTecleada.slice(0, -1) });
         return;
@@ -698,33 +806,35 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     },
 
     confirmarLongitud: async (shift = false) => {
+      const herramienta = get().herramienta;
+      const puntos = get().puntosHerramienta;
+      if (!herramienta || puntos.length === 0) return;
+      if (herramienta === "losa") {
+        await get().dobleClicEnPlanta();
+        return;
+      }
       const texto = get().longitudTecleada.replace(",", ".");
       const longitud = Number(texto);
-      const puntos = get().puntosHerramienta;
-      if (!Number.isFinite(longitud) || longitud <= 0 || puntos.length === 0) return;
+      const tieneLongitud = texto !== "" && Number.isFinite(longitud) && longitud > 0;
+      // Enter sin longitud termina en el punto del cursor; en Muro se conserva el
+      // comportamiento de O003b (solo la longitud tecleada cierra el tramo).
+      if (!tieneLongitud && herramienta === "muro") return;
       const origen = puntos[puntos.length - 1];
-      const raton = get().ratonHerramienta ?? [origen[0] + 1, origen[1]];
-      const destino = puntoConLongitud(origen, raton, longitud, shift);
-      const vista = get().vistas.find((v) => v.id === get().vistaActivaId);
-      const nivel = vista?.nivel ?? get().niveles[0]?.globalid;
-      const opciones = get().opcionesMuro;
-      const ok = await ejecutar("muros.crear", {
-        tipo: opciones.tipo,
-        nivel,
-        x1: origen[0],
-        y1: origen[1],
-        x2: destino[0],
-        y2: destino[1],
-        altura: opciones.altura,
-        alineacion: opciones.alineacion,
-      });
-      if (ok) {
-        set({
-          puntosHerramienta: [destino],
-          longitudTecleada: "",
-          ratonHerramienta: null,
-          engancheHerramienta: null,
-        });
+      const raton = get().ratonHerramienta ?? (puntos.length > 1 ? puntos[puntos.length - 1] : null);
+      if (!tieneLongitud && !raton) return;
+      const destino = tieneLongitud
+        ? puntoConLongitud(origen, raton ?? origen, longitud, shift)
+        : (raton as Punto2);
+      if (herramienta === "muro") {
+        await crearMuroEntre(origen, destino);
+        return;
+      }
+      if (herramienta === "eje") {
+        await crearEjeEntre(puntos[0], destino);
+        return;
+      }
+      if (herramienta === "mover" || herramienta === "copiar") {
+        await moverSeleccion(puntos[0], destino);
       }
     },
 
@@ -755,27 +865,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
           set({ puntosHerramienta: [p], aviso: "Muro: segundo punto o longitud y Enter." });
           return;
         }
-        const origen = puntos[puntos.length - 1];
-        if (Math.hypot(p[0] - origen[0], p[1] - origen[1]) < 0.01) return;
-        const opciones = get().opcionesMuro;
-        const ok = await ejecutar("muros.crear", {
-          tipo: opciones.tipo,
-          nivel,
-          x1: origen[0],
-          y1: origen[1],
-          x2: p[0],
-          y2: p[1],
-          altura: opciones.altura,
-          alineacion: opciones.alineacion,
-        });
-        if (ok) {
-          set({
-            puntosHerramienta: [p],
-            longitudTecleada: "",
-            ratonHerramienta: null,
-            engancheHerramienta: null,
-          });
-        }
+        await crearMuroEntre(puntos[puntos.length - 1], p);
         return;
       }
       if (herramienta === "losa") {
@@ -793,25 +883,10 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       }
       if (herramienta === "eje") {
         if (puntos.length === 0) {
-          set({ puntosHerramienta: [p], aviso: "Eje: segundo punto." });
+          set({ puntosHerramienta: [p], aviso: "Eje: segundo punto, longitud y Enter, o doble clic." });
           return;
         }
-        const origen = puntos[0];
-        const ok = await ejecutar("ejes.crear", {
-          etiqueta: get().etiquetaEje,
-          x1: origen[0],
-          y1: origen[1],
-          x2: p[0],
-          y2: p[1],
-        });
-        if (ok) {
-          set({
-            puntosHerramienta: [],
-            etiquetaEje: "",
-            ratonHerramienta: null,
-            engancheHerramienta: null,
-          });
-        }
+        await crearEjeEntre(puntos[0], p);
         return;
       }
       if (herramienta === "puerta" || herramienta === "ventana") {
@@ -843,17 +918,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
           set({ puntosHerramienta: [p], aviso: "Indique el punto destino." });
           return;
         }
-        const origen = puntos[0];
-        const metodo = herramienta === "mover" ? "elementos.mover" : "elementos.copiar";
-        const ok = await ejecutar(metodo, {
-          globalids: get().seleccionados,
-          dx: p[0] - origen[0],
-          dy: p[1] - origen[1],
-          dz: 0,
-        });
-        if (ok) {
-          set({ puntosHerramienta: [], ratonHerramienta: null, engancheHerramienta: null });
-        }
+        await moverSeleccion(puntos[0], p);
         return;
       }
       void agregar;
@@ -869,6 +934,21 @@ export const useModelo = create<EstadoModelo>((set, get) => {
           engancheHerramienta: null,
           aviso: "Cadena de muros terminada.",
         });
+        return;
+      }
+      if (herramienta === "eje") {
+        const puntos = get().puntosHerramienta;
+        if (puntos.length === 0) return;
+        const destino = get().ratonHerramienta;
+        if (!destino) return;
+        await crearEjeEntre(puntos[0], destino);
+        return;
+      }
+      if (herramienta === "mover" || herramienta === "copiar") {
+        const puntos = get().puntosHerramienta;
+        const destino = get().ratonHerramienta;
+        if (puntos.length === 0 || !destino) return;
+        await moverSeleccion(puntos[0], destino);
         return;
       }
       if (herramienta !== "losa") return;

@@ -14,6 +14,7 @@ export function BarraHerramienta() {
   const cancelar = useModelo((s) => s.cancelarHerramienta);
   const doble = useModelo((s) => s.dobleClicEnPlanta);
   const losaDesdeMuros = useModelo((s) => s.losaDesdeMuros);
+  const etiquetaEje = useModelo((s) => s.etiquetaEje);
   if (!herramienta) return null;
   return (
     <div
@@ -111,6 +112,20 @@ export function BarraHerramienta() {
             : longitud
               ? `Longitud: ${longitud} m · Enter`
               : "Segundo punto o escriba la longitud"}
+        </span>
+      )}
+      {herramienta === "eje" && (
+        <span className="text-muted-foreground" data-testid="eje-etiqueta">
+          {puntos.length === 0
+            ? `Siguiente etiqueta: ${etiquetaEje || "1 / A"}`
+            : longitud
+              ? `Longitud: ${longitud} m · Enter`
+              : "Segundo punto, longitud y Enter, o doble clic"}
+        </span>
+      )}
+      {herramienta === "losa" && puntos.length > 0 && (
+        <span className="text-muted-foreground">
+          {longitud ? `Longitud: ${longitud} m · Enter cierra` : "Doble clic o Enter para cerrar"}
         </span>
       )}
       <button

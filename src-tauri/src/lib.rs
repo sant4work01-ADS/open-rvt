@@ -20,6 +20,63 @@ fn version_app() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+/// O005c: los E2E y el desarrollo arrancan con OPENRVT_SIN_ACTUALIZACIONES=1.
+#[tauri::command]
+fn actualizaciones_deshabilitadas() -> bool {
+    std::env::var("OPENRVT_SIN_ACTUALIZACIONES")
+        .map(|v| v == "1")
+        .unwrap_or(false)
+}
+
+/// O005c: abre en el navegador el enlace de descarga (Linux no instala .deb solo).
+#[tauri::command]
+fn abrir_enlace(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
+/// O005c: última versión publicada, consultada desde Rust para evitar CORS en Linux.
+#[derive(serde::Serialize)]
+struct UltimaVersion {
+    version: String,
+    fecha: Option<String>,
+    notas: Option<String>,
+}
+
+#[tauri::command]
+async fn ultima_version() -> Result<Option<UltimaVersion>, String> {
+    const URL: &str =
+        "https://gitea.spm.lat/sant4/openrvt-actualizaciones/raw/branch/main/latest.json";
+    let cliente = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let respuesta = cliente.get(URL).send().await.map_err(|e| e.to_string())?;
+    if respuesta.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
+    if !respuesta.status().is_success() {
+        return Err(format!("HTTP {}", respuesta.status()));
+    }
+    let datos: serde_json::Value = respuesta.json().await.map_err(|e| e.to_string())?;
+    let Some(version) = datos.get("version").and_then(|v| v.as_str()) else {
+        return Ok(None);
+    };
+    Ok(Some(UltimaVersion {
+        version: version.to_string(),
+        fecha: datos
+            .get("pub_date")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        notas: datos
+            .get("notes")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+    }))
+}
+
 /// Preferencias actuales (ya cargadas al arrancar).
 #[tauri::command]
 fn obtener_config(estado: State<'_, EstadoApp>) -> Config {
@@ -211,10 +268,15 @@ pub fn run() {
         )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(EstadoApp::default())
         .manage(EstadoNucleo::default())
         .invoke_handler(tauri::generate_handler![
             version_app,
+            actualizaciones_deshabilitadas,
+            abrir_enlace,
+            ultima_version,
             obtener_config,
             migrar_tema_local,
             guardar_tema,
@@ -335,9 +397,11 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("openrvt-config-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let ruta = dir.join("config.json");
-        let mut c = Config::default();
-        c.tema = "oscuro".into();
-        c.escala_ui = 130;
+        let c = Config {
+            tema: "oscuro".into(),
+            escala_ui: 130,
+            ..Config::default()
+        };
         guardar_config(&ruta, &c).unwrap();
         let leido = leer_config(&ruta);
         assert_eq!(leido.tema, "oscuro");

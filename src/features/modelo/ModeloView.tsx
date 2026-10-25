@@ -106,8 +106,9 @@ export function ModeloView() {
               onEscape={() => {
                 const estado = useModelo.getState();
                 if (estado.modoCorte) estado.cancelarCorte();
-                else if (estado.herramienta) estado.cancelarHerramienta();
-                else void estado.seleccionar(null);
+                else if (estado.herramienta) {
+                  if (!estado.cancelarTrazo()) estado.cancelarHerramienta();
+                } else void estado.seleccionar(null);
               }}
             />
           ) : (

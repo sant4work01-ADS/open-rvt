@@ -37,6 +37,7 @@ import {
 } from "./seccion";
 import {
   ajustarAspecto,
+  cajaConEjes,
   camaraOrtografica,
   camaraPerspectiva,
   centroCaja,
@@ -225,6 +226,76 @@ function lineaCerrada(
 
 // Las texturas se reutilizan entre elementos y vistas.
 const CACHE_TEXTURAS = new Map<string, THREE.Texture>();
+
+/** O005c: burbuja de eje con su etiqueta, dibujada como sprite para que siempre se lea. */
+function burbujaEje(texto: string, color: string, fondo: string): THREE.Sprite | null {
+  if (typeof document === "undefined") return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.clearRect(0, 0, 128, 128);
+  ctx.beginPath();
+  ctx.arc(64, 64, 54, 0, Math.PI * 2);
+  ctx.fillStyle = fondo;
+  ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = color;
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.font = "bold 58px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(texto, 64, 66);
+  const textura = new THREE.CanvasTexture(canvas);
+  textura.colorSpace = THREE.SRGBColorSpace;
+  const material = new THREE.SpriteMaterial({
+    map: textura,
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+  });
+  return new THREE.Sprite(material);
+}
+
+/** O005c: cota temporal de la herramienta (p. ej. «4.50 m»). */
+function etiquetaCota(
+  texto: string,
+  color: string,
+  fondo: string,
+  altoMundo: number,
+): THREE.Sprite | null {
+  if (typeof document === "undefined") return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.fillStyle = fondo;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.rect(2, 8, 252, 48);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.font = "bold 30px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(texto, 128, 33);
+  const textura = new THREE.CanvasTexture(canvas);
+  textura.colorSpace = THREE.SRGBColorSpace;
+  const material = new THREE.SpriteMaterial({
+    map: textura,
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+  });
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(altoMundo * 4, altoMundo, 1);
+  return sprite;
+}
 
 /** Genera la textura de un patrón de relleno (un período de escala en mm de papel). */
 function texturaPatron(
@@ -445,6 +516,9 @@ export function Visor3D({
     return mapa;
   }, [niveles]);
 
+  // O005c: los ejes también encuadran la planta (burbujas incluidas).
+  const cajaVista = useMemo(() => cajaConEjes(caja, referencias.ejes), [caja, referencias]);
+
   useEffect(() => {
     const observador = new MutationObserver(() =>
       setOscuro(document.documentElement.classList.contains("dark")),
@@ -536,25 +610,25 @@ export function Visor3D({
     camera.lookAt(nav.objetivo);
     if (camera instanceof THREE.OrthographicCamera) {
       camera.near = 0.01;
-      camera.far = nav.distancia + diagonalCaja(caja) * 3 + 10;
+      camera.far = nav.distancia + diagonalCaja(cajaVista) * 3 + 10;
       camera.updateProjectionMatrix();
     } else if (camera instanceof THREE.PerspectiveCamera) {
-      camera.far = nav.distancia + diagonalCaja(caja) * 4 + 10;
+      camera.far = nav.distancia + diagonalCaja(cajaVista) * 4 + 10;
       camera.updateProjectionMatrix();
     }
     camera.updateMatrixWorld();
-  }, [caja]);
+  }, [cajaVista]);
 
   // Cámara de la vista activa (solo se reencuadra al cambiar de vista o de modelo).
   useEffect(() => {
     const nodo = contenedor.current;
     if (!nodo || !renderer.current) return;
     const aspecto = Math.max(nodo.clientWidth, 1) / Math.max(nodo.clientHeight, 1);
-    const nav = crearNavegacion(vista, caja, aspecto);
+    const nav = crearNavegacion(vista, cajaVista, aspecto);
     navegacion.current = nav;
     const centro = nav.objetivo;
     if (nav.tipo === "perspectiva") {
-      const perspectiva = camaraPerspectiva(caja, { aspecto });
+      const perspectiva = camaraPerspectiva(cajaVista, { aspecto });
       const camera = new THREE.PerspectiveCamera(50, aspecto, perspectiva.cerca, perspectiva.lejos);
       camara.current = camera;
     } else {
@@ -568,7 +642,7 @@ export function Visor3D({
               : vectorIso();
       const arriba: [number, number, number] =
         vista.tipo === "planta" ? [0, -1, 0] : [0, 0, 1];
-      const inicial = camaraOrtografica(caja, direccion, {
+      const inicial = camaraOrtografica(cajaVista, direccion, {
         arriba,
         centro: [centro.x, centro.y, centro.z],
       });
@@ -586,7 +660,7 @@ export function Visor3D({
     aplicarCamara();
     // `aplicarCamara` es estable por referencia del componente; se usa a través de refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vista.id, vista.tipo, vista.orientacion, caja, dimensiones.ancho, dimensiones.alto]);
+  }, [vista.id, vista.tipo, vista.orientacion, cajaVista, dimensiones.ancho, dimensiones.alto]);
 
   // Vista activa y geometría: filtros de categorías/niveles, recorte y relleno.
   useEffect(() => {
@@ -610,11 +684,19 @@ export function Visor3D({
     const fondo = colorDeFondo(oscuro);
     const colorTrazo = oscuro ? "#e8eaed" : "#1f2328";
     const colorArista = new THREE.Color(colorTrazo);
-    const tamano = Math.max(diagonalCaja(caja), 2);
+    const tamano = Math.max(diagonalCaja(cajaVista), 2);
     const nivelesVisibles = new Set(vista.nivelesVisibles);
     const visibles = mallas.filter((malla) => {
       if (!categoriaVisible(vista, malla.categoria)) return false;
       if (categoriaOculta(vista, malla.categoria)) return false;
+      // O005c: en planta puertas y ventanas se dibujan solo con su simbología 2D;
+      // su marco y su hoja en 3D no deben asomar como un rectángulo fuera del muro.
+      if (
+        vista.tipo === "planta" &&
+        (malla.clase === "IfcDoor" || malla.clase === "IfcWindow")
+      ) {
+        return false;
+      }
       const gid = nivelGlobalidPorNombre.get(malla.nivel);
       if (nivelesVisibles.size > 0 && gid && !nivelesVisibles.has(gid)) return false;
       return true;
@@ -1052,9 +1134,64 @@ export function Visor3D({
       }
     }
 
+    // O005c: ejes en todas las plantas, con la plumilla «Ejes» de O005. Se dibujan a
+    // partir de modelo.referencias porque geometria.teselar no devuelve mallas de ejes.
+    if (vista.tipo === "planta" && referencias.ejes.length > 0) {
+      const mmEjes = grosorDe("ejes", "proyeccion");
+      if (mmEjes !== null) {
+        const zEje = corteZ + 0.05;
+        const estiloEje = estilos.categorias.ejes;
+        const colorEje = oscuro ? "#e0b07a" : estiloEje.color;
+        const materialEje = crearMaterialLinea({
+          mm: mmEjes,
+          escala: vista.escala,
+          color: colorEje,
+          patron: "trazo-punto",
+          profundidad: false,
+          registro,
+          mundoPorPx,
+        });
+        const altoBurbuja = Math.max(tamano * 0.035, 0.35);
+        for (const eje of referencias.ejes) {
+          const dx = eje.x2 - eje.x1;
+          const dy = eje.y2 - eje.y1;
+          const largo = Math.hypot(dx, dy);
+          if (largo < 1e-6) continue;
+          const ux = dx / largo;
+          const uy = dy / largo;
+          const radio = altoBurbuja / 2;
+          const fin: [number, number, number] = [
+            eje.x2 - ux * Math.min(radio, largo * 0.45),
+            eje.y2 - uy * Math.min(radio, largo * 0.45),
+            zEje,
+          ];
+          lineaCerrada(
+            [[eje.x1, eje.y1, zEje], fin],
+            materialEje,
+            1.6,
+            grupoLocal,
+          );
+          const burbuja = burbujaEje(
+            eje.etiqueta,
+            colorEje,
+            oscuro ? "#1f2328" : "#ffffff",
+          );
+          if (burbuja) {
+            burbuja.position.set(eje.x2, eje.y2, zEje + 0.01);
+            burbuja.scale.set(altoBurbuja, altoBurbuja, 1);
+            burbuja.renderOrder = 20;
+            grupoLocal.add(burbuja);
+          }
+        }
+      }
+    }
+
     // Datos para las pruebas y las capturas: lo que realmente se está dibujando.
     const nodoVisor = contenedor.current;
     if (nodoVisor) {
+      nodoVisor.dataset.ejes = String(referencias.ejes.length);
+      nodoVisor.dataset.ejesEtiquetas = referencias.ejes.map((eje) => eje.etiqueta).join(",");
+      nodoVisor.dataset.mallasDibujadas = String(visibles.length);
       nodoVisor.dataset.seccionPolilineas = String(polilineasSeccion);
       nodoVisor.dataset.estiloMurosCorte = String(
         grosorMm(estilos, vista, "muros", "corte") ?? "",
@@ -1151,6 +1288,8 @@ export function Visor3D({
     nivelGlobalidPorNombre,
     estilos,
     aberturas,
+    referencias,
+    cajaVista,
     dimensiones.alto,
   ]);
 
@@ -1170,7 +1309,7 @@ export function Visor3D({
     }
     if (vista.tipo !== "planta" || !herramienta) return;
     const z = (vista.alturaPlano ?? caja.max[2]) + 0.03;
-    const escala = Math.max(diagonalCaja(caja), 2);
+    const escala = Math.max(diagonalCaja(cajaVista), 2);
     const tamano = Math.max(escala * 0.018, 0.06);
     const colorPuntos = new THREE.Color(0xd97706);
     const colorSnap = new THREE.Color(0x0ea5e9);
@@ -1196,6 +1335,30 @@ export function Visor3D({
     polilinea(puntosHerramienta);
     if (puntosHerramienta.length > 0 && ratonHerramienta) {
       polilinea([puntosHerramienta[puntosHerramienta.length - 1], ratonHerramienta]);
+      // O005c: cota temporal mientras se traza (muro, eje, losa, mover y copiar).
+      const origen = puntosHerramienta[puntosHerramienta.length - 1];
+      const largo = Math.hypot(
+        ratonHerramienta[0] - origen[0],
+        ratonHerramienta[1] - origen[1],
+      );
+      if (largo > 0.02) {
+        const texto = `${largo.toFixed(2)} m`;
+        const cota = etiquetaCota(
+          texto,
+          oscuro ? "#e8eaed" : "#1f2328",
+          oscuro ? "#262b33" : "#ffffff",
+          Math.max(tamano * 0.028, 0.22),
+        );
+        if (cota) {
+          cota.position.set(
+            (origen[0] + ratonHerramienta[0]) / 2,
+            (origen[1] + ratonHerramienta[1]) / 2,
+            z + 0.06,
+          );
+          cota.renderOrder = 18;
+          grupoLocal.add(cota);
+        }
+      }
     }
     if (herramienta === "losa" && puntosHerramienta.length >= 2) {
       polilinea(puntosHerramienta, puntosHerramienta.length >= 3);
@@ -1308,7 +1471,8 @@ export function Visor3D({
     referencias,
     voltearSiguiente,
     vista,
-    caja,
+    cajaVista,
+    oscuro,
   ]);
 
   // Ajustar la cámara a la vista (botón y Z luego A).
@@ -1316,7 +1480,7 @@ export function Visor3D({
     const nodo = contenedor.current;
     if (!nodo) return;
     const aspecto = Math.max(nodo.clientWidth, 1) / Math.max(nodo.clientHeight, 1);
-    navegacion.current = crearNavegacion(vista, caja, aspecto);
+    navegacion.current = crearNavegacion(vista, cajaVista, aspecto);
     aplicarCamara();
   }, [aplicarCamara, vista, caja]);
 
@@ -1332,9 +1496,9 @@ export function Visor3D({
       const aspecto = nodo
         ? Math.max(nodo.clientWidth, 1) / Math.max(nodo.clientHeight, 1)
         : 1;
-      const inicial = crearNavegacion(vista, caja, aspecto);
+      const inicial = crearNavegacion(vista, cajaVista, aspecto);
       const limites = ajustarAspecto(
-        camaraOrtografica(caja, [nav.direccion.x, nav.direccion.y, nav.direccion.z]),
+        camaraOrtografica(cajaVista, [nav.direccion.x, nav.direccion.y, nav.direccion.z]),
         aspecto,
       );
       camera.left = limites.izquierda;
@@ -1344,7 +1508,7 @@ export function Visor3D({
       nav.distancia = inicial.distancia;
     }
     aplicarCamara();
-  }, [aplicarCamara, caja, vista]);
+  }, [aplicarCamara, cajaVista, vista]);
 
   // Rueda: zoom hacia el cursor en ortográficas y acercamiento en 3D.
   useEffect(() => {
@@ -1355,7 +1519,7 @@ export function Visor3D({
       if (!camera) return;
       const alto = Math.max(nodo.clientHeight, 1);
       const ancho = Math.max(nodo.clientWidth, 1);
-      let mundoPorPx = diagonalCaja(caja) / alto;
+      let mundoPorPx = diagonalCaja(cajaVista) / alto;
       if (camera instanceof THREE.OrthographicCamera) {
         mundoPorPx = Math.max((camera.top - camera.bottom) / alto, 1e-6);
       } else if (camera instanceof THREE.PerspectiveCamera) {
@@ -1412,7 +1576,7 @@ export function Visor3D({
     };
     nodo.addEventListener("wheel", alRodar, { passive: false });
     return () => nodo.removeEventListener("wheel", alRodar);
-  }, [aplicarCamara, caja]);
+  }, [aplicarCamara, cajaVista]);
 
   // Paneo, órbita, selección y puntos del corte.
   useEffect(() => {
@@ -1606,7 +1770,6 @@ export function Visor3D({
         ultimaZ.current = 0;
         ajustar();
       }
-      if (evento.key === "Escape") onEscape();
     };
     const alSoltarTecla = (evento: KeyboardEvent) => {
       if (evento.code === "Space") espacio.current = false;

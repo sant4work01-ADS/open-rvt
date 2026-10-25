@@ -117,7 +117,8 @@
     "idioma": "Language",
     "idiomaAyuda": "Interface language; the change applies immediately.",
     "tamano-de-la-interfaz": "Interface size",
-    "escala-toda-la-interfaz-el-sidebar-iconos-y-boto": "Scales the whole interface; the sidebar (icons and buttons) stays a little larger. Shortcuts: Ctrl+= enlarges, Ctrl+− shrinks and Ctrl+0 returns to the default (120 %)."
+    "escala-toda-la-interfaz-el-sidebar-iconos-y-boto": "Scales the whole interface; the sidebar (icons and buttons) stays a little larger. Shortcuts: Ctrl+= enlarges, Ctrl+− shrinks and Ctrl+0 returns to the default (120 %).",
+    "acercaActualizaciones": "About / Updates"
   },
   "ayuda": {
     "indice-del-manual": "Manual index",
@@ -168,5 +169,34 @@
     "io": "The operation could not be completed: {{mensaje}}",
     "validacion": "Invalid data: {{mensaje}}",
     "no_encontrado": "Not found: {{mensaje}}"
+  },
+  "actualizaciones": {
+    "seActualizaSolo": "OPEN-RVT updates itself when a new version is available.",
+    "versionActual": "Current version:",
+    "buscar": "Check for updates",
+    "buscando": "Checking…",
+    "alDia": "You are up to date.",
+    "versionNueva": "A new version is available ({{version}}).",
+    "verDetalles": "See details",
+    "hayActualizacion": "An update is available ({{version}})",
+    "verDisponible": "See the available update",
+    "preparando": "Preparing download…",
+    "descargando": "Downloading {{descargado}}…",
+    "descargandoDe": "Downloading {{descargado}} of {{total}} ({{pct}} %)",
+    "instalando": "Installing…",
+    "sinNotas": "No release notes for this version.",
+    "despues": "Later",
+    "actualizarAhora": "Update now",
+    "descargar": "Download",
+    "disponible": "Update available",
+    "disponibleVersion": "Update available: {{version}}",
+    "publicada": "Published on {{fecha}}",
+    "linuxDeb": "On Linux the .deb installer is downloaded separately; the app cannot replace itself.",
+    "linuxDescarga": "On Linux download the new .deb from the releases page.",
+    "irADescargas": "Go to downloads",
+    "errorFirma": "The update signature is not valid; nothing was installed.",
+    "errorRed": "No internet connection. Check your network and try again.",
+    "errorServidor": "The update server is not available right now.",
+    "errorComprobar": "The update could not be checked: {{detalle}}"
   }
 }

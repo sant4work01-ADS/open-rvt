@@ -8,6 +8,7 @@ import {
   puntoDibujo,
   redondearCuadricula,
   REFERENCIAS_VACIAS,
+  siguienteEtiquetaEje,
   type Referencias,
 } from "./herramientas";
 
@@ -100,6 +101,30 @@ describe("longitud tecleada", () => {
     expect(Math.abs(Math.hypot(p[0] - 1, p[1] - 2) - 4.5)).toBeLessThan(1e-6);
     const angulo = (Math.atan2(p[1] - 2, p[0] - 1) * 180) / Math.PI;
     expect(angulo).toBeCloseTo(45, 6);
+  });
+});
+
+describe("etiquetas de ejes", () => {
+  const eje = (etiqueta: string, vertical: boolean) => ({
+    globalid: `g-${etiqueta}`,
+    etiqueta,
+    x1: 0,
+    y1: 0,
+    x2: vertical ? 0 : 1,
+    y2: vertical ? 1 : 0,
+    vertical,
+  });
+
+  test("los verticales usan el primer número libre y los horizontales la primera letra", () => {
+    expect(siguienteEtiquetaEje([], true)).toBe("1");
+    expect(siguienteEtiquetaEje([eje("1", true), eje("3", true)], true)).toBe("2");
+    expect(siguienteEtiquetaEje([], false)).toBe("A");
+    expect(siguienteEtiquetaEje([eje("a", false), eje("C", false)], false)).toBe("B");
+  });
+
+  test("no reutiliza una etiqueta aunque sea de la otra dirección", () => {
+    expect(siguienteEtiquetaEje([eje("1", false)], true)).toBe("2");
+    expect(siguienteEtiquetaEje([eje("A", true)], false)).toBe("B");
   });
 });
 

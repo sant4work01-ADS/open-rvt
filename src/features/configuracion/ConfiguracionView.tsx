@@ -5,15 +5,21 @@
 import { tr } from "@/i18n";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Languages, Monitor, Moon, Palette, Sun } from "lucide-react";
+import { Languages, Info, Monitor, Moon, Palette, Sun } from "lucide-react";
 import type { Idioma } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { ESCALA_OPCIONES, useTema, type PreferenciaTema } from "@/lib/tema";
+import { AcercaDeActualizaciones } from "@/features/actualizaciones/Actualizaciones";
 
 const SECCIONES = () =>
   [
     { id: "apariencia", nombre: tr("configuracion.apariencia", "Apariencia"), icono: Palette },
     { id: "idioma", nombre: tr("configuracion.idioma", "Idioma"), icono: Languages },
+    {
+      id: "acerca",
+      nombre: tr("configuracion.acercaActualizaciones", "Acerca de / Actualizaciones"),
+      icono: Info,
+    },
   ] as const;
 
 const TEMAS = (): { id: PreferenciaTema; nombre: string; icono: typeof Sun }[] => [
@@ -166,6 +172,7 @@ export function ConfiguracionView({
             <IdiomaSelector />
           </section>
         )}
+        {seccion === "acerca" && <AcercaDeActualizaciones />}
       </div>
     </div>
   );

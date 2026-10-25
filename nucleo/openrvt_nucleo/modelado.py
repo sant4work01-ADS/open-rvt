@@ -1066,9 +1066,20 @@ class ModeladoMixin:
         return matriz
 
     def _cuerpo_relleno(
-        self, ancho: float, alto: float, profundidad: float, clase: str, volteado: bool
+        self,
+        ancho: float,
+        alto: float,
+        profundidad: float,
+        clase: str,
+        volteado: bool,
+        desfase: float = 0.0,
     ) -> Any:
-        """Marco de cuatro barras y hoja (puerta) o vidrio (ventana)."""
+        """Marco de cuatro barras y hoja (puerta) o vidrio (ventana).
+
+        O005c: `desfase` centra el marco en el cuerpo del muro. Con alineación
+        «interior» o «exterior» el cuerpo no está sobre el eje, y antes el marco se
+        quedaba en el eje: en planta asomaba un rectángulo fuera del muro.
+        """
         barra = min(0.06, ancho / 6.0, alto / 6.0)
         # Cada caja: (x0, z0, ancho, alto, media profundidad).
         cajas = [
@@ -1100,14 +1111,14 @@ class ModeladoMixin:
             base = len(vertices)
             vertices.extend(
                 [
-                    [x0, -t + desplazamiento, z0],
-                    [x0 + w, -t + desplazamiento, z0],
-                    [x0 + w, t + desplazamiento, z0],
-                    [x0, t + desplazamiento, z0],
-                    [x0, -t + desplazamiento, z0 + h],
-                    [x0 + w, -t + desplazamiento, z0 + h],
-                    [x0 + w, t + desplazamiento, z0 + h],
-                    [x0, t + desplazamiento, z0 + h],
+                    [x0, -t + desplazamiento + desfase, z0],
+                    [x0 + w, -t + desplazamiento + desfase, z0],
+                    [x0 + w, t + desplazamiento + desfase, z0],
+                    [x0, t + desplazamiento + desfase, z0],
+                    [x0, -t + desplazamiento + desfase, z0 + h],
+                    [x0 + w, -t + desplazamiento + desfase, z0 + h],
+                    [x0 + w, t + desplazamiento + desfase, z0 + h],
+                    [x0, t + desplazamiento + desfase, z0 + h],
                 ]
             )
             caras.extend(
@@ -1132,10 +1143,32 @@ class ModeladoMixin:
             return
         muro = self._entidad_por_gid(datos["muro"], ("IfcWall",)) if datos["muro"] else None
         espesor = self._datos_muro(muro)["espesor"] if muro is not None else 0.15
+        # O005c: centro del cuerpo del muro en el eje local Y, para que el marco no
+        # sobresalga cuando la alineación es interior o exterior.
+        desfase = (
+            self._desfase_alineacion(self._datos_muro(muro)["alineacion"], espesor)
+            + espesor / 2.0
+            if muro is not None
+            else 0.0
+        )
         if relleno.is_a("IfcDoor"):
-            cuerpo = self._cuerpo_relleno(datos["ancho"], datos["alto"], espesor, "IfcDoor", datos["volteado"])
+            cuerpo = self._cuerpo_relleno(
+                datos["ancho"],
+                datos["alto"],
+                espesor,
+                "IfcDoor",
+                datos["volteado"],
+                desfase,
+            )
         else:
-            cuerpo = self._cuerpo_relleno(datos["ancho"], datos["alto"], espesor, "IfcWindow", datos["volteado"])
+            cuerpo = self._cuerpo_relleno(
+                datos["ancho"],
+                datos["alto"],
+                espesor,
+                "IfcWindow",
+                datos["volteado"],
+                desfase,
+            )
         self._quitar_representaciones(relleno, "Body")
         geometry_api.assign_representation(self.modelo, product=relleno, representation=cuerpo)
         geometry_api.edit_object_placement(

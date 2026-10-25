@@ -16,8 +16,11 @@ tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-log = "2"
 tauri-plugin-opener = "2"
-# Actualizador (desactivado): cuando se active hará falta tauri-plugin-updater, el
-# endpoint de actualizaciones y su llave pública. Ahora no hay ninguno de los tres.
+# O005c: actualizador automático del canal propio (Windows) y relanzado tras instalar.
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+# O005c: consulta nativa del latest.json en Linux (el WebView no puede por CORS).
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 log = "0.4"
 serde.workspace = true
 serde_json.workspace = true

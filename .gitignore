@@ -11,3 +11,8 @@ src-tauri/gen/
 .DS_Store
 e2e/salida/
 src-tauri/recursos/
+
+# Instaladores: van en los releases (GitHub y Gitea), no en git
+instaladores/*.deb
+instaladores/*.exe
+instaladores/*.sig

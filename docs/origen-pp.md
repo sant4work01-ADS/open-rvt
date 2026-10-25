@@ -1,7 +1,9 @@
 # Origen en PresupuestosPro
 
 Todo lo copiado viene de `/home/sant4/pp-trabajo/presupuestos-pro`, rama `master`,
-commit **`fd60cde`** («Ayuda: novedades de la versión 0.13.18»).
+commit **`fd60cde`** («Ayuda: novedades de la versión 0.13.18»), salvo el actualizador
+automático (O005c), que se copió de la rama **`actualizaciones`** del worktree
+`/home/sant4/pp-trabajo/actualizaciones`; en `master` ese módulo no existe.
 
 - **intacto**: el archivo es idéntico al de PP.
 - **adaptado**: se cambió solo lo necesario (imports que no existen, comandos de
@@ -97,7 +99,12 @@ commit **`fd60cde`** («Ayuda: novedades de la versión 0.13.18»).
 | `src-tauri/src/main.rs` | `src-tauri/src/main.rs` | adaptado | Llama a `open_rvt_lib::run()`. |
 | `src-tauri/src/lib.rs` | `src-tauri/src/lib.rs` | adaptado | Solo preferencias, título, registros y `configurar_webview2` (intacto); sin comandos de presupuesto. En O003a añade el estado del núcleo IFC, `nucleo_llamar` y su arranque. |
 | `src-tauri/src/estado.rs` | `src-tauri/src/estado.rs` | adaptado | Solo `Config` y las rutas de datos; sin obra, empresa, respaldos ni consumo. |
-| `src-tauri/tauri.conf.json` | `src-tauri/tauri.conf.json` | adaptado | «OPEN-RVT», `mx.openrvt.app`, versión 0.1.0 y sin recursos del catálogo. |
+| `src-tauri/tauri.conf.json` | `src-tauri/tauri.conf.json` | adaptado | «OPEN-RVT», `mx.openrvt.app`, versión 0.3.1 y sin recursos del catálogo. En O005c añade `plugins.updater` (llave de OPEN-RVT, endpoint propio, `installMode: passive`), `createUpdaterArtifacts` y el permiso de red a `gitea.spm.lat`. |
+| `src/features/actualizaciones/servicio.ts` | `src/features/actualizaciones/servicio.ts` (rama `actualizaciones`) | adaptado | Endpoint, llave y canal de OPEN-RVT; en Linux se consulta `latest.json` y se ofrece la descarga del `.deb` (el updater de Tauri no sustituye paquetes `.deb`). |
+| `src/features/actualizaciones/tienda.ts` | `src/features/actualizaciones/tienda.ts` (rama `actualizaciones`) | adaptado | El guardado previo usa `useModelo.asegurarSinCambios()` en vez de la sesión de obra de PP; en Linux abre la página de descargas y no relanza. |
+| `src/features/actualizaciones/Actualizaciones.tsx` | `src/features/actualizaciones/Actualizaciones.tsx` (rama `actualizaciones`) | adaptado | Textos de OPEN-RVT y aviso de descarga para Linux. |
+| `src/features/actualizaciones/actualizaciones.test.tsx` | `src/features/actualizaciones/actualizaciones.test.tsx` (rama `actualizaciones`) | adaptado | El caso de guardado usa el estado del modelo; se añaden pruebas de versión y del aviso de Linux. |
+| `herramientas/publicar-actualizacion.sh` | `/home/sant4/pp-trabajo/publicar-actualizacion.sh` | adaptado | Repo `sant4/openrvt-actualizaciones`, llave `openrvt-updater.key`, nombre `OPEN-RVT_${V}_x64-setup.exe`, `CARGO_TARGET_DIR` propio y `preparar_python.sh windows` antes de compilar. |
 
 ## Pruebas de PP que no se copiaron
 
@@ -137,8 +144,16 @@ existen).
 composición activa para dibujar WebGL; O002 sigue ejecutándose con la composición
 desactivada, como antes.
 
-## Pendiente anotado
+## Actualizador (O005c)
 
-- **Actualizador**: el código de actualización de PP no se copió porque PP no lo tiene
-  activo; cuando se añada `tauri-plugin-updater` harán falta endpoint y llave pública.
-  No se deja ninguno de los dos.
+- Origen: rama **`actualizaciones`** del worktree `/home/sant4/pp-trabajo/actualizaciones`
+  (PP no lo tiene en `master`).
+- `src-tauri/Cargo.toml`: `tauri-plugin-updater` y `tauri-plugin-process`.
+- `src-tauri/src/lib.rs`: plugins y comandos `actualizaciones_deshabilitadas`,
+  `abrir_enlace` y `ultima_version` (consulta nativa del `latest.json` para Linux).
+- `src-tauri/capabilities/default.json`: `updater:default`, `process:allow-restart` y
+  `opener:default`.
+- `src-tauri/tauri.conf.json`: `plugins.updater` con la llave pública de
+  `~/.tauri/openrvt-updater.key.pub` y el endpoint de OPEN-RVT.
+- En Linux el updater de Tauri no puede sustituir un `.deb`: el diálogo solo avisa y
+  abre la página de descargas.

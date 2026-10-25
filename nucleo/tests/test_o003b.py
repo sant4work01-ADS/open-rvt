@@ -181,6 +181,28 @@ def test_uniones_en_l_quedan_conectadas():
         assert frozenset((muros[i], muros[(i + 1) % 4])) in pares
 
 
+def test_ventana_centrada_en_el_cuerpo_del_muro_con_alineacion_interior():
+    """O005c: el marco no debe asomar fuera del muro cuando el cuerpo está desplazado."""
+    nucleo = ModeloNucleo()
+    nucleo.nuevo("Ventana interior")
+    nivel = nucleo.niveles()[0]["globalid"]
+    muro = nucleo.muro_crear(
+        "Block 15", nivel, 0, 0, 8, 0, altura=2.60, alineacion="interior"
+    )["creados"][0]
+    nucleo.abertura_crear("IfcWindow", muro, 3.0)
+
+    ventana = next(e for e in nucleo.modelo.by_type("IfcWindow"))
+    ajustes = geom.settings()
+    ajustes.set(ajustes.USE_WORLD_COORDS, True)
+    forma = geom.create_shape(ajustes, ventana)
+    vertices = np.asarray(forma.geometry.verts, dtype=float).reshape(-1, 3)
+    ys = vertices[:, 1]
+    # El cuerpo del muro va de 0 a 0,15; el marco debe quedar dentro, centrado en 0,075.
+    assert float(ys.min()) == pytest.approx(0.0, abs=0.002)
+    assert float(ys.max()) == pytest.approx(0.15, abs=0.002)
+    assert float((ys.min() + ys.max()) / 2.0) == pytest.approx(0.075, abs=0.002)
+
+
 def test_union_en_t_conecta_el_extremo_con_el_interior_del_otro_muro():
     nucleo = ModeloNucleo()
     nucleo.nuevo()

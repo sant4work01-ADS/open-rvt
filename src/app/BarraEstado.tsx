@@ -3,6 +3,7 @@
 // del núcleo IFC. Sin modelo se conserva «Sin modelo abierto» del esqueleto.
 import { useTranslation } from "react-i18next";
 import { useModelo } from "@/features/modelo/estado";
+import { AvisoActualizacion } from "@/features/actualizaciones/Actualizaciones";
 
 /** Altura anterior de la barra (h-7 = 1.75 rem); se conserva la de PP. */
 export const ALTO_ANTERIOR_REM = 1.75;
@@ -61,6 +62,7 @@ export function BarraEstado() {
         <span data-testid="estado-modelo">{t("comun.noHayObra", "Sin modelo abierto")}</span>
       )}
       <span className="ml-auto flex min-w-0 items-center gap-3">
+        <AvisoActualizacion />
         {cargando && <span data-testid="estado-cargando">Cargando…</span>}
         {modoCorte && (
           <span data-testid="estado-modo-corte" className="text-amber-600 dark:text-amber-400">

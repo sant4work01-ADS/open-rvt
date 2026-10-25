@@ -135,6 +135,7 @@ impl Nucleo {
 
     /// Carpeta de recursos configurada (para diagnóstico y pruebas).
     #[cfg(test)]
+    #[allow(dead_code)]
     pub fn recursos(&self) -> Option<PathBuf> {
         self.recursos
             .lock()

@@ -279,6 +279,12 @@ test("O005: estilos, rellenos, simbología, persistencia y capturas", async () =
       Number(await (await ses.porTestid("visor")).getAttribute("data-seccion-polilineas")) >= 4,
       "la casa no generó las secciones de sus muros",
     );
+    // O005c: puerta y ventana se dibujan solo con su simbología 2D en planta.
+    assert.equal(
+      await (await ses.porTestid("visor")).getAttribute("data-mallas-dibujadas"),
+      "5",
+      "no deben dibujarse las mallas 3D de puerta y ventana en planta",
+    );
     const capturaCasa = path.join(CAPTURAS, "o005_planta_casa.png");
     await ses.captura(capturaCasa);
     assert.deepEqual(dimensionesPng(capturaCasa), { ancho: 1600, alto: 900 });

@@ -102,6 +102,8 @@ class Sesion {
     const entorno = {
       ...process.env,
       OPENRVT_DATOS_DIR: datos,
+      // O005c: las pruebas no consultan el canal de actualizaciones.
+      OPENRVT_SIN_ACTUALIZACIONES: "1",
       GDK_BACKEND: "x11",
     };
     // WebGL necesita composición: en las pruebas con visor se deja activa.

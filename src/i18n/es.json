@@ -117,7 +117,8 @@
     "idioma": "Idioma",
     "idiomaAyuda": "Idioma de la interfaz; el cambio se aplica al instante.",
     "tamano-de-la-interfaz": "Tamaño de la interfaz",
-    "escala-toda-la-interfaz-el-sidebar-iconos-y-boto": "Escala toda la interfaz; el sidebar (íconos y botones) queda un poco más grande. Atajos: Ctrl+= agranda, Ctrl+− achica y Ctrl+0 vuelve al predeterminado (120 %)."
+    "escala-toda-la-interfaz-el-sidebar-iconos-y-boto": "Escala toda la interfaz; el sidebar (íconos y botones) queda un poco más grande. Atajos: Ctrl+= agranda, Ctrl+− achica y Ctrl+0 vuelve al predeterminado (120 %).",
+    "acercaActualizaciones": "Acerca de / Actualizaciones"
   },
   "ayuda": {
     "indice-del-manual": "Índice del manual",
@@ -168,5 +169,34 @@
     "io": "No se pudo completar la operación: {{mensaje}}",
     "validacion": "Datos no válidos: {{mensaje}}",
     "no_encontrado": "No se encontró: {{mensaje}}"
+  },
+  "actualizaciones": {
+    "seActualizaSolo": "OPEN-RVT se actualiza solo cuando hay una versión nueva.",
+    "versionActual": "Versión actual:",
+    "buscar": "Buscar actualizaciones",
+    "buscando": "Buscando…",
+    "alDia": "Estás al día.",
+    "versionNueva": "Hay una versión nueva ({{version}}).",
+    "verDetalles": "Ver detalles",
+    "hayActualizacion": "Hay una actualización ({{version}})",
+    "verDisponible": "Ver la actualización disponible",
+    "preparando": "Preparando la descarga…",
+    "descargando": "Descargando {{descargado}}…",
+    "descargandoDe": "Descargando {{descargado}} de {{total}} ({{pct}} %)",
+    "instalando": "Instalando…",
+    "sinNotas": "Sin notas de esta versión.",
+    "despues": "Después",
+    "actualizarAhora": "Actualizar ahora",
+    "descargar": "Descargar",
+    "disponible": "Actualización disponible",
+    "disponibleVersion": "Actualización disponible: {{version}}",
+    "publicada": "Publicada el {{fecha}}",
+    "linuxDeb": "En Linux el instalador .deb se descarga aparte; la aplicación no puede sustituirse sola.",
+    "linuxDescarga": "En Linux descarga el .deb nuevo desde la página de versiones.",
+    "irADescargas": "Ir a descargas",
+    "errorFirma": "La firma de la actualización no es válida; no se instaló nada.",
+    "errorRed": "Sin conexión a internet. Revisa tu red e inténtalo de nuevo.",
+    "errorServidor": "El servidor de actualizaciones no está disponible en este momento.",
+    "errorComprobar": "No se pudo comprobar la actualización: {{detalle}}"
   }
 }
