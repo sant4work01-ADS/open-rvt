@@ -725,9 +725,22 @@ export function Visor3D({
       // Cota inferior/superior del elemento para separar lo que queda arriba del corte.
       let minZ = Infinity;
       let maxZ = -Infinity;
-      for (let i = 2; i < elemento.vertices.length; i += 3) {
-        minZ = Math.min(minZ, elemento.vertices[i]);
-        maxZ = Math.max(maxZ, elemento.vertices[i]);
+      let minD = Infinity;
+      let maxD = -Infinity;
+      for (let i = 0; i < elemento.vertices.length; i += 3) {
+        const x = elemento.vertices[i];
+        const y = elemento.vertices[i + 1];
+        const z = elemento.vertices[i + 2];
+        minZ = Math.min(minZ, z);
+        maxZ = Math.max(maxZ, z);
+        if (planoSeccion) {
+          const d =
+            x * planoSeccion.normal[0] +
+            y * planoSeccion.normal[1] +
+            z * planoSeccion.normal[2];
+          minD = Math.min(minD, d);
+          maxD = Math.max(maxD, d);
+        }
       }
       const arribaDelCorte =
         vista.tipo === "planta" &&
@@ -817,8 +830,12 @@ export function Visor3D({
         grupoLocal.add(aristas);
       }
 
-      // Sección real del plano de corte con esta malla.
-      if (diseno && planoSeccion && origenSeccion && !arribaDelCorte) {
+      // Sección real del plano de corte con esta malla (solo si lo atraviesa).
+      const atraviesa =
+        planoSeccion !== null &&
+        minD <= -planoSeccion.constante + 1e-4 &&
+        maxD >= -planoSeccion.constante - 1e-4;
+      if (diseno && planoSeccion && origenSeccion && !arribaDelCorte && atraviesa) {
         const polilineas = interseccionPlanoMalla(
           elemento.vertices,
           elemento.indices,
@@ -1035,9 +1052,18 @@ export function Visor3D({
         Object.values(estilos.materiales).filter((m) => m.patron !== "vidrio").length,
       );
       nodoVisor.dataset.estiloVista = vista.estilo;
+      nodoVisor.dataset.redibujo = String(
+        Number(nodoVisor.dataset.redibujo ?? "0") + 1,
+      );
       nodoVisor.dataset.redibujoMs = String(
         Math.round(performance.now() - inicioEfecto),
       );
+      const tamanoBuffer = renderer.current?.getDrawingBufferSize(new THREE.Vector2());
+      if (tamanoBuffer) {
+        for (const entrada of registro) {
+          entrada.material.resolution.set(tamanoBuffer.x, tamanoBuffer.y);
+        }
+      }
     }
 
     // Trazas de los cortes sobre las plantas, con flechas en los extremos.
