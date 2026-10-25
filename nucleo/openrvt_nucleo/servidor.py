@@ -52,6 +52,18 @@ class Servidor:
         return self.modelo
 
     def despachar(self, metodo: str, params: dict[str, Any]) -> Any:
+        if metodo == "nucleo.ping":
+            if self.modelo is None:
+                return {
+                    "disponible": False,
+                    "detalle": "falta IfcOpenShell en el intérprete de Python",
+                }
+            import ifcopenshell
+
+            return {
+                "disponible": True,
+                "ifcopenshell": getattr(ifcopenshell, "version", "desconocida"),
+            }
         if metodo == "proyecto.nuevo":
             return self._exigir().nuevo(str(params.get("nombre") or "Modelo sin título"))
         if metodo == "proyecto.abrir":
