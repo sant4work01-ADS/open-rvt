@@ -91,15 +91,18 @@ export function BarraEstado() {
               type="button"
               data-testid="aviso-copiar-detalle"
               title={t("bitacora.copiar-detalle", "Copiar detalle")}
+              aria-label={t("bitacora.copiar-detalle", "Copiar detalle")}
               onClick={() => copiarTexto(textoDeDetalle(ultimoErrorBitacora()))}
-              className="shrink-0 rounded p-0.5 hover:bg-muted"
+              className="flex shrink-0 items-center gap-1 rounded px-1 hover:bg-muted"
             >
               <Copy size={12} strokeWidth={1.5} />
+              {t("bitacora.copiar-detalle", "Copiar detalle")}
             </button>
             <button
               type="button"
               data-testid="aviso-exportar-bitacora"
               title={t("bitacora.exportar", "Exportar bitácora…")}
+              aria-label={t("bitacora.exportar", "Exportar bitácora…")}
               onClick={() => {
                 void exportarBitacora({ rutaIfc: useModelo.getState().ruta }).catch((e: unknown) => {
                   useModelo
@@ -107,9 +110,10 @@ export function BarraEstado() {
                     .fijarAviso(`No se pudo exportar: ${e instanceof Error ? e.message : String(e)}`);
                 });
               }}
-              className="shrink-0 rounded p-0.5 hover:bg-muted"
+              className="flex shrink-0 items-center gap-1 rounded px-1 hover:bg-muted"
             >
               <Download size={12} strokeWidth={1.5} />
+              {t("bitacora.exportar", "Exportar bitácora…")}
             </button>
           </span>
         )}

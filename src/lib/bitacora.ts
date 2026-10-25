@@ -114,14 +114,18 @@ export async function vaciarBitacora(): Promise<void> {
   const lote = pendientes;
   pendientes = [];
   enviando = true;
+  let exito = false;
   try {
     await commands.bitacoraAgregar(lote);
+    exito = true;
   } catch {
     // Sin backend (pruebas en navegador) no hay dónde escribir; no se pierde el panel.
     pendientes = [...lote, ...pendientes];
   } finally {
     enviando = false;
-    if (pendientes.length > 0 && !temporizador) {
+    // Si llegó un error mientras se enviaba el lote, se escribe de inmediato.
+    if (exito && pendientes.length > 0) void vaciarBitacora();
+    else if (!exito && pendientes.length > 0 && !temporizador) {
       temporizador = setInterval(() => void vaciarBitacora(), INTERVALO_ENVIO_MS);
     }
   }
@@ -169,30 +173,35 @@ export function etiquetaDeControl(elemento: Element): string {
 /** Contexto del control: `ribbon>Modelar>Eje`, sin repetir etiquetas. */
 export function rutaDeComponentes(elemento: Element, etiqueta = etiquetaDeControl(elemento)): string {
   const partes: string[] = [];
-  if (elemento.closest('[aria-label="Cinta de opciones"]')) {
+  const barraRibbon = document.querySelector('[role="tablist"]')?.parentElement;
+  const enRibbon = Boolean(barraRibbon && barraRibbon.contains(elemento));
+  if (enRibbon) {
     partes.push("ribbon");
     const pestana = document.querySelector('[role="tab"][aria-selected="true"]');
     const nombre = textoLimpio(pestana?.textContent);
     if (nombre) partes.push(nombre);
+    const grupo = elemento.closest('[data-testid^="grupo-"]');
+    const nombreGrupo = textoLimpio(grupo?.getAttribute("aria-label"));
+    if (nombreGrupo) partes.push(nombreGrupo);
+  } else {
+    const ancestros: string[] = [];
+    let actual = elemento.parentElement;
+    for (let i = 0; actual && i < 8; i += 1) {
+      const testid = actual.getAttribute("data-testid");
+      const aria = actual.getAttribute("aria-label");
+      if (testid && !testid.startsWith("cmd-")) ancestros.unshift(testid);
+      else if (aria) ancestros.unshift(textoLimpio(aria));
+      actual = actual.parentElement;
+    }
+    partes.push(...ancestros.slice(-2));
   }
-  const ancestros: string[] = [];
-  let actual = elemento.parentElement;
-  for (let i = 0; actual && i < 8; i += 1) {
-    const testid = actual.getAttribute("data-testid");
-    const aria = actual.getAttribute("aria-label");
-    if (testid && !testid.startsWith("cmd-")) ancestros.unshift(testid);
-    else if (aria) ancestros.unshift(textoLimpio(aria));
-    actual = actual.parentElement;
-  }
-  partes.push(...ancestros.slice(-2), etiqueta);
-  return [...new Set(partes.filter(Boolean))].slice(-4).join(">");
+  partes.push(etiqueta);
+  return [...new Set(partes.filter(Boolean))].join(">");
 }
 
 /** Vista activa tal como la ve el usuario (módulo y vista de modelo). */
 export function vistaActiva(): string {
-  const modulo = document.querySelector(
-    'nav[aria-label="Módulos"] [aria-current="page"]',
-  );
+  const modulo = document.querySelector('[data-modulo][aria-current="page"]');
   const vista = document.querySelector('[data-testid="vista-item"][aria-current="true"]');
   const partes = [textoLimpio(modulo?.getAttribute("aria-label")), textoLimpio(vista?.textContent)];
   return partes.filter(Boolean).join(" · ");
