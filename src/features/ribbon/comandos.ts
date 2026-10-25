@@ -113,6 +113,10 @@ export interface AccionesRibbon {
   herramientaTrabe: () => void;
   herramientaCerramiento: () => void;
   herramientaDala: () => void;
+  /** O007c: interacciones de la estructura. */
+  castillosAutomaticos: () => void;
+  unirZapatas: () => void;
+  unirTrabes: () => void;
   /** O007a: abre el editor de tipos y materiales. */
   abrirTipos: () => void;
   borrarSeleccion: () => void;
@@ -373,28 +377,61 @@ export function construirComandosRibbon(a: AccionesRibbon): ComandoRibbon[] {
       accion: a.herramientaTrabe,
     },
     {
+      id: "castillos-automaticos",
+      texto: "Castillos automáticos",
+      icono: Columns2,
+      grupo: "Estructura",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      descripcion: "Poner castillos en esquinas, remates e intermedios de los muros",
+      accion: a.castillosAutomaticos,
+    },
+    {
       id: "cerramiento",
-      texto: "Cerramiento",
+      texto: "Cerramiento en muro",
       icono: PanelTop,
       grupo: "Estructura",
       pestana: "modelar",
       tamano: "chico",
       habilitado: true,
       activo: a.herramientaActiva === "cerramiento",
-      descripcion: "Trazar el cerramiento que corona un muro",
+      descripcion: "Clic sobre un muro: el cerramiento se liga a su eje",
       accion: a.herramientaCerramiento,
     },
     {
       id: "dala",
-      texto: "Dala",
+      texto: "Dala en muro",
       icono: Frame,
       grupo: "Estructura",
       pestana: "modelar",
       tamano: "chico",
       habilitado: true,
       activo: a.herramientaActiva === "dala",
-      descripcion: "Trazar la dala de desplante sobre el cimiento",
+      descripcion: "Clic sobre un muro: la dala se liga a su base",
       accion: a.herramientaDala,
+    },
+    {
+      id: "unir-zapatas",
+      texto: "Unir zapatas",
+      icono: Frame,
+      grupo: "Estructura",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      descripcion: "Contratrabes entre zapatas consecutivas sobre cada eje",
+      accion: a.unirZapatas,
+    },
+    {
+      id: "unir-trabes",
+      texto: "Unir columnas",
+      icono: RectangleHorizontal,
+      grupo: "Estructura",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      descripcion: "Trabes entre columnas consecutivas sobre cada eje",
+      accion: a.unirTrabes,
     },
     {
       id: "mover",

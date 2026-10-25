@@ -345,6 +345,9 @@ export function App() {
         herramientaCerramiento: () =>
           useModelo.getState().activarHerramienta("cerramiento"),
         herramientaDala: () => useModelo.getState().activarHerramienta("dala"),
+        castillosAutomaticos: () => useModelo.getState().abrirDialogoCastillos(),
+        unirZapatas: () => void useModelo.getState().unirZapatas(),
+        unirTrabes: () => void useModelo.getState().unirTrabes(),
         // O007a: el editor vive en el módulo Modelo; la cinta cambia de módulo.
         abrirTipos: () => {
           irAModulo("modelo");
@@ -453,7 +456,38 @@ export function App() {
       {atajos && <DialogoAtajos onCerrar={() => setAtajos(false)} />}
       <DialogoActualizacion />
       <DialogoGuardarCambios />
+      <DialogoBorrarZapata />
     </div>
+  );
+}
+
+/** O007c: al borrar una columna, ¿se borra también su zapata? (por omisión, sí). */
+function DialogoBorrarZapata() {
+  const pregunta = useModelo((s) => s.preguntaZapata);
+  const responder = useModelo((s) => s.responderZapata);
+  if (!pregunta) return null;
+  return (
+    <Modal
+      titulo="Borrar columna"
+      onCerrar={() => responder(true)}
+      className="w-[min(480px,92vw)]"
+    >
+      <div className="flex flex-col gap-3 p-4" data-testid="dialogo-borrar-zapata">
+        <h2 className="font-semibold">¿Borrar también su zapata?</h2>
+        <p className="text-muted-foreground">
+          La columna tiene una zapata ligada. Si la conserva, quedará suelta en el
+          modelo.
+        </p>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => responder(false)}>
+            Conservar zapata
+          </Button>
+          <Button autoFocus onClick={() => responder(true)}>
+            Borrar también
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

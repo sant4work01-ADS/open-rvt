@@ -28,7 +28,9 @@ import {
   areaPoligono,
   colocarAbertura,
   ejeConDistancia,
+  muroBajoPunto,
   puntoConLongitud,
+  proyectarSobreSegmento,
   puntoDibujo,
   REFERENCIAS_VACIAS,
   referenciasAlDia,
@@ -175,6 +177,19 @@ interface EstadoModelo {
   tipoHerramienta: Partial<Record<Herramienta, string>>;
   /** O007b: giro de la siguiente columna o zapata (grados). */
   rotacionSiguiente: number;
+  /** O007c: al colocar una columna se ofrece su zapata y el tipo de zapata. */
+  columnaConZapata: boolean;
+  tipoZapata: string;
+  fijarColumnaConZapata: (valor: boolean) => void;
+  fijarTipoZapata: (nombre: string) => void;
+  /** O007c: diálogo de separación de los castillos automáticos. */
+  dialogoCastillos: boolean;
+  abrirDialogoCastillos: () => void;
+  cerrarDialogoCastillos: () => void;
+  /** O007c: pregunta «¿Borrar también su zapata?» (por omisión, sí). */
+  preguntaZapata: { resolver: (ok: boolean) => void } | null;
+  preguntarZapata: () => Promise<boolean>;
+  responderZapata: (ok: boolean) => void;
   fijarTipoHerramienta: (herramienta: Herramienta, nombre: string) => void;
   girar90: () => void;
   referencias: Referencias;
@@ -253,6 +268,13 @@ interface EstadoModelo {
   cotasMoverSiguientes: boolean;
   fijarCotasMoverSiguientes: (valor: boolean) => void;
   losaDesdeMuros: () => Promise<void>;
+  /** O007c: castillos en esquinas, remates e intermedios de los muros elegidos. */
+  castillosAutomaticos: (separacion: number) => Promise<boolean>;
+  /** O007c: columna en todos los cruces de la retícula (con zapata opcional). */
+  columnasEnCruces: () => Promise<boolean>;
+  /** O007c: contratrabes entre zapatas consecutivas y trabes entre columnas. */
+  unirZapatas: () => Promise<boolean>;
+  unirTrabes: () => Promise<boolean>;
   editarElemento: (globalid: string, cambios: Record<string, unknown>) => Promise<void>;
 
   nuevo: () => Promise<boolean>;
@@ -563,15 +585,22 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     if (!seleccion) set({ propiedades: null });
   };
 
-  const ejecutar = async (metodo: string, params: Record<string, unknown> = {}) => {
+  const ejecutarResultado = async (
+    metodo: string,
+    params: Record<string, unknown> = {},
+  ): Promise<RespuestaComando | null> => {
     try {
       const resultado = await rpc<RespuestaComando>(metodo, params);
       await refrescarDeComando(resultado);
-      return true;
+      return resultado;
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e) });
-      return false;
+      return null;
     }
+  };
+
+  const ejecutar = async (metodo: string, params: Record<string, unknown> = {}) => {
+    return (await ejecutarResultado(metodo, params)) !== null;
   };
 
   const nivelActivo = () => {
@@ -617,6 +646,25 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     return tipo;
   };
 
+  const tipoZapataElegida = (): TipoHerramienta | null => {
+    const zapatas = get().tiposHerramienta.filter((t) => t.alias === "zapata");
+    const elegido = get().tipoZapata;
+    return zapatas.find((t) => t.nombre === elegido) ?? zapatas[0] ?? null;
+  };
+
+  /** O007c: ejes que pasan por el punto de enganche (para guardar EjeA y EjeB). */
+  const ejesEnPunto = (punto: Punto2): string[] => {
+    const dentro = get().referencias.ejes.filter((eje) => {
+      const proyeccion = proyectarSobreSegmento(
+        punto,
+        [eje.x1, eje.y1],
+        [eje.x2, eje.y2],
+      );
+      return proyeccion.distancia <= 0.01 && proyeccion.t >= -1e-6 && proyeccion.t <= 1 + 1e-6;
+    });
+    return dentro.slice(0, 2).map((eje) => eje.globalid);
+  };
+
   /** O007b: columna, castillo o zapata en un cruce de ejes. */
   const crearEstructuralPunto = async (
     herramienta: Herramienta,
@@ -627,18 +675,32 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     if (!tipo || !nivel) return false;
     const rotacion = (get().rotacionSiguiente * Math.PI) / 180;
     const metodo = herramienta === "zapata" ? "zapatas.crear" : "columnas.crear";
-    const ok = await ejecutar(metodo, {
+    const cruce = herramienta === "columna" ? ejesEnPunto(punto) : [];
+    const resultado = await ejecutarResultado(metodo, {
       tipo: tipo.nombre,
       nivel,
       x: punto[0],
       y: punto[1],
       rotacion,
+      ...(cruce.length >= 2 ? { ejeA: cruce[0], ejeB: cruce[1] } : {}),
     });
-    if (ok) {
-      set({ aviso: `${tipo.nombre} colocado. R gira 90°.` });
-      bitacoraHerramienta(herramienta, "terminar", { x: punto[0], y: punto[1] });
+    if (!resultado) return false;
+    if (herramienta === "columna" && get().columnaConZapata) {
+      const zapata = tipoZapataElegida();
+      const columna = resultado.creados[0];
+      if (zapata && columna) {
+        const hecha = await ejecutarResultado("zapatas.bajo_columna", {
+          tipo: zapata.nombre,
+          columna,
+        });
+        if (!hecha) return false;
+      }
     }
-    return ok;
+    set({
+      aviso: `${tipo.nombre} colocado${herramienta === "columna" && get().columnaConZapata ? " con zapata" : ""}. R gira 90°.`,
+    });
+    bitacoraHerramienta(herramienta, "terminar", { x: punto[0], y: punto[1] });
+    return true;
   };
 
   /** O007b: trabe, cerramiento, dala, contratrabe o zapata corrida entre dos puntos. */
@@ -775,6 +837,10 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     tiposHerramienta: [],
     tipoHerramienta: {},
     rotacionSiguiente: 0,
+    columnaConZapata: false,
+    tipoZapata: "",
+    dialogoCastillos: false,
+    preguntaZapata: null,
     referencias: REFERENCIAS_VACIAS,
     puntosHerramienta: [],
     ratonHerramienta: null,
@@ -1030,10 +1096,10 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         zapata_corrida: "Zapata corrida: dos clics a lo largo del trazo.",
         contratrabe: "Contratrabe: dos clics entre zapatas.",
         columna: "Columna: un clic en un cruce de ejes. R gira 90°.",
-        castillo: "Castillo: un clic en un cruce de ejes. R gira 90°.",
+        castillo: "Castillo: clic sobre un muro o en un cruce de ejes. R gira 90°.",
         trabe: "Trabe: dos clics entre columnas.",
-        cerramiento: "Cerramiento: dos clics sobre el muro.",
-        dala: "Dala de desplante: dos clics sobre el muro.",
+        cerramiento: "Cerramiento: clic sobre un muro.",
+        dala: "Dala de desplante: clic sobre un muro.",
       };
       const conservarSeleccion =
         herramienta === "mover" || herramienta === "copiar" || herramienta === "losa";
@@ -1085,10 +1151,10 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         zapata_corrida: "Zapata corrida: dos clics a lo largo del trazo.",
         contratrabe: "Contratrabe: dos clics entre zapatas.",
         columna: "Columna: un clic en un cruce de ejes. R gira 90°.",
-        castillo: "Castillo: un clic en un cruce de ejes. R gira 90°.",
+        castillo: "Castillo: clic sobre un muro o en un cruce de ejes. R gira 90°.",
         trabe: "Trabe: dos clics entre columnas.",
-        cerramiento: "Cerramiento: dos clics sobre el muro.",
-        dala: "Dala de desplante: dos clics sobre el muro.",
+        cerramiento: "Cerramiento: clic sobre un muro.",
+        dala: "Dala de desplante: clic sobre un muro.",
       };
       set({
         puntosHerramienta: [],
@@ -1107,6 +1173,18 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
     fijarTipoHerramienta: (herramienta, nombre) =>
       set({ tipoHerramienta: { ...get().tipoHerramienta, [herramienta]: nombre } }),
+
+    fijarColumnaConZapata: (valor) => set({ columnaConZapata: valor }),
+    fijarTipoZapata: (nombre) => set({ tipoZapata: nombre }),
+    abrirDialogoCastillos: () => set({ dialogoCastillos: true }),
+    cerrarDialogoCastillos: () => set({ dialogoCastillos: false }),
+    preguntarZapata: () =>
+      new Promise<boolean>((resolver) => set({ preguntaZapata: { resolver } })),
+    responderZapata: (ok) => {
+      const pregunta = get().preguntaZapata;
+      set({ preguntaZapata: null });
+      pregunta?.resolver(ok);
+    },
 
     girar90: () =>
       set({ rotacionSiguiente: (get().rotacionSiguiente + 90) % 360 }),
@@ -1231,6 +1309,42 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       );
       const p = enganche.punto;
       bitacoraHerramienta(herramienta, "punto", { x: p[0], y: p[1] });
+      if (herramienta === "castillo") {
+        const bajo = muroBajoPunto(get().referencias, p, 0.35);
+        if (bajo) {
+          const largo = Math.hypot(
+            bajo.muro.x2 - bajo.muro.x1,
+            bajo.muro.y2 - bajo.muro.y1,
+          );
+          const t = proyectarSobreSegmento(
+            p,
+            [bajo.muro.x1, bajo.muro.y1],
+            [bajo.muro.x2, bajo.muro.y2],
+          ).t;
+          const tipo = tipoEstructural("castillo");
+          if (!tipo) return;
+          await ejecutar("castillos.crear_en_muro", {
+            tipo: tipo.nombre,
+            muro: bajo.muro.globalid,
+            distancia: Number((t * largo).toFixed(6)),
+          });
+          return;
+        }
+      }
+      if (herramienta === "cerramiento" || herramienta === "dala") {
+        const bajo = muroBajoPunto(get().referencias, p, 0.35);
+        if (bajo) {
+          const tipo = tipoEstructural(herramienta);
+          if (!tipo) return;
+          await ejecutar(
+            herramienta === "cerramiento"
+              ? "cerramientos.crear_en_muro"
+              : "dalas.crear_en_muro",
+            { tipo: tipo.nombre, muro: bajo.muro.globalid },
+          );
+          return;
+        }
+      }
       if (esHerramientaPuntual(herramienta)) {
         await crearEstructuralPunto(herramienta, p);
         return;
@@ -1407,7 +1521,13 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         set({ aviso: "Seleccione uno o varios elementos para borrar." });
         return;
       }
-      await ejecutar("elementos.borrar", { globalids: gids });
+      // O007c: al borrar una columna se pregunta si cae también su zapata.
+      const hayColumna = get().elementos.some(
+        (elemento) =>
+          gids.includes(elemento.globalid) && elemento.clase === "IfcColumn",
+      );
+      const dependientes = hayColumna ? await get().preguntarZapata() : true;
+      await ejecutar("elementos.borrar", { globalids: gids, dependientes });
     },
 
     deshacer: async () => {
@@ -1597,6 +1717,81 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         return;
       }
       await ejecutar("losas.desde_muros", { nivel, globalids: gids });
+    },
+
+    castillosAutomaticos: async (separacion) => {
+      if (!Number.isFinite(separacion) || separacion <= 0) {
+        set({ aviso: "La separación entre castillos debe ser positiva." });
+        return false;
+      }
+      const nivel = nivelActivo();
+      const muros = get().seleccionados.filter((gid) =>
+        get().elementos.some(
+          (elemento) => elemento.globalid === gid && elemento.clase === "IfcWall",
+        ),
+      );
+      const ok = await ejecutar("castillos.automaticos", {
+        muros,
+        separacion_max: separacion,
+        nivel,
+      });
+      if (ok) set({ dialogoCastillos: false });
+      return ok;
+    },
+
+    columnasEnCruces: async () => {
+      const tipo = tipoEstructural("columna");
+      const nivel = nivelActivo();
+      if (!tipo || !nivel) return false;
+      const resultado = await ejecutarResultado("columnas.en_cruces", {
+        tipo: tipo.nombre,
+        nivel,
+      });
+      if (!resultado) return false;
+      if (get().columnaConZapata) {
+        const zapata = tipoZapataElegida();
+        if (zapata) {
+          for (const columna of resultado.creados) {
+            const ok = await ejecutar("zapatas.bajo_columna", {
+              tipo: zapata.nombre,
+              columna,
+            });
+            if (!ok) return false;
+          }
+        }
+      }
+      set({
+        aviso: `${resultado.creados.length} columna(s) en los cruces${
+          get().columnaConZapata ? " con zapata" : ""
+        }.`,
+      });
+      return true;
+    },
+
+    unirZapatas: async () => {
+      const tipo = get().tiposHerramienta.find((t) => t.alias === "contratrabe");
+      const nivel = nivelActivo();
+      if (!tipo || !nivel) {
+        set({ aviso: "No hay tipo de contratrabe en la biblioteca." });
+        return false;
+      }
+      return ejecutar("contratrabes.unir_zapatas", {
+        tipo: tipo.nombre,
+        nivel,
+      });
+    },
+
+    unirTrabes: async () => {
+      const tipo = get().tiposHerramienta.find((t) => t.alias === "trabe");
+      const nivel = nivelActivo();
+      if (!tipo || !nivel) {
+        set({ aviso: "No hay tipo de trabe en la biblioteca." });
+        return false;
+      }
+      return ejecutar("trabes.unir_columnas", {
+        tipo: tipo.nombre,
+        nivel,
+      });
     },
 
     editarElemento: async (globalid, cambios) => {
