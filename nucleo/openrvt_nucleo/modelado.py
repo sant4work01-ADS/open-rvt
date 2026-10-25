@@ -1091,18 +1091,23 @@ class ModeladoMixin:
             )
         vertices: list[list[float]] = []
         caras: list[list[int]] = []
-        for x0, z0, w, h, t in cajas:
+        for indice, (x0, z0, w, h, t) in enumerate(cajas):
+            # La hoja de la puerta se desplaza a un lado u otro del marco: así se ve
+            # el lado de abatimiento que elige el usuario con Espacio.
+            desplazamiento = 0.0
+            if indice == 4 and clase == "IfcDoor":
+                desplazamiento = 0.03 if volteado else -0.03
             base = len(vertices)
             vertices.extend(
                 [
-                    [x0, -t, z0],
-                    [x0 + w, -t, z0],
-                    [x0 + w, t, z0],
-                    [x0, t, z0],
-                    [x0, -t, z0 + h],
-                    [x0 + w, -t, z0 + h],
-                    [x0 + w, t, z0 + h],
-                    [x0, t, z0 + h],
+                    [x0, -t + desplazamiento, z0],
+                    [x0 + w, -t + desplazamiento, z0],
+                    [x0 + w, t + desplazamiento, z0],
+                    [x0, t + desplazamiento, z0],
+                    [x0, -t + desplazamiento, z0 + h],
+                    [x0 + w, -t + desplazamiento, z0 + h],
+                    [x0 + w, t + desplazamiento, z0 + h],
+                    [x0, t + desplazamiento, z0 + h],
                 ]
             )
             caras.extend(
