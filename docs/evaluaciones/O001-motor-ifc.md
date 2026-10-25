@@ -302,7 +302,9 @@ lo vuelve a abrir con el **otro** motor para medir los muros. No se parte de un 
 - Puerta de 0.90 × 2.10 m en el muro sur, con `IfcOpeningElement` y `IfcRelFillsElement`.
 - Edición: el muro este se desplaza 1 m hacia el este (la dimensión este-oeste pasa de 8 a 9 m) y el
   sur y el norte se estiran a 9 m. El espesor del tipo «Block 15» pasa de 0.15 a 0.20 m y se
-  comprueba que los cuatro muros quedan con 0.20 m.
+  comprueba que los cuatro muros quedan con 0.20 m. Nota de interpretación: «alargar el muro este
+  1 m» se implementó como desplazarlo 1 m al este; estirar su eje de 6 a 7 m habría dado un
+  rectángulo de 8 × 7 m, no de 9 × 6 m como pide la especificación.
 - Uniones declaradas por el guion: **a eje**. Cada muro conserva su largo nominal (sur 9, norte 9,
   este 6, oeste 6) y se solapa con los perpendiculares en las esquinas. No se recortan las esquinas,
   porque el volumen esperado de la especificación para el muro sur supone largo 9.00 m completo.
