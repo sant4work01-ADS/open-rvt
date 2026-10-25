@@ -12,7 +12,7 @@ commit **`fd60cde`** («Ayuda: novedades de la versión 0.13.18»).
 
 | Archivo en OPEN-RVT | Archivo en PP | Estado | Motivo de la adaptación |
 | --- | --- | --- | --- |
-| `package.json` | `package.json` | adaptado | Nombre `open-rvt`; se quitaron glide-data-grid, marked, lodash, zod, react-hook-form, react-hotkeys-hook, pdfjs-dist, selenium y demás dependencias que ya no usa nadie. |
+| `package.json` | `package.json` | adaptado | Nombre `open-rvt`; se quitaron glide-data-grid, marked, lodash, zod, react-hook-form, react-hotkeys-hook, pdfjs-dist, selenium y demás dependencias que ya no usa nadie; en O003a se añadió `three` con versión fija y sus tipos. |
 | `eslint.config.js` | `eslint.config.js` | intacto | — |
 | `vite.config.ts` | `vite.config.ts` | adaptado | Se quitó la deduplicación y los comentarios de Glide; el resto (alias `@`, jsdom, setup) es igual. |
 | `.gitignore` | `.gitignore` | adaptado | Se añadieron las salidas de `dist`, `target`, `src-tauri/gen` y `e2e/salida`. |
@@ -28,7 +28,7 @@ commit **`fd60cde`** («Ayuda: novedades de la versión 0.13.18»).
 | `src/vite-env.d.ts` | `src/vite-env.d.ts` | intacto | — |
 | `src/test-setup.ts` | `src/test-setup.ts` | adaptado | Sin los simulacros de Glide, del backend IPC de PP ni de sus diálogos. |
 | `src/test/utiles.tsx` | `src/test/utiles.tsx` | adaptado | `montarApp` ya no instala el backend falso de PP; reinicia el tema y monta `App`. |
-| `src/app/App.tsx` | `src/app/App.tsx` | adaptado | Sin vistas ni consultas de presupuesto; módulos Modelo, Niveles, Configuración y Ayuda; ribbon directo y barra de estado simple. |
+| `src/app/App.tsx` | `src/app/App.tsx` | adaptado | Sin vistas ni consultas de presupuesto; módulos Modelo, Niveles, Configuración y Ayuda; ribbon directo y barra de estado simple. En O003a conecta archivo, atajos, cierre con cambios y el núcleo IFC. |
 | `src/app/App.test.tsx` | `src/app/App.test.tsx` | adaptado | Prueba el esqueleto nuevo (módulos, área vacía, ribbon, tema y escala). |
 | `src/app/BarraTitulo.tsx` | `src/app/BarraTitulo.tsx` | adaptado | Sin el botón del asistente ni el nombre de la obra: el título es siempre «OPEN-RVT». |
 | `src/app/BarraTitulo.test.tsx` | `src/app/BarraTitulo.test.tsx` | adaptado | Sin sesión de obra; se conservan las pruebas de ventana, foco y redimensión. |
@@ -68,7 +68,7 @@ commit **`fd60cde`** («Ayuda: novedades de la versión 0.13.18»).
 | `src/lib/utils.ts` | `src/lib/utils.ts` | intacto | — |
 | `src/lib/ipc.ts` | `src/lib/ipc.ts` | adaptado | Comandos genéricos de preferencias y registro; sin motor ni OPUS. |
 | `src/lib/bindings.ts` | `src/lib/bindings.ts` | adaptado | En PP lo genera tauri-specta; aquí es la lista escrita a mano de los comandos genéricos. |
-| `src/lib/dialogos.ts` | `src/lib/dialogos.ts` | intacto | — |
+| `src/lib/dialogos.ts` | `src/lib/dialogos.ts` | adaptado | Se añadieron los diálogos nativos de IFC (`*.ifc`) de O003a; el resto sigue intacto. |
 | `src/lib/errores-globales.ts` | `src/lib/errores-globales.ts` | intacto | — |
 | `src/lib/usePanelRedimensionable.ts` | `src/lib/usePanelRedimensionable.ts` | intacto | — |
 | `src/lib/formato.ts` | `src/lib/formato.ts` | intacto | — |
@@ -95,7 +95,7 @@ commit **`fd60cde`** («Ayuda: novedades de la versión 0.13.18»).
 | `src-tauri/capabilities/default.json` | `src-tauri/capabilities/default.json` | intacto | — |
 | `src-tauri/icons/` | `src-tauri/icons/` | intacto | Iconos provisionales de PP (decisión de la spec). |
 | `src-tauri/src/main.rs` | `src-tauri/src/main.rs` | adaptado | Llama a `open_rvt_lib::run()`. |
-| `src-tauri/src/lib.rs` | `src-tauri/src/lib.rs` | adaptado | Solo preferencias, título, registros y `configurar_webview2` (intacto); sin comandos de presupuesto. |
+| `src-tauri/src/lib.rs` | `src-tauri/src/lib.rs` | adaptado | Solo preferencias, título, registros y `configurar_webview2` (intacto); sin comandos de presupuesto. En O003a añade el estado del núcleo IFC, `nucleo_llamar` y su arranque. |
 | `src-tauri/src/estado.rs` | `src-tauri/src/estado.rs` | adaptado | Solo `Config` y las rutas de datos; sin obra, empresa, respaldos ni consumo. |
 | `src-tauri/tauri.conf.json` | `src-tauri/tauri.conf.json` | adaptado | «OPEN-RVT», `mx.openrvt.app`, versión 0.1.0 y sin recursos del catálogo. |
 
@@ -115,6 +115,24 @@ Se borraron junto con lo que probaban (spec O002):
 `unidades`, `medida` y `tsv`; en i18n, `pantallas-en.test.tsx`,
 `plantillas.test.ts` y `textos-fijos.test.ts` (dependen de pantallas y textos que no
 existen).
+
+## Archivos nuevos de O003a (sin equivalente en PP)
+
+| Archivo en OPEN-RVT | Origen | Estado |
+| --- | --- | --- |
+| `nucleo/` | — | nuevo: núcleo IFC Python/IfcOpenShell con JSON-RPC, pruebas y `pyproject.toml`. |
+| `src-tauri/src/nucleo.rs` | — | nuevo: puente del proceso Python, relanzado, timeout y avisos. |
+| `src/features/modelo/tipos.ts` | — | nuevo: tipos de vistas, mallas y propiedades. |
+| `src/features/modelo/vistas.ts` | — | nuevo: cámaras, creación automática de vistas y JSON de `OPENRVT_Vistas`. |
+| `src/features/modelo/estado.ts` | — | nuevo: estado del modelo, archivo y selección. |
+| `src/features/modelo/Visor3D.tsx` | Idea y convenciones de `three.js`; no es código de PP | nuevo: visor, recorte con stencil, navegación y selección. |
+| `src/features/modelo/NavegadorVistas.tsx` | — | nuevo: árbol de vistas. |
+| `src/features/modelo/PanelPropiedades.tsx` | — | nuevo: propiedades de vista y elemento. |
+| `e2e/o003a.test.js` | `e2e/inicio.test.js` de O002 | nuevo: E2E del modelo, cortes, guardado y capturas. |
+
+`e2e/arnes.js` pasó de solo O002 a aceptar `compositar: true`: WebKitGTK necesita la
+composición activa para dibujar WebGL; O002 sigue ejecutándose con la composición
+desactivada, como antes.
 
 ## Pendiente anotado
 

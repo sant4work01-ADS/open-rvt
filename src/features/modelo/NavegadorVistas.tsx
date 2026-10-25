@@ -30,7 +30,10 @@ export function NavegadorVistas({ vistas, activaId, onElegir }: Props) {
           if (delGrupo.length === 0) return null;
           return (
             <section key={grupo.titulo} data-grupo={grupo.prueba}>
-              <h3 className="px-1 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <h3
+                className="px-1 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+                title={grupo.titulo === "Alzados" ? "El norte del IFC es −Y" : undefined}
+              >
                 {grupo.titulo}
               </h3>
               <ul className="flex flex-col">

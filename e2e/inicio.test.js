@@ -34,7 +34,7 @@ test("O002: la ventana muestra título, ribbon, 4 módulos y el área de trabajo
 
     for (const id of ["nuevo", "abrir", "guardar"]) {
       const b = await ses.porTestid(`cmd-${id}`);
-      assert.equal(await b.isEnabled(), false);
+      assert.equal(await b.isEnabled(), true);
     }
 
     // La captura de la entrega: ribbon, sidebar con los 4 módulos y área vacía.
