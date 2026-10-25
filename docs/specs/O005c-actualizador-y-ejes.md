@@ -64,3 +64,10 @@ PresupuestosPro ya se actualiza solo. Su código está en la rama **`actualizaci
 - `docs/progreso/O005c.md` con la etiqueta «LISTA PARA REVISIÓN»: la causa del bug de ejes, qué casos fallaban, las pruebas y la captura `o005c_ejes.png` (planta con 3 ejes verticales y 2 horizontales, burbujas y etiquetas).
 - Todo en verde: build, vitest, cargo test, clippy y pytest.
 - Commits en español. No hagas push.
+
+## 3. Ventana en planta: geometría 3D asomada
+En `docs/capturas/o005_planta_casa.png`, junto al símbolo 2D centrado, se sigue viendo un rectángulo **fuera del muro**. Es la geometría 3D de la ventana (marco y hoja) dibujada en proyección o en corte.
+
+- En plantas, la geometría 3D de **IfcWindow** e **IfcDoor** no se dibuja. Solo se dibuja su simbología 2D.
+- Revisa si la caja del marco de O003b está desplazada respecto al eje del muro; si lo está, corrígela en el núcleo para que quede centrada en el muro. Así no se verá mal en 3D.
+- Vuelve a tomar `o005_planta_casa.png`.
