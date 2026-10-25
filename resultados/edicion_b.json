@@ -1,0 +1,88 @@
+{
+  "motor": "b",
+  "ifc": "resultados/edicion_b.ifc",
+  "esquema": "IFC4",
+  "operaciones_s": {
+    "crear_modelo_s": 0.036845100000000006,
+    "editar_muro_s": 0.0016725999999999885,
+    "cambiar_tipo_s": 0.0006529999999999632,
+    "guardar_s": 0.0018394999999999868,
+    "medir_propio_s": 0.042462299999999974,
+    "medir_otro_s": 0.31516160099999996,
+    "validar_s": 0.3197866019999999
+  },
+  "total_s": 0.7184207029999998,
+  "propagacion_tipo": {
+    "capa": 0.2,
+    "perfiles": [
+      0.2,
+      0.2,
+      0.2,
+      0.2
+    ],
+    "ok": true
+  },
+  "medido_propio": {
+    "motor": "b",
+    "muros": [
+      {
+        "globalid": "0IpPlHRljDd8miFKb_Sm2q",
+        "nombre": "Muro Oeste",
+        "volumen_malla": 3.6000000536441803
+      },
+      {
+        "globalid": "1tykEUs990K8x_xuTW700$",
+        "nombre": "Muro Norte",
+        "volumen_malla": 5.4000000804662704
+      },
+      {
+        "globalid": "2WkBxrYifC5QfMJZuBwpRB",
+        "nombre": "Muro Este",
+        "volumen_malla": 3.6000000536441803
+      },
+      {
+        "globalid": "2YJZpGApPEKfU0eMzFgWwQ",
+        "nombre": "Muro Sur",
+        "volumen_malla": 5.022000080555678
+      }
+    ]
+  },
+  "medido_por_a": {
+    "motor": "a",
+    "esquema": "IFC4",
+    "conteo": {
+      "muros": 4,
+      "losas": 1,
+      "puertas": 1,
+      "vanos": 1
+    },
+    "muros": [
+      {
+        "globalid": "2YJZpGApPEKfU0eMzFgWwQ",
+        "nombre": "Muro Sur",
+        "volumen_malla": 5.022
+      },
+      {
+        "globalid": "2WkBxrYifC5QfMJZuBwpRB",
+        "nombre": "Muro Este",
+        "volumen_malla": 3.5999999999999837
+      },
+      {
+        "globalid": "1tykEUs990K8x_xuTW700$",
+        "nombre": "Muro Norte",
+        "volumen_malla": 5.400000000000009
+      },
+      {
+        "globalid": "0IpPlHRljDd8miFKb_Sm2q",
+        "nombre": "Muro Oeste",
+        "volumen_malla": 3.600000000000001
+      }
+    ]
+  },
+  "validacion": {
+    "errores": 0,
+    "avisos": 0,
+    "mensajes": [],
+    "ok": true
+  }
+}

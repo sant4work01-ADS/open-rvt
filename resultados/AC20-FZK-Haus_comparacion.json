@@ -1,0 +1,946 @@
+{
+ "n_a": 38,
+ "n_b": 38,
+ "comunes": 38,
+ "faltan_en_b": [],
+ "faltan_en_a": [],
+ "duplicados_a": [],
+ "duplicados_b": [],
+ "volumen": {
+  "comparables": 38,
+  "pasan_1pct": 0,
+  "concordancia_pct": 100.0,
+  "concordancia_cerradas_pct": 100.0,
+  "comparables_cerradas": 29,
+  "peores": [
+   {
+    "globalid": "1M$gxUrX1Fiwe3P64ww7U5",
+    "clase": "IfcDoor",
+    "nombre": "Terrassentuer",
+    "volumen_a": 0.13543425,
+    "volumen_b": 0.135434264,
+    "dif_rel": 1.0337119297837155e-07,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "2RGlQk4xH47RHK93zcTzUL",
+    "clase": "IfcSlab",
+    "nombre": "Slab-033",
+    "volumen_a": 19.967154916,
+    "volumen_b": 19.967156359,
+    "dif_rel": 7.226868365700439e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "1zOBw0Gej5Wf0QAJfHnOc0",
+    "clase": "IfcWindow",
+    "nombre": "OG-Fenster-2",
+    "volumen_a": 0.030238271,
+    "volumen_b": 0.030238269,
+    "dif_rel": 6.614134779555644e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "2ACmFFQhT1Ouf0x4YRUh9m",
+    "clase": "IfcWindow",
+    "nombre": "OG-Fenster-1",
+    "volumen_a": 0.030238271,
+    "volumen_b": 0.030238269,
+    "dif_rel": 6.614134779555644e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "0B1RwEzzP3CfME5NR$Vqh5",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-7",
+    "volumen_a": 0.0738055,
+    "volumen_b": 0.073805504,
+    "dif_rel": 5.419650294211918e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": false
+   },
+   {
+    "globalid": "13aSY79zb8fP4HApEJ0z_e",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-8",
+    "volumen_a": 0.0738055,
+    "volumen_b": 0.073805504,
+    "dif_rel": 5.419650294211918e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": false
+   },
+   {
+    "globalid": "1DiYqhfzH9xxuJdVHwXCNa",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-3",
+    "volumen_a": 0.0738055,
+    "volumen_b": 0.073805504,
+    "dif_rel": 5.419650294211918e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": false
+   },
+   {
+    "globalid": "1TAI4ouKX4Xx4lBDZIu5qM",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-1",
+    "volumen_a": 0.0738055,
+    "volumen_b": 0.073805504,
+    "dif_rel": 5.419650294211918e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": false
+   },
+   {
+    "globalid": "1srAI$R4T8ihLXSNHmUSET",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-6",
+    "volumen_a": 0.0738055,
+    "volumen_b": 0.073805504,
+    "dif_rel": 5.419650294211918e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": false
+   },
+   {
+    "globalid": "25nJxEpYf8LRDJNkMUVO0m",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-4",
+    "volumen_a": 0.0738055,
+    "volumen_b": 0.073805504,
+    "dif_rel": 5.419650294211918e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": false
+   }
+  ],
+  "diferencias": [
+   {
+    "globalid": "07Enbsqm9C7AQC9iyBwfSD",
+    "clase": "IfcSlab",
+    "nombre": "Dach-1",
+    "volumen_a": 16.512217699,
+    "volumen_b": 16.512217958,
+    "dif_rel": 1.5685355222100746e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "0B1RwEzzP3CfME5NR$Vqh5",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-7",
+    "volumen_a": 0.0738055,
+    "volumen_b": 0.073805504,
+    "dif_rel": 5.419650294211918e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": false
+   },
+   {
+    "globalid": "0eaC0nL3XAOfFxRXK_2iAr",
+    "clase": "IfcBeam",
+    "nombre": "Pfette-2-1",
+    "volumen_a": 0.166399993,
+    "volumen_b": 0.166399993,
+    "dif_rel": 0.0,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "0knNIAVBPBFvBy_m5QVHsU",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Ext-OG-1",
+    "volumen_a": 5.54440603,
+    "volumen_b": 5.54440626,
+    "dif_rel": 4.148325325487753e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "0pGAjlJMP3ifYPATVF5xAR",
+    "clase": "IfcDoor",
+    "nombre": "Innentuer-2",
+    "volumen_a": 0.085569,
+    "volumen_b": 0.085568996,
+    "dif_rel": 4.674590110638624e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "1$wmdwWPjDYuku_ghVkynE",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Int-ERDG-5",
+    "volumen_a": 2.1,
+    "volumen_b": 2.099999953,
+    "dif_rel": 2.2380952329521213e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "13aSY79zb8fP4HApEJ0z_e",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-8",
+    "volumen_a": 0.0738055,
+    "volumen_b": 0.073805504,
+    "dif_rel": 5.419650294211918e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": false
+   },
+   {
+    "globalid": "16DNNqzfP2thtfaOflvsKA",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Ext-ERDG-4",
+    "volumen_a": 6.604875,
+    "volumen_b": 6.604875279,
+    "dif_rel": 4.22415261442381e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "1DiYqhfzH9xxuJdVHwXCNa",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-3",
+    "volumen_a": 0.0738055,
+    "volumen_b": 0.073805504,
+    "dif_rel": 5.419650294211918e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": false
+   },
+   {
+    "globalid": "1M$gxUrX1Fiwe3P64ww7U5",
+    "clase": "IfcDoor",
+    "nombre": "Terrassentuer",
+    "volumen_a": 0.13543425,
+    "volumen_b": 0.135434264,
+    "dif_rel": 1.0337119297837155e-07,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "1Oms875aH3Wg$9l65H2ZGw",
+    "clase": "IfcDoor",
+    "nombre": "Innentuer-1",
+    "volumen_a": 0.085569,
+    "volumen_b": 0.085568996,
+    "dif_rel": 4.674590110638624e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "1TAI4ouKX4Xx4lBDZIu5qM",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-1",
+    "volumen_a": 0.0738055,
+    "volumen_b": 0.073805504,
+    "dif_rel": 5.419650294211918e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": false
+   },
+   {
+    "globalid": "1bzfVsJqn8De5PukCrqylz",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Ext-ERDG-2",
+    "volumen_a": 7.317,
+    "volumen_b": 7.317000389,
+    "dif_rel": 5.316386500089944e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "1pPHnf7cXCpPsNEnQf8_6B",
+    "clase": "IfcSlab",
+    "nombre": "Bodenplatte",
+    "volumen_a": 24.0,
+    "volumen_b": 24.000000358,
+    "dif_rel": 1.491666671663931e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "1srAI$R4T8ihLXSNHmUSET",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-6",
+    "volumen_a": 0.0738055,
+    "volumen_b": 0.073805504,
+    "dif_rel": 5.419650294211918e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": false
+   },
+   {
+    "globalid": "1zOBw0Gej5Wf0QAJfHnOc0",
+    "clase": "IfcWindow",
+    "nombre": "OG-Fenster-2",
+    "volumen_a": 0.030238271,
+    "volumen_b": 0.030238269,
+    "dif_rel": 6.614134779555644e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "20bTaetQDApP5w8egFxj13",
+    "clase": "IfcBeam",
+    "nombre": "First",
+    "volumen_a": 0.166399993,
+    "volumen_b": 0.166399993,
+    "dif_rel": 0.0,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "25OWQvmXj5BPgyergP43tY",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Ext-OG-2",
+    "volumen_a": 2.056376841,
+    "volumen_b": 2.056376882,
+    "dif_rel": 1.99379797623589e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "25fsbPyk15VvuXI$yNKenK",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Ext-ERDG-3",
+    "volumen_a": 6.417,
+    "volumen_b": 6.417000211,
+    "dif_rel": 3.2881408848812265e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "25nJxEpYf8LRDJNkMUVO0m",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-4",
+    "volumen_a": 0.0738055,
+    "volumen_b": 0.073805504,
+    "dif_rel": 5.419650294211918e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": false
+   },
+   {
+    "globalid": "2ACmFFQhT1Ouf0x4YRUh9m",
+    "clase": "IfcWindow",
+    "nombre": "OG-Fenster-1",
+    "volumen_a": 0.030238271,
+    "volumen_b": 0.030238269,
+    "dif_rel": 6.614134779555644e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "2EQh_jhP1B_A_AMuSJc5E0",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-9",
+    "volumen_a": 0.0738055,
+    "volumen_b": 0.073805504,
+    "dif_rel": 5.419650294211918e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": false
+   },
+   {
+    "globalid": "2IxUUNUVPB6Ob$eicCfP2N",
+    "clase": "IfcSlab",
+    "nombre": "Dach-2",
+    "volumen_a": 16.512217699,
+    "volumen_b": 16.512217958,
+    "dif_rel": 1.5685355222100746e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "2Q9w7oRXP249jBobEMVqlZ",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-2",
+    "volumen_a": 0.0738055,
+    "volumen_b": 0.073805504,
+    "dif_rel": 5.419650294211918e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": false
+   },
+   {
+    "globalid": "2RGlQk4xH47RHK93zcTzUL",
+    "clase": "IfcSlab",
+    "nombre": "Slab-033",
+    "volumen_a": 19.967154916,
+    "volumen_b": 19.967156359,
+    "dif_rel": 7.226868365700439e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "2XPyKWY018sA1ygZKgQPtU",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Int-ERDG-4",
+    "volumen_a": 2.502,
+    "volumen_b": 2.501999918,
+    "dif_rel": 3.27737808470356e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "2jTRqchjf7oB0yhQ6462T0",
+    "clase": "IfcDoor",
+    "nombre": "Haustuer",
+    "volumen_a": 0.149581184,
+    "volumen_b": 0.149581181,
+    "dif_rel": 2.0055998476525847e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "2ptk1k7qn8_Qk22vjh$0DE",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Int-ERDG-1",
+    "volumen_a": 2.226,
+    "volumen_b": 2.225999973,
+    "dif_rel": 1.2129380059992799e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "2qiPPF3FrF8OIqfrKiSUqm",
+    "clase": "IfcDoor",
+    "nombre": "Innentuer-3",
+    "volumen_a": 0.085569,
+    "volumen_b": 0.085568996,
+    "dif_rel": 4.674590110638624e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "38a9vdh9bF5Qg28GWyHhlr",
+    "clase": "IfcStair",
+    "nombre": "Wendeltreppe",
+    "volumen_a": 0.207907216,
+    "volumen_b": 0.207907214,
+    "dif_rel": 9.619675725672207e-09,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "3BFcylCsX74PQAoRAe5fNv",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-5",
+    "volumen_a": 0.0738055,
+    "volumen_b": 0.073805504,
+    "dif_rel": 5.419650294211918e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": false
+   },
+   {
+    "globalid": "3PfS__Y_DBAfq5naM6zD2Z",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Int-ERDG-2",
+    "volumen_a": 2.915076,
+    "volumen_b": 2.91507603,
+    "dif_rel": 1.0291326818812227e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "3Ttjr$59XEWfWN1WUHjelZ",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Ext-OG-4",
+    "volumen_a": 2.056376841,
+    "volumen_b": 2.056376882,
+    "dif_rel": 1.99379797623589e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "3VCarUKgH1buLo22Ozxe6J",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Ext-OG-3",
+    "volumen_a": 5.54440603,
+    "volumen_b": 5.54440626,
+    "dif_rel": 4.148325325487753e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "3jZHeNcfvDMf9wG$wx9XqG",
+    "clase": "IfcBeam",
+    "nombre": "Pfette-1-1",
+    "volumen_a": 0.166399993,
+    "volumen_b": 0.166399993,
+    "dif_rel": 0.0,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "3jjW3rL656ex34Gws22EfM",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Int-ERDG-3",
+    "volumen_a": 3.412152,
+    "volumen_b": 3.412152017,
+    "dif_rel": 4.982193077658521e-09,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "3rPX_Juz59peXXY6wDJl18",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Ext-ERDG-1",
+    "volumen_a": 5.80797,
+    "volumen_b": 5.807970202,
+    "dif_rel": 3.477979394490071e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "3tCgZT92j6fw8fXgwCL3Jm",
+    "clase": "IfcBeam",
+    "nombre": "Unterzug-1",
+    "volumen_a": 0.195838109,
+    "volumen_b": 0.195838118,
+    "dif_rel": 4.595632607575269e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   }
+  ]
+ },
+ "qto_volumen_a": {
+  "comparables": 38,
+  "pasan": 9,
+  "umbral": 0.02,
+  "mediana_dif_rel": 0.0,
+  "p95_dif_rel": 0.8606037688283859,
+  "peores": [
+   {
+    "globalid": "1TAI4ouKX4Xx4lBDZIu5qM",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-1",
+    "malla": 0.0738055,
+    "qto": 0.0396675,
+    "dif_rel": 0.8606037688283859,
+    "pasa": true
+   },
+   {
+    "globalid": "2Q9w7oRXP249jBobEMVqlZ",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-2",
+    "malla": 0.0738055,
+    "qto": 0.0396675,
+    "dif_rel": 0.8606037688283859,
+    "pasa": true
+   },
+   {
+    "globalid": "1DiYqhfzH9xxuJdVHwXCNa",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-3",
+    "malla": 0.0738055,
+    "qto": 0.0396675,
+    "dif_rel": 0.8606037688283859,
+    "pasa": true
+   },
+   {
+    "globalid": "25nJxEpYf8LRDJNkMUVO0m",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-4",
+    "malla": 0.0738055,
+    "qto": 0.0396675,
+    "dif_rel": 0.8606037688283859,
+    "pasa": true
+   },
+   {
+    "globalid": "3BFcylCsX74PQAoRAe5fNv",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-5",
+    "malla": 0.0738055,
+    "qto": 0.0396675,
+    "dif_rel": 0.8606037688283859,
+    "pasa": true
+   },
+   {
+    "globalid": "1srAI$R4T8ihLXSNHmUSET",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-6",
+    "malla": 0.0738055,
+    "qto": 0.0396675,
+    "dif_rel": 0.8606037688283859,
+    "pasa": true
+   },
+   {
+    "globalid": "0B1RwEzzP3CfME5NR$Vqh5",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-7",
+    "malla": 0.0738055,
+    "qto": 0.0396675,
+    "dif_rel": 0.8606037688283859,
+    "pasa": true
+   },
+   {
+    "globalid": "13aSY79zb8fP4HApEJ0z_e",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-8",
+    "malla": 0.0738055,
+    "qto": 0.0396675,
+    "dif_rel": 0.8606037688283859,
+    "pasa": true
+   },
+   {
+    "globalid": "2EQh_jhP1B_A_AMuSJc5E0",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-9",
+    "malla": 0.0738055,
+    "qto": 0.0396675,
+    "dif_rel": 0.8606037688283859,
+    "pasa": true
+   },
+   {
+    "globalid": "1$wmdwWPjDYuku_ghVkynE",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Int-ERDG-5",
+    "malla": 2.1,
+    "qto": 2.088961891,
+    "dif_rel": 0.005284016452170042,
+    "pasa": false
+   }
+  ]
+ },
+ "qto_volumen_b": {
+  "comparables": 38,
+  "pasan": 9,
+  "umbral": 0.02,
+  "mediana_dif_rel": 4.674590110638624e-08,
+  "p95_dif_rel": 0.8606038696666034,
+  "peores": [
+   {
+    "globalid": "1srAI$R4T8ihLXSNHmUSET",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-6",
+    "malla": 0.073805504,
+    "qto": 0.0396675,
+    "dif_rel": 0.8606038696666034,
+    "pasa": true
+   },
+   {
+    "globalid": "0B1RwEzzP3CfME5NR$Vqh5",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-7",
+    "malla": 0.073805504,
+    "qto": 0.0396675,
+    "dif_rel": 0.8606038696666034,
+    "pasa": true
+   },
+   {
+    "globalid": "25nJxEpYf8LRDJNkMUVO0m",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-4",
+    "malla": 0.073805504,
+    "qto": 0.0396675,
+    "dif_rel": 0.8606038696666034,
+    "pasa": true
+   },
+   {
+    "globalid": "3BFcylCsX74PQAoRAe5fNv",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-5",
+    "malla": 0.073805504,
+    "qto": 0.0396675,
+    "dif_rel": 0.8606038696666034,
+    "pasa": true
+   },
+   {
+    "globalid": "13aSY79zb8fP4HApEJ0z_e",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-8",
+    "malla": 0.073805504,
+    "qto": 0.0396675,
+    "dif_rel": 0.8606038696666034,
+    "pasa": true
+   },
+   {
+    "globalid": "2EQh_jhP1B_A_AMuSJc5E0",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-9",
+    "malla": 0.073805504,
+    "qto": 0.0396675,
+    "dif_rel": 0.8606038696666034,
+    "pasa": true
+   },
+   {
+    "globalid": "1TAI4ouKX4Xx4lBDZIu5qM",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-1",
+    "malla": 0.073805504,
+    "qto": 0.0396675,
+    "dif_rel": 0.8606038696666034,
+    "pasa": true
+   },
+   {
+    "globalid": "2Q9w7oRXP249jBobEMVqlZ",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-2",
+    "malla": 0.073805504,
+    "qto": 0.0396675,
+    "dif_rel": 0.8606038696666034,
+    "pasa": true
+   },
+   {
+    "globalid": "1DiYqhfzH9xxuJdVHwXCNa",
+    "clase": "IfcWindow",
+    "nombre": "EG-Fenster-3",
+    "malla": 0.073805504,
+    "qto": 0.0396675,
+    "dif_rel": 0.8606038696666034,
+    "pasa": true
+   },
+   {
+    "globalid": "1$wmdwWPjDYuku_ghVkynE",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Int-ERDG-5",
+    "malla": 2.099999953,
+    "qto": 2.088961891,
+    "dif_rel": 0.005283993952956392,
+    "pasa": false
+   }
+  ]
+ },
+ "qto_area_a": {
+  "comparables": 17,
+  "pasan": 6,
+  "umbral": 0.02,
+  "mediana_dif_rel": 0.01623535156695158,
+  "p95_dif_rel": 0.13243690906273145,
+  "peores": [
+   {
+    "globalid": "07Enbsqm9C7AQC9iyBwfSD",
+    "clase": "IfcSlab",
+    "nombre": "Dach-1",
+    "malla": 71.626953125,
+    "qto": 82.561088494,
+    "dif_rel": 0.13243690906273145,
+    "pasa": true
+   },
+   {
+    "globalid": "2IxUUNUVPB6Ob$eicCfP2N",
+    "clase": "IfcSlab",
+    "nombre": "Dach-2",
+    "malla": 71.626953125,
+    "qto": 82.561088494,
+    "dif_rel": 0.13243690906273145,
+    "pasa": true
+   },
+   {
+    "globalid": "25fsbPyk15VvuXI$yNKenK",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Ext-ERDG-3",
+    "malla": 2.838134766,
+    "qto": 2.91,
+    "dif_rel": 0.024695956701030964,
+    "pasa": true
+   },
+   {
+    "globalid": "3VCarUKgH1buLo22Ozxe6J",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Ext-OG-3",
+    "malla": 2.838134766,
+    "qto": 2.91,
+    "dif_rel": 0.024695956701030964,
+    "pasa": true
+   },
+   {
+    "globalid": "3rPX_Juz59peXXY6wDJl18",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Ext-ERDG-1",
+    "malla": 2.849578857,
+    "qto": 2.91,
+    "dif_rel": 0.02076327938144334,
+    "pasa": true
+   },
+   {
+    "globalid": "0knNIAVBPBFvBy_m5QVHsU",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Ext-OG-1",
+    "malla": 2.849578857,
+    "qto": 2.91,
+    "dif_rel": 0.02076327938144334,
+    "pasa": true
+   },
+   {
+    "globalid": "3PfS__Y_DBAfq5naM6zD2Z",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Int-ERDG-2",
+    "malla": 1.362630887,
+    "qto": 1.3368,
+    "dif_rel": 0.019322925643327285,
+    "pasa": false
+   },
+   {
+    "globalid": "3jjW3rL656ex34Gws22EfM",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Int-ERDG-3",
+    "malla": 1.678487695,
+    "qto": 1.7064,
+    "dif_rel": 0.016357422058134,
+    "pasa": false
+   },
+   {
+    "globalid": "1bzfVsJqn8De5PukCrqylz",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Ext-ERDG-2",
+    "malla": 3.566986084,
+    "qto": 3.51,
+    "dif_rel": 0.01623535156695158,
+    "pasa": false
+   },
+   {
+    "globalid": "16DNNqzfP2thtfaOflvsKA",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Ext-ERDG-4",
+    "malla": 3.566986084,
+    "qto": 3.51,
+    "dif_rel": 0.01623535156695158,
+    "pasa": false
+   }
+  ]
+ },
+ "qto_area_b": {
+  "comparables": 17,
+  "pasan": 6,
+  "umbral": 0.02,
+  "mediana_dif_rel": 0.01623535156695158,
+  "p95_dif_rel": 0.13243690906273145,
+  "peores": [
+   {
+    "globalid": "07Enbsqm9C7AQC9iyBwfSD",
+    "clase": "IfcSlab",
+    "nombre": "Dach-1",
+    "malla": 71.626953125,
+    "qto": 82.561088494,
+    "dif_rel": 0.13243690906273145,
+    "pasa": true
+   },
+   {
+    "globalid": "2IxUUNUVPB6Ob$eicCfP2N",
+    "clase": "IfcSlab",
+    "nombre": "Dach-2",
+    "malla": 71.626953125,
+    "qto": 82.561088494,
+    "dif_rel": 0.13243690906273145,
+    "pasa": true
+   },
+   {
+    "globalid": "3rPX_Juz59peXXY6wDJl18",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Ext-ERDG-1",
+    "malla": 2.838134766,
+    "qto": 2.91,
+    "dif_rel": 0.024695956701030964,
+    "pasa": true
+   },
+   {
+    "globalid": "25fsbPyk15VvuXI$yNKenK",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Ext-ERDG-3",
+    "malla": 2.838134766,
+    "qto": 2.91,
+    "dif_rel": 0.024695956701030964,
+    "pasa": true
+   },
+   {
+    "globalid": "0knNIAVBPBFvBy_m5QVHsU",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Ext-OG-1",
+    "malla": 2.838134766,
+    "qto": 2.91,
+    "dif_rel": 0.024695956701030964,
+    "pasa": true
+   },
+   {
+    "globalid": "3VCarUKgH1buLo22Ozxe6J",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Ext-OG-3",
+    "malla": 2.838134766,
+    "qto": 2.91,
+    "dif_rel": 0.024695956701030964,
+    "pasa": true
+   },
+   {
+    "globalid": "3PfS__Y_DBAfq5naM6zD2Z",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Int-ERDG-2",
+    "malla": 1.359913804,
+    "qto": 1.3368,
+    "dif_rel": 0.017290397965290298,
+    "pasa": false
+   },
+   {
+    "globalid": "3jjW3rL656ex34Gws22EfM",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Int-ERDG-3",
+    "malla": 1.678487758,
+    "qto": 1.7064,
+    "dif_rel": 0.016357385138302847,
+    "pasa": false
+   },
+   {
+    "globalid": "1bzfVsJqn8De5PukCrqylz",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Ext-ERDG-2",
+    "malla": 3.566986084,
+    "qto": 3.51,
+    "dif_rel": 0.01623535156695158,
+    "pasa": false
+   },
+   {
+    "globalid": "25OWQvmXj5BPgyergP43tY",
+    "clase": "IfcWallStandardCase",
+    "nombre": "Wand-Ext-OG-2",
+    "malla": 3.566986084,
+    "qto": 3.51,
+    "dif_rel": 0.01623535156695158,
+    "pasa": false
+   }
+  ]
+ },
+ "archivo_a": "resultados/AC20-FZK-Haus_a.csv",
+ "archivo_b": "resultados/AC20-FZK-Haus_b.csv"
+}

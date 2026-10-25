@@ -1,0 +1,13 @@
+{
+  "name": "openrvt-evaluacion-ifc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Motor B de la evaluación O001: web-ifc",
+  "scripts": {
+    "b": "node b_webifc.mjs"
+  },
+  "dependencies": {
+    "web-ifc": "^0.0.74"
+  }
+}

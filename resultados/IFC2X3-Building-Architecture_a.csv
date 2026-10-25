@@ -1,0 +1,9 @@
+globalid,clase,nombre,nivel,volumen_malla,area_planta,qto_volumen,qto_area,largo,alto,cerrada
+2iPwJwpPDCSgMheXwk9cBT,IfcRoof,house - roof,environment - site,,,,,,,false
+3zR0BOEcLADRKln4HYporH,IfcSlab,floor,00 groundfloor,6.437500000,25.706860962,6.437500000,25.750000000,7.578374571,0.250000000,true
+0ZTBBPo6f6bxqV2K7Oelrq,IfcSlab,house - roof - slab left,,6.720343740,15.824531250,6.720342848,22.401142828,6.600000000,2.824264387,true
+12UVOn4wvAJPMUExKdZLb8,IfcSlab,house - roof - slab right,,9.363508800,22.077773438,9.363507996,31.211693322,7.021535690,4.224264396,true
+0OfZwWc8j9QP5uX8xPTxDH,IfcWall,house - outer wall - house left,00 groundfloor,4.230883200,1.195312500,4.230883118,,6.000700307,3.625736000,true
+3wdauVJT5Fx9drrREiDqA$,IfcWall,house - outer wall - house right back,00 groundfloor,1.785618240,0.826875000,1.785618182,,4.201001509,2.225736000,true
+1AQAupaRP1txwK1AGiN61V,IfcWall,house - outer wall - house right front,00 groundfloor,1.269264960,0.360703125,1.269264935,,1.802358850,3.625736000,true
+0Q5LjisRjDwhFSOc_WQjlF,IfcWall,plumbing wall,00 groundfloor,0.164701958,0.074787169,0.164701953,,3.800011137,2.225736000,true

@@ -1,0 +1,392 @@
+{
+ "n_a": 8,
+ "n_b": 8,
+ "comunes": 8,
+ "faltan_en_b": [],
+ "faltan_en_a": [],
+ "duplicados_a": [],
+ "duplicados_b": [],
+ "volumen": {
+  "comparables": 7,
+  "pasan_1pct": 0,
+  "concordancia_pct": 100.0,
+  "concordancia_cerradas_pct": 100.0,
+  "comparables_cerradas": 7,
+  "peores": [
+   {
+    "globalid": "0Q5LjisRjDwhFSOc_WQjlF",
+    "clase": "IfcWall",
+    "nombre": "plumbing wall",
+    "volumen_a": 0.164701958,
+    "volumen_b": 0.164701965,
+    "dif_rel": 4.25010126249714e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "12UVOn4wvAJPMUExKdZLb8",
+    "clase": "IfcSlab",
+    "nombre": "house - roof - slab right",
+    "volumen_a": 9.3635088,
+    "volumen_b": 9.363509149,
+    "dif_rel": 3.727235248122798e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "3wdauVJT5Fx9drrREiDqA$",
+    "clase": "IfcWall",
+    "nombre": "house - outer wall - house right back",
+    "volumen_a": 1.78561824,
+    "volumen_b": 1.785618285,
+    "dif_rel": 2.5201355441215928e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "0OfZwWc8j9QP5uX8xPTxDH",
+    "clase": "IfcWall",
+    "nombre": "house - outer wall - house left",
+    "volumen_a": 4.2308832,
+    "volumen_b": 4.230883301,
+    "dif_rel": 2.3872084288020925e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "1AQAupaRP1txwK1AGiN61V",
+    "clase": "IfcWall",
+    "nombre": "house - outer wall - house right front",
+    "volumen_a": 1.26926496,
+    "volumen_b": 1.26926499,
+    "dif_rel": 2.3635726789208668e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "0ZTBBPo6f6bxqV2K7Oelrq",
+    "clase": "IfcSlab",
+    "nombre": "house - roof - slab left",
+    "volumen_a": 6.72034374,
+    "volumen_b": 6.720343813,
+    "dif_rel": 1.0862539705591989e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "3zR0BOEcLADRKln4HYporH",
+    "clase": "IfcSlab",
+    "nombre": "floor",
+    "volumen_a": 6.4375,
+    "volumen_b": 6.4375,
+    "dif_rel": 0.0,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   }
+  ],
+  "diferencias": [
+   {
+    "globalid": "0OfZwWc8j9QP5uX8xPTxDH",
+    "clase": "IfcWall",
+    "nombre": "house - outer wall - house left",
+    "volumen_a": 4.2308832,
+    "volumen_b": 4.230883301,
+    "dif_rel": 2.3872084288020925e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "0Q5LjisRjDwhFSOc_WQjlF",
+    "clase": "IfcWall",
+    "nombre": "plumbing wall",
+    "volumen_a": 0.164701958,
+    "volumen_b": 0.164701965,
+    "dif_rel": 4.25010126249714e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "0ZTBBPo6f6bxqV2K7Oelrq",
+    "clase": "IfcSlab",
+    "nombre": "house - roof - slab left",
+    "volumen_a": 6.72034374,
+    "volumen_b": 6.720343813,
+    "dif_rel": 1.0862539705591989e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "12UVOn4wvAJPMUExKdZLb8",
+    "clase": "IfcSlab",
+    "nombre": "house - roof - slab right",
+    "volumen_a": 9.3635088,
+    "volumen_b": 9.363509149,
+    "dif_rel": 3.727235248122798e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "1AQAupaRP1txwK1AGiN61V",
+    "clase": "IfcWall",
+    "nombre": "house - outer wall - house right front",
+    "volumen_a": 1.26926496,
+    "volumen_b": 1.26926499,
+    "dif_rel": 2.3635726789208668e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "3wdauVJT5Fx9drrREiDqA$",
+    "clase": "IfcWall",
+    "nombre": "house - outer wall - house right back",
+    "volumen_a": 1.78561824,
+    "volumen_b": 1.785618285,
+    "dif_rel": 2.5201355441215928e-08,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   },
+   {
+    "globalid": "3zR0BOEcLADRKln4HYporH",
+    "clase": "IfcSlab",
+    "nombre": "floor",
+    "volumen_a": 6.4375,
+    "volumen_b": 6.4375,
+    "dif_rel": 0.0,
+    "pasa_1pct": false,
+    "cerrada_a": true,
+    "cerrada_b": true
+   }
+  ]
+ },
+ "qto_volumen_a": {
+  "comparables": 7,
+  "pasan": 0,
+  "umbral": 0.02,
+  "mediana_dif_rel": 3.035786708229392e-08,
+  "p95_dif_rel": 1.3273132342512327e-07,
+  "peores": [
+   {
+    "globalid": "0ZTBBPo6f6bxqV2K7Oelrq",
+    "clase": "IfcSlab",
+    "nombre": "house - roof - slab left",
+    "malla": 6.72034374,
+    "qto": 6.720342848,
+    "dif_rel": 1.3273132342512327e-07,
+    "pasa": false
+   },
+   {
+    "globalid": "12UVOn4wvAJPMUExKdZLb8",
+    "clase": "IfcSlab",
+    "nombre": "house - roof - slab right",
+    "malla": 9.3635088,
+    "qto": 9.363507996,
+    "dif_rel": 8.586525489608342e-08,
+    "pasa": false
+   },
+   {
+    "globalid": "3wdauVJT5Fx9drrREiDqA$",
+    "clase": "IfcWall",
+    "nombre": "house - outer wall - house right back",
+    "malla": 1.78561824,
+    "qto": 1.785618182,
+    "dif_rel": 3.248174805713319e-08,
+    "pasa": false
+   },
+   {
+    "globalid": "0Q5LjisRjDwhFSOc_WQjlF",
+    "clase": "IfcWall",
+    "nombre": "plumbing wall",
+    "malla": 0.164701958,
+    "qto": 0.164701953,
+    "dif_rel": 3.035786708229392e-08,
+    "pasa": false
+   },
+   {
+    "globalid": "1AQAupaRP1txwK1AGiN61V",
+    "clase": "IfcWall",
+    "nombre": "house - outer wall - house right front",
+    "malla": 1.26926496,
+    "qto": 1.269264935,
+    "dif_rel": 1.9696439553896467e-08,
+    "pasa": false
+   },
+   {
+    "globalid": "0OfZwWc8j9QP5uX8xPTxDH",
+    "clase": "IfcWall",
+    "nombre": "house - outer wall - house left",
+    "malla": 4.2308832,
+    "qto": 4.230883118,
+    "dif_rel": 1.9381296384771236e-08,
+    "pasa": false
+   },
+   {
+    "globalid": "3zR0BOEcLADRKln4HYporH",
+    "clase": "IfcSlab",
+    "nombre": "floor",
+    "malla": 6.4375,
+    "qto": 6.4375,
+    "dif_rel": 0.0,
+    "pasa": false
+   }
+  ]
+ },
+ "qto_volumen_b": {
+  "comparables": 7,
+  "pasan": 0,
+  "umbral": 0.02,
+  "mediana_dif_rel": 5.76831043169332e-08,
+  "p95_dif_rel": 1.4359386457251454e-07,
+  "peores": [
+   {
+    "globalid": "0ZTBBPo6f6bxqV2K7Oelrq",
+    "clase": "IfcSlab",
+    "nombre": "house - roof - slab left",
+    "malla": 6.720343813,
+    "qto": 6.720342848,
+    "dif_rel": 1.4359386457251454e-07,
+    "pasa": false
+   },
+   {
+    "globalid": "12UVOn4wvAJPMUExKdZLb8",
+    "clase": "IfcSlab",
+    "nombre": "house - roof - slab right",
+    "malla": 9.363509149,
+    "qto": 9.363507996,
+    "dif_rel": 1.2313761057771145e-07,
+    "pasa": false
+   },
+   {
+    "globalid": "0Q5LjisRjDwhFSOc_WQjlF",
+    "clase": "IfcWall",
+    "nombre": "plumbing wall",
+    "malla": 0.164701965,
+    "qto": 0.164701953,
+    "dif_rel": 7.28588809975054e-08,
+    "pasa": false
+   },
+   {
+    "globalid": "3wdauVJT5Fx9drrREiDqA$",
+    "clase": "IfcWall",
+    "nombre": "house - outer wall - house right back",
+    "malla": 1.785618285,
+    "qto": 1.785618182,
+    "dif_rel": 5.76831043169332e-08,
+    "pasa": false
+   },
+   {
+    "globalid": "1AQAupaRP1txwK1AGiN61V",
+    "clase": "IfcWall",
+    "nombre": "house - outer wall - house right front",
+    "malla": 1.26926499,
+    "qto": 1.269264935,
+    "dif_rel": 4.33321668086448e-08,
+    "pasa": false
+   },
+   {
+    "globalid": "0OfZwWc8j9QP5uX8xPTxDH",
+    "clase": "IfcWall",
+    "nombre": "house - outer wall - house left",
+    "malla": 4.230883301,
+    "qto": 4.230883118,
+    "dif_rel": 4.32533811354641e-08,
+    "pasa": false
+   },
+   {
+    "globalid": "3zR0BOEcLADRKln4HYporH",
+    "clase": "IfcSlab",
+    "nombre": "floor",
+    "malla": 6.4375,
+    "qto": 6.4375,
+    "dif_rel": 0.0,
+    "pasa": false
+   }
+  ]
+ },
+ "qto_area_a": {
+  "comparables": 3,
+  "pasan": 2,
+  "umbral": 0.02,
+  "mediana_dif_rel": 0.29264416351168704,
+  "p95_dif_rel": 0.2935837527797759,
+  "peores": [
+   {
+    "globalid": "0ZTBBPo6f6bxqV2K7Oelrq",
+    "clase": "IfcSlab",
+    "nombre": "house - roof - slab left",
+    "malla": 15.82453125,
+    "qto": 22.401142828,
+    "dif_rel": 0.2935837527797759,
+    "pasa": true
+   },
+   {
+    "globalid": "12UVOn4wvAJPMUExKdZLb8",
+    "clase": "IfcSlab",
+    "nombre": "house - roof - slab right",
+    "malla": 22.077773438,
+    "qto": 31.211693322,
+    "dif_rel": 0.29264416351168704,
+    "pasa": true
+   },
+   {
+    "globalid": "3zR0BOEcLADRKln4HYporH",
+    "clase": "IfcSlab",
+    "nombre": "floor",
+    "malla": 25.706860962,
+    "qto": 25.75,
+    "dif_rel": 0.0016753024466019274,
+    "pasa": false
+   }
+  ]
+ },
+ "qto_area_b": {
+  "comparables": 3,
+  "pasan": 2,
+  "umbral": 0.02,
+  "mediana_dif_rel": 0.29264416351168704,
+  "p95_dif_rel": 0.2935837527797759,
+  "peores": [
+   {
+    "globalid": "0ZTBBPo6f6bxqV2K7Oelrq",
+    "clase": "IfcSlab",
+    "nombre": "house - roof - slab left",
+    "malla": 15.82453125,
+    "qto": 22.401142828,
+    "dif_rel": 0.2935837527797759,
+    "pasa": true
+   },
+   {
+    "globalid": "12UVOn4wvAJPMUExKdZLb8",
+    "clase": "IfcSlab",
+    "nombre": "house - roof - slab right",
+    "malla": 22.077773438,
+    "qto": 31.211693322,
+    "dif_rel": 0.29264416351168704,
+    "pasa": true
+   },
+   {
+    "globalid": "3zR0BOEcLADRKln4HYporH",
+    "clase": "IfcSlab",
+    "nombre": "floor",
+    "malla": 25.706860962,
+    "qto": 25.75,
+    "dif_rel": 0.0016753024466019274,
+    "pasa": false
+   }
+  ]
+ },
+ "archivo_a": "resultados/IFC2X3-Building-Architecture_a.csv",
+ "archivo_b": "resultados/IFC2X3-Building-Architecture_b.csv"
+}
