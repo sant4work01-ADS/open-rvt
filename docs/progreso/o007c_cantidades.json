@@ -1,0 +1,715 @@
+{
+  "total": {
+    "volumen_neto_m3": 19.118125,
+    "acero_kg": 1013.031,
+    "volumen_bruto_m3": 21.69375
+  },
+  "union_m3": 19.118125,
+  "elementos": [
+    {
+      "alias": "cerramiento",
+      "acero_kg": 21.955,
+      "volumen_bruto_m3": 0.21,
+      "detalle": {},
+      "globalid": "0lgoHJXg1DWg3d5BEu8lfv",
+      "area_neta_m2": null,
+      "clase": "IfcBeam",
+      "tipo": "CE-1 Cerramiento 15×20",
+      "volumen_neto_m3": 0.1365
+    },
+    {
+      "alias": "cerramiento",
+      "acero_kg": 15.732,
+      "volumen_bruto_m3": 0.15,
+      "detalle": {},
+      "globalid": "35mRQRRsz0mRoJD6112rvW",
+      "area_neta_m2": null,
+      "clase": "IfcBeam",
+      "tipo": "CE-1 Cerramiento 15×20",
+      "volumen_neto_m3": 0.14775
+    },
+    {
+      "alias": "cerramiento",
+      "acero_kg": 21.955,
+      "volumen_bruto_m3": 0.21,
+      "detalle": {},
+      "globalid": "0YQpmCIGD87RPB_ciNF9EX",
+      "area_neta_m2": null,
+      "clase": "IfcBeam",
+      "tipo": "CE-1 Cerramiento 15×20",
+      "volumen_neto_m3": 0.21
+    },
+    {
+      "alias": "cerramiento",
+      "acero_kg": 15.732,
+      "volumen_bruto_m3": 0.15,
+      "detalle": {},
+      "globalid": "1xbjnTI$j8tuW0oYDZcPDg",
+      "area_neta_m2": null,
+      "clase": "IfcBeam",
+      "tipo": "CE-1 Cerramiento 15×20",
+      "volumen_neto_m3": 0.075375
+    },
+    {
+      "alias": "trabe",
+      "acero_kg": 20.048,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "1$0kZAE$TA0gxL6CAzxMXo",
+      "area_neta_m2": null,
+      "clase": "IfcBeam",
+      "tipo": "T-1 Trabe 20×40",
+      "volumen_neto_m3": 0.124
+    },
+    {
+      "alias": "trabe",
+      "acero_kg": 20.048,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "14GkZ27OHBJhd3HkJ33SCm",
+      "area_neta_m2": null,
+      "clase": "IfcBeam",
+      "tipo": "T-1 Trabe 20×40",
+      "volumen_neto_m3": 0.148
+    },
+    {
+      "alias": "trabe",
+      "acero_kg": 20.048,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "2lQQTWjZ5EO8w6_Zp1fR_H",
+      "area_neta_m2": null,
+      "clase": "IfcBeam",
+      "tipo": "T-1 Trabe 20×40",
+      "volumen_neto_m3": 0.116
+    },
+    {
+      "alias": "trabe",
+      "acero_kg": 20.048,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "35Te3Ttkz89g$VUtrSCsM6",
+      "area_neta_m2": null,
+      "clase": "IfcBeam",
+      "tipo": "T-1 Trabe 20×40",
+      "volumen_neto_m3": 0.14
+    },
+    {
+      "alias": "trabe",
+      "acero_kg": 20.048,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "3fN6dTM01099caSd_HQL$v",
+      "area_neta_m2": null,
+      "clase": "IfcBeam",
+      "tipo": "T-1 Trabe 20×40",
+      "volumen_neto_m3": 0.12
+    },
+    {
+      "alias": "trabe",
+      "acero_kg": 20.048,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "2AgPDQYETEgvdpsbKhZc9N",
+      "area_neta_m2": null,
+      "clase": "IfcBeam",
+      "tipo": "T-1 Trabe 20×40",
+      "volumen_neto_m3": 0.144
+    },
+    {
+      "alias": "trabe",
+      "acero_kg": 20.048,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "29s7Kx6on0DAnMGG1tu4sc",
+      "area_neta_m2": null,
+      "clase": "IfcBeam",
+      "tipo": "T-1 Trabe 20×40",
+      "volumen_neto_m3": 0.136
+    },
+    {
+      "alias": "trabe",
+      "acero_kg": 20.048,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "0cwtTIQi99jAXRj_9KGt0y",
+      "area_neta_m2": null,
+      "clase": "IfcBeam",
+      "tipo": "T-1 Trabe 20×40",
+      "volumen_neto_m3": 0.136
+    },
+    {
+      "alias": "trabe",
+      "acero_kg": 20.048,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "233faAzlj1guonUTs3WKZn",
+      "area_neta_m2": null,
+      "clase": "IfcBeam",
+      "tipo": "T-1 Trabe 20×40",
+      "volumen_neto_m3": 0.152
+    },
+    {
+      "alias": "trabe",
+      "acero_kg": 20.048,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "108FVHrzz9RwJ4imk8Rc2r",
+      "area_neta_m2": null,
+      "clase": "IfcBeam",
+      "tipo": "T-1 Trabe 20×40",
+      "volumen_neto_m3": 0.16
+    },
+    {
+      "alias": "trabe",
+      "acero_kg": 20.048,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "2_6G1Eguz25BF8I$ED37eJ",
+      "area_neta_m2": null,
+      "clase": "IfcBeam",
+      "tipo": "T-1 Trabe 20×40",
+      "volumen_neto_m3": 0.136
+    },
+    {
+      "alias": "trabe",
+      "acero_kg": 20.048,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "29zuDMs2bCAv55HZlrVm1t",
+      "area_neta_m2": null,
+      "clase": "IfcBeam",
+      "tipo": "T-1 Trabe 20×40",
+      "volumen_neto_m3": 0.136
+    },
+    {
+      "alias": "castillo",
+      "acero_kg": 7.169,
+      "volumen_bruto_m3": 0.054,
+      "detalle": {},
+      "globalid": "0a3fpsUdnFDA3vYJcXAxcG",
+      "area_neta_m2": null,
+      "clase": "IfcColumn",
+      "tipo": "K-1 Castillo 15×15",
+      "volumen_neto_m3": 0.054
+    },
+    {
+      "alias": "castillo",
+      "acero_kg": 8.737,
+      "volumen_bruto_m3": 0.06525,
+      "detalle": {},
+      "globalid": "0Z3zyk_05D6w8x6j0JXaAd",
+      "area_neta_m2": null,
+      "clase": "IfcColumn",
+      "tipo": "K-1 Castillo 15×15",
+      "volumen_neto_m3": 0
+    },
+    {
+      "alias": "castillo",
+      "acero_kg": 7.169,
+      "volumen_bruto_m3": 0.054,
+      "detalle": {},
+      "globalid": "3MqwectZX6Q8TAusmBr5wh",
+      "area_neta_m2": null,
+      "clase": "IfcColumn",
+      "tipo": "K-1 Castillo 15×15",
+      "volumen_neto_m3": 0.054
+    },
+    {
+      "alias": "castillo",
+      "acero_kg": 7.169,
+      "volumen_bruto_m3": 0.054,
+      "detalle": {},
+      "globalid": "3f1qe6Fjn4ZQSkZHOdVJnA",
+      "area_neta_m2": null,
+      "clase": "IfcColumn",
+      "tipo": "K-1 Castillo 15×15",
+      "volumen_neto_m3": 0.054
+    },
+    {
+      "alias": "castillo",
+      "acero_kg": 7.169,
+      "volumen_bruto_m3": 0.054,
+      "detalle": {},
+      "globalid": "2sm9bmb1r9EBQHkuKYVpqS",
+      "area_neta_m2": null,
+      "clase": "IfcColumn",
+      "tipo": "K-1 Castillo 15×15",
+      "volumen_neto_m3": 0.054
+    },
+    {
+      "alias": "castillo",
+      "acero_kg": 7.169,
+      "volumen_bruto_m3": 0.054,
+      "detalle": {},
+      "globalid": "1cXRgLD59729R_rNd9TOF0",
+      "area_neta_m2": null,
+      "clase": "IfcColumn",
+      "tipo": "K-1 Castillo 15×15",
+      "volumen_neto_m3": 0.054
+    },
+    {
+      "alias": "castillo",
+      "acero_kg": 7.169,
+      "volumen_bruto_m3": 0.054,
+      "detalle": {},
+      "globalid": "0b9D6zepPBRgkO60Ans1RQ",
+      "area_neta_m2": null,
+      "clase": "IfcColumn",
+      "tipo": "K-1 Castillo 15×15",
+      "volumen_neto_m3": 0.054
+    },
+    {
+      "alias": "castillo",
+      "acero_kg": 7.169,
+      "volumen_bruto_m3": 0.054,
+      "detalle": {},
+      "globalid": "0HmLKlAXHEQuj9hniGpVu_",
+      "area_neta_m2": null,
+      "clase": "IfcColumn",
+      "tipo": "K-1 Castillo 15×15",
+      "volumen_neto_m3": 0.054
+    },
+    {
+      "alias": "castillo",
+      "acero_kg": 7.169,
+      "volumen_bruto_m3": 0.054,
+      "detalle": {},
+      "globalid": "0ILC6gAzL0NfKGy_4rfRTp",
+      "area_neta_m2": null,
+      "clase": "IfcColumn",
+      "tipo": "K-1 Castillo 15×15",
+      "volumen_neto_m3": 0.054
+    },
+    {
+      "alias": "castillo",
+      "acero_kg": 7.169,
+      "volumen_bruto_m3": 0.054,
+      "detalle": {},
+      "globalid": "2$ROH$6x9FnABQZZCxpMne",
+      "area_neta_m2": null,
+      "clase": "IfcColumn",
+      "tipo": "K-1 Castillo 15×15",
+      "volumen_neto_m3": 0.054
+    },
+    {
+      "alias": "columna",
+      "acero_kg": 33.046,
+      "volumen_bruto_m3": 0.2745,
+      "detalle": {},
+      "globalid": "3A3XLkmVH6B9WH0$ZUUdJA",
+      "area_neta_m2": null,
+      "clase": "IfcColumn",
+      "tipo": "C-1 Columna 30×30",
+      "volumen_neto_m3": 0.272
+    },
+    {
+      "alias": "columna",
+      "acero_kg": 33.046,
+      "volumen_bruto_m3": 0.2745,
+      "detalle": {},
+      "globalid": "3riVAkNfn0ruxHLpt2lGSW",
+      "area_neta_m2": null,
+      "clase": "IfcColumn",
+      "tipo": "C-1 Columna 30×30",
+      "volumen_neto_m3": 0.2715
+    },
+    {
+      "alias": "columna",
+      "acero_kg": 33.046,
+      "volumen_bruto_m3": 0.2745,
+      "detalle": {},
+      "globalid": "0etEQWfUPEjxmAZctJt1DH",
+      "area_neta_m2": null,
+      "clase": "IfcColumn",
+      "tipo": "C-1 Columna 30×30",
+      "volumen_neto_m3": 0.272
+    },
+    {
+      "alias": "columna",
+      "acero_kg": 33.046,
+      "volumen_bruto_m3": 0.2745,
+      "detalle": {},
+      "globalid": "3a4tlPxDf9m9wmqbwvmfFh",
+      "area_neta_m2": null,
+      "clase": "IfcColumn",
+      "tipo": "C-1 Columna 30×30",
+      "volumen_neto_m3": 0.271
+    },
+    {
+      "alias": "columna",
+      "acero_kg": 33.046,
+      "volumen_bruto_m3": 0.2745,
+      "detalle": {},
+      "globalid": "1_Q6lrfIrBTfVwE8OaIi2i",
+      "area_neta_m2": null,
+      "clase": "IfcColumn",
+      "tipo": "C-1 Columna 30×30",
+      "volumen_neto_m3": 0.2715
+    },
+    {
+      "alias": "columna",
+      "acero_kg": 33.046,
+      "volumen_bruto_m3": 0.2745,
+      "detalle": {},
+      "globalid": "1MNrVKCBv9c8Hfk8$JXvsp",
+      "area_neta_m2": null,
+      "clase": "IfcColumn",
+      "tipo": "C-1 Columna 30×30",
+      "volumen_neto_m3": 0.271
+    },
+    {
+      "alias": "columna",
+      "acero_kg": 33.046,
+      "volumen_bruto_m3": 0.2745,
+      "detalle": {},
+      "globalid": "3ccyyjLYrEUx6p9jwCfQaT",
+      "area_neta_m2": null,
+      "clase": "IfcColumn",
+      "tipo": "C-1 Columna 30×30",
+      "volumen_neto_m3": 0.272
+    },
+    {
+      "alias": "columna",
+      "acero_kg": 33.046,
+      "volumen_bruto_m3": 0.2745,
+      "detalle": {},
+      "globalid": "10X5hn$yDDjQc9QD739f_H",
+      "area_neta_m2": null,
+      "clase": "IfcColumn",
+      "tipo": "C-1 Columna 30×30",
+      "volumen_neto_m3": 0.2715
+    },
+    {
+      "alias": "columna",
+      "acero_kg": 33.046,
+      "volumen_bruto_m3": 0.2745,
+      "detalle": {},
+      "globalid": "3MxQrJvp97NP6MxCfLhbJm",
+      "area_neta_m2": null,
+      "clase": "IfcColumn",
+      "tipo": "C-1 Columna 30×30",
+      "volumen_neto_m3": 0.272
+    },
+    {
+      "alias": "zapata",
+      "acero_kg": 13.121,
+      "volumen_bruto_m3": 0.528,
+      "detalle": {},
+      "globalid": "3Vkp4Rzuj8GRL6Wb1cKlgW",
+      "area_neta_m2": null,
+      "clase": "IfcFooting",
+      "tipo": "Z-1 Zapata 1.20×1.20",
+      "volumen_neto_m3": 0.528
+    },
+    {
+      "alias": "zapata",
+      "acero_kg": 13.121,
+      "volumen_bruto_m3": 0.528,
+      "detalle": {},
+      "globalid": "3YsU$QeSv3Fv5_w10JilXy",
+      "area_neta_m2": null,
+      "clase": "IfcFooting",
+      "tipo": "Z-1 Zapata 1.20×1.20",
+      "volumen_neto_m3": 0.528
+    },
+    {
+      "alias": "zapata",
+      "acero_kg": 13.121,
+      "volumen_bruto_m3": 0.528,
+      "detalle": {},
+      "globalid": "1jgdrttkTA_guG8PK9Okxw",
+      "area_neta_m2": null,
+      "clase": "IfcFooting",
+      "tipo": "Z-1 Zapata 1.20×1.20",
+      "volumen_neto_m3": 0.528
+    },
+    {
+      "alias": "zapata",
+      "acero_kg": 13.121,
+      "volumen_bruto_m3": 0.528,
+      "detalle": {},
+      "globalid": "1WVPxLy25DLwaEy0YB1qCf",
+      "area_neta_m2": null,
+      "clase": "IfcFooting",
+      "tipo": "Z-1 Zapata 1.20×1.20",
+      "volumen_neto_m3": 0.528
+    },
+    {
+      "alias": "zapata",
+      "acero_kg": 13.121,
+      "volumen_bruto_m3": 0.528,
+      "detalle": {},
+      "globalid": "2nHzDzEdL01xAgoueHgeOl",
+      "area_neta_m2": null,
+      "clase": "IfcFooting",
+      "tipo": "Z-1 Zapata 1.20×1.20",
+      "volumen_neto_m3": 0.528
+    },
+    {
+      "alias": "zapata",
+      "acero_kg": 13.121,
+      "volumen_bruto_m3": 0.528,
+      "detalle": {},
+      "globalid": "1gXAzuAMH2YONydD91xkVx",
+      "area_neta_m2": null,
+      "clase": "IfcFooting",
+      "tipo": "Z-1 Zapata 1.20×1.20",
+      "volumen_neto_m3": 0.528
+    },
+    {
+      "alias": "zapata",
+      "acero_kg": 13.121,
+      "volumen_bruto_m3": 0.528,
+      "detalle": {},
+      "globalid": "1OfuCMWwv1HRAxu8KyiEm$",
+      "area_neta_m2": null,
+      "clase": "IfcFooting",
+      "tipo": "Z-1 Zapata 1.20×1.20",
+      "volumen_neto_m3": 0.528
+    },
+    {
+      "alias": "zapata",
+      "acero_kg": 13.121,
+      "volumen_bruto_m3": 0.528,
+      "detalle": {},
+      "globalid": "1n1P$$$7DFxOmCG92mLKvC",
+      "area_neta_m2": null,
+      "clase": "IfcFooting",
+      "tipo": "Z-1 Zapata 1.20×1.20",
+      "volumen_neto_m3": 0.528
+    },
+    {
+      "alias": "zapata",
+      "acero_kg": 13.121,
+      "volumen_bruto_m3": 0.528,
+      "detalle": {},
+      "globalid": "0oeQo2eSTAS8tWNmfPlJ5B",
+      "area_neta_m2": null,
+      "clase": "IfcFooting",
+      "tipo": "Z-1 Zapata 1.20×1.20",
+      "volumen_neto_m3": 0.528
+    },
+    {
+      "alias": "contratrabe",
+      "acero_kg": 17.36,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "2NnxggIuvBr8TPnyB3rcNP",
+      "area_neta_m2": null,
+      "clase": "IfcFooting",
+      "tipo": "CT-1 Contratrabe 20×40",
+      "volumen_neto_m3": 0.114
+    },
+    {
+      "alias": "contratrabe",
+      "acero_kg": 17.36,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "2d8d1sgEP56R9kh9CkbkTQ",
+      "area_neta_m2": null,
+      "clase": "IfcFooting",
+      "tipo": "CT-1 Contratrabe 20×40",
+      "volumen_neto_m3": 0.142
+    },
+    {
+      "alias": "contratrabe",
+      "acero_kg": 17.36,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "0uXxM2gc93WP2XGv_YUoB2",
+      "area_neta_m2": null,
+      "clase": "IfcFooting",
+      "tipo": "CT-1 Contratrabe 20×40",
+      "volumen_neto_m3": 0.118
+    },
+    {
+      "alias": "contratrabe",
+      "acero_kg": 17.36,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "3K_vRmzFzEAvsCIjCyEmKe",
+      "area_neta_m2": null,
+      "clase": "IfcFooting",
+      "tipo": "CT-1 Contratrabe 20×40",
+      "volumen_neto_m3": 0.1415
+    },
+    {
+      "alias": "contratrabe",
+      "acero_kg": 17.36,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "3ykaJpjxj558p2VVnSaJUE",
+      "area_neta_m2": null,
+      "clase": "IfcFooting",
+      "tipo": "CT-1 Contratrabe 20×40",
+      "volumen_neto_m3": 0.1135
+    },
+    {
+      "alias": "contratrabe",
+      "acero_kg": 17.36,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "3wHWTUhFL4Qx8kLP5e1GDD",
+      "area_neta_m2": null,
+      "clase": "IfcFooting",
+      "tipo": "CT-1 Contratrabe 20×40",
+      "volumen_neto_m3": 0.1415
+    },
+    {
+      "alias": "contratrabe",
+      "acero_kg": 17.36,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "2uREvEoJv2LQ5pta1jHoyN",
+      "area_neta_m2": null,
+      "clase": "IfcFooting",
+      "tipo": "CT-1 Contratrabe 20×40",
+      "volumen_neto_m3": 0.131
+    },
+    {
+      "alias": "contratrabe",
+      "acero_kg": 17.36,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "2Yu60wqd9ClAW2fgvr5kYL",
+      "area_neta_m2": null,
+      "clase": "IfcFooting",
+      "tipo": "CT-1 Contratrabe 20×40",
+      "volumen_neto_m3": 0.1315
+    },
+    {
+      "alias": "contratrabe",
+      "acero_kg": 17.36,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "1PVMKTh_n3xgdyYWLhjRE_",
+      "area_neta_m2": null,
+      "clase": "IfcFooting",
+      "tipo": "CT-1 Contratrabe 20×40",
+      "volumen_neto_m3": 0.156
+    },
+    {
+      "alias": "contratrabe",
+      "acero_kg": 17.36,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "3Z_ZQ44xP8QRuxL5sAjWyV",
+      "area_neta_m2": null,
+      "clase": "IfcFooting",
+      "tipo": "CT-1 Contratrabe 20×40",
+      "volumen_neto_m3": 0.152
+    },
+    {
+      "alias": "contratrabe",
+      "acero_kg": 17.36,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "3LCm$i6JX0GRu5W7j1imOh",
+      "area_neta_m2": null,
+      "clase": "IfcFooting",
+      "tipo": "CT-1 Contratrabe 20×40",
+      "volumen_neto_m3": 0.131
+    },
+    {
+      "alias": "contratrabe",
+      "acero_kg": 17.36,
+      "volumen_bruto_m3": 0.16,
+      "detalle": {},
+      "globalid": "2JOYbuosjFyfHjQFLONHmD",
+      "area_neta_m2": null,
+      "clase": "IfcFooting",
+      "tipo": "CT-1 Contratrabe 20×40",
+      "volumen_neto_m3": 0.132
+    },
+    {
+      "alias": "muro",
+      "acero_kg": 0,
+      "volumen_bruto_m3": 2.73,
+      "detalle": {
+        "area_neta_m2": 12.54
+      },
+      "globalid": "06ICBoUbH44ePMdxiSfDyy",
+      "area_neta_m2": 12.54,
+      "clase": "IfcWall",
+      "tipo": "Block 15",
+      "volumen_neto_m3": 2.115
+    },
+    {
+      "alias": "muro",
+      "acero_kg": 0,
+      "volumen_bruto_m3": 1.95,
+      "detalle": {
+        "area_neta_m2": 11.28
+      },
+      "globalid": "0eNIl373H7h8OcMElsXfxo",
+      "area_neta_m2": 11.28,
+      "clase": "IfcWall",
+      "tipo": "Block 15",
+      "volumen_neto_m3": 1.692
+    },
+    {
+      "alias": "muro",
+      "acero_kg": 0,
+      "volumen_bruto_m3": 2.73,
+      "detalle": {
+        "area_neta_m2": 15.72
+      },
+      "globalid": "1y6BoDnYnEgxAtp2jvdbAj",
+      "area_neta_m2": 15.72,
+      "clase": "IfcWall",
+      "tipo": "Block 15",
+      "volumen_neto_m3": 2.358
+    },
+    {
+      "alias": "muro",
+      "acero_kg": 0,
+      "volumen_bruto_m3": 1.95,
+      "detalle": {
+        "area_neta_m2": 8.895
+      },
+      "globalid": "0yVFiMGs99dwTOUepDBOhI",
+      "area_neta_m2": 8.895,
+      "clase": "IfcWall",
+      "tipo": "Block 15",
+      "volumen_neto_m3": 1.449
+    }
+  ],
+  "totales_por_tipo": {
+    "CE-1 Cerramiento 15×20": {
+      "volumen_neto_m3": 0.569625,
+      "acero_kg": 75.374,
+      "volumen_bruto_m3": 0.72
+    },
+    "T-1 Trabe 20×40": {
+      "volumen_neto_m3": 1.648,
+      "acero_kg": 240.576,
+      "volumen_bruto_m3": 1.92
+    },
+    "C-1 Columna 30×30": {
+      "volumen_neto_m3": 2.4445,
+      "acero_kg": 297.414,
+      "volumen_bruto_m3": 2.4705
+    },
+    "CT-1 Contratrabe 20×40": {
+      "volumen_neto_m3": 1.604,
+      "acero_kg": 208.32,
+      "volumen_bruto_m3": 1.92
+    },
+    "K-1 Castillo 15×15": {
+      "volumen_neto_m3": 0.486,
+      "acero_kg": 73.258,
+      "volumen_bruto_m3": 0.55125
+    },
+    "Block 15": {
+      "volumen_neto_m3": 7.614,
+      "acero_kg": 0,
+      "volumen_bruto_m3": 9.36
+    },
+    "Z-1 Zapata 1.20×1.20": {
+      "volumen_neto_m3": 4.752,
+      "acero_kg": 118.089,
+      "volumen_bruto_m3": 4.752
+    }
+  }
+}
