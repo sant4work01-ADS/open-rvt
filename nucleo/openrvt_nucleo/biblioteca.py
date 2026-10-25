@@ -757,7 +757,7 @@ class BibliotecaMixin:
         self._instantanea()
         if clase == "IfcWallType":
             capas = datos.get("capas")
-            if not capas:
+            if capas is None:
                 capas = [
                     {
                         "material": _texto(datos.get("material") or "Concreto armado"),
