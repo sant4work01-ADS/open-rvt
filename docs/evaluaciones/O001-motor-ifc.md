@@ -255,6 +255,9 @@ done
   AC20-FZK-Haus AC20-Institute-Var-2 IFC2X3-Building-Architecture
 ```
 
+Las 9 pruebas de `evaluacion/test_comparar.py` pasan (volumen exacto del cubo y del prisma,
+detección de malla abierta, diferencia sembrada del 5 % y umbral del 2 % contra cantidades base).
+
 Salidas versionadas:
 
 - `resultados/<muestra>_<motor>.csv` — columnas pedidas:
