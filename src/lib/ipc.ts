@@ -28,7 +28,7 @@ export class ErrorIpc extends Error {
 export function mensajeDeError(e: DetalleError): string {
   const codigo = e.codigo ?? CODIGO_POR_TIPO[e.tipo];
   if (!codigo) return e.mensaje;
-  return tr(`errores.${codigo}`, e.mensaje);
+  return tr(`errores.${codigo}`, e.mensaje, { mensaje: e.mensaje });
 }
 
 type Comandos = typeof commands;

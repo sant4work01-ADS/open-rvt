@@ -265,6 +265,9 @@ class Servidor:
 
 
 def main() -> int:
+    # El puente Rust lee y escribe UTF-8; en Windows las tuberías serían cp1252.
+    for flujo in (sys.stdin, sys.stdout, sys.stderr):
+        flujo.reconfigure(encoding="utf-8")
     logging.basicConfig(
         level=logging.INFO,
         stream=sys.stderr,

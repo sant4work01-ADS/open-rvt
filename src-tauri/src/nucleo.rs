@@ -204,7 +204,10 @@ impl Nucleo {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .env("PYTHONUNBUFFERED", "1");
+            .env("PYTHONUNBUFFERED", "1")
+            // En Windows Python usa cp1252 en las tuberías; el puente lee UTF-8.
+            .env("PYTHONUTF8", "1")
+            .env("PYTHONIOENCODING", "utf-8");
         if let Some(carpeta) = &pythonpath {
             let actual = std::env::var_os("PYTHONPATH").unwrap_or_default();
             let mut valor = carpeta.clone().into_os_string();
