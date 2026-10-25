@@ -163,7 +163,11 @@ export function App() {
       </div>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <SidebarModulos activo={activo} onElegir={irAModulo} />
+        {/* OPEN-RVT: la barra lateral va en una columna propia, como en PP, para que su
+            `flex-1` sea vertical y no se estire a lo ancho. */}
+        <div className="flex min-h-0 shrink-0 flex-col">
+          <SidebarModulos activo={activo} onElegir={irAModulo} />
+        </div>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">

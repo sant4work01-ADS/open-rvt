@@ -13,10 +13,10 @@
     "ayuda": "Help",
     "alertas": "{{n}} alerts",
     "selector": "Modules",
-    "colapsar": "Collapse the menu",
-    "colapsarMenu": "Collapse the module menu",
-    "expandirMenu": "Expand the module menu",
-    "redimensionar": "Resize the module menu"
+    "colapsar": "Collapse",
+    "colapsarMenu": "Collapse side menu",
+    "expandirMenu": "Expand side menu",
+    "redimensionar": "Resize the side panel"
   },
   "ribbon": {
     "cinta": "Command ribbon",

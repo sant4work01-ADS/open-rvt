@@ -13,10 +13,10 @@
     "ayuda": "Ayuda",
     "alertas": "{{n}} alertas",
     "selector": "Módulos",
-    "colapsar": "Colapsar el menú",
-    "colapsarMenu": "Colapsar el menú de módulos",
-    "expandirMenu": "Expandir el menú de módulos",
-    "redimensionar": "Redimensionar el menú de módulos"
+    "colapsar": "Colapsar",
+    "colapsarMenu": "Colapsar menú lateral",
+    "expandirMenu": "Expandir menú lateral",
+    "redimensionar": "Redimensionar el panel lateral"
   },
   "ribbon": {
     "cinta": "Cinta de comandos",

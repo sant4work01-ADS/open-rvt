@@ -1,0 +1,9 @@
+{
+  "name": "open-rvt-e2e",
+  "private": true,
+  "type": "commonjs",
+  "scripts": { "test": "node --test" },
+  "dependencies": {
+    "selenium-webdriver": "^4.51.0"
+  }
+}
