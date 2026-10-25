@@ -10,3 +10,4 @@ src-tauri/gen/
 *.log
 .DS_Store
 e2e/salida/
+src-tauri/recursos/
