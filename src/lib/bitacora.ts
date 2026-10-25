@@ -65,16 +65,18 @@ function sesionLocal(): string {
   );
 }
 
-/** Parámetros de una llamada al núcleo, truncados a 2 KB de JSON. */
+/** Parámetros de una llamada al núcleo, truncados a 2 KB de JSON en total. */
 export function truncarParams(params: unknown): unknown {
   try {
     const texto = JSON.stringify(params ?? {});
     if (texto.length <= MAX_PARAMS) return params ?? {};
-    return {
-      truncado: true,
-      bytes: texto.length,
-      texto: texto.slice(0, MAX_PARAMS),
-    };
+    const salida = { truncado: true, bytes: texto.length, texto: "" };
+    salida.texto = texto.slice(0, Math.max(0, MAX_PARAMS - JSON.stringify(salida).length));
+    // El entrecomillado de JSON puede crecer al recortar: se ajusta hasta caber en 2 KB.
+    while (JSON.stringify(salida).length > MAX_PARAMS && salida.texto.length > 0) {
+      salida.texto = salida.texto.slice(0, salida.texto.length - 8);
+    }
+    return salida;
   } catch {
     return { truncado: true, texto: String(params).slice(0, MAX_PARAMS) };
   }

@@ -103,7 +103,8 @@ describe("truncarParams", () => {  it("deja intactos los parámetros pequeños",
       texto: string;
     };
     expect(truncado.truncado).toBe(true);
-    expect(truncado.texto.length).toBe(2048);
+    expect(JSON.stringify(truncado).length).toBeLessThanOrEqual(2048);
+    expect(truncado.texto.length).toBeLessThan(2048);
     expect(truncado.bytes).toBeGreaterThan(2048);
     expect(truncado.bytes).toBe(JSON.stringify(params).length);
   });
