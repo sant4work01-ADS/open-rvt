@@ -191,9 +191,8 @@ describe("herramienta Eje", () => {
     useModelo.getState().teclearLongitud("6");
     await useModelo.getState().confirmarLongitud();
 
-    const llamada = nucleo.mock.calls
-      .filter(([metodo]) => metodo === "ejes.crear")
-      .at(-1)!;
+    const llamadas = nucleo.mock.calls.filter(([metodo]) => metodo === "ejes.crear");
+    const llamada = llamadas[llamadas.length - 1];
     expect(llamada[1]).toEqual({
       etiqueta: "2",
       x1: 6,
@@ -212,9 +211,8 @@ describe("herramienta Eje", () => {
     useModelo.getState().fijarRatonHerramienta([4, 2.5]);
     await useModelo.getState().clicEnPlanta([4, 2.5], false, true);
 
-    const params = nucleo.mock.calls
-      .filter(([metodo]) => metodo === "ejes.crear")
-      .at(-1)![1] as Record<string, number>;
+    const llamadas = nucleo.mock.calls.filter(([metodo]) => metodo === "ejes.crear");
+    const params = llamadas[llamadas.length - 1][1] as Record<string, number>;
     expect(params.x1).not.toBe(params.x2);
     expect(params.y1).not.toBe(params.y2);
     // Sin Ctrl el mismo trazo habría quedado vertical en x = 4.

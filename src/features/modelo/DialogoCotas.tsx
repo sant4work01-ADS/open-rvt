@@ -262,7 +262,6 @@ export function DialogoCotas() {
                 data-testid="eje-sep-modo-origen"
                 name="eje-sep-modo"
                 checked={modoEfectivo === "origen"}
-                disabled={!soloUna && modoEfectivo === "origen" ? false : soloUna}
                 onChange={() => setModo("origen")}
               />
               Desde el origen

@@ -172,12 +172,14 @@ test("O006c: bitácora con clics, acciones, errores con traza y exportación .zi
     // 2) Error forzado desde la interfaz: repetir la etiqueta «1».
     await activar(ses, "cmd-ejes-separaciones");
     await ses.q('[data-testid="dialogo-ejes-separaciones"]');
-    await fijarValor(ses, "eje-sep-direccion", "vertical");
-    await fijarValor(ses, "eje-sep-origen", "0");
-    await fijarValor(ses, "eje-sep-separaciones", "5");
-    await fijarValor(ses, "eje-sep-longitud", "10");
-    await fijarValor(ses, "eje-sep-etiqueta", "1");
-    await activar(ses, "eje-sep-aceptar");
+    await fijarValor(ses, "eje-sep-horizontal-separaciones", "");
+    await fijarValor(ses, "eje-sep-vertical-separaciones", "5");
+    await fijarValor(ses, "eje-sep-vertical-etiqueta", "1");
+    await fijarValor(ses, "eje-sep-vertical-origen", "0");
+    await fijarValor(ses, "eje-sep-vertical-longitud", "10");
+    await ses.driver.executeScript(() => {
+      document.querySelector('[data-testid="eje-sep-aceptar"]')?.click();
+    });
     await ses.driver.wait(
       async () => {
         const texto = await textoDom(ses, '[data-testid="dialogo-ejes-separaciones"]');
@@ -240,7 +242,7 @@ test("O006c: bitácora con clics, acciones, errores con traza y exportación .zi
     assert.ok(fs.existsSync(path.join(extraido, "OPEN-RVT.log")), "falta OPEN-RVT.log");
     const sistema = JSON.parse(fs.readFileSync(path.join(extraido, "sistema.json"), "utf8"));
     assert.equal(sistema.tipo, "inicio");
-    assert.equal(sistema.version, "0.5.0");
+    assert.equal(sistema.version, "0.5.1");
     assert.ok(sistema.ifcopenshell && sistema.ifcopenshell !== "no disponible");
     assert.ok(sistema.python);
 
@@ -264,7 +266,7 @@ test("O006c: bitácora con clics, acciones, errores con traza y exportación .zi
     assert.ok(okCrear, "falta el resultado correcto de ejes.crear");
     assert.ok(okCrear.duracion_ms >= 0);
 
-    const accionError = acciones.find((e) => e.metodo === "ejes.crear_por_separaciones");
+    const accionError = acciones.find((e) => e.metodo === "ejes.crear_reticula");
     assert.ok(accionError, "falta la acción que provoca el error");
     const error = eventos.find(
       (e) => e.tipo === "resultado" && e.id === accionError.id && e.ok === false,

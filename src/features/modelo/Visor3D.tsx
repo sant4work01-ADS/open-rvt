@@ -583,6 +583,7 @@ export function Visor3D({
   const dobleClicEnPlanta = useModelo((s) => s.dobleClicEnPlanta);
   const espacio = useRef(false);
   const ultimaZ = useRef(0);
+  const ultimoMedio = useRef(0);
   const [oscuro, setOscuro] = useState(() =>
     typeof document !== "undefined" ? document.documentElement.classList.contains("dark") : false,
   );
@@ -2340,6 +2341,18 @@ export function Visor3D({
       const botonMedio = evento.button === 1;
       const izquierdo = evento.button === 0;
       if (!botonMedio && !izquierdo) return;
+      // O006d: doble clic con el botón medio = Ajustar (el `dblclick` del navegador
+      // no siempre conserva `button = 1` en WebKitGTK).
+      if (botonMedio) {
+        const ahora = performance.now();
+        if (ahora - ultimoMedio.current < 400) {
+          ultimoMedio.current = 0;
+          evento.preventDefault();
+          ajustar();
+          return;
+        }
+        ultimoMedio.current = ahora;
+      }
       const paneable = botonMedio || (izquierdo && espacio.current);
       if (paneable) {
         evento.preventDefault();
