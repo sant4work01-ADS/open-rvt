@@ -1,0 +1,136 @@
+{
+  "comun": {
+    "app": "OPEN-RVT",
+    "obra": "Modelo",
+    "noHayObra": "Sin modelo abierto",
+    "espanol": "Español",
+    "ingles": "Inglés"
+  },
+  "modulos": {
+    "modelo": "Modelo",
+    "niveles": "Niveles y ejes",
+    "configuracion": "Configuración",
+    "ayuda": "Ayuda",
+    "alertas": "{{n}} alertas",
+    "selector": "Módulos",
+    "colapsar": "Colapsar el menú",
+    "colapsarMenu": "Colapsar el menú de módulos",
+    "expandirMenu": "Expandir el menú de módulos",
+    "redimensionar": "Redimensionar el menú de módulos"
+  },
+  "ribbon": {
+    "cinta": "Cinta de comandos",
+    "pestanas": "Pestañas de la cinta",
+    "pestana": "Pestaña {{nombre}}",
+    "expandir": "Expandir la cinta",
+    "minimizar": "Minimizar la cinta",
+    "expandirAtajo": "Expandir la cinta (Ctrl+F1)",
+    "minimizarAtajo": "Minimizar la cinta (Ctrl+F1)",
+    "mas-grupos": "Más grupos",
+    "barraCompacta": "Barra de herramientas",
+    "menu": "Menú",
+    "pestanasNombres": {
+      "inicio": "Inicio",
+      "principal": "Inicio",
+      "vista": "Vista"
+    },
+    "grupos": {
+      "Archivo": "Archivo",
+      "Tema": "Tema"
+    },
+    "comandos": {
+      "nuevo": "Nuevo",
+      "abrir": "Abrir",
+      "guardar": "Guardar",
+      "tema-sistema": "Sistema",
+      "tema-claro": "Claro",
+      "tema-oscuro": "Oscuro",
+      "deshacer": "Deshacer",
+      "cortar": "Cortar",
+      "copiar": "Copiar",
+      "pegar": "Pegar"
+    },
+    "descripciones": {
+      "nuevo": "Disponible pronto",
+      "abrir": "Disponible pronto",
+      "guardar": "Disponible pronto",
+      "tema-sistema": "Seguir el tema del sistema",
+      "tema-claro": "Tema claro",
+      "tema-oscuro": "Tema oscuro"
+    },
+    "masOpciones": "Más opciones"
+  },
+  "barraTitulo": {
+    "barra": "Barra de título",
+    "minimizar": "Minimizar",
+    "maximizar": "Maximizar",
+    "restaurar": "Restaurar",
+    "cerrar": "Cerrar"
+  },
+  "barraEstado": {
+    "barra": "Barra de estado"
+  },
+  "configuracion": {
+    "titulo": "Configuración",
+    "secciones": "Secciones de la configuración",
+    "apariencia": "Apariencia",
+    "aparienciaAyuda": "Tema de la interfaz y tamaño del texto y los controles.",
+    "claro": "Claro",
+    "oscuro": "Oscuro",
+    "sistema": "Sistema",
+    "idioma": "Idioma",
+    "idiomaAyuda": "Idioma de la interfaz; el cambio se aplica al instante.",
+    "tamano-de-la-interfaz": "Tamaño de la interfaz",
+    "escala-toda-la-interfaz-el-sidebar-iconos-y-boto": "Escala toda la interfaz; el sidebar (íconos y botones) queda un poco más grande. Atajos: Ctrl+= agranda, Ctrl+− achica y Ctrl+0 vuelve al predeterminado (120 %)."
+  },
+  "ayuda": {
+    "indice-del-manual": "Índice del manual",
+    "buscar-en-el-manual": "Buscar en el manual",
+    "buscar-en-la-ayuda": "Buscar en la ayuda…",
+    "atajos-de-teclado-f1": "Atajos de teclado (F1)",
+    "presentacion": "Presentación",
+    "atajos": "Atajos de teclado",
+    "unAtajo": "atajo",
+    "variosAtajos": "atajos",
+    "grupos": {
+      "Generales": "Generales"
+    },
+    "descripciones": {
+      "paleta-de-comandos": "Paleta de comandos",
+      "atajos-de-teclado": "Atajos de teclado",
+      "minimizar-o-restaurar-la-cinta-de-comandos": "Minimizar o restaurar la cinta de comandos",
+      "agrandar-la-interfaz": "Agrandar la interfaz",
+      "agrandar-la-interfaz-tecla-suma": "Agrandar la interfaz (tecla Suma)",
+      "achicar-la-interfaz": "Achicar la interfaz",
+      "volver-la-interfaz-al-tamano-predeterminado-120": "Volver la interfaz al tamaño predeterminado (120 %)"
+    },
+    "origen": {
+      "OPUS": "OPUS",
+      "propio": "propio"
+    }
+  },
+  "app": {
+    "irA": "Ir a {{nombre}}",
+    "tema": "Tema {{nombre}}",
+    "temaSistema": "del sistema",
+    "temaClaro": "claro",
+    "temaOscuro": "oscuro",
+    "buscar-atajo": "Buscar atajo",
+    "buscar-por-tecla-o-accion": "Buscar por tecla o acción…",
+    "ningun-atajo-coincide-con": "Ningún atajo coincide con «",
+    "navegacion-esc-cierra": "· ↑↓ navegación · Esc cierra",
+    "seleccionar-todo": "Seleccionar todo",
+    "edicion": "Edición"
+  },
+  "dialogos": {
+    "paleta-de-comandos": "Paleta de comandos"
+  },
+  "modelo": {
+    "aqui-ira-el-editor-planta-y-3d": "Aquí irá el editor (planta y 3D)"
+  },
+  "errores": {
+    "io": "No se pudo completar la operación: {{mensaje}}",
+    "validacion": "Datos no válidos: {{mensaje}}",
+    "no_encontrado": "No se encontró: {{mensaje}}"
+  }
+}

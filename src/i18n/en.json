@@ -1,0 +1,136 @@
+{
+  "comun": {
+    "app": "OPEN-RVT",
+    "obra": "Model",
+    "noHayObra": "No model open",
+    "espanol": "Spanish",
+    "ingles": "English"
+  },
+  "modulos": {
+    "modelo": "Model",
+    "niveles": "Levels and axes",
+    "configuracion": "Settings",
+    "ayuda": "Help",
+    "alertas": "{{n}} alerts",
+    "selector": "Modules",
+    "colapsar": "Collapse the menu",
+    "colapsarMenu": "Collapse the module menu",
+    "expandirMenu": "Expand the module menu",
+    "redimensionar": "Resize the module menu"
+  },
+  "ribbon": {
+    "cinta": "Command ribbon",
+    "pestanas": "Ribbon tabs",
+    "pestana": "{{nombre}} tab",
+    "expandir": "Expand the ribbon",
+    "minimizar": "Minimize the ribbon",
+    "expandirAtajo": "Expand the ribbon (Ctrl+F1)",
+    "minimizarAtajo": "Minimize the ribbon (Ctrl+F1)",
+    "mas-grupos": "More groups",
+    "barraCompacta": "Toolbar",
+    "menu": "Menu",
+    "pestanasNombres": {
+      "inicio": "Home",
+      "principal": "Home",
+      "vista": "View"
+    },
+    "grupos": {
+      "Archivo": "File",
+      "Tema": "Theme"
+    },
+    "comandos": {
+      "nuevo": "New",
+      "abrir": "Open",
+      "guardar": "Save",
+      "tema-sistema": "System",
+      "tema-claro": "Light",
+      "tema-oscuro": "Dark",
+      "deshacer": "Undo",
+      "cortar": "Cut",
+      "copiar": "Copy",
+      "pegar": "Paste"
+    },
+    "descripciones": {
+      "nuevo": "Available soon",
+      "abrir": "Available soon",
+      "guardar": "Available soon",
+      "tema-sistema": "Follow the system theme",
+      "tema-claro": "Light theme",
+      "tema-oscuro": "Dark theme"
+    },
+    "masOpciones": "More options"
+  },
+  "barraTitulo": {
+    "barra": "Title bar",
+    "minimizar": "Minimize",
+    "maximizar": "Maximize",
+    "restaurar": "Restore",
+    "cerrar": "Close"
+  },
+  "barraEstado": {
+    "barra": "Status bar"
+  },
+  "configuracion": {
+    "titulo": "Settings",
+    "secciones": "Settings sections",
+    "apariencia": "Appearance",
+    "aparienciaAyuda": "Interface theme and the size of text and controls.",
+    "claro": "Light",
+    "oscuro": "Dark",
+    "sistema": "System",
+    "idioma": "Language",
+    "idiomaAyuda": "Interface language; the change applies immediately.",
+    "tamano-de-la-interfaz": "Interface size",
+    "escala-toda-la-interfaz-el-sidebar-iconos-y-boto": "Scales the whole interface; the sidebar (icons and buttons) stays a little larger. Shortcuts: Ctrl+= enlarges, Ctrl+− shrinks and Ctrl+0 returns to the default (120 %)."
+  },
+  "ayuda": {
+    "indice-del-manual": "Manual index",
+    "buscar-en-el-manual": "Search the manual",
+    "buscar-en-la-ayuda": "Search help…",
+    "atajos-de-teclado-f1": "Keyboard shortcuts (F1)",
+    "presentacion": "Introduction",
+    "atajos": "Keyboard shortcuts",
+    "unAtajo": "shortcut",
+    "variosAtajos": "shortcuts",
+    "grupos": {
+      "Generales": "General"
+    },
+    "descripciones": {
+      "paleta-de-comandos": "Command palette",
+      "atajos-de-teclado": "Keyboard shortcuts",
+      "minimizar-o-restaurar-la-cinta-de-comandos": "Minimize or restore the command ribbon",
+      "agrandar-la-interfaz": "Enlarge the interface",
+      "agrandar-la-interfaz-tecla-suma": "Enlarge the interface (Plus key)",
+      "achicar-la-interfaz": "Shrink the interface",
+      "volver-la-interfaz-al-tamano-predeterminado-120": "Return the interface to the default size (120 %)"
+    },
+    "origen": {
+      "OPUS": "OPUS",
+      "propio": "custom"
+    }
+  },
+  "app": {
+    "irA": "Go to {{nombre}}",
+    "tema": "{{nombre}} theme",
+    "temaSistema": "System",
+    "temaClaro": "Light",
+    "temaOscuro": "Dark",
+    "buscar-atajo": "Search shortcut",
+    "buscar-por-tecla-o-accion": "Search by key or action…",
+    "ningun-atajo-coincide-con": "No shortcut matches «",
+    "navegacion-esc-cierra": "· ↑↓ navigate · Esc closes",
+    "seleccionar-todo": "Select all",
+    "edicion": "Edit"
+  },
+  "dialogos": {
+    "paleta-de-comandos": "Command palette"
+  },
+  "modelo": {
+    "aqui-ira-el-editor-planta-y-3d": "The editor (plan and 3D) will go here"
+  },
+  "errores": {
+    "io": "The operation could not be completed: {{mensaje}}",
+    "validacion": "Invalid data: {{mensaje}}",
+    "no_encontrado": "Not found: {{mensaje}}"
+  }
+}

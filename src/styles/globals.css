@@ -1,0 +1,132 @@
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Tamaño de la interfaz: el 120 % predeterminado; la UI (tipografía, botones,
+       barra de estado, diálogos y espacios) escala con la fuente raíz en rem.
+       El sidebar (ícono, botón y ancho) lleva además un 25 % extra: ×1.5 al 120 %.
+       La variable la fija `aplicarEscala` (src/lib/tema.ts); no es zoom del webview. */
+    --escala: 1.2;
+    --factor-sidebar: 1.25;
+    --background: 0 0% 100%;
+    --foreground: 240 10% 4%;
+    --card: 240 5% 98%;
+    --muted: 240 5% 96%;
+    --muted-foreground: 240 4% 40%;
+    --border: 240 6% 90%;
+    --accent: 173 80% 26%; /* #0F766E */
+    --accent-foreground: 0 0% 100%;
+    --ring: 173 80% 26%;
+    --success: 142 71% 35%;
+    --warning: 38 92% 45%;
+    --danger: 0 72% 45%;
+  }
+  .dark {
+    --background: 240 6% 7%;
+    --foreground: 0 0% 96%;
+    --card: 240 5% 10%;
+    --muted: 240 4% 14%;
+    --muted-foreground: 240 5% 65%;
+    --border: 240 4% 20%;
+    /* El acento del tema oscuro va un poco más claro: con el texto contrario casi negro,
+       la diferencia de luminancia entre el fondo y el texto de una selección (fondo
+       acento + texto de acento) llega a 0.44 y se lee sin esfuerzo. */
+    --accent: 173 70% 46%;
+    --accent-foreground: 240 10% 4%;
+    --ring: 173 70% 46%;
+    --success: 142 60% 55%;
+    --warning: 45 95% 60%;
+    --danger: 0 80% 65%;
+  }
+  * {
+    @apply border-border;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+    /* La ventana nunca se desplaza completa (ni la barra de título ni la cinta): cada
+       zona que no cabe se desplaza por dentro. */
+    overflow: hidden;
+  }
+  /* El resto de la interfaz escala con la fuente raíz (los tamaños de Tailwind van en rem). */
+  html {
+    font-size: calc(16px * var(--escala));
+  }
+  body {
+    @apply bg-background font-sans text-base text-foreground antialiased;
+    font-variant-numeric: tabular-nums;
+  }
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-1 ring-offset-background;
+  }
+}
+
+@layer components {
+  /* Renglón del buscador de recursos: Clave | Descripción (todo el resto) | Unidad | PU |
+     Origen (compactas, a la derecha). La Descripción vive en una sola línea con elipsis —el
+     texto completo va en el tooltip (title)— y solo el renglón activo puede crecer a dos.
+     Unidad y PU reservan un ancho mínimo para conservar la alineación aunque el recurso no
+     traiga ese dato. */
+  .buscador-fila {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) minmax(3.5ch, auto) minmax(8ch, auto) auto;
+    align-items: baseline;
+    column-gap: 0.5rem;
+    line-height: 1rem;
+  }
+  .buscador-desc {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .buscador-fila[aria-selected="true"] .buscador-desc {
+    overflow-wrap: break-word;
+    white-space: normal;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Píldora del tooltip del sidebar: entra deslizándose 4 px (§20.8). No se desvanece:
+   la píldora es opaca en todo momento (fondo sólido del tema). */
+@keyframes tip-entrada {
+  from {
+    transform: translateX(-4px);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* Spec 021: la interfaz no se comporta como una página web. La selección de texto
+   queda limitada a lo que se puede copiar (campos, celdas en edición, mensajes y
+   la vista previa de reportes). */
+@layer base {
+  body {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  input,
+  textarea,
+  [contenteditable="true"],
+  [data-seleccionable],
+  .celda-editando,
+  pre,
+  code {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+}
