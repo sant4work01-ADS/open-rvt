@@ -132,6 +132,21 @@ class ModeladoMixin:
         return ErrorNucleo(mensaje, codigo)
 
     def _pset(self, entidad: Any, nombre: str, crear: bool = False) -> Any:
+        # O007a: en IFC4 los materiales no son IfcObject; su pset es un
+        # IfcMaterialProperties enlazado por el atributo Material.
+        if entidad.is_a("IfcMaterial"):
+            for propiedades in getattr(entidad, "HasProperties", ()) or ():
+                if getattr(propiedades, "Name", "") == nombre:
+                    return propiedades
+            if not crear:
+                return None
+            return self.modelo.create_entity(
+                "IfcMaterialProperties",
+                Name=nombre,
+                Description="Datos de OPEN-RVT",
+                Properties=[],
+                Material=entidad,
+            )
         if entidad.is_a("IfcTypeObject"):
             # Los tipos guardan sus psets en HasPropertySets, no en IsDefinedBy.
             for pset in getattr(entidad, "HasPropertySets", ()) or ():
@@ -183,7 +198,10 @@ class ModeladoMixin:
         if pset is None:
             return {}
         salida: dict[str, Any] = {}
-        for prop in getattr(pset, "HasProperties", ()) or ():
+        propiedades = getattr(pset, "HasProperties", ()) or getattr(
+            pset, "Properties", ()
+        ) or ()
+        for prop in propiedades:
             valor = getattr(prop, "NominalValue", None)
             if valor is None:
                 continue
@@ -191,6 +209,9 @@ class ModeladoMixin:
         return salida
 
     def _guardar_pset(self, entidad: Any, nombre: str, valores: dict[str, Any]) -> None:
+        if entidad.is_a("IfcMaterial") and nombre == "OPENRVT_Material":
+            self._guardar_material_pset(entidad, valores)
+            return
         pset = self._pset(entidad, nombre, crear=True)
         existentes = {_nombre(p): p for p in (getattr(pset, "HasProperties", ()) or ())}
         for clave, valor in valores.items():
