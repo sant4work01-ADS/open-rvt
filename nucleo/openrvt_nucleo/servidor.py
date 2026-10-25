@@ -92,6 +92,85 @@ class Servidor:
             return self._exigir().leer_vistas()
         if metodo == "vistas.guardar":
             return self._exigir().guardar_vistas(params.get("lista", params.get("vistas")))
+        if metodo == "niveles.crear":
+            return self._exigir().nivel_crear(
+                str(params.get("nombre") or ""), params.get("elevacion", 0.0)
+            )
+        if metodo == "niveles.editar":
+            return self._exigir().nivel_editar(
+                str(params.get("globalid") or ""),
+                params.get("nombre"),
+                params.get("elevacion"),
+            )
+        if metodo == "niveles.borrar":
+            return self._exigir().nivel_borrar(str(params.get("globalid") or ""))
+        if metodo == "ejes.crear":
+            return self._exigir().eje_crear(
+                str(params.get("etiqueta") or ""),
+                params.get("x1", 0.0),
+                params.get("y1", 0.0),
+                params.get("x2", 0.0),
+                params.get("y2", 0.0),
+            )
+        if metodo == "ejes.borrar":
+            return self._exigir().eje_borrar(str(params.get("globalid") or ""))
+        if metodo == "ejes.listar":
+            return self._exigir().ejes_listar()
+        if metodo == "tipos.listar":
+            return self._exigir().tipos_listar(str(params.get("clase") or "IfcWallType"))
+        if metodo == "muros.crear":
+            return self._exigir().muro_crear(
+                str(params.get("tipo") or ""),
+                str(params.get("nivel") or ""),
+                params.get("x1", 0.0),
+                params.get("y1", 0.0),
+                params.get("x2", 0.0),
+                params.get("y2", 0.0),
+                params.get("altura", 2.60),
+                str(params.get("alineacion") or "centro"),
+            )
+        if metodo == "losas.crear":
+            return self._exigir().losa_crear(
+                str(params.get("nivel") or ""),
+                params.get("puntos"),
+                params.get("espesor", 0.12),
+                params.get("desfase", 0.0),
+            )
+        if metodo == "losas.desde_muros":
+            return self._exigir().losa_desde_muros(
+                str(params.get("nivel") or ""), params.get("globalids")
+            )
+        if metodo == "aberturas.crear":
+            return self._exigir().abertura_crear(
+                str(params.get("clase") or "IfcDoor"),
+                str(params.get("muro") or ""),
+                params.get("distancia", 0.0),
+                params.get("ancho"),
+                params.get("alto"),
+                params.get("antepecho"),
+            )
+        if metodo == "elementos.mover":
+            return self._exigir().elementos_mover(
+                params.get("globalids"),
+                params.get("dx", 0.0),
+                params.get("dy", 0.0),
+                params.get("dz", 0.0),
+            )
+        if metodo == "elementos.borrar":
+            return self._exigir().elementos_borrar(params.get("globalids"))
+        if metodo == "elementos.copiar":
+            return self._exigir().elementos_copiar(
+                params.get("globalids"),
+                params.get("dx", 0.0),
+                params.get("dy", 0.0),
+                params.get("dz", 0.0),
+            )
+        if metodo == "elementos.editar":
+            return self._exigir().elemento_editar(
+                str(params.get("globalid") or ""), params.get("cambios")
+            )
+        if metodo == "proyecto.validar":
+            return self._exigir().validar()
         if metodo == "historial.deshacer":
             return self._exigir().deshacer()
         if metodo == "historial.rehacer":
