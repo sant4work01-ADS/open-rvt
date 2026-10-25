@@ -85,8 +85,9 @@ diferencia fue 0.0010 % y en el IFC2X3, 0.0004 %.
 
 ## 4. Cantidades base
 
-`Qto_*BaseQuantities` se leyó de `IfcRelDefinesByProperties` → `IfcElementQuantity`, convirtiendo
-unidades del proyecto a SI (el IFC2X3 declara longitud en mm, área en m² y volumen en m³).
+`Qto_*BaseQuantities` se leyó de `IfcRelDefinesByProperties` → `IfcElementQuantity` (las cantidades
+estándar y, cuando faltaban, las de ArchiCAD), convirtiendo unidades del proyecto a SI (el IFC2X3
+declara longitud en mm, área en m² y volumen en m³).
 
 | Muestra | Motor | Volumen: con qto | Volumen: pasan 2 % | Mediana vol. | Área: con qto | Área: pasan 2 % | Mediana área |
 |---|---|---:|---:|---:|---:|---:|---:|
