@@ -21,6 +21,10 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 # O005c: consulta nativa del latest.json en Linux (el WebView no puede por CORS).
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+# O006c: nombre de archivo de la bitácora y sello de tiempo ISO con milisegundos.
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+# O006c: exportación de la bitácora en .zip.
+zip = { version = "4", default-features = false, features = ["deflate"] }
 log = "0.4"
 serde.workspace = true
 serde_json.workspace = true

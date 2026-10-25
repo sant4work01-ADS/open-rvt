@@ -1,6 +1,7 @@
 import { tr } from "@/i18n";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { bitacoraErrorUi } from "@/lib/bitacora";
 
 // OPEN-RVT: sin sesión de obra; solo se limpia el error y la pantalla vuelve a dibujarse.
 export const CLAVE_SIN_RECUPERAR = "openrvt.sinRecuperar";
@@ -23,6 +24,7 @@ export class ErrorBoundary extends Component<Props, Estado> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("Error de interfaz", error, info.componentStack);
+    bitacoraErrorUi(error.message, `${error.stack ?? ""}\n${info.componentStack ?? ""}`);
     this.setState({ pila: info.componentStack ?? null });
   }
 

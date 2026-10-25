@@ -2,7 +2,7 @@
 // lista de vistas y la selección para que la cinta, el visor y la barra de estado
 // compartan una sola fuente de verdad.
 import { create } from "zustand";
-import { ipc } from "@/lib/ipc";
+import { bitacoraHerramienta, llamarConBitacora } from "@/lib/bitacora";
 import { elegirDestinoIfc, elegirIfcParaAbrir } from "@/lib/dialogos";
 import {
   CATEGORIAS_TODAS,
@@ -187,7 +187,8 @@ interface EstadoModelo {
 }
 
 async function rpc<T>(metodo: string, params: Record<string, unknown> = {}): Promise<T> {
-  return (await ipc.nucleoLlamar(metodo, params)) as T;
+  // O006c: cada llamada al núcleo queda como `accion` y su `resultado`.
+  return llamarConBitacora<T>(metodo, params);
 }
 
 function base64ABytes(texto: string): Uint8Array {
@@ -467,7 +468,10 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       altura: opciones.altura,
       alineacion: opciones.alineacion,
     });
-    if (ok) set({ puntosHerramienta: [destino], ...limpiarTrazoExtra() });
+    if (ok) {
+      set({ puntosHerramienta: [destino], ...limpiarTrazoExtra() });
+      bitacoraHerramienta("muro", "terminar", { x: destino[0], y: destino[1] });
+    }
     return ok;
   };
 
@@ -501,6 +505,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         ...limpiarTrazoExtra(),
         aviso: `Eje «${etiqueta}» creado. Siguiente: ${siguiente}.`,
       });
+      bitacoraHerramienta("eje", "terminar", { x: destino[0], y: destino[1] });
     }
     return ok;
   };
@@ -519,7 +524,10 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       dy: destino[1] - origen[1],
       dz: 0,
     });
-    if (ok) set({ puntosHerramienta: [], ...limpiarTrazoExtra() });
+    if (ok) {
+      set({ puntosHerramienta: [], ...limpiarTrazoExtra() });
+      bitacoraHerramienta(herramienta, "terminar", { x: destino[0], y: destino[1] });
+    }
     return ok;
   };
 
@@ -781,9 +789,11 @@ export const useModelo = create<EstadoModelo>((set, get) => {
           : { seleccion: null, seleccionados: [], propiedades: null }),
         aviso: nombres[herramienta],
       });
+      bitacoraHerramienta(herramienta, "activar");
     },
 
-    cancelarHerramienta: () =>
+    cancelarHerramienta: () => {
+      const herramienta = get().herramienta;
       set({
         herramienta: null,
         puntosHerramienta: [],
@@ -792,7 +802,9 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         longitudTecleada: "",
         etiquetaEje: "",
         aviso: null,
-      }),
+      });
+      if (herramienta) bitacoraHerramienta(herramienta, "cancelar");
+    },
 
     cancelarTrazo: () => {
       const herramienta = get().herramienta;
@@ -814,6 +826,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         longitudTecleada: "",
         aviso: nombres[herramienta],
       });
+      bitacoraHerramienta(herramienta, "cancelar_trazo");
       return true;
     },
 
@@ -916,6 +929,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         shift,
       );
       const p = enganche.punto;
+      bitacoraHerramienta(herramienta, "punto", { x: p[0], y: p[1] });
       if (herramienta === "muro") {
         if (puntos.length === 0) {
           set({ puntosHerramienta: [p], aviso: "Muro: segundo punto o longitud y Enter." });
@@ -954,7 +968,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
           set({ aviso: "Coloque la abertura sobre un muro." });
           return;
         }
-        await ejecutar("aberturas.crear", {
+        const ok = await ejecutar("aberturas.crear", {
           clase: herramienta === "puerta" ? "IfcDoor" : "IfcWindow",
           muro: colocada.muro.globalid,
           distancia: colocada.distancia,
@@ -963,6 +977,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
           antepecho,
           volteado: get().voltearSiguiente,
         });
+        if (ok) bitacoraHerramienta(herramienta, "terminar", { x: p[0], y: p[1] });
         return;
       }
       if (herramienta === "mover" || herramienta === "copiar") {
@@ -1031,6 +1046,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
           ratonHerramienta: null,
           engancheHerramienta: null,
         });
+        bitacoraHerramienta("losa", "terminar");
       }
     },
 

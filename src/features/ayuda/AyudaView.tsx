@@ -15,6 +15,7 @@ import { plegarTexto } from "@/lib/difuso";
 import manualEs from "../../../docs/manual-rapido.md?raw";
 import manualEn from "../../../docs/manual-rapido.en.md?raw";
 import { Markdown } from "./Markdown";
+import { BitacoraView } from "./BitacoraView";
 import { dividirSecciones } from "./manual";
 
 /** Ayuda: manual rápido actualizado, con índice de secciones y buscador. */
@@ -22,6 +23,7 @@ export function AyudaView() {
   const { i18n } = useTranslation();
   const [texto, setTexto] = useState("");
   const [atajos, setAtajos] = useState(false);
+  const [pestana, setPestana] = useState<"manual" | "bitacora">("manual");
   const contenido = useRef<HTMLDivElement>(null);
   const secciones = useMemo(
     () => dividirSecciones(i18n.language === "en" ? manualEn : manualEs),
@@ -47,7 +49,43 @@ export function AyudaView() {
   useScrollSeleccionado(indice, activoEnLista, visibles.length);
 
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div role="tablist" aria-label={tr("ayuda.pestanas", "Ayuda")} className="flex shrink-0 gap-1 border-b px-2">
+        <button
+          type="button"
+          role="tab"
+          data-testid="ayuda-pestana-manual"
+          aria-selected={pestana === "manual"}
+          onClick={() => setPestana("manual")}
+          className={
+            "border-b-2 px-3 py-1.5 text-xs " +
+            (pestana === "manual"
+              ? "border-accent font-medium text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground")
+          }
+        >
+          {tr("ayuda.manual", "Manual")}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          data-testid="ayuda-pestana-bitacora"
+          aria-selected={pestana === "bitacora"}
+          onClick={() => setPestana("bitacora")}
+          className={
+            "border-b-2 px-3 py-1.5 text-xs " +
+            (pestana === "bitacora"
+              ? "border-accent font-medium text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground")
+          }
+        >
+          {tr("ayuda.bitacora", "Bitácora")}
+        </button>
+      </div>
+      {pestana === "bitacora" ? (
+        <BitacoraView />
+      ) : (
+      <div className="flex min-h-0 flex-1">
       <aside
         aria-label={tr("ayuda.indice-del-manual", "Índice del manual")}
         className="flex w-64 shrink-0 flex-col border-r"
@@ -146,6 +184,8 @@ export function AyudaView() {
       </div>
 
       {atajos && <DialogoAtajos onCerrar={() => setAtajos(false)} />}
+      </div>
+      )}
     </div>
   );
 }

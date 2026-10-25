@@ -21,6 +21,15 @@ export interface ErrorDatos {
   tipo: string;
   mensaje: string;
   codigo?: string;
+  /** O006c: traza de Python que devuelve el núcleo en los errores. */
+  traza?: string;
+}
+
+/** O006c: sesión actual de la bitácora. */
+export interface DatosSesionBitacora {
+  sesion: string;
+  ruta: string | null;
+  carpeta: string | null;
 }
 
 /** Conflicto al copiar elementos entre modelos (diálogo común copiado de PP). */
@@ -39,13 +48,34 @@ export type Resultado<T> =
 function envolver<T>(promesa: Promise<T>): Promise<Resultado<T>> {
   return promesa
     .then((data) => ({ status: "ok", data }) as Resultado<T>)
-    .catch((e: unknown) => ({
-      status: "error",
-      error: { tipo: "Io", mensaje: e instanceof Error ? e.message : String(e) },
-    }));
+    .catch((e: unknown) => ({ status: "error", error: normalizarError(e) }));
+}
+
+/**
+ * O006c: un error del puente llega como objeto `{mensaje, codigo, traza}`; si se
+ * convirtiera con `String(e)` se perdería el mensaje original («[object Object]»).
+ */
+export function normalizarError(e: unknown): ErrorDatos {
+  if (e && typeof e === "object") {
+    const datos = e as Record<string, unknown>;
+    if (typeof datos.mensaje === "string" && datos.mensaje) {
+      const error: ErrorDatos = { tipo: "Io", mensaje: datos.mensaje };
+      if (typeof datos.tipo === "string") error.tipo = datos.tipo;
+      if (datos.codigo !== undefined && datos.codigo !== null) {
+        error.codigo = String(datos.codigo);
+      }
+      if (typeof datos.traza === "string" && datos.traza) error.traza = datos.traza;
+      return error;
+    }
+    if (typeof datos.message === "string" && datos.message) {
+      return { tipo: "Io", mensaje: datos.message };
+    }
+  }
+  return { tipo: "Io", mensaje: e instanceof Error ? e.message : String(e) };
 }
 
 export const commands = {
+  versionApp: () => envolver(invoke<string>("version_app")),
   obtenerConfig: () => envolver(invoke<Config>("obtener_config")),
   migrarTemaLocal: (tema: string) => envolver(invoke<Config>("migrar_tema_local", { tema })),
   guardarTema: (tema: string) => envolver(invoke<void>("guardar_tema", { tema })),
@@ -73,4 +103,17 @@ export const commands = {
   // el método JSON-RPC; los tipos concretos viven en src/features/modelo/tipos.ts.
   nucleoLlamar: (metodo: string, params: unknown) =>
     envolver(invoke<unknown>("nucleo_llamar", { metodo, params })),
+  // O006c: bitácora de la sesión (lotes JSONL y exportación .zip).
+  bitacoraAgregar: (eventos: unknown[]) =>
+    envolver(invoke<void>("bitacora_agregar", { eventos })),
+  bitacoraSesion: () => envolver(invoke<DatosSesionBitacora>("bitacora_sesion")),
+  bitacoraExportar: (
+    destino: string,
+    todas: boolean,
+    incluirIfc: boolean,
+    rutaIfc: string | null,
+  ) =>
+    envolver(
+      invoke<string>("bitacora_exportar", { destino, todas, incluirIfc, rutaIfc }),
+    ),
 };

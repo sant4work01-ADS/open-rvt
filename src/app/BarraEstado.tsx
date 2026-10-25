@@ -2,8 +2,12 @@
 // nombre del archivo, esquema, número de elementos, escala de la vista activa y avisos
 // del núcleo IFC. Sin modelo se conserva «Sin modelo abierto» del esqueleto.
 import { useTranslation } from "react-i18next";
+import { Copy, Download } from "lucide-react";
 import { useModelo } from "@/features/modelo/estado";
 import { AvisoActualizacion } from "@/features/actualizaciones/Actualizaciones";
+import { textoDeDetalle, ultimoErrorBitacora } from "@/lib/bitacora";
+import { exportarBitacora } from "@/lib/bitacoraExportar";
+import { copiarTexto } from "@/lib/portapapeles";
 
 /** Altura anterior de la barra (h-7 = 1.75 rem); se conserva la de PP. */
 export const ALTO_ANTERIOR_REM = 1.75;
@@ -77,8 +81,40 @@ export function BarraEstado() {
           </span>
         )}
         {error && (
-          <span data-testid="estado-error" className="truncate text-red-600" title={error}>
-            {error}
+          <span
+            data-testid="estado-error"
+            className="flex min-w-0 items-center gap-1 truncate text-red-600"
+            title={error}
+          >
+            <span className="truncate">{error}</span>
+            <button
+              type="button"
+              data-testid="aviso-copiar-detalle"
+              title={t("bitacora.copiar-detalle", "Copiar detalle")}
+              aria-label={t("bitacora.copiar-detalle", "Copiar detalle")}
+              onClick={() => copiarTexto(textoDeDetalle(ultimoErrorBitacora()))}
+              className="flex shrink-0 items-center gap-1 rounded px-1 hover:bg-muted"
+            >
+              <Copy size={12} strokeWidth={1.5} />
+              {t("bitacora.copiar-detalle", "Copiar detalle")}
+            </button>
+            <button
+              type="button"
+              data-testid="aviso-exportar-bitacora"
+              title={t("bitacora.exportar", "Exportar bitácora…")}
+              aria-label={t("bitacora.exportar", "Exportar bitácora…")}
+              onClick={() => {
+                void exportarBitacora({ rutaIfc: useModelo.getState().ruta }).catch((e: unknown) => {
+                  useModelo
+                    .getState()
+                    .fijarAviso(`No se pudo exportar: ${e instanceof Error ? e.message : String(e)}`);
+                });
+              }}
+              className="flex shrink-0 items-center gap-1 rounded px-1 hover:bg-muted"
+            >
+              <Download size={12} strokeWidth={1.5} />
+              {t("bitacora.exportar", "Exportar bitácora…")}
+            </button>
           </span>
         )}
       </span>
