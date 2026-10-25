@@ -81,6 +81,48 @@ Trabe, Cerramiento y Dala.
 - **Planta:** columnas y castillos se rellenan con el rayado de concreto; trabes,
   cerramientos, dalas, zapatas y contratrabes se dibujan con líneas discontinuas.
 
+### Interacciones de la estructura
+
+Los elementos se ligan como en obra y se editan en cadena. La liga se guarda en el pset
+`OPENRVT_Liga` de la pieza dependiente y también como `IfcRelConnectsElements`, así que
+se conserva al guardar y reabrir.
+
+- **Castillos automáticos** (Modelar → Estructura): pide la separación máxima entre
+  centros (3.00 m por omisión). Los coloca en cada esquina L, T o X, en cada remate
+  libre (cara al ras) y repartidos en los tramos, sin duplicar los que ya están a menos
+  de 5 cm. Si hay muros seleccionados trabaja solo con ellos; si no, con todos los del
+  nivel activo. Todo en un solo paso de deshacer.
+- **Castillo sobre un muro:** la herramienta Castillo, al hacer clic dentro de un muro,
+  toma el espesor del núcleo, la rotación y la base del muro; su altura llega al lecho
+  bajo del cerramiento o a la parte de arriba del muro. Si se mueve, estira, cambia de
+  altura o de tipo el muro, el castillo se recoloca; al borrar el muro caen sus
+  castillos, cerramientos y dalas.
+- **Cerramiento y dala en muro:** un clic sobre el muro crea la pieza con su mismo eje y
+  el ancho del núcleo. El cerramiento deja su lecho alto en la parte de arriba del muro
+  y la dala su lecho bajo en la base. Al crear un cerramiento, los castillos de ese muro
+  bajan hasta su lecho bajo.
+- **Columnas en los cruces:** el botón «En todos los cruces» de la barra de la
+  herramienta Columna pone una columna en cada cruce de la retícula y guarda `EjeA` y
+  `EjeB`. La casilla «Con zapata» crea además una zapata bajo cada columna. Al mover un
+  eje se mueven sus columnas y sus zapatas en el mismo paso.
+- **Zapata bajo columna:** la zapata se centra bajo la columna o, con lindero N, S, E u
+  O, se desplaza para que su borde quede al ras de esa cara de la columna. La base de la
+  columna baja a la cara superior del dado (o de la zapata si no hay dado). Al borrar la
+  columna se pregunta si se borra también su zapata; por omisión, sí.
+- **Unir zapatas y unir columnas:** crean contratrabes entre zapatas consecutivas y
+  trabes entre columnas consecutivas sobre cada eje, de centro a centro. Las trabes
+  dejan su lecho alto en el nivel superior menos el espesor de la losa y la parte de
+  arriba de las columnas llega a ese lecho; el nudo es de la columna.
+- **Cortes por prioridad:** para cuantificar no se cuenta dos veces el mismo volumen.
+  Gana, en este orden: zapata > contratrabe > columna > trabe > losa > castillo >
+  cerramiento/dala > muro (núcleo) > acabados. `cantidades.estructura` devuelve el
+  volumen bruto, el neto y el acero de cada pieza, totales por tipo y el gran total; la
+  suma de netos coincide con el volumen de la unión.
+- **Acero por pieza tipo:** los kg/m se calculan con un largo de referencia (3.00 m en
+  columna y castillo; 4.00 m en trabe, cerramiento, dala, contratrabe y zapata corrida)
+  para no contar de más el confinamiento y los estribos de extremo. El editor muestra
+  «X kg/m (sobre L_ref m)».
+
 ### Novedades de la versión 0.5.3
 
 - Nuevos elementos estructurales: zapata aislada y corrida, contratrabe, columna,
@@ -117,6 +159,25 @@ La detección dura 60 segundos desde el último gesto.
 - **Ctrl+Shift+D** abre un panel con los últimos 20 eventos `wheel` (deltaX, deltaY,
   deltaMode, Ctrl y milisegundos entre eventos) y la clasificación de cada uno. Si el
   touchpad sigue fallando, ese panel sirve para reportarlo.
+
+## Novedades de la versión 0.5.5
+
+- **Castillos automáticos** en esquinas, remates e intermedios, con separación
+  configurable (3.00 m por omisión) y sin duplicados.
+- **Ligas entre elementos** en `OPENRVT_Liga` y `IfcRelConnectsElements`: castillo,
+  cerramiento y dala siguen a su muro; la zapata sigue a su columna.
+- **Cerramiento y dala en muro** con un clic, y castillos que bajan al lecho bajo del
+  cerramiento.
+- **Columnas en todos los cruces**, con zapata opcional; mover un eje mueve sus
+  columnas y zapatas.
+- **Zapata bajo columna** centrada o excéntrica en el lindero, con la base de la
+  columna en la cara superior del dado.
+- **Contratrabes y trabes automáticas** entre piezas consecutivas de cada eje.
+- **Cortes por prioridad** y `cantidades.estructura` con volúmenes netos, acero y
+  totales; la suma de netos es igual a la unión.
+- **Esquinas de planta** con el núcleo recortado por castillos y columnas y los
+  acabados pasando por encima del castillo.
+- **Acero por pieza tipo** con largo de referencia: C-1 = 10.912 kg/m.
 
 ## Novedades de la versión 0.5.4
 

@@ -9,6 +9,7 @@ import {
   puntoDentroDeHuella,
   unirHuellas,
   type MuroPlanta,
+  type SeccionPlanta,
 } from "./planta";
 
 const nucleo = (espesor = 0.15): CapaMuro[] => [
@@ -104,6 +105,107 @@ describe("huellas de muros unidas (O006e)", () => {
   });
 });
 
+
+describe("castillos y columnas en planta (O007c)", () => {
+  const castillo: SeccionPlanta = {
+    globalid: "k1",
+    x: 4,
+    y: 0,
+    ancho: 0.15,
+    fondo: 0.15,
+    rotacion: 0,
+    funcion: "castillo",
+  };
+  const columna: SeccionPlanta = {
+    globalid: "c1",
+    x: 4,
+    y: 0,
+    ancho: 0.30,
+    fondo: 0.30,
+    rotacion: 0,
+    funcion: "columna",
+  };
+  // Interior estricto: la cara de la columna sí se dibuja.
+  const enSeccion = (punto: [number, number], seccion: SeccionPlanta) =>
+    Math.abs(punto[0] - seccion.x) < seccion.ancho / 2 - 1e-9 &&
+    Math.abs(punto[1] - seccion.y) < seccion.fondo / 2 - 1e-9;
+  const longitud = (lineas: Array<Array<[number, number]>>) =>
+    lineas.reduce(
+      (total, linea) =>
+        total +
+        linea.slice(1).reduce(
+          (suma, punto, i) =>
+            suma +
+            Math.hypot(punto[0] - linea[i][0], punto[1] - linea[i][1]),
+          0,
+        ),
+      0,
+    );
+  const nucleo = (planta: ReturnType<typeof calcularPlantaMuros>) =>
+    planta.capas.filter((capa) => capa.funcion === "núcleo").flatMap((c) => c.lineas);
+  const acabados = (planta: ReturnType<typeof calcularPlantaMuros>) =>
+    planta.capas.filter((capa) => capa.funcion !== "núcleo").flatMap((c) => c.lineas);
+  const longitudDentro = (
+    lineas: Array<Array<[number, number]>>,
+    seccion: SeccionPlanta,
+  ) =>
+    lineas.reduce(
+      (total, linea) =>
+        total +
+        linea.slice(1).reduce((suma, punto, i) => {
+          const anterior = linea[i];
+          const medio: [number, number] = [
+            (anterior[0] + punto[0]) / 2,
+            (anterior[1] + punto[1]) / 2,
+          ];
+          return suma +
+            (enSeccion(medio, seccion)
+              ? Math.hypot(punto[0] - anterior[0], punto[1] - anterior[1])
+              : 0);
+        }, 0),
+      0,
+    );
+
+  test("en una L con castillo ninguna línea de núcleo entra en su sección", () => {
+    const muros = L.map((m) => muro(m.globalid, m.eje, multicapa()));
+    const planta = calcularPlantaMuros(muros, [castillo]);
+    for (const linea of nucleo(planta)) {
+      for (let i = 1; i < linea.length; i += 1) {
+        for (const t of [0.1, 0.5, 0.9]) {
+          const punto: [number, number] = [
+            linea[i - 1][0] + (linea[i][0] - linea[i - 1][0]) * t,
+            linea[i - 1][1] + (linea[i][1] - linea[i - 1][1]) * t,
+          ];
+          expect(enSeccion(punto, castillo)).toBe(false);
+        }
+      }
+    }
+  });
+
+  test("los acabados pasan por encima del castillo y no se recortan", () => {
+    const muros = L.map((m) => muro(m.globalid, m.eje, multicapa()));
+    // Para medir la interrupción se usa un castillo a media crujía; en la esquina
+    // el núcleo ya está unido y no tiene líneas interiores que cortar.
+    const medio: SeccionPlanta = castillo;
+    const sin = calcularPlantaMuros(muros);
+    const con = calcularPlantaMuros(muros, [medio]);
+    expect(longitudDentro(nucleo(con), medio)).toBe(0);
+    // Si los acabados se recortaran contra el castillo, su longitud bajaría.
+    expect(longitud(acabados(con))).toBeGreaterThanOrEqual(longitud(acabados(sin)) - 1e-6);
+    for (const linea of acabados(con)) {
+      for (const punto of linea) expect(enSeccion(punto, castillo)).toBe(false);
+    }
+  });
+
+  test("en una columna todas las capas del muro terminan en su cara", () => {
+    const muros = L.map((m) => muro(m.globalid, m.eje, multicapa()));
+    const con = calcularPlantaMuros(muros, [columna]);
+    expect(longitudDentro(con.capas.flatMap((c) => c.lineas), columna)).toBe(0);
+    for (const linea of con.capas.flatMap((capa) => capa.lineas)) {
+      for (const punto of linea) expect(enSeccion(punto, columna)).toBe(false);
+    }
+  });
+});
 
 function puntoEnAnilloLocal(punto: [number, number], anillo: Array<[number, number]>): boolean {
   let dentro = false;

@@ -1314,8 +1314,35 @@ export function Visor3D({
           eje: elemento.eje as [number, number, number, number],
           capas: elemento.capas,
         }));
+      // O007c: castillos y columnas recortan el núcleo; los acabados solo se cortan
+      // en las columnas y pasan por encima del castillo.
+      const seccionesPlanta = visibles
+        .filter(
+          (elemento) =>
+            elemento.estructura &&
+            (elemento.estructura.alias === "castillo" ||
+              elemento.estructura.alias === "columna"),
+        )
+        .map((elemento) => {
+          const seccion = elemento.estructura?.seccion ?? {};
+          const datos = elemento.estructura?.datos ?? {};
+          const numero = (valor: unknown, respaldo = 0) => Number(valor) || respaldo;
+          const ancho = numero(datos.B, numero(seccion.B, numero(seccion.D, 0.15)));
+          const fondo = numero(datos.H, numero(seccion.H, numero(seccion.D, 0.15)));
+          return {
+            globalid: elemento.globalid,
+            x: numero(datos.X),
+            y: numero(datos.Y),
+            ancho,
+            fondo,
+            rotacion: numero(datos.Rotacion),
+            funcion: elemento.estructura?.alias === "columna"
+              ? ("columna" as const)
+              : ("castillo" as const),
+          };
+        });
       if (murosPlanta.length > 0) {
-        const planta = calcularPlantaMuros(murosPlanta);
+        const planta = calcularPlantaMuros(murosPlanta, seccionesPlanta);
         const zPlantas = corteZ + 0.035;
         const colorPlantas = oscuro ? "#e5e7eb" : estilos.categorias.muros.color;
         const materialContorno = crearMaterialLinea({
@@ -1428,8 +1455,8 @@ export function Visor3D({
           lineaCerrada(lista, material, 1.35, grupoLocal);
         };
         if (alias === "columna" || alias === "castillo") {
-          const ancho = numero(seccion.B, 0.30);
-          const fondo = numero(seccion.H, 0.30);
+          const ancho = numero(datos.B, numero(seccion.B, 0.30));
+          const fondo = numero(datos.H, numero(seccion.H, 0.30));
           const cx = numero(datos.X);
           const cy = numero(datos.Y);
           const rotacion = numero(datos.Rotacion);

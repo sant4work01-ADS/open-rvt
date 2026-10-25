@@ -11,6 +11,7 @@ import { PanelPropiedades } from "./PanelPropiedades";
 import { BarraHerramienta } from "./BarraHerramienta";
 import { DialogoEstilos } from "./DialogoEstilos";
 import { DialogoCotas } from "./DialogoCotas";
+import { DialogoCastillos } from "./DialogoCastillos";
 import { EditorTipos } from "@/features/tipos/EditorTipos";
 
 export function ModeloView() {
@@ -32,6 +33,7 @@ export function ModeloView() {
   const fijarVista = useModelo((s) => s.fijarVista);
   const dialogoEstilos = useModelo((s) => s.dialogoEstilos);
   const dialogoCotas = useModelo((s) => s.dialogoCotas);
+  const dialogoCastillos = useModelo((s) => s.dialogoCastillos);
   const editorTipos = useModelo((s) => s.editorTipos);
   const editorTipoInicial = useModelo((s) => s.editorTipoInicial);
   const cerrarEditorTipos = useModelo((s) => s.cerrarEditorTipos);
@@ -137,6 +139,7 @@ export function ModeloView() {
       {panelAbierto && <PanelPropiedades />}
       {dialogoEstilos && <DialogoEstilos />}
       {dialogoCotas && <DialogoCotas />}
+      {dialogoCastillos && <DialogoCastillos />}
     </div>
   );
 }

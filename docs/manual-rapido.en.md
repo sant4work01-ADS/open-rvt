@@ -81,6 +81,48 @@ Tie column, Beam, Lintel beam and Sill beam.
 - **Plan:** columns and tie columns are filled with the concrete hatch; beams, lintel
   beams, sill beams, footings and grade beams are drawn with dashed lines.
 
+### Structural interactions
+
+Elements are linked as they are on site and edited in a chain. The link is stored in
+the dependent element's `OPENRVT_Liga` property set and also as an
+`IfcRelConnectsElements` relation, so it survives saving and reopening.
+
+- **Automatic tie columns** (Model → Structure): asks for the maximum centre spacing
+  (3.00 m by default). Places one at every L, T or X corner, one at every free end
+  (face flush with the end) and intermediate ones so no gap exceeds the spacing,
+  skipping any existing column within 5 cm. It works on the selected walls or, with no
+  selection, on every wall of the active storey. One undo step.
+- **Tie column on a wall:** clicking inside a wall with the Tie column tool takes the
+  core thickness, rotation and base from the wall; its height reaches the lintel's
+  bottom face or the top of the wall. Moving, stretching, re-typing or changing the
+  wall height relocates it; deleting the wall also deletes its tie columns, lintels and
+  sill beams.
+- **Lintel and sill on a wall:** one click on the wall creates the piece along its axis
+  with the core width. The lintel leaves its top face at the top of the wall and the
+  sill its bottom face at the base. Creating a lintel lowers that wall's tie columns to
+  its bottom face.
+- **Columns at every crossing:** the "At every crossing" button in the Column tool bar
+  places a column at every grid crossing and stores `EjeA` and `EjeB`. The "With
+  footing" box also creates a footing under each column. Moving an axis moves its
+  columns and footings in the same step.
+- **Footing under a column:** centred under the column or, with an N, S, E or W
+  boundary, shifted so its edge is flush with that column face. The column base drops
+  to the top of the pedestal (or of the pad when there is no pedestal). Deleting the
+  column asks whether to delete its footing too; the default is yes.
+- **Join footings and join columns:** create grade beams between consecutive footings
+  and beams between consecutive columns on each axis, centre to centre. Beams leave
+  their top face at the upper storey minus the slab thickness and the column tops reach
+  that face; the joint belongs to the column.
+- **Priority cuts:** quantification never counts the same volume twice. Priority is
+  footing > grade beam > column > beam > slab > tie column > lintel/sill > wall core >
+  finishes. `cantidades.estructura` returns each piece's gross and net volume and its
+  steel, totals by type and the grand total; the sum of net volumes equals the union
+  volume.
+- **Steel per type piece:** kg/m uses a reference length (3.00 m for columns and tie
+  columns; 4.00 m for beams, lintels, sills, grade beams and strip footings) so end
+  confinement and stirrups are not overcounted. The editor shows "X kg/m (over L_ref
+  m)".
+
 ### What's new in version 0.5.3
 
 - New structural elements: isolated and strip footings, grade beam, column, tie column,
@@ -117,6 +159,25 @@ detection lasts 60 seconds after the last gesture.
 - **Ctrl+Shift+D** opens a panel with the last 20 `wheel` events (deltaX, deltaY,
   deltaMode, Ctrl and milliseconds between events) and each one's classification. If
   the touchpad still misbehaves, that panel is what to report.
+
+## What's new in version 0.5.5
+
+- **Automatic tie columns** at corners, free ends and intermediate positions, with
+  configurable spacing (3.00 m by default) and no duplicates.
+- **Element links** in `OPENRVT_Liga` and `IfcRelConnectsElements`: tie column, lintel
+  and sill follow their wall; the footing follows its column.
+- **Lintel and sill on a wall** with one click, and tie columns lowering to the
+  lintel's bottom face.
+- **Columns at every crossing**, with an optional footing; moving an axis moves its
+  columns and footings.
+- **Footing under a column**, centred or eccentric at a boundary, with the column base
+  on top of the pedestal.
+- **Automatic grade beams and beams** between consecutive pieces on each axis.
+- **Priority cuts** and `cantidades.estructura` with net volumes, steel and totals; the
+  sum of nets equals the union.
+- **Plan corners** with the core cut by tie columns and columns and the finishes
+  running over the tie column.
+- **Steel per type piece** with a reference length: C-1 = 10.912 kg/m.
 
 ## What's new in version 0.5.4
 

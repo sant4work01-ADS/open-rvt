@@ -688,9 +688,16 @@ class ModeladoMixin:
         self._desplazar_eje(eje, nx, ny, desplazamiento)
         # O006d: los extremos de la familia opuesta siguen rebasando la misma distancia.
         self._recalcular_reticula(grid)
+        # O007c: las columnas ligadas al eje se mueven con él (y sus zapatas).
+        modificados = [globalid]
+        modificados.extend(
+            _gid(e) for e in self._mover_columnas_de_eje(
+                globalid, nx, ny, desplazamiento
+            )
+        )
         self.con_cambios = True
         return self._resultado(
-            modificados=[globalid],
+            modificados=modificados,
             mensaje=f"Eje desplazado {desplazamiento:.2f} m.",
         )
 
@@ -729,6 +736,9 @@ class ModeladoMixin:
         self._instantanea()
         modificados = [mover]
         self._desplazar_eje(eje_mover, nx, ny, delta)
+        modificados.extend(
+            _gid(e) for e in self._mover_columnas_de_eje(mover, nx, ny, delta)
+        )
         if cadena:
             for candidato in self._ejes(grid):
                 if candidato == eje_mover:
@@ -743,7 +753,13 @@ class ModeladoMixin:
                 # «Más allá» de mover: del lado contrario a la referencia.
                 if (s_c - s_mover) * lado > 1e-6:
                     self._desplazar_eje(candidato, nx, ny, delta)
-                    modificados.append(self._id_eje(grid, candidato))
+                    gid_candidato = self._id_eje(grid, candidato)
+                    modificados.append(gid_candidato)
+                    modificados.extend(
+                        _gid(e) for e in self._mover_columnas_de_eje(
+                            gid_candidato, nx, ny, delta
+                        )
+                    )
         # O006d: al cambiar una separación se recalculan los extremos de la otra familia.
         self._recalcular_reticula(grid)
         self.con_cambios = True
@@ -1585,6 +1601,12 @@ class ModeladoMixin:
         if alias is None:
             return
         datos = self._leer_pset(elemento, "OPENRVT_Estructura")
+        # O007c: el castillo usa el núcleo del muro y el cerramiento su espesor;
+        # la instancia puede sobrescribir B/H sin tocar el tipo.
+        seccion = dict(seccion)
+        for clave in ("B", "H"):
+            if datos.get(clave):
+                seccion[clave] = float(datos[clave])
         self._aplicar_predefinido(elemento, tipo)
         self._quitar_representaciones(elemento, "Body")
         if elemento.is_a("IfcColumn"):
@@ -1641,6 +1663,8 @@ class ModeladoMixin:
         rotacion: float = 0.0,
         nivel_superior: str | None = None,
         altura: float | None = None,
+        eje_a: str = "",
+        eje_b: str = "",
     ) -> dict[str, Any]:
         self._exigir_modelo()
         tipo_entidad = self._tipo_estructura(tipo, ("IfcColumnType",))
@@ -1671,6 +1695,8 @@ class ModeladoMixin:
         spatial_api.assign_container(
             self.modelo, products=[columna], relating_structure=nivel_entidad
         )
+        if eje_a or eje_b:
+            self._guardar_liga(columna, {"EjeA": _texto(eje_a), "EjeB": _texto(eje_b)})
         self.con_cambios = True
         return self._resultado(
             [columna], mensaje=f"Columna creada ({alto:.2f} m)."
@@ -2429,13 +2455,21 @@ class ModeladoMixin:
             return self._resultado(mensaje="Sin desplazamiento.")
         self._instantanea()
         afectados: list[Any] = []
-        vistos: set[int] = set()
+        # Se comparan GlobalId, no id() de los envoltorios: un envoltorio liberado
+        # puede reutilizar la dirección de memoria y saltarse un elemento.
+        vistos: set[str] = set()
         for gid in gids:
             for producto in self._productos_de(gid):
-                if id(producto) in vistos:
+                if _gid(producto) in vistos:
                     continue
-                vistos.add(id(producto))
+                vistos.add(_gid(producto))
                 afectados.append(producto)
+                # O007c: mover la columna mueve su zapata.
+                if producto.is_a("IfcColumn"):
+                    for zapata in self._zapatas_de_columna(producto):
+                        if _gid(zapata) not in vistos:
+                            vistos.add(_gid(zapata))
+                            afectados.append(zapata)
         # Se calculan todas las matrices antes de tocar nada: mover un muro desplaza a
         # sus vanos (que cuelgan de él), pero un relleno puede tener colocación propia.
         matrices = {
@@ -2454,6 +2488,8 @@ class ModeladoMixin:
         for producto in afectados:
             if producto.is_a("IfcWall"):
                 self._unir_muros(producto)
+                # O007c: castillos, cerramientos y dalas siguen al muro.
+                self._actualizar_dependientes_muro(producto)
         self.con_cambios = True
         return self._resultado(
             modificados=[g for g in afectados if not g.is_a("IfcOpeningElement")],
@@ -2495,13 +2531,36 @@ class ModeladoMixin:
             except Exception:
                 LOG.debug("no se pudo quitar una unión", exc_info=True)
 
-    def elementos_borrar(self, globalids: Any) -> dict[str, Any]:
+    def elementos_borrar(self, globalids: Any, dependientes: bool = True) -> dict[str, Any]:
         self._exigir_modelo()
         gids = self._todos_los_gids(globalids)
+        # O007c: al borrar un muro caen sus castillos, cerramientos y dalas; al borrar
+        # una columna se puede decidir si cae también su zapata.
+        expandidos: list[str] = []
+        pendientes = list(gids)
+        while pendientes:
+            gid = pendientes.pop(0)
+            if gid in expandidos:
+                continue
+            try:
+                entidad = self._entidad_por_gid(gid)
+            except Exception:
+                continue
+            expandidos.append(gid)
+            if entidad.is_a("IfcWall"):
+                pendientes.extend(
+                    _gid(d) for d in self._dependientes_de(entidad, "Muro")
+                )
+            elif entidad.is_a("IfcColumn") and dependientes:
+                pendientes.extend(
+                    _gid(z) for z in self._zapatas_de_columna(entidad)
+                )
         self._instantanea()
         borrados: list[str] = []
-        vistos: set[int] = set()
-        for gid in gids:
+        # GlobalId en lugar de id(): los envoltorios de IfcOpenShell se liberan al
+        # borrarlos y Python puede reutilizar su dirección de memoria.
+        vistos: set[str] = set()
+        for gid in expandidos:
             try:
                 entidad = self._entidad_por_gid(gid)
             except Exception:
@@ -2509,11 +2568,12 @@ class ModeladoMixin:
             productos = self._productos_de(_gid(entidad))
             # De relleno a vano y de vano a muro, para no dejar relaciones colgando.
             for producto in reversed(productos):
-                if id(producto) in vistos:
+                if _gid(producto) in vistos:
                     continue
-                vistos.add(id(producto))
+                vistos.add(_gid(producto))
                 if producto.is_a("IfcWall"):
                     self._quitar_uniones(producto)
+                self._quitar_conexiones(producto)
                 for rel in list(getattr(producto, "Decomposes", ()) or ()):
                     try:
                         self.modelo.remove(rel)
@@ -2684,6 +2744,7 @@ class ModeladoMixin:
                 self._cambiar_tipo_muro(entidad, self._tipo_muro(str(tipo)))
                 datos = self._datos_muro(entidad)
             altura = cambios.get("altura", cambios.get("Altura"))
+            longitud = cambios.get("longitud", cambios.get("Longitud"))
             if altura is not None:
                 altura = float(altura)
                 if altura <= 0:
@@ -2693,17 +2754,31 @@ class ModeladoMixin:
                         raise self._error(
                             "La nueva altura deja una abertura fuera del muro.", -32023
                         )
+                datos["altura"] = altura
+            if longitud is not None:
+                longitud = float(longitud)
+                if longitud <= 0:
+                    raise self._error("La longitud del muro debe ser positiva.", -32602)
+                for vano, info in self._aberturas_del_muro(entidad):
+                    if info["distancia"] + info["ancho"] > longitud + TOLERANCIA:
+                        raise self._error(
+                            "La nueva longitud deja una abertura fuera del muro.", -32023
+                        )
+                datos["longitud"] = longitud
+            if altura is not None or longitud is not None:
                 self._guardar_pset(
                     entidad,
                     "OPENRVT_Muro",
                     {
                         "Longitud": datos["longitud"],
-                        "Altura": altura,
+                        "Altura": datos["altura"],
                         "Espesor": datos["espesor"],
                         "Alineacion": datos["alineacion"],
                     },
                 )
             self._regenerar_muro(entidad)
+            # O007c: el castillo, el cerramiento y la dala se recalculan con el muro.
+            modificados.extend(self._actualizar_dependientes_muro(entidad))
             for vano, info in self._aberturas_del_muro(entidad):
                 relleno = self._relleno_de(vano)
                 if relleno is not None:
@@ -2732,6 +2807,8 @@ class ModeladoMixin:
             entidad, "OPENRVT_Estructura"
         ):
             datos = dict(self._leer_pset(entidad, "OPENRVT_Estructura"))
+            antes_x = float(datos.get("X") or 0.0)
+            antes_y = float(datos.get("Y") or 0.0)
             claves = {
                 "desplante": "Desplante", "Desplante": "Desplante",
                 "desfase": "Desfase", "Desfase": "Desfase",
@@ -2800,6 +2877,13 @@ class ModeladoMixin:
                 datos["Z"] = elevacion - float(datos.get("Desplante") or 1.0)
             self._guardar_pset(entidad, "OPENRVT_Estructura", datos)
             self._regenerar_estructura(entidad)
+            if entidad.is_a("IfcColumn"):
+                dx = float(datos.get("X") or 0.0) - antes_x
+                dy = float(datos.get("Y") or 0.0) - antes_y
+                if abs(dx) + abs(dy) > TOLERANCIA_CALCULO:
+                    for zapata in self._zapatas_de_columna(entidad):
+                        self._mover_producto(zapata, dx, dy, 0.0)
+                        modificados.append(zapata)
         elif entidad.is_a("IfcOpeningElement"):
             datos = self._datos_abertura(entidad) or {}
             ancho = float(cambios.get("ancho", cambios.get("Ancho", datos.get("ancho", 0.9))))

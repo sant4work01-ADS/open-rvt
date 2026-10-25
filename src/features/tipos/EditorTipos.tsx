@@ -53,6 +53,8 @@ interface ResumenTipo {
     total_kg: number;
     longitudinal_kg: number;
     estribos_kg: number;
+    kg_m?: number;
+    largo_referencia?: number;
   };
   instancias: number;
 }
@@ -1379,11 +1381,32 @@ export function EditorTipos({
                 <div className="font-medium text-foreground">{borrador.nombre}</div>
                 {esEstructural ? (
                   <div data-testid="acero-tipo">
-                    Acero estimado por pieza tipo:{" "}
-                    <span className="font-medium text-foreground">
-                      {(aceroTipo?.total_kg ?? borrador.acero?.total_kg ?? 0).toFixed(3)} kg
-                    </span>{" "}
-                    ({aceroTipo?.unidad ?? borrador.acero?.unidad ?? "kg/pieza"})
+                    {(() => {
+                      const acero = aceroTipo ?? borrador.acero;
+                      const unidad = acero?.unidad ?? "kg/pieza";
+                      if (unidad === "kg/m") {
+                        const kgm = acero?.kg_m ?? acero?.total_kg ?? 0;
+                        const ref = acero?.largo_referencia ?? 3;
+                        return (
+                          <>
+                            Acero estimado por pieza tipo:{" "}
+                            <span className="font-medium text-foreground">
+                              {kgm.toFixed(3)} kg/m
+                            </span>{" "}
+                            (sobre {ref.toFixed(2)} m)
+                          </>
+                        );
+                      }
+                      return (
+                        <>
+                          Acero estimado por pieza tipo:{" "}
+                          <span className="font-medium text-foreground">
+                            {(acero?.total_kg ?? 0).toFixed(3)} kg
+                          </span>{" "}
+                          ({unidad})
+                        </>
+                      );
+                    })()}
                   </div>
                 ) : (
                   <>

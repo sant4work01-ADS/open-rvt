@@ -26,11 +26,17 @@ export function BarraHerramienta() {
   const doble = useModelo((s) => s.dobleClicEnPlanta);
   const losaDesdeMuros = useModelo((s) => s.losaDesdeMuros);
   const etiquetaEje = useModelo((s) => s.etiquetaEje);
+  const conZapata = useModelo((s) => s.columnaConZapata);
+  const fijarConZapata = useModelo((s) => s.fijarColumnaConZapata);
+  const tipoZapata = useModelo((s) => s.tipoZapata);
+  const fijarTipoZapata = useModelo((s) => s.fijarTipoZapata);
+  const columnasEnCruces = useModelo((s) => s.columnasEnCruces);
   if (!herramienta) return null;
   const estructura = esHerramientaEstructura(herramienta);
   const opcionesTipo = estructura
     ? tiposEstructura.filter((t) => t.alias === ALIAS_HERRAMIENTA[herramienta])
     : [];
+  const tiposZapata = tiposEstructura.filter((t) => t.alias === "zapata");
   const tipoElegido =
     (estructura ? elegidos[herramienta] : undefined) ?? opcionesTipo[0]?.nombre ?? "";
   return (
@@ -109,7 +115,9 @@ export function BarraHerramienta() {
           {esHerramientaPuntual(herramienta) && (
             <>
               <span className="text-muted-foreground">
-                Clic en un cruce de ejes
+                {herramienta === "castillo"
+                  ? "Clic sobre un muro o en un cruce de ejes"
+                  : "Clic en un cruce de ejes"}
               </span>
               <button
                 type="button"
@@ -119,7 +127,46 @@ export function BarraHerramienta() {
               >
                 R · Girar 90° ({rotacion}°)
               </button>
+              {herramienta === "columna" && (
+                <>
+                  <label className="flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      data-testid="columna-con-zapata"
+                      checked={conZapata}
+                      onChange={(e) => fijarConZapata(e.target.checked)}
+                    />
+                    <span>Con zapata</span>
+                  </label>
+                  <select
+                    data-testid="columna-tipo-zapata"
+                    value={tipoZapata || tiposZapata[0]?.nombre || ""}
+                    onChange={(e) => fijarTipoZapata(e.target.value)}
+                    disabled={!conZapata}
+                    className="rounded border bg-background px-1 py-0.5 disabled:opacity-50"
+                  >
+                    {tiposZapata.map((tipo) => (
+                      <option key={tipo.globalid} value={tipo.nombre}>
+                        {tipo.nombre}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    data-testid="columna-en-cruces"
+                    onClick={() => void columnasEnCruces()}
+                    className="rounded border px-2 py-0.5 hover:bg-muted"
+                  >
+                    En todos los cruces
+                  </button>
+                </>
+              )}
             </>
+          )}
+          {(herramienta === "cerramiento" || herramienta === "dala") && (
+            <span className="text-muted-foreground">
+              Clic sobre un muro · se liga a su eje
+            </span>
           )}
           {esHerramientaLineal(herramienta) && (
             <span className="text-muted-foreground">

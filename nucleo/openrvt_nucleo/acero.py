@@ -12,6 +12,18 @@ from typing import Any
 
 from .biblioteca import ARMEX, VARILLAS, _texto
 
+# O007c §7: largo de referencia para expresar kg/m sin que el confinamiento y los
+# estribos de extremo se cuenten de más (con L = 1 m se sobrestimaban).
+LARGOS_REFERENCIA = {
+    "columna": 3.00,
+    "castillo": 3.00,
+    "trabe": 4.00,
+    "cerramiento": 4.00,
+    "dala": 4.00,
+    "contratrabe": 4.00,
+    "zapata_corrida": 4.00,
+}
+
 
 def _peso(varilla: str) -> float:
     return float(VARILLAS.get(_texto(varilla), {}).get("peso_kg_m", 0.0))
@@ -156,13 +168,23 @@ class AceroMixin:
         alias, seccion, armado = self._seccion_y_armado(tipo)
         if alias is None:
             return {}
-        if alias in ("zapata", "zapata_corrida"):
-            unidad = "kg/pieza"
-            resultado = estimar(alias, seccion, armado, 1.0 if alias == "zapata_corrida" else 0.0)
-        else:
-            unidad = "kg/m"
-            resultado = estimar(alias, seccion, armado, 1.0)
-        return {"unidad": unidad, **resultado}
+        if alias == "zapata":
+            return {
+                "unidad": "kg/pieza",
+                "largo_referencia": 0.0,
+                **estimar(alias, seccion, armado, 0.0),
+            }
+        unidad = "kg/m"
+        largo_ref = LARGOS_REFERENCIA.get(alias, 3.0)
+        resultado = estimar(alias, seccion, armado, largo_ref)
+        kg_m = resultado["total_kg"] / largo_ref
+        return {
+            "unidad": unidad,
+            "largo_referencia": largo_ref,
+            "kg_m": round(kg_m, 3),
+            "kg": round(resultado["total_kg"], 3),
+            **resultado,
+        }
 
     def acero_estimar(self, globalid: str) -> dict[str, Any]:
         self._exigir_modelo()
