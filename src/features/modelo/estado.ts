@@ -20,6 +20,7 @@ import {
   cajaDeMallas,
   crearVistaCorte,
   crearVistas,
+  migrarNivelesVisibles,
   normalizarVistas,
   numeroDeCorte,
 } from "./vistas";
@@ -232,9 +233,17 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     const aberturas = await cargarAberturas(elementos, mallas, referencias);
     let vistas = normalizarVistas(vistasCrudas);
     let persistidas = vistas.length > 0;
+    let migradas = false;
     if (vistas.length === 0) {
       vistas = crearVistas(niveles);
       persistidas = false;
+    } else {
+      // O005b: las vistas guardadas con todos los niveles marcados por omisión pasan a
+      // mostrar solo el nivel de su planta.
+      const migracion = migrarNivelesVisibles(vistas, niveles);
+      vistas = migracion.vistas;
+      migradas = migracion.cambiadas;
+      if (migradas) await persistirVistas(vistas);
     }
     const activa =
       vistas.find((v) => v.tipo === "planta") ?? vistas[0] ?? null;
@@ -242,7 +251,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       ruta: info.ruta,
       nombreArchivo: nombreDeRuta(info.ruta, info.nombre),
       esquema: info.esquema,
-      conCambios: info.con_cambios,
+      conCambios: info.con_cambios || migradas,
       totalElementos: info.elementos,
       conteos: info.por_clase,
       niveles,
@@ -968,7 +977,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
           nivel: nivel.globalid,
           alturaPlano: nivel.elevacion + 1.2,
           profundidad: inferior,
-          nivelesVisibles: niveles.map((n) => n.globalid),
+          nivelesVisibles: [nivel.globalid],
           categorias: CATEGORIAS_TODAS(),
           estilo: "sombreado",
           escala: 100,

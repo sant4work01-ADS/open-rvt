@@ -9,7 +9,7 @@ import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
 import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
 import type { Abertura, Caja, ElementoMalla, Nivel, Vista } from "./tipos";
-import { categoriaVisible } from "./vistas";
+import { categoriaVisible, dibujaSiluetaSobreCorte } from "./vistas";
 import { useModelo } from "./estado";
 import { colocarAbertura, type Punto2 } from "./herramientas";
 import {
@@ -31,6 +31,7 @@ import {
   geometriaPuerta,
   geometriaVentana,
   interseccionPlanoMalla,
+  siluetaProyectada,
   type Punto2 as PuntoSeccion,
   type Punto3,
 } from "./seccion";
@@ -742,11 +743,15 @@ export function Visor3D({
           maxD = Math.max(maxD, d);
         }
       }
-      const arribaDelCorte =
-        vista.tipo === "planta" &&
-        planoSeccion !== null &&
-        minZ > corteZ + 1e-4 &&
-        minZ <= corteZ + (vista.alturaArriba ?? 3);
+      // O005b: por encima del corte solo se dibuja la silueta de losas, cubiertas y
+      // vigas del mismo nivel. El resto (viguetas y elementos del piso de arriba) no
+      // aparece en la planta.
+      const encimaDelCorte =
+        vista.tipo === "planta" && planoSeccion !== null && minZ > corteZ + 1e-4;
+      const nivelDelElemento = nivelGlobalidPorNombre.get(elemento.nivel);
+      const siluetaArriba =
+        encimaDelCorte &&
+        dibujaSiluetaSobreCorte(vista, elemento.categoria, nivelDelElemento, minZ);
 
       const material =
         diseno
@@ -763,9 +768,9 @@ export function Visor3D({
               clippingPlanes: planos,
               emissive: seleccionado ? 0x123a66 : 0x000000,
             });
-      // Lo que queda por encima del corte no se dibuja como cara: solo su línea
+      // Lo que queda por encima del corte no se dibuja como cara: solo su silueta
       // discontinua, para que no tape la planta.
-      if (!arribaDelCorte) {
+      if (!encimaDelCorte) {
         const malla = new THREE.Mesh(geometria, material);
         malla.userData.globalid = elemento.globalid;
         malla.renderOrder = 0;
@@ -777,26 +782,35 @@ export function Visor3D({
 
       const categoriaEstilo = elemento.categoria;
       if (diseno) {
-        const bordes = new THREE.EdgesGeometry(geometria, 30);
-        if (arribaDelCorte) {
+        if (siluetaArriba) {
           const mm = grosorDe("arriba-corte", "proyeccion");
-          if (mm !== null) {
+          const siluetas =
+            mm === null ? [] : siluetaProyectada(elemento.vertices, elemento.indices);
+          if (mm !== null && siluetas.length > 0) {
             const materialLinea = crearMaterialLinea({
               mm,
               escala: vista.escala,
               color: seleccionado ? "#ff8a00" : estilos.categorias["arriba-corte"].color,
-              patron: estilos.categorias["arriba-corte"].patron,
+              // Siempre trazo discontinuo largo, como pide la spec.
+              patron: "discontinua-larga",
               registro,
               mundoPorPx,
               profundidad: true,
             });
-            const segmentos = new LineSegmentsGeometry().fromEdgesGeometry(bordes);
-            const lineas = new LineSegments2(segmentos, materialLinea);
-            lineas.computeLineDistances();
-            lineas.renderOrder = 0.6;
-            grupoLocal.add(lineas);
+            const zSilueta = corteZ + 0.04;
+            for (const polilinea of siluetas) {
+              const puntos = polilinea.map(([x, y]) => [x, y, zSilueta] as [number, number, number]);
+              if (puntos.length < 2) continue;
+              const primero = puntos[0];
+              const ultimo = puntos[puntos.length - 1];
+              if (Math.hypot(primero[0] - ultimo[0], primero[1] - ultimo[1]) > 1e-4) {
+                puntos.push(primero);
+              }
+              lineaCerrada(puntos, materialLinea, 0.6, grupoLocal);
+            }
           }
-        } else {
+        } else if (!encimaDelCorte) {
+          const bordes = new THREE.EdgesGeometry(geometria, 30);
           const mm = grosorDe(categoriaEstilo, "proyeccion");
           if (mm !== null) {
             const materialLinea = crearMaterialLinea({
@@ -815,9 +829,9 @@ export function Visor3D({
             lineas.renderOrder = 0.5;
             grupoLocal.add(lineas);
           }
+          bordes.dispose();
         }
-        bordes.dispose();
-      } else if (vista.estilo !== "sombreado") {
+      } else if (vista.estilo !== "sombreado" && !encimaDelCorte) {
         const aristas = new THREE.LineSegments(
           new THREE.EdgesGeometry(geometria, 30),
           new THREE.LineBasicMaterial({
@@ -835,7 +849,7 @@ export function Visor3D({
         planoSeccion !== null &&
         minD <= -planoSeccion.constante + 1e-4 &&
         maxD >= -planoSeccion.constante - 1e-4;
-      if (diseno && planoSeccion && origenSeccion && !arribaDelCorte && atraviesa) {
+      if (diseno && planoSeccion && origenSeccion && !encimaDelCorte && atraviesa) {
         const polilineas = interseccionPlanoMalla(
           elemento.vertices,
           elemento.indices,

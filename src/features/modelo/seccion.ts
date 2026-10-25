@@ -223,7 +223,7 @@ export function geometriaPuerta(opciones: {
 export interface GeometriaVentana {
   /** Las tres líneas del corte (dos paños y el vidrio central). */
   lineas: Punto2[][];
-  /** Contorno del alféizar, ligeramente hacia el exterior. */
+  /** Contorno del alféizar; sobresale solo hacia el exterior (+Y local). */
   alfeizar: Punto2[];
 }
 
@@ -235,7 +235,8 @@ export function geometriaVentana(opciones: {
 }): GeometriaVentana {
   const ancho = Math.max(opciones.ancho, 0.01);
   const espesor = Math.max(opciones.espesor, 0.02);
-  const vuelo = opciones.vueloAlfeizar ?? 0.05;
+  // La spec limita el vuelo del alféizar: nunca más de 0,05 m hacia el exterior.
+  const vuelo = Math.min(Math.max(opciones.vueloAlfeizar ?? 0.05, 0), 0.05);
   const mitad = espesor / 2;
   const lineas: Punto2[][] = [
     [
@@ -259,14 +260,141 @@ export function geometriaVentana(opciones: {
       [ancho, mitad],
     ],
   ];
+  // El alféizar arranca en el paño interior del muro y vuela solo hacia fuera: no
+  // debe dibujar un rectángulo que rodee el muro por los dos lados.
   const alfeizar: Punto2[] = [
-    [-vuelo, -mitad - vuelo],
-    [ancho + vuelo, -mitad - vuelo],
+    [-vuelo, -mitad],
+    [ancho + vuelo, -mitad],
     [ancho + vuelo, mitad + vuelo],
     [-vuelo, mitad + vuelo],
-    [-vuelo, -mitad - vuelo],
+    [-vuelo, -mitad],
   ];
   return { lineas, alfeizar };
+}
+
+// --------------------------------------------------------- silueta sobre el corte
+
+/** Aristas del contorno exterior de una malla proyectada sobre el plano XY. */
+export function siluetaProyectada(
+  vertices: ArrayLike<number>,
+  indices: ArrayLike<number>,
+): Punto2[][] {
+  const soldar = (i: number): string => {
+    const x = Math.round((vertices[i * 3] ?? 0) * 1e4) / 1e4;
+    const y = Math.round((vertices[i * 3 + 1] ?? 0) * 1e4) / 1e4;
+    const z = Math.round((vertices[i * 3 + 2] ?? 0) * 1e4) / 1e4;
+    return `${x},${y},${z}`;
+  };
+  const canonico = new Map<string, number>();
+  const idDe = (i: number): number => {
+    const clave = soldar(i);
+    const existente = canonico.get(clave);
+    if (existente !== undefined) return existente;
+    canonico.set(clave, i);
+    return i;
+  };
+  const posicion = (i: number): Punto2 => [vertices[i * 3] ?? 0, vertices[i * 3 + 1] ?? 0];
+  const areaFirmada = (a: Punto2, b: Punto2, c: Punto2): number =>
+    (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+
+  interface Arista {
+    a: number;
+    b: number;
+    signos: number[];
+  }
+  const aristas = new Map<string, Arista>();
+  for (let t = 0; t + 2 < indices.length; t += 3) {
+    const ia = idDe(indices[t]);
+    const ib = idDe(indices[t + 1]);
+    const ic = idDe(indices[t + 2]);
+    const area = areaFirmada(posicion(ia), posicion(ib), posicion(ic));
+    const signo = Math.abs(area) < 1e-10 ? 0 : Math.sign(area);
+    for (const [u, v] of [
+      [ia, ib],
+      [ib, ic],
+      [ic, ia],
+    ] as Array<[number, number]>) {
+      const clave = u < v ? `${u}:${v}` : `${v}:${u}`;
+      const arista = aristas.get(clave) ?? { a: u, b: v, signos: [] };
+      arista.signos.push(signo);
+      aristas.set(clave, arista);
+    }
+  }
+
+  // Una arista es de silueta si tiene una sola cara, o si las dos caras proyectadas
+  // caen en lados distintos (una visible y otra de canto). Las aristas interiores de
+  // una cara plana y las cumbreras entre faldones se descartan.
+  const segmentos = new Map<string, [Punto2, Punto2]>();
+  for (const arista of aristas.values()) {
+    const signos = arista.signos;
+    const exterior =
+      signos.length === 1 ||
+      (signos.length > 1 && Math.min(...signos) <= 0 && Math.max(...signos) >= 0);
+    if (!exterior) continue;
+    const a = posicion(arista.a);
+    const b = posicion(arista.b);
+    if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 1e-4) continue;
+    const clavePunto = (p: Punto2) =>
+      `${Math.round(p[0] * 1e4) / 1e4},${Math.round(p[1] * 1e4) / 1e4}`;
+    const ka = clavePunto(a);
+    const kb = clavePunto(b);
+    const clave = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
+    if (!segmentos.has(clave)) segmentos.set(clave, [a, b]);
+  }
+
+  // Encadena los segmentos en polilíneas y quita los vértices colineales.
+  const porExtremo = new Map<string, Punto2[]>();
+  const clavePunto = (p: Punto2) =>
+    `${Math.round(p[0] * 1e4) / 1e4},${Math.round(p[1] * 1e4) / 1e4}`;
+  const pendientes: Array<[Punto2, Punto2]> = [];
+  for (const [a, b] of segmentos.values()) {
+    pendientes.push([a, b]);
+    const ka = clavePunto(a);
+    const kb = clavePunto(b);
+    (porExtremo.get(ka) ?? porExtremo.set(ka, []).get(ka)!).push(b);
+    (porExtremo.get(kb) ?? porExtremo.set(kb, []).get(kb)!).push(a);
+  }
+  const usados = new Set<string>();
+  const claveSegmento = (a: Punto2, b: Punto2) => {
+    const ka = clavePunto(a);
+    const kb = clavePunto(b);
+    return ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
+  };
+  const polilineas: Punto2[][] = [];
+  for (const [inicio] of pendientes) {
+    const claveInicio = clavePunto(inicio);
+    if (usados.has(claveInicio)) continue;
+    const polilinea: Punto2[] = [inicio];
+    let actual = inicio;
+    for (;;) {
+      const vecinos = porExtremo.get(clavePunto(actual)) ?? [];
+      let siguiente: Punto2 | null = null;
+      for (const vecino of vecinos) {
+        if (usados.has(claveSegmento(actual, vecino))) continue;
+        siguiente = vecino;
+        break;
+      }
+      if (!siguiente) break;
+      usados.add(claveSegmento(actual, siguiente));
+      usados.add(clavePunto(siguiente));
+      polilinea.push(siguiente);
+      actual = siguiente;
+    }
+    const limpia: Punto2[] = [];
+    for (let i = 0; i < polilinea.length; i += 1) {
+      if (i === 0 || i === polilinea.length - 1) {
+        limpia.push(polilinea[i]);
+        continue;
+      }
+      const a = limpia[limpia.length - 1];
+      const b = polilinea[i];
+      const c = polilinea[i + 1];
+      const cruz = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+      if (Math.abs(cruz) > 1e-9) limpia.push(b);
+    }
+    if (limpia.length >= 2) polilineas.push(limpia);
+  }
+  return polilineas;
 }
 
 /** Coloca puntos locales (u, v) en el mundo: rotación, espejo y traslación. */export function colocarSimbolo(

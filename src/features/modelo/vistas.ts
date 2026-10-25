@@ -244,7 +244,8 @@ export function crearVistas(niveles: Nivel[]): Vista[] {
       nivel: nivel.globalid,
       alturaPlano: nivel.elevacion + 1.2,
       profundidad: inferior,
-      nivelesVisibles: [...idsNiveles],
+      // O005b: una planta nueva muestra solo su nivel; el resto se desmarca.
+      nivelesVisibles: [nivel.globalid],
       categorias: { ...categorias },
       estilo: "lineas-ocultas",
       escala: 100,
@@ -466,4 +467,52 @@ export function numeroDeCorte(vistas: Vista[]): number {
 /** Comprueba si una categoría está visible en una vista. */
 export function categoriaVisible(vista: Vista, categoria: Categoria): boolean {
   return vista.categorias[categoria] !== false;
+}
+
+/** Categorías que se dibujan por encima del corte en una planta (silueta). */
+export const CATEGORIAS_SOBRE_CORTE: readonly Categoria[] = ["losas", "cubiertas", "vigas"];
+
+/**
+ * O005b: en una planta solo se dibuja la silueta de lo que queda sobre el corte si es
+ * una losa, cubierta o viga **del mismo nivel** de la planta. Así no se cuelan las
+ * viguetas ni los elementos del piso de arriba.
+ */
+export function dibujaSiluetaSobreCorte(
+  vista: Vista,
+  categoria: Categoria,
+  nivelGlobalid: string | undefined,
+  cotaMinima: number,
+): boolean {
+  if (vista.tipo !== "planta") return false;
+  if (!CATEGORIAS_SOBRE_CORTE.includes(categoria)) return false;
+  if (!vista.nivel || nivelGlobalid !== vista.nivel) return false;
+  if (vista.alturaPlano === undefined) return false;
+  const corte = vista.alturaPlano;
+  return (
+    cotaMinima > corte + 1e-4 && cotaMinima <= corte + (vista.alturaArriba ?? 3)
+  );
+}
+
+/**
+ * Migra las vistas guardadas con el criterio viejo (todos los niveles marcados) al
+ * nuevo: cada planta muestra solo su nivel, salvo que el usuario la haya editado.
+ */
+export function migrarNivelesVisibles(
+  vistas: Vista[],
+  niveles: Array<{ globalid: string }>,
+): { vistas: Vista[]; cambiadas: boolean } {
+  const todos = new Set(niveles.map((n) => n.globalid));
+  let cambiadas = false;
+  const migradas = vistas.map((vista) => {
+    if (vista.tipo !== "planta" || !vista.nivel || !todos.has(vista.nivel)) return vista;
+    const sinNiveles = vista.nivelesVisibles.length === 0;
+    const conTodos =
+      !sinNiveles &&
+      vista.nivelesVisibles.length === todos.size &&
+      vista.nivelesVisibles.every((id) => todos.has(id));
+    if (!sinNiveles && !conTodos) return vista;
+    cambiadas = true;
+    return { ...vista, nivelesVisibles: [vista.nivel] };
+  });
+  return { vistas: migradas, cambiadas };
 }

@@ -6,13 +6,16 @@ import {
   cajaDeMallas,
   crearVistaCorte,
   crearVistas,
+  dibujaSiluetaSobreCorte,
   direccionAlzado,
   leerVistas,
+  migrarNivelesVisibles,
   normalizarVista,
   serializarVistas,
   vectorIso,
   vectorPerspectiva,
 } from "./vistas";
+import { areaPoligono2D, siluetaProyectada } from "./seccion";
 
 const CAJA: Caja = { min: [-5, -3, 0], max: [5, 3, 6] };
 
@@ -89,8 +92,9 @@ describe("creación automática de vistas", () => {
     expect(plantas[0].profundidad).toBe(-1);
     expect(plantas[1].alturaPlano).toBe(4.2);
     expect(plantas[1].profundidad).toBe(0);
+    expect(plantas[0].nivelesVisibles).toEqual(["nivel-0"]);
+    expect(plantas[1].nivelesVisibles).toEqual(["nivel-1"]);
     for (const planta of plantas) {
-      expect(planta.nivelesVisibles).toEqual(["nivel-0", "nivel-1"]);
       expect(Object.values(planta.categorias).every(Boolean)).toBe(true);
     }
     expect(vistas.filter((v) => v.tipo === "alzado").map((v) => v.orientacion)).toEqual([
@@ -184,6 +188,113 @@ describe("caja de las mallas", () => {
 
   it("sin mallas devuelve una caja unitaria para no romper la cámara", () => {
     expect(cajaDeMallas([])).toEqual({ min: [-1, -1, -1], max: [1, 1, 1] });
+  });
+});
+
+describe("sobre el corte en planta (O005b)", () => {
+  /** Caja con caras hacia fuera, como las mallas del núcleo. */
+  const caja3 = (
+    x0: number,
+    y0: number,
+    z0: number,
+    x1: number,
+    y1: number,
+    z1: number,
+  ) => {
+    const vertices = [
+      [x0, y0, z0],
+      [x1, y0, z0],
+      [x1, y1, z0],
+      [x0, y1, z0],
+      [x0, y0, z1],
+      [x1, y0, z1],
+      [x1, y1, z1],
+      [x0, y1, z1],
+    ].flat();
+    const indices = [
+      [0, 1, 2],
+      [0, 2, 3],
+      [4, 6, 5],
+      [4, 7, 6],
+      [0, 4, 5],
+      [0, 5, 1],
+      [1, 5, 6],
+      [1, 6, 2],
+      [2, 6, 7],
+      [2, 7, 3],
+      [3, 7, 4],
+      [3, 4, 0],
+    ].flat();
+    return { vertices: new Float32Array(vertices), indices: new Uint32Array(indices) };
+  };
+
+  it("dibuja el contorno del volado y ninguna vigueta del piso de arriba", () => {
+    const planta = crearVistas(NIVELES)[0];
+    // Aunque el usuario vuelva a marcar el nivel de arriba, la planta solo debe
+    // dibujar la silueta del mismo nivel.
+    planta.nivelesVisibles = ["nivel-0", "nivel-1"];
+    const mapaNiveles = new Map([
+      ["Nivel 0", "nivel-0"],
+      ["Nivel 1", "nivel-1"],
+    ]);
+    const volado = {
+      categoria: "losas" as const,
+      nivel: "Nivel 0",
+      caja: caja3(-1, -1, 2.5, 4, 2, 2.7),
+    };
+    const viguetas = {
+      categoria: "vigas" as const,
+      nivel: "Nivel 1",
+      caja: caja3(-1, -1, 3, 4, 2, 3.2),
+    };
+    const losaDeArriba = {
+      categoria: "losas" as const,
+      nivel: "Nivel 1",
+      caja: caja3(-1, -1, 2.9, 4, 2, 3.1),
+    };
+    const cota = (m: { caja: { vertices: Float32Array } }) => {
+      let min = Infinity;
+      for (let i = 2; i < m.caja.vertices.length; i += 3) min = Math.min(min, m.caja.vertices[i]);
+      return min;
+    };
+    const sobreCorte = [volado, viguetas, losaDeArriba].filter((m) =>
+      dibujaSiluetaSobreCorte(planta, m.categoria, mapaNiveles.get(m.nivel), cota(m)),
+    );
+    expect(sobreCorte).toEqual([volado]);
+
+    const siluetas = siluetaProyectada(volado.caja.vertices, volado.caja.indices);
+    // Un solo contorno exterior (sin la retícula de triángulos) de 5 × 3 m.
+    expect(siluetas).toHaveLength(1);
+    expect(siluetas[0]).toHaveLength(5);
+    expect(areaPoligono2D(siluetas[0])).toBeCloseTo(5 * 3, 6);
+    // Las viguetas del nivel superior no llegan a generar silueta.
+    expect(
+      dibujaSiluetaSobreCorte(
+        planta,
+        viguetas.categoria,
+        mapaNiveles.get(viguetas.nivel),
+        cota(viguetas),
+      ),
+    ).toBe(false);
+  });
+
+  it("migra solo las plantas que conservan todos los niveles por omisión", () => {
+    const conTodos = normalizarVista({
+      tipo: "planta",
+      nombre: "Planta vieja",
+      nivel: "nivel-0",
+      nivelesVisibles: ["nivel-0", "nivel-1"],
+    })!;
+    const editada = normalizarVista({
+      tipo: "planta",
+      nombre: "Planta editada",
+      nivel: "nivel-0",
+      nivelesVisibles: ["nivel-1"],
+    })!;
+    const migracion = migrarNivelesVisibles([conTodos, editada], NIVELES);
+    expect(migracion.cambiadas).toBe(true);
+    expect(migracion.vistas[0].nivelesVisibles).toEqual(["nivel-0"]);
+    expect(migracion.vistas[1].nivelesVisibles).toEqual(["nivel-1"]);
   });
 });
 

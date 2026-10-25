@@ -167,7 +167,28 @@ describe("simbología de ventana", () => {  it("traza tres líneas paralelas y e
       [0, 0.1],
       [1.2, 0.1],
     ]);
-    expect(areaPoligono2D(alfeizar)).toBeCloseTo(1.3 * 0.3, 9);
+    expect(areaPoligono2D(alfeizar)).toBeCloseTo(1.3 * 0.25, 9);
+  });
+
+  it("en un muro de 0,15 m el símbolo queda centrado dentro de la franja", () => {
+    const espesor = 0.15;
+    const { lineas, alfeizar } = geometriaVentana({ ancho: 1.2, espesor });
+    const mitad = espesor / 2;
+    // Dos paños en los bordes del muro y el vidrio en el eje.
+    expect(lineas[0].map((p) => p[1])).toEqual([-mitad, -mitad]);
+    expect(lineas[1].map((p) => p[1])).toEqual([0, 0]);
+    expect(lineas[2].map((p) => p[1])).toEqual([mitad, mitad]);
+    // Ningún punto se sale de la franja del muro más 0,05 m de alféizar.
+    const verticales = [...lineas.flat(), ...alfeizar].map((p) => p[1]);
+    expect(Math.min(...verticales)).toBeCloseTo(-mitad, 9);
+    expect(Math.max(...verticales)).toBeCloseTo(mitad + 0.05, 9);
+    // El alféizar vuela solo hacia el exterior, no rodea el muro por ambos lados.
+    expect(alfeizar.some((p) => p[1] < -mitad - 1e-9)).toBe(false);
+  });
+
+  it("el vuelo del alféizar nunca pasa de 0,05 m", () => {
+    const { alfeizar } = geometriaVentana({ ancho: 1, espesor: 0.2, vueloAlfeizar: 0.3 });
+    expect(Math.max(...alfeizar.map((p) => p[1]))).toBeCloseTo(0.1 + 0.05, 9);
   });
 
   it("coloca el símbolo girado en el mundo", () => {
