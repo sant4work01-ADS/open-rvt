@@ -228,7 +228,7 @@ export function BitacoraView() {
               <p className="mb-1 text-muted-foreground">Código: {String(detalle.codigo)}</p>
             )}
             {detalle.traza ? (
-              <pre className="mb-3 max-h-64 overflow-auto whitespace-pre-wrap rounded border bg-muted/50 p-2 font-mono text-[11px]">
+              <pre className="mb-3 min-h-24 max-h-64 overflow-auto whitespace-pre-wrap rounded border bg-muted/50 p-2 font-mono text-[11px]">
                 {String(detalle.traza)}
               </pre>
             ) : (

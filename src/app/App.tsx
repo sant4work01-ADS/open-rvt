@@ -13,7 +13,7 @@ import { AyudaView } from "@/features/ayuda/AyudaView";
 import { ModeloView } from "@/features/modelo/ModeloView";
 import { NivelesView } from "@/features/modelo/NivelesView";
 import { useModelo } from "@/features/modelo/estado";
-import { bitacoraAviso, bitacoraVista } from "@/lib/bitacora";
+import { bitacoraAviso, bitacoraVista, vaciarBitacora } from "@/lib/bitacora";
 import { Ribbon } from "@/features/ribbon/Ribbon";
 import { construirComandosRibbon } from "@/features/ribbon/comandos";
 import {
@@ -141,6 +141,8 @@ export function App() {
         const ventana = getCurrentWindow();
         const desuscribir = await ventana.onCloseRequested(async (evento) => {
           if (permitirCierre.current) return;
+          // O006c: al cerrar se vacía el lote pendiente de la bitácora.
+          void vaciarBitacora();
           const modelo = useModelo.getState();
           if (!modelo.conCambios) return;
           evento.preventDefault();
