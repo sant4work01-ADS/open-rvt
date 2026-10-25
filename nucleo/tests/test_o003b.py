@@ -111,6 +111,32 @@ def test_casa_guardar_reabrir_conteos_y_validacion(tmp_path: Path):
     assert {e["tipo"] for e in otro.elementos(filtro={"clase": "IfcWall"})} == {"Block 15"}
 
 
+def test_ejes_etiquetas_automaticas_e_intersecciones():
+    nucleo = ModeloNucleo()
+    nucleo.nuevo()
+    # Verticales (constantes en X) llevan números; horizontales, letras.
+    nucleo.eje_crear("", 0, 0, 0, 6)
+    nucleo.eje_crear("", 4, 0, 4, 6)
+    nucleo.eje_crear("", 0, 0, 8, 0)
+    nucleo.eje_crear("", 0, 3, 8, 3)
+    ejes = nucleo.ejes_listar()
+    assert [(e["etiqueta"], e["vertical"]) for e in ejes] == [
+        ("1", True),
+        ("2", True),
+        ("A", False),
+        ("B", False),
+    ]
+    assert nucleo.referencias()["intersecciones"] == [
+        [0.0, 0.0],
+        [0.0, 3.0],
+        [4.0, 0.0],
+        [4.0, 3.0],
+    ]
+    borrado = nucleo.eje_borrar(ejes[0]["globalid"])
+    assert borrado["borrados"] == [ejes[0]["globalid"]]
+    assert len(nucleo.ejes_listar()) == 3
+
+
 def test_volumen_de_muros_descuenta_aberturas():
     nucleo, _nivel, muros = _casa()
     volumenes = _volumenes(nucleo, "IfcWall")

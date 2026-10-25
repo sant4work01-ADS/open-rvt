@@ -49,6 +49,10 @@ def _nombre(entidad: Any) -> str:
     return str(getattr(entidad, "Name", "") or "")
 
 
+def _etiqueta_eje(entidad: Any) -> str:
+    return str(getattr(entidad, "AxisTag", "") or "")
+
+
 def _redondear(valor: float) -> float:
     return round(float(valor), 6)
 
@@ -262,8 +266,9 @@ class ModeladoMixin:
         return creados
 
     def _asegurar_tipos_muro(self) -> None:
-        if not self.modelo.by_type("IfcWallType"):
-            self.crear_tipos_muro()
+        # En archivos abiertos puede haber tipos propios pero no los de OPEN-RVT:
+        # se agregan los que falten al crear el primer muro.
+        self.crear_tipos_muro()
 
     def _tipo_muro(self, nombre: str) -> Any:
         self._asegurar_tipos_muro()
@@ -379,22 +384,32 @@ class ModeladoMixin:
 
     def _etiqueta_libre(self, vertical: bool) -> str:
         grid = self._grid()
-        usadas = {_nombre(a).casefold() for a in self._ejes(grid) if _nombre(a)}
+        usadas = {
+            _etiqueta_eje(a).casefold()
+            for a in self._ejes(grid)
+            if getattr(a, "AxisTag", None)
+        }
         if vertical:
-            i = 0
-            while chr(ord("A") + i) in usadas:
+            i = 1
+            while str(i) in usadas:
                 i += 1
-            return chr(ord("A") + i)
-        i = 1
-        while str(i) in usadas:
+            return str(i)
+        i = 0
+        while chr(ord("A") + i).casefold() in usadas:
             i += 1
-        return str(i)
+        return chr(ord("A") + i)
 
     @staticmethod
     def _ejes(grid: Any) -> list[Any]:
         return list(getattr(grid, "UAxes", ()) or ()) + list(
             getattr(grid, "VAxes", ()) or ()
         )
+
+    @staticmethod
+    def _id_eje(grid: Any, eje: Any) -> str:
+        # IfcGridAxis no es IfcRoot y no tiene GlobalId propio: se usa el del IfcGrid
+        # junto con la etiqueta, que es única dentro de cada conjunto de ejes.
+        return _gid(eje) or f"{_gid(grid)}/{_etiqueta_eje(eje)}"
 
     def ejes_listar(self) -> list[dict[str, Any]]:
         self._exigir_modelo()
@@ -415,8 +430,8 @@ class ModeladoMixin:
                     x1 = y1 = x2 = y2 = 0.0
                 salida.append(
                     {
-                        "globalid": _gid(eje),
-                        "etiqueta": _nombre(eje),
+                        "globalid": self._id_eje(grid, eje),
+                        "etiqueta": _etiqueta_eje(eje),
                         "x1": _redondear(x1),
                         "y1": _redondear(y1),
                         "x2": _redondear(x2),
@@ -453,14 +468,16 @@ class ModeladoMixin:
             self.modelo, p1=(x1, y1, 0.0), p2=(x2, y2, 0.0), grid_axis=eje, is_si=True
         )
         self.con_cambios = True
-        return self._resultado([eje], mensaje=f"Eje «{etiqueta}» creado.")
+        return self._resultado(
+            [self._id_eje(grid, eje)], mensaje=f"Eje «{etiqueta}» creado."
+        )
 
     def eje_borrar(self, globalid: str) -> dict[str, Any]:
         self._exigir_modelo()
         eje = None
         for grid in self.modelo.by_type("IfcGrid"):
             for candidato in self._ejes(grid):
-                if _gid(candidato) == globalid:
+                if self._id_eje(grid, candidato) == globalid:
                     eje = candidato
                     break
         if eje is None:
@@ -484,6 +501,30 @@ class ModeladoMixin:
         largo = float(datos.get("Longitud") or 0.0)
         if largo <= 0:
             largo = float(datos.get("Largo") or 0.0)
+        espesor = float(datos.get("Espesor") or 0.0)
+        if largo <= 0 or espesor <= 0:
+            # Muros de archivos abiertos: se toman del eje y del tipo/material.
+            forma = getattr(muro, "Representation", None)
+            for rep in getattr(forma, "Representations", ()) or []:
+                if getattr(rep, "RepresentationIdentifier", "") != "Axis":
+                    continue
+                for item in getattr(rep, "Items", ()) or []:
+                    puntos = []
+                    for punto in getattr(item, "Points", ()) or ():
+                        coords = list(getattr(punto, "Coordinates", ()) or ())
+                        if len(coords) >= 2:
+                            puntos.append(coords)
+                    if len(puntos) >= 2 and largo <= 0:
+                        largo = math.hypot(
+                            float(puntos[-1][0]) - float(puntos[0][0]),
+                            float(puntos[-1][1]) - float(puntos[0][1]),
+                        )
+        if espesor <= 0:
+            tipo = self._tipo_entidad(muro)
+            if tipo is not None and tipo.is_a("IfcWallType"):
+                espesor = self._espesor_tipo(tipo)
+            else:
+                espesor = 0.20
         return {
             "x1": x,
             "y1": y,
@@ -492,7 +533,7 @@ class ModeladoMixin:
             "dy": dy,
             "longitud": largo,
             "altura": float(datos.get("Altura") or 2.6),
-            "espesor": float(datos.get("Espesor") or 0.15),
+            "espesor": espesor,
             "alineacion": str(datos.get("Alineacion") or "centro"),
             "x2": x + dx * largo,
             "y2": y + dy * largo,
@@ -551,7 +592,13 @@ class ModeladoMixin:
         return rep
 
     def _cuerpo_hueco(
-        self, largo: float, alto: float, espesor: float, z0: float, dx: float
+        self,
+        largo: float,
+        alto: float,
+        espesor: float,
+        z0: float,
+        dx: float,
+        offset: float = 0.0,
     ) -> Any:
         """Prisma de un vano, ligeramente más grueso que el muro para cortarlo bien.
 
@@ -564,7 +611,7 @@ class ModeladoMixin:
             length=max(largo, 0.001),
             height=max(alto, 0.001),
             thickness=max(espesor + 0.20, 0.001),
-            offset=0.0,
+            offset=offset,
         )
         rep.RepresentationIdentifier = "Body"
         return rep
@@ -595,6 +642,7 @@ class ModeladoMixin:
                     datos["espesor"],
                     info["antepecho"],
                     info["distancia"],
+                    self._desfase_alineacion(datos["alineacion"], datos["espesor"]),
                 )
             )
         cuerpo.RepresentationIdentifier = "Body"
@@ -611,11 +659,13 @@ class ModeladoMixin:
 
     @staticmethod
     def _desfase_alineacion(alineacion: str, espesor: float) -> float:
+        # El cuerpo del muro se extiende desde `offset` hasta `offset + espesor`
+        # en el eje local Y. «Centro» deja el eje en la mitad del muro.
         if alineacion == "exterior":
-            return -espesor / 2.0
+            return -espesor
         if alineacion == "interior":
-            return espesor / 2.0
-        return 0.0
+            return 0.0
+        return -espesor / 2.0
 
     def _quitar_representaciones(self, producto: Any, identificador: str) -> None:
         forma = getattr(producto, "Representation", None)
@@ -1046,6 +1096,7 @@ class ModeladoMixin:
         ancho: float | None = None,
         alto: float | None = None,
         antepecho: float | None = None,
+        volteado: bool = False,
     ) -> dict[str, Any]:
         self._exigir_modelo()
         if clase not in ("IfcDoor", "IfcWindow"):
@@ -1101,10 +1152,16 @@ class ModeladoMixin:
                 "Alto": alto,
                 "Antepecho": antepecho,
                 "Muro": _gid(muro_entidad),
+                "Volteado": bool(volteado),
             },
         )
         cuerpo_vano = self._cuerpo_hueco(
-            ancho, alto, datos_muro["espesor"], antepecho, distancia
+            ancho,
+            alto,
+            datos_muro["espesor"],
+            antepecho,
+            distancia,
+            self._desfase_alineacion(datos_muro["alineacion"], datos_muro["espesor"]),
         )
         geometry_api.assign_representation(self.modelo, product=vano, representation=cuerpo_vano)
         geometry_api.edit_object_placement(
@@ -1448,7 +1505,14 @@ class ModeladoMixin:
                 self.modelo,
                 product=entidad,
                 representation=self._cuerpo_hueco(
-                    ancho, alto, info_muro["espesor"], datos["antepecho"], datos["distancia"]
+                    ancho,
+                    alto,
+                    info_muro["espesor"],
+                    datos["antepecho"],
+                    datos["distancia"],
+                    self._desfase_alineacion(
+                        info_muro["alineacion"], info_muro["espesor"]
+                    ),
                 ),
             )
             relleno = self._relleno_de(entidad)
@@ -1497,6 +1561,69 @@ class ModeladoMixin:
         except Exception:
             pass
         return [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+
+    def referencias(self) -> dict[str, Any]:
+        """Puntos y ejes para los enganches del dibujo en planta."""
+        self._exigir_modelo()
+        muros = []
+        extremos = []
+        medios = []
+        for muro in self.modelo.by_type("IfcWall"):
+            datos = self._datos_muro(muro)
+            if datos["longitud"] <= TOLERANCIA_CALCULO:
+                continue
+            muros.append(
+                {
+                    "globalid": _gid(muro),
+                    "x1": _redondear(datos["x1"]),
+                    "y1": _redondear(datos["y1"]),
+                    "x2": _redondear(datos["x2"]),
+                    "y2": _redondear(datos["y2"]),
+                    "espesor": _redondear(datos["espesor"]),
+                    "altura": _redondear(datos["altura"]),
+                }
+            )
+            extremos.extend(
+                [
+                    [_redondear(datos["x1"]), _redondear(datos["y1"])],
+                    [_redondear(datos["x2"]), _redondear(datos["y2"])],
+                ]
+            )
+            medios.append(
+                [
+                    _redondear((datos["x1"] + datos["x2"]) / 2),
+                    _redondear((datos["y1"] + datos["y2"]) / 2),
+                ]
+            )
+        ejes = self.ejes_listar()
+        intersecciones = []
+        for i, a in enumerate(ejes):
+            for b in ejes[i + 1 :]:
+                punto = self._interseccion(
+                    a["x1"], a["y1"], a["x2"], a["y2"], b["x1"], b["y1"], b["x2"], b["y2"]
+                )
+                if punto is not None:
+                    intersecciones.append([_redondear(punto[0]), _redondear(punto[1])])
+        return {
+            "muros": muros,
+            "extremos": extremos,
+            "medios": medios,
+            "ejes": ejes,
+            "intersecciones": intersecciones,
+        }
+
+    @staticmethod
+    def _interseccion(
+        x1: float, y1: float, x2: float, y2: float, x3: float, y3: float, x4: float, y4: float
+    ) -> tuple[float, float] | None:
+        den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+        if abs(den) <= TOLERANCIA_CALCULO:
+            return None
+        t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den
+        u = ((x1 - x3) * (y1 - y2) - (y1 - y3) * (x1 - x2)) / den
+        if -TOLERANCIA <= t <= 1 + TOLERANCIA and -TOLERANCIA <= u <= 1 + TOLERANCIA:
+            return (x1 + t * (x2 - x1), y1 + t * (y2 - y1))
+        return None
 
     # ------------------------------------------------------------------ validación
     def validar(self) -> list[dict[str, Any]]:

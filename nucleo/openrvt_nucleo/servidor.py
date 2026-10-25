@@ -148,6 +148,7 @@ class Servidor:
                 params.get("ancho"),
                 params.get("alto"),
                 params.get("antepecho"),
+                bool(params.get("volteado", False)),
             )
         if metodo == "elementos.mover":
             return self._exigir().elementos_mover(
@@ -171,6 +172,8 @@ class Servidor:
             )
         if metodo == "proyecto.validar":
             return self._exigir().validar()
+        if metodo == "modelo.referencias":
+            return self._exigir().referencias()
         if metodo == "historial.deshacer":
             return self._exigir().deshacer()
         if metodo == "historial.rehacer":
