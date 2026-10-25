@@ -893,6 +893,10 @@ class BibliotecaMixin:
     def _aplicar_perfil_de_tipo(self, tipo: Any, alias: str, seccion: dict[str, Any]) -> None:
         material = self._material_por_nombre("Concreto armado")
         if alias in ("zapata", "zapata_corrida"):
+            try:
+                material_api.unassign_material(self.modelo, products=[tipo])
+            except Exception:
+                pass
             material_api.assign_material(self.modelo, products=[tipo], material=material)
             return
         self._quitar_perfil_de_tipo(tipo)

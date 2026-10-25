@@ -1694,7 +1694,7 @@ class ModeladoMixin:
         type_api.assign_type(self.modelo, related_objects=[viga], relating_type=tipo_entidad)
         lecho_bajo = alias == "dala"
         centro = (
-            elevacion + desfase + (alto / 2.0 if lecho_bajo else -alto / 2.0)
+            elevacion + (alto / 2.0 if lecho_bajo else desfase - alto / 2.0)
         )
         self._guardar_pset(
             viga,
@@ -2664,8 +2664,10 @@ class ModeladoMixin:
                 if datos["Longitud"] <= TOLERANCIA_CALCULO:
                     raise self._error("La viga necesita dos puntos distintos.", -32602)
                 lecho_bajo = alias == "dala"
-                datos["Z"] = elevacion + float(datos.get("Desfase") or 0.0) + (
-                    alto / 2.0 if lecho_bajo else -alto / 2.0
+                datos["Z"] = elevacion + (
+                    alto / 2.0
+                    if lecho_bajo
+                    else float(datos.get("Desfase") or 0.0) - alto / 2.0
                 )
             elif _texto(getattr(entidad, "PredefinedType", "")) == "STRIP_FOOTING":
                 alto = float(seccion.get("Peralte") or 0.20)
