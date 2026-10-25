@@ -298,7 +298,7 @@ lo vuelve a abrir con el **otro** motor para medir los muros. No se parte de un 
 - 4 muros de 0.15 × 3.00 m sobre ejes de 8 × 6 m, tipo `IfcWallType` «Block 15» y una capa de
   material de 0.15 m.
 - Losa de 0.12 m con el contorno exterior de los muros; cara superior en 3.00 m (piso del nivel 2,
-  sobre el nivel 1).
+  sobre el nivel 1). En la edición también se estira de 8 × 6 a 9 × 6 m.
 - Puerta de 0.90 × 2.10 m en el muro sur, con `IfcOpeningElement` y `IfcRelFillsElement`.
 - Edición: el muro este se desplaza 1 m hacia el este (la dimensión este-oeste pasa de 8 a 9 m) y el
   sur y el norte se estiran a 9 m. El espesor del tipo «Block 15» pasa de 0.15 a 0.20 m y se
@@ -321,10 +321,10 @@ lo vuelve a abrir con el **otro** motor para medir los muros. No se parte de un 
 | Validación | `ifcopenshell.validate` en proceso | No hay validador en web-ifc: se llama a A para validar |
 | Medición del resultado | Propia (IfcOpenShell) y cruzada (B) | Propia (web-ifc) y cruzada (A) |
 
-En A, la creación y edición ocupan **169 líneas físicas** (143 de código, sin blancos ni comentarios)
+En A, la creación y edición ocupan **186 líneas físicas** (158 de código, sin blancos ni comentarios)
 en `crear_modelo`, `_rep_eje`, `_cambiar_largo_eje` y `editar_modelo`. En B, la clase de escritura,
-`crearModelo` y las funciones de edición ocupan **410 líneas físicas** (359 de código). El guion
-completo mide 414/340 (A) y 616/521 (B) líneas físicas/de código, respectivamente; la diferencia
+`crearModelo` y las funciones de edición ocupan **422 líneas físicas** (370 de código). El guion
+completo mide 428/352 (A) y 629/533 (B) líneas físicas/de código, respectivamente; la diferencia
 incluye la medición y la orquestación, que son parecidas en ambos.
 
 ### 11.3 Volumen esperado contra medido
@@ -364,31 +364,31 @@ Python 3.14, IfcOpenShell 0.9.0.post1, web-ifc 0.0.74).
 
 | Operación | A (s) | B (s) |
 |---|---:|---:|
-| Crear el modelo completo | 0.0279 | 0.0441 |
-| Editar el muro y estirar sur/norte | 0.0052 | 0.0015 |
-| Cambiar el espesor del tipo y propagar | incluido en «editar» | 0.0006 |
-| Guardar | 0.0028 | 0.0021 |
-| Medir con el motor propio | 0.0121 | 0.0386 |
-| Medir con el otro motor | 0.3224 | 0.3539 |
-| Validar con `ifcopenshell.validate` | 0.0099 | 0.3278 |
-| **Total del guion** | **0.4073** | **0.7687** |
+| Crear el modelo completo | 0.0280 | 0.0370 |
+| Editar muros, estirar sur/norte y losa | 0.0050 | 0.0017 |
+| Cambiar el espesor del tipo y propagar | incluido en «editar» | 0.0007 |
+| Guardar | 0.0029 | 0.0018 |
+| Medir con el motor propio | 0.0118 | 0.0425 |
+| Medir con el otro motor | 0.2688 | 0.3046 |
+| Validar con `ifcopenshell.validate` | 0.0096 | 0.3198 |
+| **Total del guion** | **0.3271** | **0.7087** |
 
 Lectura:
 
-- La creación es 1.6× más lenta en B; la edición geométrica es más rápida porque son unas pocas
-  asignaciones de atributos, pero esa rapidez se paga con las ~2.4× líneas de código del núcleo.
-- La medición cruzada cuesta lo mismo en los dos (0.32–0.35 s): es el arranque del otro runtime, no
+- La creación es 1.3× más lenta en B; la edición geométrica es más rápida porque son unas pocas
+  asignaciones de atributos, pero esa rapidez se paga con las ~2.3× líneas de código del núcleo.
+- La medición cruzada cuesta lo mismo en los dos (0.27–0.30 s): es el arranque del otro runtime, no
   el motor.
 - El total de B incluye **dos** arranques de Python (medir y validar), porque web-ifc no trae
   validador de esquema; el de A solo incluye un arranque de Node. Sin las llamadas al otro motor
-  (`medir_otro` y `validar`), el costo propio es **A 0.048 s** y **B 0.087 s**.
+  (`medir_otro` y `validar`), el costo propio es **A 0.048 s** y **B 0.084 s**.
 - Los tiempos de edición son de milisegundos en ambos; la diferencia de producto no está en la
   velocidad de edición, sino en cuánto hay que programar para editar.
 
 ### 11.6 Hechos que deciden (edición)
 
 - **IfcOpenShell resuelve la edición semántica:** geometría desde eje + capa, vano que resta,
-  propagación del tipo y validador de esquema. El guion de edición es ~2.4× más corto.
+  propagación del tipo y validador de esquema. El guion de edición es ~2.3× más corto.
 - **web-ifc no edita a alto nivel:** puede escribir y guardar IFC4 válido, y su teselador resta el
   vano, pero la geometría, las uniones y la propagación del tipo se programan a mano. Es viable como
   motor de visualización o de edición geométrica puntual, no como núcleo del editor.

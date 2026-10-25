@@ -226,6 +226,20 @@ def editar_modelo(modelo, ids):
     _cambiar_largo_eje(muros[MURO_SUR], 9.0)
     _cambiar_largo_eje(muros[MURO_NORTE], 9.0)
 
+    # La losa acompaña el nuevo contorno exterior de 9 × 6 m.
+    for rep in ids["losa"].Representation.Representations:
+        if rep.RepresentationIdentifier != "Body":
+            continue
+        for item in rep.Items:
+            perfil = getattr(item, "SweptArea", None)
+            if perfil is not None and perfil.is_a("IfcArbitraryClosedProfileDef"):
+                perfil.OuterCurve.Points.CoordList = [
+                    (0.0, 0.0),
+                    (9.0, 0.0),
+                    (9.0, 6.0),
+                    (0.0, 6.0),
+                ]
+
     # Cambio de espesor del tipo: se edita la capa y se regeneran los cuatro
     # muros desde eje + capa, como haría el editor al aceptar el cambio.
     ifcopenshell.api.material.edit_layer(modelo, layer=ids["capa"], attributes={"LayerThickness": 0.20})

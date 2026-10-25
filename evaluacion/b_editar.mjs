@@ -364,6 +364,7 @@ async function crearModelo() {
       placementMuros: idsPlacement,
       perfiles: idsPerfil,
       ejes: idsEje,
+      perfilLosa: perfilLosa,
       losa,
       vano,
       puerta,
@@ -434,6 +435,17 @@ function aplicarGrosor(api, mid, ids) {
     escribir(api, mid, pos);
     escribir(api, mid, perfil);
   }
+}
+
+function estirarLosa(api, mid, perfilId, largo) {
+  const perfil = leer(api, mid, perfilId);
+  perfil.XDim = largo;
+  const pos = leer(api, mid, perfil.Position.value);
+  const punto = leer(api, mid, pos.Location.value);
+  punto.Coordinates = [largo / 2, 3];
+  escribir(api, mid, punto);
+  escribir(api, mid, pos);
+  escribir(api, mid, perfil);
 }
 
 function comprobarGrosor(api, mid, ids, grosor) {
@@ -561,6 +573,7 @@ async function principal() {
   moverMuro(api, mid, ids.placementMuros[MURO_NORTE], 9, 6, [-1, 0, 0]);
   estirarMuro(api, mid, ids.perfiles[MURO_SUR], ids.ejes[MURO_SUR], 9, 0.15);
   estirarMuro(api, mid, ids.perfiles[MURO_NORTE], ids.ejes[MURO_NORTE], 9, 0.15);
+  estirarLosa(api, mid, ids.perfilLosa, 9);
   tiempos.editar_muro_s = (performance.now() - t0) / 1000;
 
   // Edición 2: espesor del tipo «Block 15» a 0.20 m y regeneración manual de

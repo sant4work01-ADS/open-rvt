@@ -3,15 +3,15 @@
   "ifc": "resultados/edicion_b.ifc",
   "esquema": "IFC4",
   "operaciones_s": {
-    "crear_modelo_s": 0.041421502000000006,
-    "editar_muro_s": 0.0014944999999999596,
-    "cambiar_tipo_s": 0.000606899999999996,
-    "guardar_s": 0.0018548999999999864,
-    "medir_propio_s": 0.037626701000000026,
-    "medir_otro_s": 0.287593408,
-    "validar_s": 0.290005808
+    "crear_modelo_s": 0.036845100000000006,
+    "editar_muro_s": 0.0016725999999999885,
+    "cambiar_tipo_s": 0.0006529999999999632,
+    "guardar_s": 0.0018394999999999868,
+    "medir_propio_s": 0.042462299999999974,
+    "medir_otro_s": 0.31516160099999996,
+    "validar_s": 0.3197866019999999
   },
-  "total_s": 0.6606037189999999,
+  "total_s": 0.7184207029999998,
   "propagacion_tipo": {
     "capa": 0.2,
     "perfiles": [
@@ -26,22 +26,22 @@
     "motor": "b",
     "muros": [
       {
-        "globalid": "30olZAQ7T5tOmH2w$4OX6J",
+        "globalid": "0IpPlHRljDd8miFKb_Sm2q",
         "nombre": "Muro Oeste",
         "volumen_malla": 3.6000000536441803
       },
       {
-        "globalid": "3BIO9ER3L7kxgl_WsuUCRv",
+        "globalid": "1tykEUs990K8x_xuTW700$",
         "nombre": "Muro Norte",
         "volumen_malla": 5.4000000804662704
       },
       {
-        "globalid": "1eK2Su3gTBcOPUXE$M$z8D",
+        "globalid": "2WkBxrYifC5QfMJZuBwpRB",
         "nombre": "Muro Este",
         "volumen_malla": 3.6000000536441803
       },
       {
-        "globalid": "0vb_C2zLr9RfW7VT6o2wl4",
+        "globalid": "2YJZpGApPEKfU0eMzFgWwQ",
         "nombre": "Muro Sur",
         "volumen_malla": 5.022000080555678
       }
@@ -58,22 +58,22 @@
     },
     "muros": [
       {
-        "globalid": "0vb_C2zLr9RfW7VT6o2wl4",
+        "globalid": "2YJZpGApPEKfU0eMzFgWwQ",
         "nombre": "Muro Sur",
         "volumen_malla": 5.022
       },
       {
-        "globalid": "1eK2Su3gTBcOPUXE$M$z8D",
+        "globalid": "2WkBxrYifC5QfMJZuBwpRB",
         "nombre": "Muro Este",
         "volumen_malla": 3.5999999999999837
       },
       {
-        "globalid": "3BIO9ER3L7kxgl_WsuUCRv",
+        "globalid": "1tykEUs990K8x_xuTW700$",
         "nombre": "Muro Norte",
         "volumen_malla": 5.400000000000009
       },
       {
-        "globalid": "30olZAQ7T5tOmH2w$4OX6J",
+        "globalid": "0IpPlHRljDd8miFKb_Sm2q",
         "nombre": "Muro Oeste",
         "volumen_malla": 3.600000000000001
       }
