@@ -232,6 +232,10 @@ pub fn run() {
             nucleo_llamar,
         ])
         .setup(|app| {
+            // Carpeta real de recursos (en .deb es /usr/lib/<app>/, no /usr/bin).
+            if let Ok(recursos) = app.path().resource_dir() {
+                app.state::<EstadoNucleo>().0.configurar_recursos(recursos);
+            }
             // El proceso Python se lanza al arrancar y queda vivo. Si no hay
             // IfcOpenShell, la app abre igual y el error se muestra en la barra de estado.
             app.state::<EstadoNucleo>().0.precalentar();

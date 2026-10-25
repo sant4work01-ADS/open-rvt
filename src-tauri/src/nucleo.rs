@@ -73,6 +73,8 @@ pub struct Nucleo {
     argumentos: Vec<OsString>,
     /// Carpeta que se añade a `PYTHONPATH` (la que contiene `openrvt_nucleo/`).
     pythonpath: Option<PathBuf>,
+    /// Carpeta de recursos de la app (`app.path().resource_dir()`).
+    recursos: Mutex<Option<PathBuf>>,
     timeout: Duration,
     proceso: Mutex<Option<Proceso>>,
     siguiente_id: AtomicI64,
@@ -98,6 +100,7 @@ impl Nucleo {
             programa,
             argumentos,
             pythonpath,
+            recursos: Mutex::new(None),
             timeout: TIMEOUT,
             proceso: Mutex::new(None),
             siguiente_id: AtomicI64::new(1),
@@ -113,12 +116,51 @@ impl Nucleo {
             programa: programa.into(),
             argumentos,
             pythonpath: None,
+            recursos: Mutex::new(None),
             timeout,
             proceso: Mutex::new(None),
             siguiente_id: AtomicI64::new(1),
             generacion: AtomicU64::new(0),
             avisos: Mutex::new(Vec::new()),
         }
+    }
+
+    /// Fija la carpeta de recursos de Tauri. En el .deb los recursos no quedan junto al
+    /// ejecutable (/usr/bin) sino en `/usr/lib/<app>/`; `resource_dir()` da la ruta real.
+    /// `OPENRVT_PYTHON` sigue teniendo prioridad (pruebas y desarrollo).
+    pub fn configurar_recursos(&self, recursos: PathBuf) {
+        let mut guard = self.recursos.lock().unwrap_or_else(|e| e.into_inner());
+        *guard = Some(recursos);
+    }
+
+    /// Carpeta de recursos configurada (para diagnóstico y pruebas).
+    #[cfg(test)]
+    pub fn recursos(&self) -> Option<PathBuf> {
+        self.recursos
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// Programa y PYTHONPATH efectivos: los recursos de Tauri mandan sobre el
+    /// intérprete del sistema, salvo que `OPENRVT_PYTHON` esté definido.
+    fn programa_efectivo(&self) -> (OsString, Option<PathBuf>) {
+        let con_env = std::env::var_os("OPENRVT_PYTHON").is_some_and(|ruta| !ruta.is_empty());
+        if !con_env {
+            let recursos = self
+                .recursos
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
+            if let Some(recursos) = recursos {
+                if let Some(ruta) = interprete_en_recursos(&recursos) {
+                    let carpeta = buscar_carpeta_nucleo_en(&recursos)
+                        .or_else(|| self.pythonpath.clone());
+                    return (ruta.into_os_string(), carpeta);
+                }
+            }
+        }
+        (self.programa.clone(), self.pythonpath.clone())
     }
 
     /// Lanza el proceso si todavía no está vivo. Si falla, la app sigue abierta y el
@@ -154,14 +196,15 @@ impl Nucleo {
     }
 
     fn lanzar(&self) -> Result<Proceso, String> {
-        let mut comando = Command::new(&self.programa);
+        let (programa, pythonpath) = self.programa_efectivo();
+        let mut comando = Command::new(&programa);
         comando
             .args(&self.argumentos)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .env("PYTHONUNBUFFERED", "1");
-        if let Some(carpeta) = &self.pythonpath {
+        if let Some(carpeta) = &pythonpath {
             let actual = std::env::var_os("PYTHONPATH").unwrap_or_default();
             let mut valor = carpeta.clone().into_os_string();
             if !actual.is_empty() {
@@ -170,10 +213,18 @@ impl Nucleo {
             }
             comando.env("PYTHONPATH", valor);
         }
+        // En Windows el intérprete embebido es python.exe (necesita stdin/stdout para
+        // JSON-RPC); CREATE_NO_WINDOW evita que se abra una consola.
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            comando.creation_flags(CREATE_NO_WINDOW);
+        }
         let mut hijo = comando.spawn().map_err(|e| {
             format!(
                 "no se pudo lanzar el intérprete «{}»: {e}",
-                self.programa.to_string_lossy()
+                programa.to_string_lossy()
             )
         })?;
         let entrada = hijo
@@ -331,12 +382,22 @@ fn detalle_si_hay(detalle: &str) -> String {
     }
 }
 
-/// Ejecutable de Python: `OPENRVT_PYTHON`, `recursos/python/` o `python3`/`python`.
+/// Ejecutable de Python: `OPENRVT_PYTHON`, recursos de la app, `recursos/python/`
+/// junto al ejecutable, o `python3`/`python`.
 pub fn resolver_interprete() -> OsString {
+    resolver_interprete_en(None)
+}
+
+/// Igual que [`resolver_interprete`] pero teniendo en cuenta la carpeta de recursos
+/// que Tauri resuelve en tiempo de ejecución (en .deb puede no estar junto al binario).
+pub fn resolver_interprete_en(recursos: Option<&Path>) -> OsString {
     if let Some(ruta) = std::env::var_os("OPENRVT_PYTHON") {
         if !ruta.is_empty() {
             return ruta;
         }
+    }
+    if let Some(ruta) = recursos.and_then(interprete_en_recursos) {
+        return ruta.into_os_string();
     }
     if let Some(ruta) = interprete_empaquetado() {
         return ruta.into_os_string();
@@ -348,12 +409,22 @@ pub fn resolver_interprete() -> OsString {
     }
 }
 
-/// Python embebido de los instaladores: `<ejecutable>/recursos/python/`.
+/// Python embebido junto al ejecutable: `<ejecutable>/recursos/python/`.
 pub fn interprete_empaquetado() -> Option<PathBuf> {
     let ejecutable = std::env::current_exe().ok()?;
     let base = ejecutable.parent()?.join("recursos").join("python");
+    interprete_en(&base)
+}
+
+/// Python embebido dentro de la carpeta de recursos de Tauri:
+/// `<recursos>/recursos/python/`. En el .deb `<recursos>` es `/usr/lib/<app>/`.
+pub fn interprete_en_recursos(recursos: &Path) -> Option<PathBuf> {
+    interprete_en(&recursos.join("recursos").join("python"))
+}
+
+fn interprete_en(base: &Path) -> Option<PathBuf> {
     if base.is_file() {
-        return Some(base);
+        return Some(base.to_path_buf());
     }
     if !base.is_dir() {
         return None;
@@ -361,7 +432,7 @@ pub fn interprete_empaquetado() -> Option<PathBuf> {
     let candidatos = if cfg!(windows) {
         vec!["python.exe", "python3.exe", "python"]
     } else {
-        vec!["bin/python3", "bin/python", "python3", "python"]
+        vec!["bin/python3.12", "bin/python3", "bin/python", "python3", "python"]
     };
     candidatos
         .into_iter()
@@ -371,11 +442,19 @@ pub fn interprete_empaquetado() -> Option<PathBuf> {
 
 /// Carpeta que contiene el paquete `openrvt_nucleo/` (para `PYTHONPATH`).
 pub fn buscar_carpeta_nucleo() -> Option<PathBuf> {
+    buscar_carpeta_nucleo_en(Path::new(""))
+}
+
+/// Como [`buscar_carpeta_nucleo`] pero mira primero en la carpeta de recursos.
+pub fn buscar_carpeta_nucleo_en(recursos: &Path) -> Option<PathBuf> {
     if let Some(ruta) = std::env::var_os("OPENRVT_NUCLEO_DIR") {
         let ruta = PathBuf::from(ruta);
         if ruta.join("openrvt_nucleo").is_dir() {
             return Some(ruta);
         }
+    }
+    if let Some(carpeta) = empaquetado_en(recursos) {
+        return Some(carpeta);
     }
     let mut bases: Vec<PathBuf> = Vec::new();
     if let Ok(actual) = std::env::current_dir() {
@@ -393,6 +472,18 @@ pub fn buscar_carpeta_nucleo() -> Option<PathBuf> {
                 return Some(candidato);
             }
         }
+    }
+    None
+}
+
+/// `<recursos>/recursos/python/nucleo` cuando existe.
+fn empaquetado_en(recursos: &Path) -> Option<PathBuf> {
+    if recursos.as_os_str().is_empty() {
+        return None;
+    }
+    let carpeta = recursos.join("recursos").join("python").join("nucleo");
+    if carpeta.join("openrvt_nucleo").is_dir() {
+        return Some(carpeta);
     }
     None
 }
@@ -509,5 +600,46 @@ for linea in sys.stdin:
         let error = nucleo.llamar("no.existe", json!({})).unwrap_err();
         assert!(error.to_string().contains("Método desconocido"));
         assert!(error.to_string().contains("-32601"));
+    }
+
+    #[test]
+    fn el_python_empaquetado_se_encuentra_en_la_carpeta_de_recursos() {
+        let base = std::env::temp_dir().join(format!(
+            "openrvt-recursos-{}-{}",
+            std::process::id(),
+            "interprete"
+        ));
+        let python = if cfg!(windows) {
+            base.join("recursos").join("python").join("python.exe")
+        } else {
+            base.join("recursos").join("python").join("bin").join("python3.12")
+        };
+        std::fs::create_dir_all(python.parent().unwrap()).unwrap();
+        std::fs::write(&python, b"").unwrap();
+
+        // El .deb deja los recursos en /usr/lib/<app>/; la ruta debe salir de ahí y
+        // no de la carpeta del ejecutable.
+        assert_eq!(interprete_en_recursos(&base), Some(python));
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
+    fn la_carpeta_del_nucleo_empaquetado_se_usa_para_pythonpath() {
+        let base = std::env::temp_dir().join(format!(
+            "openrvt-recursos-{}-{}",
+            std::process::id(),
+            "nucleo"
+        ));
+        let paquete = base
+            .join("recursos")
+            .join("python")
+            .join("nucleo")
+            .join("openrvt_nucleo");
+        std::fs::create_dir_all(&paquete).unwrap();
+        assert_eq!(
+            buscar_carpeta_nucleo_en(&base),
+            Some(base.join("recursos").join("python").join("nucleo"))
+        );
+        std::fs::remove_dir_all(&base).ok();
     }
 }
