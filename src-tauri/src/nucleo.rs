@@ -14,6 +14,8 @@ use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
+use crate::bitacora::Bitacora;
+
 /// Tiempo máximo de una llamada (60 s, como pide la especificación).
 pub const TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_LINEAS_ERROR: usize = 6;
@@ -99,6 +101,7 @@ pub struct Nucleo {
     siguiente_id: AtomicI64,
     generacion: AtomicU64,
     avisos: Mutex<Vec<String>>,
+    bitacora: Mutex<Option<Arc<Bitacora>>>,
 }
 
 impl Default for Nucleo {
@@ -125,6 +128,7 @@ impl Nucleo {
             siguiente_id: AtomicI64::new(1),
             generacion: AtomicU64::new(0),
             avisos: Mutex::new(Vec::new()),
+            bitacora: Mutex::new(None),
         }
     }
 
@@ -141,6 +145,7 @@ impl Nucleo {
             siguiente_id: AtomicI64::new(1),
             generacion: AtomicU64::new(0),
             avisos: Mutex::new(Vec::new()),
+            bitacora: Mutex::new(None),
         }
     }
 
@@ -150,6 +155,11 @@ impl Nucleo {
     pub fn configurar_recursos(&self, recursos: PathBuf) {
         let mut guard = self.recursos.lock().unwrap_or_else(|e| e.into_inner());
         *guard = Some(recursos);
+    }
+
+    /// O006c: el stderr del proceso Python también queda en la bitácora.
+    pub fn configurar_bitacora(&self, bitacora: Arc<Bitacora>) {
+        *self.bitacora.lock().unwrap_or_else(|e| e.into_inner()) = Some(bitacora);
     }
 
     /// Carpeta de recursos configurada (para diagnóstico y pruebas).
@@ -261,10 +271,18 @@ impl Nucleo {
         let errores = Arc::new(Mutex::new(VecDeque::new()));
         if let Some(stderr) = hijo.stderr.take() {
             let errores_hilo = Arc::clone(&errores);
+            let bitacora = self
+                .bitacora
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
             std::thread::spawn(move || {
                 let lector = BufReader::new(stderr);
                 for linea in lector.lines().map_while(Result::ok) {
                     log::info!("núcleo IFC: {linea}");
+                    if let Some(bitacora) = &bitacora {
+                        bitacora.anotar_stderr(linea.clone());
+                    }
                     let mut guard = errores_hilo.lock().unwrap_or_else(|e| e.into_inner());
                     guard.push_back(linea);
                     while guard.len() > MAX_LINEAS_ERROR {

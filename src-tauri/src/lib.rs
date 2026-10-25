@@ -7,11 +7,14 @@
 //! Actualizador: todavía no hay. Cuando exista, se añadirá `tauri-plugin-updater` con su
 //! endpoint y su llave pública; no se dejan ni endpoint ni llave en este esqueleto.
 
+mod bitacora;
 mod estado;
 mod nucleo;
 
+use bitacora::{Bitacora, EstadoBitacora};
 use estado::{guardar_config, leer_config, Config, EstadoApp, Rutas};
 use nucleo::EstadoNucleo;
+use std::sync::Arc;
 use tauri::{Emitter, Manager, State};
 
 /// Versión de la aplicación; comando de prueba para validar el puente IPC.
@@ -253,6 +256,39 @@ fn nucleo_llamar(
     resultado
 }
 
+/// O006c: añade un lote de eventos a la bitácora de la sesión actual.
+#[tauri::command]
+fn bitacora_agregar(
+    estado: State<'_, EstadoBitacora>,
+    eventos: Vec<serde_json::Value>,
+) -> Result<(), String> {
+    estado.0.agregar(&eventos)
+}
+
+/// O006c: sesión actual y ruta de su archivo (para el panel y las pruebas).
+#[tauri::command]
+fn bitacora_sesion(estado: State<'_, EstadoBitacora>) -> bitacora::DatosSesion {
+    estado.0.datos_sesion()
+}
+
+/// O006c: exporta el .zip con las sesiones, OPEN-RVT.log, sistema.json y, si se pide, el IFC.
+#[tauri::command]
+fn bitacora_exportar(
+    estado: State<'_, EstadoBitacora>,
+    destino: String,
+    todas: bool,
+    incluir_ifc: bool,
+    ruta_ifc: Option<String>,
+) -> Result<String, String> {
+    estado.0.exportar(
+        std::path::Path::new(&destino),
+        todas,
+        incluir_ifc,
+        ruta_ifc.as_deref().map(std::path::Path::new),
+    )?;
+    Ok(destino)
+}
+
 pub fn run() {
     log::info!(
         "OPEN-RVT {} arranca en {}",
@@ -261,11 +297,7 @@ pub fn run() {
     );
 
     tauri::Builder::default()
-        .plugin(
-            tauri_plugin_log::Builder::new()
-                .level(log::LevelFilter::Info)
-                .build(),
-        )
+        .plugin(registro_de_la_app().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -292,8 +324,20 @@ pub fn run() {
             registrar_error_ui,
             registrar_error_comando,
             nucleo_llamar,
+            bitacora_agregar,
+            bitacora_sesion,
+            bitacora_exportar,
         ])
         .setup(|app| {
+            // O006c: la bitácora vive junto a OPEN-RVT.log y arranca antes del núcleo
+            // para no perder las primeras líneas de stderr.
+            let bitacora = Arc::new(Bitacora::nuevo());
+            bitacora.iniciar(app.handle());
+            app.manage(EstadoBitacora(Arc::clone(&bitacora)));
+            app.state::<EstadoNucleo>()
+                .0
+                .configurar_bitacora(Arc::clone(&bitacora));
+
             // Carpeta real de recursos (en .deb es /usr/lib/<app>/, no /usr/bin).
             if let Ok(recursos) = app.path().resource_dir() {
                 app.state::<EstadoNucleo>().0.configurar_recursos(recursos);
@@ -333,6 +377,28 @@ pub fn run() {
                 app.state::<EstadoNucleo>().0.detener();
             }
         });
+}
+
+/// Registro de la aplicación. En pruebas y capturas (OPENRVT_DATOS_DIR) el
+/// `OPEN-RVT.log` va a la misma carpeta aislada que la bitácora.
+fn registro_de_la_app() -> tauri_plugin_log::Builder {
+    let constructor = tauri_plugin_log::Builder::new().level(log::LevelFilter::Info);
+    #[cfg(debug_assertions)]
+    if let Ok(dir) = std::env::var("OPENRVT_DATOS_DIR") {
+        if !dir.trim().is_empty() {
+            use tauri_plugin_log::{Target, TargetKind};
+            let logs = std::path::PathBuf::from(dir).join("logs");
+            let _ = std::fs::create_dir_all(&logs);
+            return constructor.clear_targets().targets([
+                Target::new(TargetKind::Stdout),
+                Target::new(TargetKind::Folder {
+                    path: logs,
+                    file_name: Some("OPEN-RVT".into()),
+                }),
+            ]);
+        }
+    }
+    constructor
 }
 
 /// Capa A de la spec 021 (solo Windows / WebView2): la ventana no ofrece menús,
