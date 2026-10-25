@@ -48,8 +48,58 @@ export type Herramienta =
   | "ventana"
   | "eje"
   | "mover"
-  | "copiar";
+  | "copiar"
+  | "zapata"
+  | "zapata_corrida"
+  | "contratrabe"
+  | "columna"
+  | "castillo"
+  | "trabe"
+  | "cerramiento"
+  | "dala";
 export type AlineacionMuro = "centro" | "interior" | "exterior";
+
+/** O007b: las ocho herramientas estructurales y su alias de tipo. */
+export const ALIAS_HERRAMIENTA: Partial<Record<Herramienta, string>> = {
+  zapata: "zapata",
+  zapata_corrida: "zapata_corrida",
+  contratrabe: "contratrabe",
+  columna: "columna",
+  castillo: "castillo",
+  trabe: "trabe",
+  cerramiento: "cerramiento",
+  dala: "dala",
+};
+
+export const HERRAMIENTAS_ESTRUCTURA: Herramienta[] = [
+  "zapata", "zapata_corrida", "contratrabe", "columna", "castillo",
+  "trabe", "cerramiento", "dala",
+];
+
+export function esHerramientaEstructura(h: Herramienta | null): boolean {
+  return h !== null && HERRAMIENTAS_ESTRUCTURA.includes(h);
+}
+
+/** Las lineales se trazan con dos clics; las puntuales con uno. */
+export function esHerramientaLineal(h: Herramienta | null): boolean {
+  return h === "zapata_corrida" || h === "contratrabe" || h === "trabe" ||
+    h === "cerramiento" || h === "dala";
+}
+
+export function esHerramientaPuntual(h: Herramienta | null): boolean {
+  return h === "zapata" || h === "columna" || h === "castillo";
+}
+
+export interface TipoHerramienta {
+  globalid: string;
+  nombre: string;
+  clase: string;
+  espesor?: number;
+  alias?: string;
+  seccion?: Record<string, number | string>;
+  armado?: Record<string, number | string>;
+  acero?: Record<string, unknown>;
+}
 
 export interface OpcionesMuro {
   tipo: string;
@@ -119,6 +169,13 @@ interface EstadoModelo {
   herramienta: Herramienta | null;
   opcionesMuro: OpcionesMuro;
   tiposMuro: Array<{ globalid: string; nombre: string; espesor: number }>;
+  /** O007b: tipos estructurales y el tipo elegido por herramienta. */
+  tiposHerramienta: TipoHerramienta[];
+  tipoHerramienta: Partial<Record<Herramienta, string>>;
+  /** O007b: giro de la siguiente columna o zapata (grados). */
+  rotacionSiguiente: number;
+  fijarTipoHerramienta: (herramienta: Herramienta, nombre: string) => void;
+  girar90: () => void;
   referencias: Referencias;
   puntosHerramienta: Punto2[];
   ratonHerramienta: Punto2 | null;
@@ -245,6 +302,7 @@ function decodificarMalla(crudo: RespuestaTeselado["elementos"][number]): Elemen
     tipo: crudo.tipo ?? "",
     capas: crudo.capas ?? [],
     eje: crudo.eje ?? null,
+    estructura: crudo.estructura ?? null,
     vertices: new Float32Array(vertices.buffer, vertices.byteOffset, vertices.byteLength / 4),
     indices: new Uint32Array(indices.buffer, indices.byteOffset, indices.byteLength / 4),
   };
@@ -302,10 +360,31 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     );
   };
 
+  const cargarTiposEstructura = async (): Promise<TipoHerramienta[]> => {
+    const clases = ["IfcFootingType", "IfcColumnType", "IfcBeamType"];
+    const listas = await Promise.all(
+      clases.map((clase) =>
+        rpc<TipoHerramienta[]>("tipos.listar", { clase }).catch(() => []),
+      ),
+    );
+    return listas.flat().sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  };
+
+  /** Tipo elegido por herramienta; si no hay, el primero de su alias. */
+  const tipoDeHerramienta = (
+    herramienta: Herramienta,
+    tipos: TipoHerramienta[],
+    elegidos: Partial<Record<Herramienta, string>>,
+  ): TipoHerramienta | undefined => {
+    const alias = ALIAS_HERRAMIENTA[herramienta];
+    const candidatos = tipos.filter((t) => t.alias === alias);
+    return candidatos.find((t) => t.nombre === elegidos[herramienta]) ?? candidatos[0];
+  };
+
   const cargar = async (info: RespuestaInfo) => {
     const inicio = performance.now();
-    const [niveles, elementos, teselado, vistasCrudas, tipos, referencias, estilosCrudos] =
-      await Promise.all([
+    const [niveles, elementos, teselado, vistasCrudas, tipos, referencias, estilosCrudos,
+      tiposEstructura] = await Promise.all([
         rpc<Nivel[]>("modelo.niveles"),
         rpc<Elemento[]>("modelo.elementos"),
         rpc<RespuestaTeselado>("geometria.teselar", { globalids: null }),
@@ -315,6 +394,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         }),
         rpc<Referencias>("modelo.referencias"),
         rpc<unknown>("estilos.leer").catch(() => null),
+        cargarTiposEstructura(),
       ]);
     const mallas = teselado.elementos.map(decodificarMalla);
     const caja = cajaDeMallas(mallas);
@@ -359,6 +439,9 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       modoCorte: false,
       puntoCorte: null,
       tiposMuro: tipos,
+      tiposHerramienta: tiposEstructura,
+      tipoHerramienta: {},
+      rotacionSiguiente: 0,
       referencias,
       herramienta: null,
       puntosHerramienta: [],
@@ -509,6 +592,73 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     return ok;
   };
 
+  const tipoEstructural = (herramienta: Herramienta): TipoHerramienta | null => {
+    const tipo = tipoDeHerramienta(
+      herramienta,
+      get().tiposHerramienta,
+      get().tipoHerramienta,
+    );
+    if (!tipo) {
+      set({ aviso: `No hay tipos de ${herramienta.replace(/_/g, " ")} en la biblioteca.` });
+      return null;
+    }
+    return tipo;
+  };
+
+  /** O007b: columna, castillo o zapata en un cruce de ejes. */
+  const crearEstructuralPunto = async (
+    herramienta: Herramienta,
+    punto: Punto2,
+  ): Promise<boolean> => {
+    const tipo = tipoEstructural(herramienta);
+    const nivel = nivelActivo();
+    if (!tipo || !nivel) return false;
+    const rotacion = (get().rotacionSiguiente * Math.PI) / 180;
+    const metodo = herramienta === "zapata" ? "zapatas.crear" : "columnas.crear";
+    const ok = await ejecutar(metodo, {
+      tipo: tipo.nombre,
+      nivel,
+      x: punto[0],
+      y: punto[1],
+      rotacion,
+    });
+    if (ok) {
+      set({ aviso: `${tipo.nombre} colocado. R gira 90°.` });
+      bitacoraHerramienta(herramienta, "terminar", { x: punto[0], y: punto[1] });
+    }
+    return ok;
+  };
+
+  /** O007b: trabe, cerramiento, dala, contratrabe o zapata corrida entre dos puntos. */
+  const crearEstructuralLineal = async (
+    herramienta: Herramienta,
+    origen: Punto2,
+    destino: Punto2,
+  ): Promise<boolean> => {
+    if (Math.hypot(destino[0] - origen[0], destino[1] - origen[1]) < 0.01) return false;
+    const tipo = tipoEstructural(herramienta);
+    const nivel = nivelActivo();
+    if (!tipo || !nivel) return false;
+    const metodo = herramienta === "zapata_corrida"
+      ? "zapatas_corridas.crear"
+      : "vigas.crear";
+    const ok = await ejecutar(metodo, {
+      tipo: tipo.nombre,
+      nivel,
+      x1: origen[0],
+      y1: origen[1],
+      x2: destino[0],
+      y2: destino[1],
+    });
+    if (ok) {
+      set({ puntosHerramienta: [], ...limpiarTrazoExtra() });
+      bitacoraHerramienta(herramienta, "terminar", {
+        x: destino[0], y: destino[1],
+      });
+    }
+    return ok;
+  };
+
   const limpiarTrazoExtra = () => ({
     longitudTecleada: "",
     ratonHerramienta: null,
@@ -610,6 +760,9 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     herramienta: null,
     opcionesMuro: { tipo: "", altura: 2.6, alineacion: "centro" },
     tiposMuro: [],
+    tiposHerramienta: [],
+    tipoHerramienta: {},
+    rotacionSiguiente: 0,
     referencias: REFERENCIAS_VACIAS,
     puntosHerramienta: [],
     ratonHerramienta: null,
@@ -729,15 +882,24 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     },
     recargarTipos: async () => {
       try {
-        const tipos = await rpc<Array<{ globalid: string; nombre: string; espesor: number }>>(
-          "tipos.listar",
-          { clase: "IfcWallType" },
-        );
-        set({ tiposMuro: tipos });
+        const [tipos, estructura] = await Promise.all([
+          rpc<Array<{ globalid: string; nombre: string; espesor: number }>>(
+            "tipos.listar",
+            { clase: "IfcWallType" },
+          ),
+          cargarTiposEstructura(),
+        ]);
+        set({ tiposMuro: tipos, tiposHerramienta: estructura });
         const actual = get().opcionesMuro;
         if (!tipos.some((t) => t.nombre === actual.tipo) && tipos[0]) {
           set({ opcionesMuro: { ...actual, tipo: tipos[0].nombre } });
         }
+        const elegidos = { ...get().tipoHerramienta };
+        for (const herramienta of HERRAMIENTAS_ESTRUCTURA) {
+          const tipo = tipoDeHerramienta(herramienta, estructura, elegidos);
+          if (tipo) elegidos[herramienta] = tipo.nombre;
+        }
+        set({ tipoHerramienta: elegidos });
       } catch (e) {
         set({ error: e instanceof Error ? e.message : String(e) });
       }
@@ -852,6 +1014,14 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         eje: "Eje: dos clics. La etiqueta se asigna sola.",
         mover: "Mover: punto base y punto destino.",
         copiar: "Copiar: punto base y punto destino.",
+        zapata: "Zapata: un clic en un cruce de ejes. R gira 90°.",
+        zapata_corrida: "Zapata corrida: dos clics a lo largo del trazo.",
+        contratrabe: "Contratrabe: dos clics entre zapatas.",
+        columna: "Columna: un clic en un cruce de ejes. R gira 90°.",
+        castillo: "Castillo: un clic en un cruce de ejes. R gira 90°.",
+        trabe: "Trabe: dos clics entre columnas.",
+        cerramiento: "Cerramiento: dos clics sobre el muro.",
+        dala: "Dala de desplante: dos clics sobre el muro.",
       };
       const conservarSeleccion =
         herramienta === "mover" || herramienta === "copiar" || herramienta === "losa";
@@ -899,6 +1069,14 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         eje: "Eje: dos clics. La etiqueta se asigna sola.",
         mover: "Mover: punto base y punto destino.",
         copiar: "Copiar: punto base y punto destino.",
+        zapata: "Zapata: un clic en un cruce de ejes. R gira 90°.",
+        zapata_corrida: "Zapata corrida: dos clics a lo largo del trazo.",
+        contratrabe: "Contratrabe: dos clics entre zapatas.",
+        columna: "Columna: un clic en un cruce de ejes. R gira 90°.",
+        castillo: "Castillo: un clic en un cruce de ejes. R gira 90°.",
+        trabe: "Trabe: dos clics entre columnas.",
+        cerramiento: "Cerramiento: dos clics sobre el muro.",
+        dala: "Dala de desplante: dos clics sobre el muro.",
       };
       set({
         puntosHerramienta: [],
@@ -914,6 +1092,12 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
     fijarOpcionesMuro: (cambios) =>
       set({ opcionesMuro: { ...get().opcionesMuro, ...cambios } }),
+
+    fijarTipoHerramienta: (herramienta, nombre) =>
+      set({ tipoHerramienta: { ...get().tipoHerramienta, [herramienta]: nombre } }),
+
+    girar90: () =>
+      set({ rotacionSiguiente: (get().rotacionSiguiente + 90) % 360 }),
 
     fijarEtiquetaEje: (etiqueta) => set({ etiquetaEje: etiqueta }),
 
@@ -969,7 +1153,9 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       const tieneLongitud = texto !== "" && Number.isFinite(longitud) && longitud > 0;
       // Enter sin longitud termina en el punto del cursor; en Muro se conserva el
       // comportamiento de O003b (solo la longitud tecleada cierra el tramo).
-      if (!tieneLongitud && herramienta === "muro") return;
+      if (!tieneLongitud && (herramienta === "muro" || esHerramientaLineal(herramienta))) {
+        return;
+      }
       const origen = puntos[puntos.length - 1];
       const raton = get().ratonHerramienta ?? (puntos.length > 1 ? puntos[puntos.length - 1] : null);
       if (!tieneLongitud && !raton) return;
@@ -978,6 +1164,10 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         : (raton as Punto2);
       if (herramienta === "muro") {
         await crearMuroEntre(origen, destino);
+        return;
+      }
+      if (esHerramientaLineal(herramienta)) {
+        await crearEstructuralLineal(herramienta, origen, destino);
         return;
       }
       if (herramienta === "eje") {
@@ -1027,6 +1217,21 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       );
       const p = enganche.punto;
       bitacoraHerramienta(herramienta, "punto", { x: p[0], y: p[1] });
+      if (esHerramientaPuntual(herramienta)) {
+        await crearEstructuralPunto(herramienta, p);
+        return;
+      }
+      if (esHerramientaLineal(herramienta)) {
+        if (puntos.length === 0) {
+          set({
+            puntosHerramienta: [p],
+            aviso: `${herramienta.replace(/_/g, " ")}: segundo punto o longitud y Enter.`,
+          });
+          return;
+        }
+        await crearEstructuralLineal(herramienta, puntos[puntos.length - 1], p);
+        return;
+      }
       if (herramienta === "muro") {
         if (puntos.length === 0) {
           set({ puntosHerramienta: [p], aviso: "Muro: segundo punto o longitud y Enter." });
@@ -1105,6 +1310,26 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       if (!herramienta && elegido?.clase === "IfcWall") {
         const tipo = get().tiposMuro.find((t) => t.nombre === elegido.tipo);
         get().abrirEditorTipos(tipo?.globalid ?? null);
+        return;
+      }
+      if (
+        !herramienta &&
+        elegido &&
+        ["IfcColumn", "IfcBeam", "IfcFooting"].includes(elegido.clase)
+      ) {
+        const tipo = get().tiposHerramienta.find((t) => t.nombre === elegido.tipo);
+        if (tipo) {
+          get().abrirEditorTipos(tipo.globalid);
+          return;
+        }
+      }
+      if (esHerramientaLineal(herramienta) && get().puntosHerramienta.length > 0) {
+        const destino = get().ratonHerramienta;
+        if (destino) {
+          await crearEstructuralLineal(
+            herramienta!, get().puntosHerramienta[0], destino,
+          );
+        }
         return;
       }
       if (herramienta === "muro") {

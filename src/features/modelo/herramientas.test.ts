@@ -51,6 +51,19 @@ describe("enganches", () => {
     expect(redondearCuadricula([1.26, 1.24])).toEqual([1.25, 1.25]);
   });
 
+  test("O007b: el cruce de dos ejes engancha con prioridad sobre la cuadrícula", () => {
+    const r: Referencias = {
+      ...REFERENCIAS_VACIAS,
+      ejes: [
+        { globalid: "e1", etiqueta: "1", x1: 3, y1: -1, x2: 3, y2: 9, vertical: true },
+        { globalid: "eA", etiqueta: "A", x1: -1, y1: 4, x2: 9, y2: 4, vertical: false },
+      ],
+    };
+    const e = buscarEnganche([3.1, 3.9], r);
+    expect(e.tipo).toBe("cruce");
+    expect(e.punto).toEqual([3, 4]);
+  });
+
   test("engancha la intersección de dos ejes", () => {
     const r: Referencias = {
       ...REFERENCIAS_VACIAS,

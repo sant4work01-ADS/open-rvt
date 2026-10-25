@@ -108,6 +108,25 @@ export interface TipoElemento {
   parametros: Record<string, unknown>;
   capas: CapaMuro[];
   instancias: number;
+  /** O007b: alias estructural (zapata, columna, castillo…). */
+  alias?: string;
+  seccion?: Record<string, number | string>;
+  armado?: Record<string, number | string>;
+  acero?: {
+    unidad: string;
+    longitudinal_kg: number;
+    estribos_kg: number;
+    total_kg: number;
+    detalle: Record<string, unknown>;
+  };
+}
+
+/** O007b: datos de sección y colocación que el visor necesita para la planta. */
+export interface EstructuraElemento {
+  alias: string;
+  seccion: Record<string, number | string>;
+  armado: Record<string, number | string>;
+  datos: Record<string, number | string>;
 }
 
 export type LineaMuro = [number, number, number, number];
@@ -126,6 +145,8 @@ export interface ElementoMalla {
   capas: CapaMuro[];
   /** O007a: eje del muro en planta [x1, y1, x2, y2]. */
   eje?: LineaMuro | null;
+  /** O007b: sección y colocación de los elementos estructurales. */
+  estructura?: EstructuraElemento | null;
   vertices: Float32Array;
   indices: Uint32Array;
 }
@@ -157,6 +178,7 @@ export interface ElementoMallaCrudo {
   tipo: string;
   capas: CapaMuro[];
   eje?: LineaMuro | null;
+  estructura?: EstructuraElemento | null;
   vertices: string;
   indices: string;
 }

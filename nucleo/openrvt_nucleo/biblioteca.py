@@ -95,6 +95,127 @@ TIPOS_EJEMPLO: tuple[tuple[str, tuple[tuple[str, str, float], ...], str], ...] =
 
 LINEAS_UBICACION = ("eje_nucleo", "cara_exterior", "cara_interior", "centro")
 
+# ---------------------------------------------------------------- estructura (O007b)
+# Alias de tipo → (clase IFC, PredefinedType, ElementType). El alias fija las tres.
+ALIAS_ESTRUCTURA: dict[str, tuple[str, str, str | None]] = {
+    "zapata": ("IfcFootingType", "PAD_FOOTING", None),
+    "zapata_corrida": ("IfcFootingType", "STRIP_FOOTING", None),
+    "contratrabe": ("IfcFootingType", "FOOTING_BEAM", None),
+    "columna": ("IfcColumnType", "COLUMN", None),
+    "castillo": ("IfcColumnType", "USERDEFINED", "CASTILLO"),
+    "trabe": ("IfcBeamType", "BEAM", None),
+    "cerramiento": ("IfcBeamType", "USERDEFINED", "CERRAMIENTO"),
+    "dala": ("IfcBeamType", "USERDEFINED", "DALA_DESPLANTE"),
+}
+
+# Tabla única de varillas: diámetro en mm y peso en kg/m.
+VARILLAS: dict[str, dict[str, float]] = {
+    "#2": {"diametro_mm": 6.35, "peso_kg_m": 0.249},
+    "#3": {"diametro_mm": 9.53, "peso_kg_m": 0.560},
+    "#4": {"diametro_mm": 12.70, "peso_kg_m": 0.994},
+    "#5": {"diametro_mm": 15.88, "peso_kg_m": 1.552},
+    "#6": {"diametro_mm": 19.05, "peso_kg_m": 2.235},
+    "#8": {"diametro_mm": 25.40, "peso_kg_m": 3.973},
+}
+
+# Peso de la malla armex en kg/m.
+ARMEX: dict[str, float] = {
+    "15x15-4": 1.82,
+    "12x20-4": 1.82,
+    "15x20-4": 1.95,
+    "15x30-4": 2.25,
+}
+
+# Tipos semilla: (nombre, alias, sección, armado).
+TIPOS_ESTRUCTURA: tuple[
+    tuple[str, str, dict[str, float], dict[str, Any]], ...
+] = (
+    (
+        "Z-1 Zapata 1.20×1.20",
+        "zapata",
+        {"Largo": 1.20, "Ancho": 1.20, "Peralte": 0.25, "DadoB": 0.40, "DadoH": 0.40,
+         "DadoAlto": 0.60, "Plantilla": 0.05},
+        {"ParrillaVarilla": "#4", "ParrillaSepX": 0.20, "ParrillaSepY": 0.20,
+         "Recubrimiento": 0.05},
+    ),
+    (
+        "ZC-1 Zapata corrida 60",
+        "zapata_corrida",
+        {"Ancho": 0.60, "Peralte": 0.20, "Corona": 0.0, "Plantilla": 0.05},
+        {"LongCantidad": 3, "LongVarilla": "#3", "ParrillaVarilla": "#3",
+         "ParrillaSepX": 0.20, "Recubrimiento": 0.05},
+    ),
+    (
+        "CT-1 Contratrabe 20×40",
+        "contratrabe",
+        {"Forma": "rectangular", "B": 0.20, "H": 0.40, "D": 0.0},
+        {"LongCantidad": 4, "LongVarilla": "#4", "EstVarilla": "#3",
+         "EstSepExtremos": 0.15, "EstSepCentro": 0.15, "EstLongConfinamiento": 0.0},
+    ),
+    (
+        "C-1 Columna 30×30",
+        "columna",
+        {"Forma": "rectangular", "B": 0.30, "H": 0.30, "D": 0.0},
+        {"LongCantidad": 4, "LongVarilla": "#5", "EstVarilla": "#3",
+         "EstSepExtremos": 0.10, "EstSepCentro": 0.20, "EstLongConfinamiento": 0.50},
+    ),
+    (
+        "K-1 Castillo 15×15",
+        "castillo",
+        {"Forma": "rectangular", "B": 0.15, "H": 0.15, "D": 0.0},
+        {"LongCantidad": 4, "LongVarilla": "#3", "EstVarilla": "#2",
+         "EstSepExtremos": 0.20, "EstSepCentro": 0.20, "EstLongConfinamiento": 0.0},
+    ),
+    (
+        "K-2 Castillo armex 15×15",
+        "castillo",
+        {"Forma": "rectangular", "B": 0.15, "H": 0.15, "D": 0.0},
+        {"LongCantidad": 4, "LongVarilla": "#3", "EstVarilla": "#2",
+         "EstSepExtremos": 0.20, "EstSepCentro": 0.20, "EstLongConfinamiento": 0.0,
+         "Armex": "15x15-4"},
+    ),
+    (
+        "T-1 Trabe 20×40",
+        "trabe",
+        {"Forma": "rectangular", "B": 0.20, "H": 0.40, "D": 0.0},
+        {"LongCantidad": 4, "LongVarilla": "#4", "EstVarilla": "#3",
+         "EstSepExtremos": 0.10, "EstSepCentro": 0.20, "EstLongConfinamiento": 0.80},
+    ),
+    (
+        "CE-1 Cerramiento 15×20",
+        "cerramiento",
+        {"Forma": "rectangular", "B": 0.15, "H": 0.20, "D": 0.0},
+        {"LongCantidad": 4, "LongVarilla": "#3", "EstVarilla": "#2",
+         "EstSepExtremos": 0.20, "EstSepCentro": 0.20, "EstLongConfinamiento": 0.0},
+    ),
+    (
+        "DD-1 Dala de desplante 15×20",
+        "dala",
+        {"Forma": "rectangular", "B": 0.15, "H": 0.20, "D": 0.0},
+        {"LongCantidad": 4, "LongVarilla": "#3", "EstVarilla": "#2",
+         "EstSepExtremos": 0.20, "EstSepCentro": 0.20, "EstLongConfinamiento": 0.0},
+    ),
+)
+
+CAMPOS_SECCION = {
+    "columna": ("Forma", "B", "H", "D"),
+    "castillo": ("Forma", "B", "H", "D"),
+    "trabe": ("Forma", "B", "H", "D"),
+    "cerramiento": ("Forma", "B", "H", "D"),
+    "dala": ("Forma", "B", "H", "D"),
+    "contratrabe": ("Forma", "B", "H", "D"),
+    "zapata": ("Largo", "Ancho", "Peralte", "DadoB", "DadoH", "DadoAlto", "Plantilla"),
+    "zapata_corrida": ("Ancho", "Peralte", "Corona", "Plantilla"),
+}
+
+CAMPOS_ARMADO = (
+    "LongCantidad", "LongVarilla", "EstVarilla", "EstSepExtremos", "EstSepCentro",
+    "EstLongConfinamiento", "ParrillaVarilla", "ParrillaSepX", "ParrillaSepY",
+    "Recubrimiento", "Armex",
+)
+
+ENTEROS_ESTRUCTURA = ("LongCantidad",)
+
 
 def _gid(entidad: Any) -> str:
     return str(getattr(entidad, "GlobalId", "") or "")
@@ -575,9 +696,258 @@ class BibliotecaMixin:
         }
         if texto in alias:
             return alias[texto]
+        estructura = ALIAS_ESTRUCTURA.get(texto)
+        if estructura is not None:
+            return estructura[0]
         if not texto.startswith("Ifc"):
             texto = "Ifc" + texto[0].upper() + texto[1:]
         return texto
+
+    def _alias_estructura(self, clase_o_alias: str) -> str | None:
+        texto = _texto(clase_o_alias).strip()
+        if texto in ALIAS_ESTRUCTURA:
+            return texto
+        return None
+
+    @staticmethod
+    def _es_clase_estructura(clase: str) -> bool:
+        return clase in (
+            "IfcFooting", "IfcColumn", "IfcBeam",
+            "IfcFootingType", "IfcColumnType", "IfcBeamType",
+        )
+
+    def _estructura_de_tipo(self, tipo: Any) -> str | None:
+        """Alias de estructura del tipo, deducido del PredefinedType/ElementType."""
+        if tipo is None:
+            return None
+        clase = tipo.is_a()
+        if clase in ("IfcFooting", "IfcFootingType"):
+            predef = _texto(getattr(tipo, "PredefinedType", ""))
+            return {
+                "STRIP_FOOTING": "zapata_corrida",
+                "FOOTING_BEAM": "contratrabe",
+            }.get(predef, "zapata")
+        if clase in ("IfcColumn", "IfcColumnType"):
+            if _texto(getattr(tipo, "PredefinedType", "")) == "USERDEFINED":
+                elemento = _texto(
+                    getattr(tipo, "ElementType", "")
+                    if clase.endswith("Type") else getattr(tipo, "ObjectType", "")
+                )
+                return "castillo" if elemento == "CASTILLO" else "columna"
+            return "columna"
+        if clase in ("IfcBeam", "IfcBeamType"):
+            if _texto(getattr(tipo, "PredefinedType", "")) == "USERDEFINED":
+                elemento = _texto(
+                    getattr(tipo, "ElementType", "")
+                    if clase.endswith("Type") else getattr(tipo, "ObjectType", "")
+                )
+                if elemento == "CERRAMIENTO":
+                    return "cerramiento"
+                if elemento == "DALA_DESPLANTE":
+                    return "dala"
+            return "trabe"
+        return None
+
+    @staticmethod
+    def _defaults_seccion(alias: str) -> dict[str, Any]:
+        if alias == "zapata":
+            return {
+                "Largo": 1.20, "Ancho": 1.20, "Peralte": 0.25,
+                "DadoB": 0.0, "DadoH": 0.0, "DadoAlto": 0.0, "Plantilla": 0.05,
+            }
+        if alias == "zapata_corrida":
+            return {"Ancho": 0.60, "Peralte": 0.20, "Corona": 0.0, "Plantilla": 0.05}
+        return {"Forma": "rectangular", "B": 0.30 if alias == "columna" else 0.15,
+                "H": 0.30 if alias == "columna" else 0.20, "D": 0.0}
+
+    @staticmethod
+    def _defaults_armado(alias: str) -> dict[str, Any]:
+        recubrimiento = 0.05 if alias in ("zapata", "zapata_corrida") else 0.025
+        if alias == "zapata":
+            return {
+                "ParrillaVarilla": "#4", "ParrillaSepX": 0.20, "ParrillaSepY": 0.20,
+                "Recubrimiento": recubrimiento, "Armex": "",
+            }
+        if alias == "zapata_corrida":
+            return {
+                "LongCantidad": 3, "LongVarilla": "#3", "ParrillaVarilla": "#3",
+                "ParrillaSepX": 0.20, "Recubrimiento": recubrimiento, "Armex": "",
+            }
+        return {
+            "LongCantidad": 4, "LongVarilla": "#3", "EstVarilla": "#2",
+            "EstSepExtremos": 0.20, "EstSepCentro": 0.20,
+            "EstLongConfinamiento": 0.0, "Recubrimiento": recubrimiento, "Armex": "",
+        }
+
+    def _normalizar_seccion(self, alias: str, seccion: Any) -> dict[str, Any]:
+        if seccion is not None and not isinstance(seccion, dict):
+            raise self._error("La sección debe ser un objeto.", -32602)
+        datos = self._defaults_seccion(alias)
+        for clave, valor in dict(seccion or {}).items():
+            if clave not in datos:
+                continue
+            if clave == "Forma":
+                forma = _texto(valor).strip()
+                if forma not in ("rectangular", "circular"):
+                    raise self._error("La forma de la sección debe ser rectangular o circular.", -32602)
+                datos[clave] = forma
+                continue
+            try:
+                datos[clave] = float(valor)
+            except (TypeError, ValueError) as exc:
+                raise self._error(f"El campo de sección «{clave}» no es un número.", -32602) from exc
+        if alias == "columna" and datos.get("Forma") == "circular":
+            if float(datos.get("D") or 0.0) <= 0:
+                raise self._error("La columna circular necesita un diámetro mayor que cero.", -32602)
+        elif alias == "zapata":
+            if float(datos["Largo"]) <= 0 or float(datos["Ancho"]) <= 0 or float(datos["Peralte"]) <= 0:
+                raise self._error("La zapata necesita largo, ancho y peralte positivos.", -32602)
+        elif alias == "zapata_corrida":
+            if float(datos["Ancho"]) <= 0 or float(datos["Peralte"]) <= 0:
+                raise self._error("La zapata corrida necesita ancho y peralte positivos.", -32602)
+        else:
+            if float(datos.get("B") or 0.0) <= 0 or float(datos.get("H") or 0.0) <= 0:
+                raise self._error("La sección necesita ancho y peralte positivos.", -32602)
+        return datos
+
+    def _normalizar_armado(self, alias: str, armado: Any) -> dict[str, Any]:
+        if armado is not None and not isinstance(armado, dict):
+            raise self._error("El armado debe ser un objeto.", -32602)
+        datos = self._defaults_armado(alias)
+        for clave, valor in dict(armado or {}).items():
+            if clave not in CAMPOS_ARMADO:
+                continue
+            if clave in ("LongVarilla", "EstVarilla", "ParrillaVarilla"):
+                texto = _texto(valor).strip()
+                if texto and texto not in VARILLAS:
+                    raise self._error(f"La varilla «{texto}» no existe.", -32602)
+                datos[clave] = texto
+            elif clave == "Armex":
+                datos[clave] = _texto(valor).strip()
+            elif clave == "LongCantidad":
+                try:
+                    datos[clave] = int(valor)
+                except (TypeError, ValueError) as exc:
+                    raise self._error("La cantidad de varillas debe ser entera.", -32602) from exc
+                if datos[clave] < 0:
+                    raise self._error("La cantidad de varillas no puede ser negativa.", -32602)
+            else:
+                try:
+                    datos[clave] = float(valor)
+                except (TypeError, ValueError) as exc:
+                    raise self._error(f"El campo de armado «{clave}» no es un número.", -32602) from exc
+        if datos.get("Armex") and datos["Armex"] not in ARMEX:
+            raise self._error(f"El armex «{datos['Armex']}» no existe.", -32602)
+        return datos
+
+    def _seccion_y_armado(self, tipo: Any) -> tuple[str | None, dict[str, Any], dict[str, Any]]:
+        alias = self._estructura_de_tipo(tipo)
+        if alias is None:
+            return None, {}, {}
+        seccion = {**self._defaults_seccion(alias), **self._leer_pset(tipo, "OPENRVT_Seccion")}
+        armado = {**self._defaults_armado(alias), **self._leer_pset(tipo, "OPENRVT_Armado")}
+        return alias, seccion, armado
+
+    def _perfil_de_seccion(self, alias: str, seccion: dict[str, Any]) -> Any | None:
+        """IfcProfileDef estándar para columnas, castillos, trabes, dalas y contratrabes."""
+        if alias in ("zapata", "zapata_corrida"):
+            return None
+        forma = _texto(seccion.get("Forma") or "rectangular")
+        modelo = self.modelo
+        if forma == "circular":
+            perfil = modelo.create_entity("IfcCircleProfileDef", ProfileType="AREA")
+            perfil.Radius = float(seccion.get("D") or 0.3) / 2.0
+            perfil.ProfileName = f"Ø{float(seccion.get('D') or 0.3):.2f}"
+            return perfil
+        perfil = modelo.create_entity("IfcRectangleProfileDef", ProfileType="AREA")
+        perfil.XDim = float(seccion.get("B") or 0.15)
+        perfil.YDim = float(seccion.get("H") or 0.2)
+        perfil.ProfileName = f"{perfil.XDim:.2f}×{perfil.YDim:.2f}"
+        return perfil
+
+    def _quitar_perfil_de_tipo(self, tipo: Any) -> None:
+        perfiles: list[Any] = []
+        for material in getattr(tipo, "HasAssociations", ()) or ():
+            if not material.is_a("IfcRelAssociatesMaterial"):
+                continue
+            asociado = getattr(material, "RelatingMaterial", None)
+            if asociado is not None and asociado.is_a("IfcMaterialProfileSet"):
+                for item in getattr(asociado, "MaterialProfiles", ()) or ():
+                    perfil = getattr(item, "Profile", None)
+                    if perfil is not None:
+                        perfiles.append(perfil)
+                try:
+                    self.modelo.remove(material)
+                except Exception:
+                    pass
+                try:
+                    self.modelo.remove(asociado)
+                except Exception:
+                    pass
+        for perfil in perfiles:
+            try:
+                self.modelo.remove(perfil)
+            except Exception:
+                pass
+
+    def _aplicar_perfil_de_tipo(self, tipo: Any, alias: str, seccion: dict[str, Any]) -> None:
+        material = self._material_por_nombre("Concreto armado")
+        if alias in ("zapata", "zapata_corrida"):
+            try:
+                material_api.unassign_material(self.modelo, products=[tipo])
+            except Exception:
+                pass
+            material_api.assign_material(self.modelo, products=[tipo], material=material)
+            return
+        self._quitar_perfil_de_tipo(tipo)
+        perfil = self._perfil_de_seccion(alias, seccion)
+        if perfil is None:
+            return
+        conjunto = material_api.add_material_set(
+            self.modelo, name=_nombre(tipo), set_type="IfcMaterialProfileSet"
+        )
+        if hasattr(conjunto, "ProfileSetName"):
+            conjunto.ProfileSetName = _nombre(tipo)
+        material_api.add_profile(
+            self.modelo, profile_set=conjunto, material=material, profile=perfil
+        )
+        material_api.assign_material(self.modelo, products=[tipo], material=conjunto)
+
+    def _crear_tipo_estructura(
+        self,
+        alias: str,
+        nombre: str,
+        seccion: Any = None,
+        armado: Any = None,
+    ) -> Any:
+        clase, predefinido, elemento = ALIAS_ESTRUCTURA[alias]
+        tipo = root.create_entity(self.modelo, ifc_class=clase, name=nombre)
+        if hasattr(tipo, "PredefinedType"):
+            tipo.PredefinedType = predefinido
+        if elemento is not None:
+            tipo.ElementType = elemento
+        seccion_norm = self._normalizar_seccion(alias, seccion)
+        armado_norm = self._normalizar_armado(alias, armado)
+        self._guardar_pset(tipo, "OPENRVT_Seccion", seccion_norm)
+        self._guardar_pset(tipo, "OPENRVT_Armado", armado_norm)
+        self._aplicar_perfil_de_tipo(tipo, alias, seccion_norm)
+        return tipo
+
+    def crear_tipos_estructura(self) -> list[Any]:
+        """Siembra los nueve tipos de estructura que falten por nombre."""
+        self._materiales_o_semilla()
+        creados = []
+        for nombre, alias, seccion, armado in TIPOS_ESTRUCTURA:
+            if not self._nombre_tipo_libre(ALIAS_ESTRUCTURA[alias][0], nombre):
+                continue
+            creados.append(self._crear_tipo_estructura(alias, nombre, seccion, armado))
+        return creados
+
+    def acero_varillas(self) -> dict[str, Any]:
+        return {
+            "varillas": VARILLAS,
+            "armex": ARMEX,
+        }
 
     def _nombre_tipo_libre(self, clase: str, nombre: str) -> bool:
         buscado = nombre.strip().casefold()
@@ -600,7 +970,7 @@ class BibliotecaMixin:
                 sum(float(c["espesor"]) for c in capas), 9
             ) if capas else float(parametros.get("Espesor") or 0.0)
             parametros.setdefault("LineaUbicacion", "eje_nucleo")
-        return {
+        salida = {
             "globalid": _gid(tipo),
             "nombre": _nombre(tipo),
             "clase": tipo.is_a(),
@@ -608,6 +978,13 @@ class BibliotecaMixin:
             "capas": capas,
             "instancias": len(self._instancias_de_tipo(tipo)),
         }
+        alias, seccion, armado = self._seccion_y_armado(tipo)
+        if alias is not None:
+            salida["alias"] = alias
+            salida["seccion"] = seccion
+            salida["armado"] = armado
+            salida["acero"] = self.acero_estimado_tipo(tipo)
+        return salida
 
     def tipos_obtener(self, globalid: str) -> dict[str, Any]:
         self._exigir_modelo()
@@ -739,12 +1116,19 @@ class BibliotecaMixin:
             }
             if tipo.is_a("IfcWallType"):
                 datos["espesor"] = self._espesor_tipo(tipo)
+            alias, seccion, armado = self._seccion_y_armado(tipo)
+            if alias is not None:
+                datos["alias"] = alias
+                datos["seccion"] = seccion
+                datos["armado"] = armado
+                datos["acero"] = self.acero_estimado_tipo(tipo)
             salida.append(datos)
         salida.sort(key=lambda d: d["nombre"])
         return salida
 
     def tipos_crear(self, clase: str, nombre: str, datos: Any = None) -> dict[str, Any]:
         self._exigir_modelo()
+        alias_entrada = self._alias_estructura(clase)
         clase = self._clase_tipo(clase)
         nombre = _texto(nombre).strip()
         if not nombre:
@@ -775,6 +1159,13 @@ class BibliotecaMixin:
                     or parametros.get("LineaUbicacion")
                     or "eje_nucleo"
                 ),
+            )
+        elif alias_entrada is not None or self._es_clase_estructura(clase):
+            alias = alias_entrada or {
+                "IfcFooting": "zapata", "IfcColumn": "columna", "IfcBeam": "trabe",
+            }.get(clase, "trabe")
+            tipo = self._crear_tipo_estructura(
+                alias, nombre, datos.get("seccion"), datos.get("armado")
             )
         else:
             if not hasattr(ifcopenshell, "file"):
@@ -813,6 +1204,10 @@ class BibliotecaMixin:
                     for c in datos["capas"]
                 ],
                 linea=_texto(datos["parametros"].get("LineaUbicacion") or "eje_nucleo"),
+            )
+        elif datos.get("alias"):
+            tipo = self._crear_tipo_estructura(
+                datos["alias"], nombre, datos.get("seccion"), datos.get("armado")
             )
         else:
             tipo = root.create_entity(self.modelo, ifc_class=origen.is_a(), name=nombre)
@@ -883,6 +1278,21 @@ class BibliotecaMixin:
                         if relleno is not None:
                             self._regenerar_relleno(relleno, vano[0])
                     modificados.append(instancia)
+        elif self._es_clase_estructura(tipo.is_a()):
+            alias = self._estructura_de_tipo(tipo) or "trabe"
+            _, seccion_previa, armado_previo = self._seccion_y_armado(tipo)
+            seccion = self._normalizar_seccion(
+                alias, {**seccion_previa, **dict(datos.get("seccion") or {})}
+            )
+            armado = self._normalizar_armado(
+                alias, {**armado_previo, **dict(datos.get("armado") or {})}
+            )
+            self._guardar_pset(tipo, "OPENRVT_Seccion", seccion)
+            self._guardar_pset(tipo, "OPENRVT_Armado", armado)
+            self._aplicar_perfil_de_tipo(tipo, alias, seccion)
+            modificados = list(self._instancias_de_tipo(tipo))
+            for instancia in modificados:
+                self._regenerar_estructura(instancia)
         else:
             if parametros:
                 self._guardar_pset(tipo, "OPENRVT_Tipo", parametros)
@@ -940,7 +1350,14 @@ class BibliotecaMixin:
         if isinstance(tipo, str) and tipo.startswith("Ifc"):
             tipo_entidad = self._tipo_por_gid(tipo)
         else:
-            tipo_entidad = self._tipo_muro(_texto(tipo))
+            texto = _texto(tipo).strip().casefold()
+            tipo_entidad = next(
+                (t for t in self.modelo.by_type("IfcTypeObject")
+                 if _nombre(t).casefold() == texto),
+                None,
+            )
+            if tipo_entidad is None:
+                tipo_entidad = self._tipo_muro(_texto(tipo))
         if not elemento.is_a("IfcWall") and not elemento.is_a("IfcElement"):
             raise self._error("Este elemento no puede cambiar de tipo.", -32038)
         self._instantanea()
@@ -967,6 +1384,10 @@ class BibliotecaMixin:
                 if relleno is not None:
                     self._regenerar_relleno(relleno, vano[0])
                     modificados.append(relleno)
+        elif self._es_clase_estructura(elemento.is_a()) and self._leer_pset(
+            elemento, "OPENRVT_Estructura"
+        ):
+            self._regenerar_estructura(elemento)
         self.con_cambios = True
         return self._resultado(
             modificados=modificados,

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import ifcopenshell
+from .acero import AceroMixin
 from .biblioteca import BibliotecaMixin
 from .modelado import ModeladoMixin
 
@@ -138,7 +139,7 @@ def _categoria(clase: str) -> str:
     return "otros"
 
 
-class ModeloNucleo(BibliotecaMixin, ModeladoMixin):
+class ModeloNucleo(BibliotecaMixin, ModeladoMixin, AceroMixin):
     """Estado del modelo abierto en el proceso Python."""
 
     def __init__(self) -> None:
@@ -256,6 +257,7 @@ class ModeloNucleo(BibliotecaMixin, ModeladoMixin):
         self._crear_materiales_semilla()
         self.crear_tipos_muro()
         self.crear_tipos_ejemplo()
+        self.crear_tipos_estructura()
         return self.info()
 
     def abrir(self, ruta: str) -> dict[str, Any]:
@@ -275,6 +277,7 @@ class ModeloNucleo(BibliotecaMixin, ModeladoMixin):
         self._rehacer.clear()
         # O007a: si el archivo no trae biblioteca, se siembra al abrirlo.
         self._asegurar_biblioteca()
+        self.crear_tipos_estructura()
         return self.info()
 
     def guardar(self, ruta: str | None = None) -> dict[str, Any]:
@@ -502,6 +505,25 @@ class ModeloNucleo(BibliotecaMixin, ModeladoMixin):
                                         )
                         except Exception:
                             capas = []
+                        estructura = None
+                        try:
+                            if producto.is_a("IfcColumn") or producto.is_a(
+                                "IfcBeam"
+                            ) or producto.is_a("IfcFooting"):
+                                tipo = self._tipo_entidad(producto)
+                                alias, seccion, armado = self._seccion_y_armado(tipo)
+                                colocacion = self._leer_pset(
+                                    producto, "OPENRVT_Estructura"
+                                )
+                                if alias is not None and colocacion:
+                                    estructura = {
+                                        "alias": alias,
+                                        "seccion": seccion,
+                                        "armado": armado,
+                                        "datos": colocacion,
+                                    }
+                        except Exception:
+                            estructura = None
                         datos = {
                             "globalid": gid,
                             "clase": clase,
@@ -513,10 +535,15 @@ class ModeloNucleo(BibliotecaMixin, ModeladoMixin):
                             "tipo": self._tipo_de(producto),
                             "capas": capas,
                             "eje": eje_muro,
+                            "estructura": estructura,
                             "vertices": [],
                             "indices": [],
                             "_base": 0,
                         }
+                        if estructura:
+                            material_concreto = self._material_entidad("Concreto armado")
+                            if material_concreto is not None:
+                                datos["color"] = self._material_datos(material_concreto)["color"]
                         por_id[forma.id] = datos
                     base = datos["_base"]
                     datos["vertices"].append(np.asarray(geo.verts, dtype="<f4"))

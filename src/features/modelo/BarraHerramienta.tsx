@@ -1,12 +1,23 @@
 // OPEN-RVT (O003b): barra de opciones de la herramienta activa. El selector de tipo
 // de muro aparece aquí, junto con altura y alineación, como en Revit.
-import { useModelo } from "./estado";
+import {
+  ALIAS_HERRAMIENTA,
+  esHerramientaEstructura,
+  esHerramientaLineal,
+  esHerramientaPuntual,
+  useModelo,
+} from "./estado";
 
 export function BarraHerramienta() {
   const herramienta = useModelo((s) => s.herramienta);
   const opciones = useModelo((s) => s.opcionesMuro);
   const tipos = useModelo((s) => s.tiposMuro);
   const fijar = useModelo((s) => s.fijarOpcionesMuro);
+  const tiposEstructura = useModelo((s) => s.tiposHerramienta);
+  const elegidos = useModelo((s) => s.tipoHerramienta);
+  const fijarTipo = useModelo((s) => s.fijarTipoHerramienta);
+  const girar = useModelo((s) => s.girar90);
+  const rotacion = useModelo((s) => s.rotacionSiguiente);
   const puntos = useModelo((s) => s.puntosHerramienta);
   const longitud = useModelo((s) => s.longitudTecleada);
   const seleccionados = useModelo((s) => s.seleccionados);
@@ -16,6 +27,12 @@ export function BarraHerramienta() {
   const losaDesdeMuros = useModelo((s) => s.losaDesdeMuros);
   const etiquetaEje = useModelo((s) => s.etiquetaEje);
   if (!herramienta) return null;
+  const estructura = esHerramientaEstructura(herramienta);
+  const opcionesTipo = estructura
+    ? tiposEstructura.filter((t) => t.alias === ALIAS_HERRAMIENTA[herramienta])
+    : [];
+  const tipoElegido =
+    (estructura ? elegidos[herramienta] : undefined) ?? opcionesTipo[0]?.nombre ?? "";
   return (
     <div
       data-testid="barra-herramienta"
@@ -70,6 +87,49 @@ export function BarraHerramienta() {
               <option value="exterior">Exterior</option>
             </select>
           </label>
+        </>
+      )}
+      {estructura && (
+        <>
+          <label className="flex items-center gap-1">
+            <span className="text-muted-foreground">Tipo</span>
+            <select
+              data-testid="estructura-tipo"
+              value={tipoElegido}
+              onChange={(e) => fijarTipo(herramienta, e.target.value)}
+              className="rounded border bg-background px-1 py-0.5"
+            >
+              {opcionesTipo.map((tipo) => (
+                <option key={tipo.globalid} value={tipo.nombre}>
+                  {tipo.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+          {esHerramientaPuntual(herramienta) && (
+            <>
+              <span className="text-muted-foreground">
+                Clic en un cruce de ejes
+              </span>
+              <button
+                type="button"
+                data-testid="estructura-girar"
+                onClick={girar}
+                className="rounded border px-2 py-0.5 hover:bg-muted"
+              >
+                R · Girar 90° ({rotacion}°)
+              </button>
+            </>
+          )}
+          {esHerramientaLineal(herramienta) && (
+            <span className="text-muted-foreground">
+              {puntos.length === 0
+                ? "Primer punto"
+                : longitud
+                  ? `Longitud: ${longitud} m · Enter`
+                  : "Segundo punto o escriba la longitud"}
+            </span>
+          )}
         </>
       )}
       {herramienta === "losa" && (

@@ -47,7 +47,8 @@
       "Construir": "Construir",
       "Modificar": "Modificar",
       "Historial": "Historial",
-      "Editor": "Editor"
+      "Editor": "Editor",
+      "Estructura": "Estructura"
     },
     "comandos": {
       "nuevo": "Nuevo",
@@ -72,7 +73,15 @@
       "mover": "Mover",
       "borrar": "Borrar",
       "rehacer": "Rehacer",
-      "tipos": "Tipos"
+      "tipos": "Tipos",
+      "zapata": "Zapata",
+      "zapata-corrida": "Zapata corrida",
+      "contratrabe": "Contratrabe",
+      "columna": "Columna",
+      "castillo": "Castillo",
+      "trabe": "Trabe",
+      "cerramiento": "Cerramiento",
+      "dala": "Dala"
     },
     "descripciones": {
       "nuevo": "Crear un modelo IFC vacío",
@@ -94,7 +103,15 @@
       "copiar": "Copiar la selección entre dos puntos",
       "borrar": "Borrar los elementos seleccionados",
       "deshacer": "Deshacer el último comando",
-      "rehacer": "Rehacer el último comando deshecho"
+      "rehacer": "Rehacer el último comando deshecho",
+      "zapata": "Colocar una zapata aislada en un cruce de ejes",
+      "zapata-corrida": "Trazar una zapata corrida entre dos puntos",
+      "contratrabe": "Trazar un contratrabe entre dos zapatas",
+      "columna": "Colocar una columna en un cruce de ejes; R gira 90°",
+      "castillo": "Colocar un castillo en un cruce de ejes; R gira 90°",
+      "trabe": "Trazar una trabe entre dos columnas",
+      "cerramiento": "Trazar el cerramiento que corona un muro",
+      "dala": "Trazar la dala de desplante sobre el cimiento"
     },
     "masOpciones": "Más opciones"
   },

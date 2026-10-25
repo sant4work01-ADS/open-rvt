@@ -6,6 +6,7 @@ export type Punto2 = [number, number];
 export type TipoEnganche =
   | "extremo"
   | "medio"
+  | "cruce"
   | "interseccion"
   | "perpendicular"
   | "cuadricula";
@@ -98,8 +99,33 @@ export function proyectarSobreSegmento(
 }
 
 /**
- * Busca el enganche más cercano. Prioridad: extremo, punto medio, intersección de
- * ejes, perpendicular a un muro y, por último, la cuadrícula de 5 cm.
+ * O007b: cruces de ejes calculados a partir de los ejes (no depende de que el núcleo
+ * los haya publicado ya). Es el enganche de columnas, castillos y zapatas.
+ */
+export function crucesDeEjes(ejes: EjeReferencia[]): Punto2[] {
+  const cruces: Punto2[] = [];
+  for (let i = 0; i < ejes.length; i += 1) {
+    const a = ejes[i];
+    const ax = a.x2 - a.x1;
+    const ay = a.y2 - a.y1;
+    for (let j = i + 1; j < ejes.length; j += 1) {
+      const b = ejes[j];
+      const bx = b.x2 - b.x1;
+      const by = b.y2 - b.y1;
+      const den = ax * by - ay * bx;
+      if (Math.abs(den) < 1e-12) continue;
+      const t = ((b.x1 - a.x1) * by - (b.y1 - a.y1) * bx) / den;
+      const u = ((b.x1 - a.x1) * ay - (b.y1 - a.y1) * ax) / den;
+      if (t < -1e-6 || t > 1 + 1e-6 || u < -1e-6 || u > 1 + 1e-6) continue;
+      cruces.push([a.x1 + t * ax, a.y1 + t * ay]);
+    }
+  }
+  return cruces;
+}
+
+/**
+ * Busca el enganche más cercano. Prioridad: extremo, punto medio, cruce de ejes,
+ * intersección publicada, perpendicular a un muro y, por último, la cuadrícula.
  */
 export function buscarEnganche(
   raton: Punto2,
@@ -110,6 +136,7 @@ export function buscarEnganche(
   const candidatos: Array<{ punto: Punto2; tipo: TipoEnganche }> = [];
   for (const p of refs.extremos) candidatos.push({ punto: p, tipo: "extremo" });
   for (const p of refs.medios) candidatos.push({ punto: p, tipo: "medio" });
+  for (const p of crucesDeEjes(refs.ejes)) candidatos.push({ punto: p, tipo: "cruce" });
   for (const p of refs.intersecciones) candidatos.push({ punto: p, tipo: "interseccion" });
   if (desde) {
     for (const muro of refs.muros) {
@@ -128,6 +155,7 @@ export function buscarEnganche(
   const orden: TipoEnganche[] = [
     "extremo",
     "medio",
+    "cruce",
     "interseccion",
     "perpendicular",
   ];

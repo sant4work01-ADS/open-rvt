@@ -262,6 +262,49 @@ class Servidor:
             return self._exigir().elemento_editar(
                 str(params.get("globalid") or ""), params.get("cambios")
             )
+        if metodo == "acero.varillas":
+            return self._exigir().acero_varillas()
+        if metodo == "acero.estimar":
+            return self._exigir().acero_estimar(str(params.get("globalid") or ""))
+        if metodo in ("columnas.crear", "columna.crear"):
+            return self._exigir().columna_crear(
+                str(params.get("tipo") or ""),
+                str(params.get("nivel") or ""),
+                params.get("x", 0.0),
+                params.get("y", 0.0),
+                params.get("rotacion", 0.0),
+                params.get("nivel_superior") or None,
+                params.get("altura"),
+            )
+        if metodo in ("vigas.crear", "viga.crear"):
+            return self._exigir().viga_crear(
+                str(params.get("tipo") or ""),
+                str(params.get("nivel") or ""),
+                params.get("x1", 0.0),
+                params.get("y1", 0.0),
+                params.get("x2", 0.0),
+                params.get("y2", 0.0),
+                params.get("desfase", 0.0),
+            )
+        if metodo in ("zapatas.crear", "zapata.crear"):
+            return self._exigir().zapata_crear(
+                str(params.get("tipo") or ""),
+                str(params.get("nivel") or ""),
+                params.get("x", 0.0),
+                params.get("y", 0.0),
+                params.get("rotacion", 0.0),
+                params.get("desplante", 1.00),
+            )
+        if metodo in ("zapatas_corridas.crear", "zapata_corrida.crear"):
+            return self._exigir().zapata_corrida_crear(
+                str(params.get("tipo") or ""),
+                str(params.get("nivel") or ""),
+                params.get("x1", 0.0),
+                params.get("y1", 0.0),
+                params.get("x2", 0.0),
+                params.get("y2", 0.0),
+                params.get("desplante", 0.80),
+            )
         if metodo == "proyecto.validar":
             return self._exigir().validar()
         if metodo == "modelo.referencias":

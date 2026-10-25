@@ -1,5 +1,7 @@
 // OPEN-RVT: panel derecho. Sin selección muestra las propiedades de la vista (todas
 // editables y persistidas en OPENRVT_Vistas); con selección, las del elemento IFC.
+import { useEffect, useState } from "react";
+import { llamarConBitacora } from "@/lib/bitacora";
 import { useModelo } from "./estado";
 import {
   CATEGORIAS,
@@ -344,6 +346,45 @@ function CampoEditable({
   );
 }
 
+function AceroElemento({ globalid }: { globalid: string }) {
+  const [datos, setDatos] = useState<{
+    total_kg: number;
+    longitudinal_kg: number;
+    estribos_kg: number;
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    llamarConBitacora<{
+      total_kg: number;
+      longitudinal_kg: number;
+      estribos_kg: number;
+    }>("acero.estimar", { globalid })
+      .then((valor) => {
+        if (vivo) setDatos(valor);
+      })
+      .catch((e) => {
+        if (vivo) setError(e instanceof Error ? e.message : String(e));
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [globalid]);
+  if (error) return <div className="text-xs text-red-600">{error}</div>;
+  if (!datos) return <div className="text-xs text-muted-foreground">Calculando acero…</div>;
+  return (
+    <div data-testid="acero-elemento" className="text-xs">
+      <div>
+        Acero estimado: <span className="font-semibold">{datos.total_kg.toFixed(3)} kg</span>
+      </div>
+      <div className="text-muted-foreground">
+        Longitudinal {datos.longitudinal_kg.toFixed(3)} kg · estribos{" "}
+        {datos.estribos_kg.toFixed(3)} kg
+      </div>
+    </div>
+  );
+}
+
 function PropiedadesElemento() {
   const propiedades = useModelo((s) => s.propiedades);
   const editar = useModelo((s) => s.editarElemento);
@@ -355,6 +396,10 @@ function PropiedadesElemento() {
   const esMuro = propiedades.clase === "IfcWall" || propiedades.clase === "IfcWallStandardCase";
   const esLosa = propiedades.clase === "IfcSlab";
   const esAbertura = propiedades.clase === "IfcDoor" || propiedades.clase === "IfcWindow";
+  const estructura = propiedades.psets?.OPENRVT_Estructura as
+    | Record<string, unknown>
+    | undefined;
+  const esEstructural = !!estructura;
   const atributos = propiedades.atributos;
   const ancho = Number(atributos.OverallWidth ?? 0);
   const alto = Number(atributos.OverallHeight ?? 0);
@@ -439,7 +484,54 @@ function PropiedadesElemento() {
             />
           </>
         )}
+        {esEstructural && (
+          <>
+            {estructura?.Desplante !== undefined && (
+              <CampoEditable
+                etiqueta="Desplante (m)"
+                testid="elemento-desplante"
+                numerico
+                paso={0.05}
+                valor={Number(estructura.Desplante)}
+                onGuardar={(valor) => void editar(gid, { Desplante: valor })}
+              />
+            )}
+            {estructura?.Desfase !== undefined && (
+              <CampoEditable
+                etiqueta="Desfase (m)"
+                testid="elemento-desfase"
+                numerico
+                paso={0.05}
+                valor={Number(estructura.Desfase)}
+                onGuardar={(valor) => void editar(gid, { Desfase: valor })}
+              />
+            )}
+            {estructura?.Altura !== undefined && (
+              <CampoEditable
+                etiqueta="Altura (m)"
+                testid="elemento-altura-estructura"
+                numerico
+                paso={0.05}
+                valor={Number(estructura.Altura)}
+                onGuardar={(valor) => void editar(gid, { Altura: valor })}
+              />
+            )}
+            {estructura?.NivelSuperior !== undefined && (
+              <CampoEditable
+                etiqueta="Nivel superior (GlobalId)"
+                testid="elemento-nivel-superior"
+                valor={String(estructura.NivelSuperior ?? "")}
+                onGuardar={(valor) => void editar(gid, { NivelSuperior: valor })}
+              />
+            )}
+          </>
+        )}
       </fieldset>
+      {esEstructural && (
+        <div className="border-b pb-2">
+          <AceroElemento globalid={gid} />
+        </div>
+      )}
       <details open>
         <summary className="cursor-pointer font-semibold">Atributos</summary>
         <dl className="mt-1 grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-x-2 gap-y-1">

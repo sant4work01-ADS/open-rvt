@@ -107,6 +107,51 @@ export function nombreDuplicado(base: string, existentes: ReadonlyArray<string>)
   return candidato;
 }
 
+/**
+ * O007b: reparto de las varillas longitudinales en el perímetro de la sección.
+ * Primero las cuatro esquinas y después las caras (abajo/arriba y luego lados).
+ * Devuelve coordenadas locales respecto al centro, ya descontado el recubrimiento.
+ */
+export function posicionesVarillas(
+  ancho: number,
+  peralte: number,
+  cantidad: number,
+  recubrimiento = 0.025,
+): Array<[number, number]> {
+  const total = Math.max(0, Math.floor(cantidad));
+  if (total === 0) return [];
+  const limpiar = (valor: number) => Number(valor.toFixed(9));
+  const x = limpiar(Math.max(ancho / 2 - recubrimiento, 0));
+  const y = limpiar(Math.max(peralte / 2 - recubrimiento, 0));
+  const esquinas: Array<[number, number]> = [
+    [-x, -y],
+    [x, -y],
+    [x, y],
+    [-x, y],
+  ];
+  if (total <= 4) return esquinas.slice(0, total);
+  const salida = [...esquinas];
+  const lados = Math.max(total - 4, 0);
+  // Las primeras dos van en el centro de las caras horizontales (las de cota H).
+  const caras: Array<[number, number]> = [
+    [0, -y],
+    [0, y],
+    [-x, 0],
+    [x, 0],
+  ];
+  for (let i = 0; i < lados; i += 1) {
+    if (i < caras.length) {
+      salida.push(caras[i]);
+      continue;
+    }
+    // Más varillas: se reparten por tramos en las caras horizontales.
+    const tramo = Math.floor((i - caras.length) / 2) + 1;
+    const paso = x / (tramo + 1);
+    salida.push([i % 2 === 0 ? -paso * tramo : paso * tramo, i % 2 === 0 ? -y : y]);
+  }
+  return salida.slice(0, total);
+}
+
 /** Color de una capa con respaldo neutro. */
 export function colorCapa(capa: CapaMuro): string {
   return capa.color || "#cccccc";

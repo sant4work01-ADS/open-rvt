@@ -49,6 +49,10 @@ def _nombre(entidad: Any) -> str:
     return str(getattr(entidad, "Name", "") or "")
 
 
+def _texto(valor: Any) -> str:
+    return str(valor or "")
+
+
 def _etiqueta_eje(entidad: Any) -> str:
     return str(getattr(entidad, "AxisTag", "") or "")
 
@@ -1336,6 +1340,470 @@ class ModeladoMixin:
             uniones=[_gid(u) for u in uniones],
         )
 
+    # ------------------------------------------------------------------ estructura (O007b)
+    def _tipo_estructura(self, tipo: Any, clases: tuple[str, ...]) -> Any:
+        texto = _texto(tipo).strip()
+        entidad = None
+        for candidato in self.modelo.by_type("IfcTypeObject"):
+            if _gid(candidato) == texto:
+                entidad = candidato
+                break
+        if entidad is None:
+            buscado = texto.casefold()
+            for candidato in self.modelo.by_type("IfcTypeObject"):
+                if _nombre(candidato).casefold() == buscado:
+                    entidad = candidato
+                    break
+        if entidad is None or not any(entidad.is_a(c) for c in clases):
+            esperado = ", ".join(clases)
+            raise self._error(
+                f"No existe el tipo estructural «{texto}» ({esperado}).", -32020
+            )
+        if self._estructura_de_tipo(entidad) is None:
+            raise self._error(f"El tipo «{texto}» no es de estructura.", -32020)
+        return entidad
+
+    @staticmethod
+    def _matriz_colocacion(
+        x: float, y: float, z: float, rotacion: float
+    ) -> np.ndarray:
+        coseno, seno = math.cos(rotacion), math.sin(rotacion)
+        return np.array(
+            [
+                [coseno, -seno, 0.0, x],
+                [seno, coseno, 0.0, y],
+                [0.0, 0.0, 1.0, z],
+                [0.0, 0.0, 0.0, 1.0],
+            ]
+        )
+
+    @staticmethod
+    def _matriz_viga(x1: float, y1: float, z: float, ux: float, uy: float) -> np.ndarray:
+        return np.array(
+            [
+                [-uy, 0.0, ux, x1],
+                [ux, 0.0, uy, y1],
+                [0.0, 1.0, 0.0, z],
+                [0.0, 0.0, 0.0, 1.0],
+            ]
+        )
+
+    @staticmethod
+    def _caja_malla(
+        ancho: float,
+        fondo: float,
+        alto: float,
+        z0: float = 0.0,
+        dx: float = 0.0,
+        dy: float = 0.0,
+    ) -> tuple[list[list[float]], list[list[int]]]:
+        hx, hy = ancho / 2.0, fondo / 2.0
+        x0, x1 = dx - hx, dx + hx
+        y0, y1 = dy - hy, dy + hy
+        z1 = z0 + alto
+        vertices = [
+            [x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0],
+            [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1],
+        ]
+        caras = [
+            [0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4],
+            [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7],
+        ]
+        return vertices, caras
+
+    @staticmethod
+    def _caja_entre(
+        x0: float, x1: float, y0: float, y1: float, z0: float, z1: float
+    ) -> tuple[list[list[float]], list[list[int]]]:
+        vertices = [
+            [x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0],
+            [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1],
+        ]
+        caras = [
+            [0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4],
+            [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7],
+        ]
+        return vertices, caras
+
+    def _malla_de_cajas(self, cajas: list[tuple[list[list[float]], list[list[int]]]]) -> Any:
+        vertices: list[list[float]] = []
+        caras: list[list[int]] = []
+        for lista, indices in cajas:
+            base = len(vertices)
+            vertices.extend(lista)
+            caras.extend([[i + base for i in cara] for cara in indices])
+        rep = geometry_api.add_mesh_representation(
+            self.modelo, context=self._contexto(), vertices=[vertices], faces=[caras]
+        )
+        rep.RepresentationIdentifier = "Body"
+        return rep
+
+    @staticmethod
+    def _cilindro_malla(radio: float, z0: float, alto: float, lados: int = 24):
+        vertices: list[list[float]] = []
+        caras: list[list[int]] = []
+        for i in range(lados):
+            angulo = 2.0 * math.pi * i / lados
+            vertices.append([radio * math.cos(angulo), radio * math.sin(angulo), z0])
+        for i in range(lados):
+            angulo = 2.0 * math.pi * i / lados
+            vertices.append([radio * math.cos(angulo), radio * math.sin(angulo), z0 + alto])
+        for i in range(lados):
+            siguiente = (i + 1) % lados
+            caras.append([i, siguiente, lados + siguiente, lados + i])
+        caras.append(list(range(lados - 1, -1, -1)))
+        caras.append(list(range(lados, 2 * lados)))
+        return vertices, caras
+
+    def _cuerpo_columna(self, seccion: dict[str, Any], altura: float) -> Any:
+        if _texto(seccion.get("Forma") or "rectangular") == "circular":
+            vertices, caras = self._cilindro_malla(
+                float(seccion.get("D") or 0.3) / 2.0, 0.0, altura
+            )
+            rep = geometry_api.add_mesh_representation(
+                self.modelo, context=self._contexto(), vertices=[vertices], faces=[caras]
+            )
+        else:
+            rep = self._malla_de_cajas(
+                [self._caja_malla(float(seccion.get("B") or 0.15),
+                                  float(seccion.get("H") or 0.15), altura)]
+            )
+        rep.RepresentationIdentifier = "Body"
+        return rep
+
+    def _cuerpo_viga(self, seccion: dict[str, Any], largo: float) -> Any:
+        b = float(seccion.get("B") or 0.20)
+        h = float(seccion.get("H") or 0.40)
+        caja = self._caja_entre(-b / 2.0, b / 2.0, -h / 2.0, h / 2.0, 0.0, largo)
+        return self._malla_de_cajas([caja])
+
+    def _cuerpo_zapata(self, seccion: dict[str, Any]) -> Any:
+        largo = float(seccion.get("Largo") or 1.2)
+        ancho = float(seccion.get("Ancho") or 1.2)
+        peralte = float(seccion.get("Peralte") or 0.25)
+        plantilla = float(seccion.get("Plantilla") or 0.05)
+        dado_b = float(seccion.get("DadoB") or 0.0)
+        dado_h = float(seccion.get("DadoH") or 0.0)
+        dado_alto = float(seccion.get("DadoAlto") or 0.0)
+        cajas = []
+        if plantilla > 0:
+            cajas.append(
+                self._caja_entre(-largo / 2.0, largo / 2.0, -ancho / 2.0, ancho / 2.0,
+                                 -plantilla, 0.0)
+            )
+        cajas.append(
+            self._caja_entre(-largo / 2.0, largo / 2.0, -ancho / 2.0, ancho / 2.0,
+                             0.0, peralte)
+        )
+        if dado_b > 0 and dado_h > 0 and dado_alto > 0:
+            cajas.append(
+                self._caja_malla(dado_b, dado_h, dado_alto, z0=peralte)
+            )
+        return self._malla_de_cajas(cajas)
+
+    def _cuerpo_zapata_corrida(self, seccion: dict[str, Any], largo: float) -> Any:
+        ancho = float(seccion.get("Ancho") or 0.60)
+        peralte = float(seccion.get("Peralte") or 0.20)
+        corona = float(seccion.get("Corona") or 0.0)
+        plantilla = float(seccion.get("Plantilla") or 0.05)
+        mitad_inferior = ancho / 2.0
+        mitad_superior = (corona if corona > 0 else ancho) / 2.0
+        vertices = [
+            [-mitad_inferior, -peralte / 2.0, 0.0],
+            [mitad_inferior, -peralte / 2.0, 0.0],
+            [mitad_superior, peralte / 2.0, 0.0],
+            [-mitad_superior, peralte / 2.0, 0.0],
+            [-mitad_inferior, -peralte / 2.0, largo],
+            [mitad_inferior, -peralte / 2.0, largo],
+            [mitad_superior, peralte / 2.0, largo],
+            [-mitad_superior, peralte / 2.0, largo],
+        ]
+        caras = [
+            [0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4],
+            [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7],
+        ]
+        cajas = [(vertices, caras)]
+        if plantilla > 0:
+            cajas.append(
+                self._caja_entre(-mitad_inferior, mitad_inferior,
+                                 -peralte / 2.0 - plantilla, -peralte / 2.0, 0.0, largo)
+            )
+        return self._malla_de_cajas(cajas)
+
+    def _aplicar_predefinido(self, elemento: Any, tipo: Any) -> None:
+        predefinido = getattr(tipo, "PredefinedType", None)
+        if predefinido and hasattr(elemento, "PredefinedType"):
+            elemento.PredefinedType = predefinido
+        elemento_tipo = getattr(tipo, "ElementType", None)
+        if elemento_tipo:
+            if hasattr(elemento, "ElementType"):
+                elemento.ElementType = elemento_tipo
+            elif hasattr(elemento, "ObjectType"):
+                elemento.ObjectType = elemento_tipo
+
+    def _altura_columna(
+        self, elevacion: float, nivel_superior: str | None, altura: float | None
+    ) -> float:
+        if nivel_superior:
+            superior = self._nivel_por_gid(nivel_superior)
+            tope = float(superior.Elevation or 0.0)
+            resultado = tope - elevacion
+        elif altura is not None:
+            try:
+                resultado = float(altura)
+            except (TypeError, ValueError) as exc:
+                raise self._error("La altura de la columna no es un número.", -32602) from exc
+        else:
+            superiores = [
+                float(n.Elevation or 0.0)
+                for n in self.modelo.by_type("IfcBuildingStorey")
+                if float(n.Elevation or 0.0) > elevacion + TOLERANCIA_CALCULO
+            ]
+            resultado = (min(superiores) - elevacion) if superiores else 2.60
+        if resultado <= 0:
+            raise self._error("La altura de la columna debe ser positiva.", -32602)
+        return resultado
+
+    def _regenerar_estructura(self, elemento: Any) -> None:
+        tipo = self._tipo_entidad(elemento)
+        alias, seccion, _armado = self._seccion_y_armado(tipo)
+        if alias is None:
+            return
+        datos = self._leer_pset(elemento, "OPENRVT_Estructura")
+        self._aplicar_predefinido(elemento, tipo)
+        self._quitar_representaciones(elemento, "Body")
+        if elemento.is_a("IfcColumn"):
+            altura = float(datos.get("Altura") or 0.0)
+            if altura <= 0:
+                altura = 2.60
+            cuerpo = self._cuerpo_columna(seccion, altura)
+            matriz = self._matriz_colocacion(
+                float(datos.get("X") or 0.0), float(datos.get("Y") or 0.0),
+                float(datos.get("Base") or 0.0), float(datos.get("Rotacion") or 0.0),
+            )
+        elif elemento.is_a("IfcBeam") or (
+            elemento.is_a("IfcFooting")
+            and _texto(getattr(elemento, "PredefinedType", "")) == "FOOTING_BEAM"
+        ):
+            x1 = float(datos.get("X1") or 0.0)
+            y1 = float(datos.get("Y1") or 0.0)
+            x2 = float(datos.get("X2") or 0.0)
+            y2 = float(datos.get("Y2") or 0.0)
+            largo = float(datos.get("Longitud") or math.hypot(x2 - x1, y2 - y1))
+            if largo <= TOLERANCIA_CALCULO:
+                largo = 1.0
+            cuerpo = self._cuerpo_viga(seccion, largo)
+            ux, uy = (x2 - x1) / largo, (y2 - y1) / largo
+            matriz = self._matriz_viga(x1, y1, float(datos.get("Z") or 0.0), ux, uy)
+        elif elemento.is_a("IfcFooting") and _texto(
+            getattr(elemento, "PredefinedType", "")
+        ) == "STRIP_FOOTING":
+            x1 = float(datos.get("X1") or 0.0)
+            y1 = float(datos.get("Y1") or 0.0)
+            x2 = float(datos.get("X2") or 0.0)
+            y2 = float(datos.get("Y2") or 0.0)
+            largo = float(datos.get("Longitud") or math.hypot(x2 - x1, y2 - y1))
+            if largo <= TOLERANCIA_CALCULO:
+                largo = 1.0
+            cuerpo = self._cuerpo_zapata_corrida(seccion, largo)
+            ux, uy = (x2 - x1) / largo, (y2 - y1) / largo
+            matriz = self._matriz_viga(x1, y1, float(datos.get("Z") or 0.0), ux, uy)
+        else:
+            cuerpo = self._cuerpo_zapata(seccion)
+            matriz = self._matriz_colocacion(
+                float(datos.get("X") or 0.0), float(datos.get("Y") or 0.0),
+                float(datos.get("Z") or 0.0), float(datos.get("Rotacion") or 0.0),
+            )
+        geometry_api.assign_representation(self.modelo, product=elemento, representation=cuerpo)
+        geometry_api.edit_object_placement(self.modelo, product=elemento, matrix=matriz)
+
+    def columna_crear(
+        self,
+        tipo: str,
+        nivel: str,
+        x: float,
+        y: float,
+        rotacion: float = 0.0,
+        nivel_superior: str | None = None,
+        altura: float | None = None,
+    ) -> dict[str, Any]:
+        self._exigir_modelo()
+        tipo_entidad = self._tipo_estructura(tipo, ("IfcColumnType",))
+        nivel_entidad = self._nivel_por_gid(nivel)
+        try:
+            x, y, rotacion = float(x), float(y), float(rotacion)
+        except (TypeError, ValueError) as exc:
+            raise self._error("La posición de la columna no es numérica.", -32602) from exc
+        elevacion = float(nivel_entidad.Elevation or 0.0)
+        alto = self._altura_columna(elevacion, nivel_superior, altura)
+        self._instantanea()
+        columna = root.create_entity(self.modelo, ifc_class="IfcColumn")
+        alias = self._estructura_de_tipo(tipo_entidad) or "columna"
+        columna.Name = f"{alias.capitalize()} {_nombre(tipo_entidad)}"
+        type_api.assign_type(
+            self.modelo, related_objects=[columna], relating_type=tipo_entidad
+        )
+        self._guardar_pset(
+            columna,
+            "OPENRVT_Estructura",
+            {
+                "X": x, "Y": y, "Rotacion": rotacion, "Base": elevacion,
+                "Nivel": nivel, "NivelSuperior": _texto(nivel_superior or ""),
+                "Altura": alto,
+            },
+        )
+        self._regenerar_estructura(columna)
+        spatial_api.assign_container(
+            self.modelo, products=[columna], relating_structure=nivel_entidad
+        )
+        self.con_cambios = True
+        return self._resultado(
+            [columna], mensaje=f"Columna creada ({alto:.2f} m)."
+        )
+
+    def viga_crear(
+        self,
+        tipo: str,
+        nivel: str,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+        desfase: float = 0.0,
+    ) -> dict[str, Any]:
+        self._exigir_modelo()
+        tipo_entidad = self._tipo_estructura(tipo, ("IfcBeamType", "IfcFootingType"))
+        nivel_entidad = self._nivel_por_gid(nivel)
+        try:
+            x1, y1, x2, y2, desfase = (
+                float(x1), float(y1), float(x2), float(y2), float(desfase)
+            )
+        except (TypeError, ValueError) as exc:
+            raise self._error("Los datos de la viga no son números.", -32602) from exc
+        largo = math.hypot(x2 - x1, y2 - y1)
+        if largo <= TOLERANCIA_CALCULO:
+            raise self._error("La viga necesita dos puntos distintos.", -32602)
+        alias = self._estructura_de_tipo(tipo_entidad) or "trabe"
+        _, seccion, _ = self._seccion_y_armado(tipo_entidad)
+        alto = float(seccion.get("H") or 0.40)
+        elevacion = float(nivel_entidad.Elevation or 0.0)
+        clase = "IfcFooting" if tipo_entidad.is_a("IfcFootingType") else "IfcBeam"
+        self._instantanea()
+        viga = root.create_entity(self.modelo, ifc_class=clase)
+        viga.Name = f"{alias.capitalize()} {_nombre(tipo_entidad)}"
+        type_api.assign_type(self.modelo, related_objects=[viga], relating_type=tipo_entidad)
+        lecho_bajo = alias == "dala"
+        centro = (
+            elevacion + (alto / 2.0 if lecho_bajo else desfase - alto / 2.0)
+        )
+        self._guardar_pset(
+            viga,
+            "OPENRVT_Estructura",
+            {
+                "X1": x1, "Y1": y1, "X2": x2, "Y2": y2, "Longitud": largo,
+                "Desfase": desfase, "Z": centro, "Nivel": nivel,
+            },
+        )
+        self._regenerar_estructura(viga)
+        spatial_api.assign_container(
+            self.modelo, products=[viga], relating_structure=nivel_entidad
+        )
+        self.con_cambios = True
+        return self._resultado([viga], mensaje=f"Viga creada ({largo:.2f} m).")
+
+    def zapata_crear(
+        self,
+        tipo: str,
+        nivel: str,
+        x: float,
+        y: float,
+        rotacion: float = 0.0,
+        desplante: float = 1.00,
+    ) -> dict[str, Any]:
+        self._exigir_modelo()
+        tipo_entidad = self._tipo_estructura(tipo, ("IfcFootingType",))
+        if self._estructura_de_tipo(tipo_entidad) != "zapata":
+            raise self._error("El tipo no es una zapata aislada.", -32602)
+        nivel_entidad = self._nivel_por_gid(nivel)
+        try:
+            x, y, rotacion, desplante = float(x), float(y), float(rotacion), float(desplante)
+        except (TypeError, ValueError) as exc:
+            raise self._error("La posición de la zapata no es numérica.", -32602) from exc
+        if desplante <= 0:
+            raise self._error("El desplante de la zapata debe ser positivo.", -32602)
+        elevacion = float(nivel_entidad.Elevation or 0.0)
+        self._instantanea()
+        zapata = root.create_entity(self.modelo, ifc_class="IfcFooting")
+        zapata.Name = f"Zapata {_nombre(tipo_entidad)}"
+        type_api.assign_type(
+            self.modelo, related_objects=[zapata], relating_type=tipo_entidad
+        )
+        self._guardar_pset(
+            zapata,
+            "OPENRVT_Estructura",
+            {
+                "X": x, "Y": y, "Rotacion": rotacion, "Z": elevacion - desplante,
+                "Desplante": desplante, "Nivel": nivel,
+            },
+        )
+        self._regenerar_estructura(zapata)
+        spatial_api.assign_container(
+            self.modelo, products=[zapata], relating_structure=nivel_entidad
+        )
+        self.con_cambios = True
+        return self._resultado([zapata], mensaje="Zapata creada.")
+
+    def zapata_corrida_crear(
+        self,
+        tipo: str,
+        nivel: str,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+        desplante: float = 0.80,
+    ) -> dict[str, Any]:
+        self._exigir_modelo()
+        tipo_entidad = self._tipo_estructura(tipo, ("IfcFootingType",))
+        if self._estructura_de_tipo(tipo_entidad) != "zapata_corrida":
+            raise self._error("El tipo no es una zapata corrida.", -32602)
+        nivel_entidad = self._nivel_por_gid(nivel)
+        try:
+            x1, y1, x2, y2, desplante = (
+                float(x1), float(y1), float(x2), float(y2), float(desplante)
+            )
+        except (TypeError, ValueError) as exc:
+            raise self._error("El trazo de la zapata no es numérico.", -32602) from exc
+        largo = math.hypot(x2 - x1, y2 - y1)
+        if largo <= TOLERANCIA_CALCULO:
+            raise self._error("La zapata corrida necesita dos puntos distintos.", -32602)
+        if desplante <= 0:
+            raise self._error("El desplante de la zapata debe ser positivo.", -32602)
+        elevacion = float(nivel_entidad.Elevation or 0.0)
+        _, seccion, _ = self._seccion_y_armado(tipo_entidad)
+        alto = float(seccion.get("Peralte") or 0.20)
+        self._instantanea()
+        zapata = root.create_entity(self.modelo, ifc_class="IfcFooting")
+        zapata.Name = f"Zapata corrida {_nombre(tipo_entidad)}"
+        type_api.assign_type(
+            self.modelo, related_objects=[zapata], relating_type=tipo_entidad
+        )
+        self._guardar_pset(
+            zapata,
+            "OPENRVT_Estructura",
+            {
+                "X1": x1, "Y1": y1, "X2": x2, "Y2": y2, "Longitud": largo,
+                "Desplante": desplante, "Z": elevacion - desplante + alto / 2.0,
+                "Nivel": nivel,
+            },
+        )
+        self._regenerar_estructura(zapata)
+        spatial_api.assign_container(
+            self.modelo, products=[zapata], relating_structure=nivel_entidad
+        )
+        self.con_cambios = True
+        return self._resultado([zapata], mensaje=f"Zapata corrida creada ({largo:.2f} m).")
+
     def _extremos_muro(self, muro: Any) -> tuple[float, float, float, float, float]:
         datos = self._datos_muro(muro)
         return datos["x1"], datos["y1"], datos["x2"], datos["y2"], datos["espesor"]
@@ -1865,6 +2333,7 @@ class ModeladoMixin:
                 is_si=True,
                 should_transform_children=False,
             )
+            self._desplazar_pset_estructura(producto, dx, dy, dz)
         for producto in afectados:
             if producto.is_a("IfcWall"):
                 self._unir_muros(producto)
@@ -1873,6 +2342,22 @@ class ModeladoMixin:
             modificados=[g for g in afectados if not g.is_a("IfcOpeningElement")],
             mensaje=f"{len(afectados)} elemento(s) movido(s).",
         )
+
+    def _desplazar_pset_estructura(
+        self, producto: Any, dx: float, dy: float, dz: float
+    ) -> None:
+        """Mantiene las coordenadas del pset al día para que regenerar no lo devuelva."""
+        datos = self._leer_pset(producto, "OPENRVT_Estructura")
+        if not datos:
+            return
+        for clave, delta in (
+            ("X", dx), ("X1", dx), ("X2", dx),
+            ("Y", dy), ("Y1", dy), ("Y2", dy),
+            ("Z", dz), ("Base", dz),
+        ):
+            if clave in datos:
+                datos[clave] = float(datos[clave] or 0.0) + delta
+        self._guardar_pset(producto, "OPENRVT_Estructura", datos)
 
     def _matriz_traslado(self, producto: Any, dx: float, dy: float, dz: float) -> np.ndarray:
         """Matriz de mundo del producto desplazada (no la delta sola)."""
@@ -1995,6 +2480,34 @@ class ModeladoMixin:
                         relating_structure=rel.RelatingStructure,
                     )
                 creados.append(copia)
+            elif self._es_clase_estructura(original.is_a()) and self._leer_pset(
+                original, "OPENRVT_Estructura"
+            ):
+                copia = self._copiar_entidad(original)
+                tipo = self._tipo_entidad(original)
+                if tipo is not None:
+                    type_api.assign_type(
+                        self.modelo, related_objects=[copia], relating_type=tipo
+                    )
+                self._guardar_pset(
+                    copia,
+                    "OPENRVT_Estructura",
+                    dict(self._leer_pset(original, "OPENRVT_Estructura")),
+                )
+                geometry_api.edit_object_placement(
+                    self.modelo,
+                    product=copia,
+                    matrix=self._matriz_traslado(copia, dx, dy, dz),
+                    is_si=True,
+                )
+                self._desplazar_pset_estructura(copia, dx, dy, dz)
+                for rel in getattr(original, "ContainedInStructure", ()) or ():
+                    spatial_api.assign_container(
+                        self.modelo,
+                        products=[copia],
+                        relating_structure=rel.RelatingStructure,
+                    )
+                creados.append(copia)
             else:
                 copia = self._copiar_entidad(original)
                 geometry_api.edit_object_placement(
@@ -2097,6 +2610,78 @@ class ModeladoMixin:
                 geometry_api.assign_representation(self.modelo, product=entidad, representation=nueva)
                 datos["Espesor"] = espesor
                 self._guardar_pset(entidad, "OPENRVT_Losa", datos)
+        elif self._es_clase_estructura(entidad.is_a()) and self._leer_pset(
+            entidad, "OPENRVT_Estructura"
+        ):
+            datos = dict(self._leer_pset(entidad, "OPENRVT_Estructura"))
+            claves = {
+                "desplante": "Desplante", "Desplante": "Desplante",
+                "desfase": "Desfase", "Desfase": "Desfase",
+                "altura": "Altura", "Altura": "Altura",
+                "rotacion": "Rotacion", "Rotacion": "Rotacion",
+                "nivel_superior": "NivelSuperior", "NivelSuperior": "NivelSuperior",
+                "x": "X", "X": "X", "y": "Y", "Y": "Y",
+                "x1": "X1", "X1": "X1", "y1": "Y1", "Y1": "Y1",
+                "x2": "X2", "X2": "X2", "y2": "Y2", "Y2": "Y2",
+            }
+            for clave, valor in cambios.items():
+                destino = claves.get(clave)
+                if destino is None:
+                    continue
+                if destino in ("NivelSuperior",):
+                    datos[destino] = _texto(valor)
+                else:
+                    try:
+                        datos[destino] = float(valor)
+                    except (TypeError, ValueError) as exc:
+                        raise self._error(f"«{destino}» no es un número.", -32602) from exc
+            if "Altura" in datos and float(datos["Altura"]) <= 0:
+                raise self._error("La altura debe ser positiva.", -32602)
+            if "Desplante" in datos and float(datos["Desplante"]) <= 0:
+                raise self._error("El desplante debe ser positivo.", -32602)
+            tipo = self._tipo_entidad(entidad)
+            _, seccion, _ = self._seccion_y_armado(tipo)
+            nivel = self._nivel_por_gid(_texto(datos.get("Nivel") or "")) if datos.get("Nivel") else None
+            elevacion = float(nivel.Elevation or 0.0) if nivel is not None else 0.0
+            alias = self._estructura_de_tipo(tipo) or "trabe"
+            if entidad.is_a("IfcColumn"):
+                datos["Base"] = elevacion
+                if "Altura" in cambios and "NivelSuperior" not in cambios:
+                    datos["NivelSuperior"] = ""
+                if datos.get("NivelSuperior"):
+                    superior = self._nivel_por_gid(_texto(datos["NivelSuperior"]))
+                    datos["Altura"] = float(superior.Elevation or 0.0) - elevacion
+                if float(datos.get("Altura") or 0.0) <= 0:
+                    raise self._error("La altura de la columna debe ser positiva.", -32602)
+            elif entidad.is_a("IfcBeam") or _texto(
+                getattr(entidad, "PredefinedType", "")
+            ) == "FOOTING_BEAM":
+                alto = float(seccion.get("H") or 0.40)
+                datos["Longitud"] = math.hypot(
+                    float(datos.get("X2") or 0.0) - float(datos.get("X1") or 0.0),
+                    float(datos.get("Y2") or 0.0) - float(datos.get("Y1") or 0.0),
+                )
+                if datos["Longitud"] <= TOLERANCIA_CALCULO:
+                    raise self._error("La viga necesita dos puntos distintos.", -32602)
+                lecho_bajo = alias == "dala"
+                datos["Z"] = elevacion + (
+                    alto / 2.0
+                    if lecho_bajo
+                    else float(datos.get("Desfase") or 0.0) - alto / 2.0
+                )
+            elif _texto(getattr(entidad, "PredefinedType", "")) == "STRIP_FOOTING":
+                alto = float(seccion.get("Peralte") or 0.20)
+                datos["Longitud"] = math.hypot(
+                    float(datos.get("X2") or 0.0) - float(datos.get("X1") or 0.0),
+                    float(datos.get("Y2") or 0.0) - float(datos.get("Y1") or 0.0),
+                )
+                if datos["Longitud"] <= TOLERANCIA_CALCULO:
+                    raise self._error("La zapata corrida necesita dos puntos distintos.", -32602)
+                datos["Z"] = elevacion - float(datos.get("Desplante") or 0.80) + alto / 2.0
+            else:
+                datos["Z"] = elevacion - float(datos.get("Desplante") or 1.0)
+            self._guardar_pset(entidad, "OPENRVT_Estructura", datos)
+            self._regenerar_estructura(entidad)
         elif entidad.is_a("IfcOpeningElement"):
             datos = self._datos_abertura(entidad) or {}
             ancho = float(cambios.get("ancho", cambios.get("Ancho", datos.get("ancho", 0.9))))

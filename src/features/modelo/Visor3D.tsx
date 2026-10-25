@@ -257,6 +257,53 @@ function lineaCerrada(
   return linea;
 }
 
+/** O007b: esquinas de un rectángulo en planta, girado alrededor de su centro. */
+function esquinasRectangulo(
+  cx: number,
+  cy: number,
+  angulo: number,
+  ancho: number,
+  fondo: number,
+): Array<[number, number]> {
+  const coseno = Math.cos(angulo);
+  const seno = Math.sin(angulo);
+  const hx = ancho / 2;
+  const hy = fondo / 2;
+  return [
+    [-hx, -hy],
+    [hx, -hy],
+    [hx, hy],
+    [-hx, hy],
+  ].map(([x, y]) => [cx + x * coseno - y * seno, cy + x * seno + y * coseno]);
+}
+
+/** Rayado diagonal (45°) de una sección rectangular, en coordenadas locales. */
+function rayadoRectangulo(
+  ancho: number,
+  fondo: number,
+  paso = 0.08,
+): Array<[[number, number], [number, number]]> {
+  const w = ancho / 2;
+  const h = fondo / 2;
+  const lineas: Array<[[number, number], [number, number]]> = [];
+  for (let d = -w - h; d <= w + h; d += paso) {
+    const puntos: Array<[number, number]> = [];
+    const agregar = (x: number, y: number) => {
+      if (Math.abs(x) <= w + 1e-9 && Math.abs(y) <= h + 1e-9) {
+        if (!puntos.some(([px, py]) => Math.hypot(px - x, py - y) < 1e-9)) {
+          puntos.push([x, y]);
+        }
+      }
+    };
+    agregar(-w, -w - d);
+    agregar(w, w - d);
+    agregar(-h + d, -h);
+    agregar(h + d, h);
+    if (puntos.length >= 2) lineas.push([puntos[0], puntos[1]]);
+  }
+  return lineas;
+}
+
 // Las texturas se reutilizan entre elementos y vistas.
 const CACHE_TEXTURAS = new Map<string, THREE.Texture>();
 
@@ -1303,6 +1350,146 @@ export function Visor3D({
               lineasCapasPlanta += 1;
             }
           }
+        }
+      }
+    }
+
+    // O007b: simbología de los elementos estructurales en planta. Las columnas y
+    // castillos se rellenan con el rayado de concreto; trabes, cerramientos, dalas,
+    // zapatas y contratrabes se dibujan con líneas discontinuas.
+    if (vista.tipo === "planta") {
+      const zEstructura = corteZ + 0.045;
+      const p3 = (p: [number, number]): [number, number, number] => [p[0], p[1], zEstructura];
+      for (const elemento of visibles) {
+        const estructura = elemento.estructura;
+        if (!estructura) continue;
+        const seccion = estructura.seccion ?? {};
+        const datos = estructura.datos ?? {};
+        const numero = (valor: unknown, respaldo = 0) =>
+          Number(valor) || respaldo;
+        const alias = estructura.alias;
+        const color = seleccion === elemento.globalid || seleccionados.includes(elemento.globalid)
+          ? "#ff8a00"
+          : estilos.categorias[elemento.categoria].color;
+        const mm = grosorDe(elemento.categoria, "corte") ?? 0.35;
+        const trazado = (
+          puntos: Array<[number, number]>,
+          patron: PatronLinea,
+          grosor = mm,
+          cerrada = true,
+        ) => {
+          if (puntos.length < 2) return;
+          const material = crearMaterialLinea({
+            mm: grosor,
+            escala: vista.escala,
+            color,
+            patron,
+            registro,
+            mundoPorPx,
+            profundidad: false,
+          });
+          const lista = puntos.map(p3);
+          if (cerrada) lista.push(p3(puntos[0]));
+          lineaCerrada(lista, material, 1.35, grupoLocal);
+        };
+        if (alias === "columna" || alias === "castillo") {
+          const ancho = numero(seccion.B, 0.30);
+          const fondo = numero(seccion.H, 0.30);
+          const cx = numero(datos.X);
+          const cy = numero(datos.Y);
+          const rotacion = numero(datos.Rotacion);
+          const esquinas = esquinasRectangulo(cx, cy, rotacion, ancho, fondo);
+          agregarRelleno(
+            esquinas.map(([x, y]) => [x, y, zEstructura] as Punto3),
+            "concreto",
+            grupoLocal,
+          );
+          if (String(seccion.Forma ?? "rectangular") === "circular") {
+            const radio = numero(seccion.D, ancho) / 2;
+            const circulo: Array<[number, number]> = [];
+            for (let i = 0; i < 24; i += 1) {
+              const angulo = (i / 24) * Math.PI * 2;
+              circulo.push([cx + radio * Math.cos(angulo), cy + radio * Math.sin(angulo)]);
+            }
+            trazado(circulo, "continua");
+          } else {
+            trazado(esquinas, "continua");
+            const materialRaya = crearMaterialLinea({
+              mm: 0.08,
+              escala: vista.escala,
+              color,
+              registro,
+              mundoPorPx,
+              profundidad: false,
+            });
+            const coseno = Math.cos(rotacion);
+            const seno = Math.sin(rotacion);
+            for (const [[x1, y1], [x2, y2]] of rayadoRectangulo(ancho, fondo)) {
+              const punto = (x: number, y: number): [number, number, number] => [
+                cx + x * coseno - y * seno,
+                cy + x * seno + y * coseno,
+                zEstructura,
+              ];
+              lineaCerrada([punto(x1, y1), punto(x2, y2)], materialRaya, 1.2, grupoLocal);
+            }
+          }
+        } else if (alias === "trabe" || alias === "cerramiento" || alias === "dala") {
+          const ancho = numero(seccion.B, 0.20);
+          const x1 = numero(datos.X1);
+          const y1 = numero(datos.Y1);
+          const x2 = numero(datos.X2);
+          const y2 = numero(datos.Y2);
+          const largo = Math.hypot(x2 - x1, y2 - y1);
+          if (largo <= 1e-6) continue;
+          const ux = (x2 - x1) / largo;
+          const uy = (y2 - y1) / largo;
+          const nx = -uy * ancho / 2;
+          const ny = ux * ancho / 2;
+          trazado(
+            [
+              [x1 + nx, y1 + ny], [x2 + nx, y2 + ny],
+              [x2 - nx, y2 - ny], [x1 - nx, y1 - ny],
+            ],
+            "discontinua",
+          );
+        } else if (alias === "zapata") {
+          const largo = numero(seccion.Largo, 1.20);
+          const ancho = numero(seccion.Ancho, 1.20);
+          const esquinas = esquinasRectangulo(
+            numero(datos.X), numero(datos.Y), numero(datos.Rotacion), largo, ancho,
+          );
+          trazado(esquinas, "discontinua-larga");
+          const dadoB = numero(seccion.DadoB);
+          const dadoH = numero(seccion.DadoH);
+          if (dadoB > 0 && dadoH > 0) {
+            trazado(
+              esquinasRectangulo(
+                numero(datos.X), numero(datos.Y), numero(datos.Rotacion), dadoB, dadoH,
+              ),
+              "discontinua",
+            );
+          }
+        } else if (alias === "zapata_corrida" || alias === "contratrabe") {
+          const ancho = alias === "zapata_corrida"
+            ? numero(seccion.Ancho, 0.60)
+            : numero(seccion.B, 0.20);
+          const x1 = numero(datos.X1);
+          const y1 = numero(datos.Y1);
+          const x2 = numero(datos.X2);
+          const y2 = numero(datos.Y2);
+          const largo = Math.hypot(x2 - x1, y2 - y1);
+          if (largo <= 1e-6) continue;
+          const ux = (x2 - x1) / largo;
+          const uy = (y2 - y1) / largo;
+          const nx = -uy * ancho / 2;
+          const ny = ux * ancho / 2;
+          trazado(
+            [
+              [x1 + nx, y1 + ny], [x2 + nx, y2 + ny],
+              [x2 - nx, y2 - ny], [x1 - nx, y1 - ny],
+            ],
+            "discontinua-larga",
+          );
         }
       }
     }
