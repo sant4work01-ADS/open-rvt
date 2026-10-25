@@ -458,6 +458,32 @@ class ModeloNucleo(ModeladoMixin):
                     if datos is None:
                         clase = producto.is_a()
                         categoria = _categoria(clase)
+                        capas: list[dict[str, Any]] = []
+                        try:
+                            import ifcopenshell.util.element as util_elemento
+
+                            for material in util_elemento.get_materials(producto):
+                                for capa in (
+                                    getattr(material, "MaterialLayers", ())
+                                    or getattr(material, "Layers", ())
+                                    or ()
+                                ):
+                                    capas.append(
+                                        {
+                                            "material": _texto(
+                                                getattr(
+                                                    getattr(capa, "Material", None),
+                                                    "Name",
+                                                    "",
+                                                )
+                                            ),
+                                            "espesor": float(
+                                                getattr(capa, "LayerThickness", 0.0) or 0.0
+                                            ),
+                                        }
+                                    )
+                        except Exception:
+                            capas = []
                         datos = {
                             "globalid": gid,
                             "clase": clase,
@@ -467,6 +493,7 @@ class ModeloNucleo(ModeladoMixin):
                             "opacidad": OPACIDAD.get(categoria, 1.0),
                             "categoria": categoria,
                             "tipo": self._tipo_de(producto),
+                            "capas": capas,
                             "vertices": [],
                             "indices": [],
                             "_base": 0,

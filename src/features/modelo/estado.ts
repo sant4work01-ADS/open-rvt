@@ -6,6 +6,7 @@ import { ipc } from "@/lib/ipc";
 import { elegirDestinoIfc, elegirIfcParaAbrir } from "@/lib/dialogos";
 import {
   CATEGORIAS_TODAS,
+  type Abertura,
   type Caja,
   type Elemento,
   type ElementoMalla,
@@ -32,6 +33,8 @@ import {
   type Punto2,
   type Referencias,
 } from "./herramientas";
+import { estilosPorDefecto, normalizarEstilos, type Estilos } from "./estilos";
+import { construirAberturas } from "./aberturas";
 
 export type RespuestaGuardar = "guardar" | "descartar" | "cancelar";
 export type Herramienta =
@@ -75,6 +78,10 @@ interface EstadoModelo {
   mallas: ElementoMalla[];
   caja: Caja;
   vistas: Vista[];
+  /** O005: tabla de plumillas y rellenos, persistida en OPENRVT_Estilos. */
+  estilos: Estilos;
+  /** O005: puertas y ventanas con sus datos de planta. */
+  aberturas: Abertura[];
   vistaActivaId: string | null;
   seleccion: string | null;
   seleccionados: string[];
@@ -87,6 +94,8 @@ interface EstadoModelo {
   preguntaGuardar: PreguntaGuardar | null;
   tiempoCargaMs: number | null;
   vistasPersistidas: boolean;
+  /** O005: diálogo de estilos de objeto abierto. */
+  dialogoEstilos: boolean;
 
   // O003b: herramientas de modelado.
   herramienta: Herramienta | null;
@@ -132,6 +141,9 @@ interface EstadoModelo {
   responderGuardar: (respuesta: RespuestaGuardar) => void;
   fijarVista: (id: string) => void;
   actualizarVista: (id: string, cambios: Partial<Vista>) => Promise<void>;
+  guardarEstilos: (estilos: Estilos) => Promise<void>;
+  abrirDialogoEstilos: () => void;
+  cerrarDialogoEstilos: () => void;
   seleccionar: (globalid: string | null, agregar?: boolean) => Promise<void>;
   iniciarCorte: () => void;
   cancelarCorte: () => void;
@@ -163,6 +175,8 @@ function decodificarMalla(crudo: RespuestaTeselado["elementos"][number]): Elemen
     color: crudo.color,
     opacidad: crudo.opacidad,
     categoria: crudo.categoria,
+    tipo: crudo.tipo ?? "",
+    capas: crudo.capas ?? [],
     vertices: new Float32Array(vertices.buffer, vertices.byteOffset, vertices.byteLength / 4),
     indices: new Uint32Array(indices.buffer, indices.byteOffset, indices.byteLength / 4),
   };
@@ -178,20 +192,44 @@ const CAJA_VACIA: Caja = { min: [-1, -1, -1], max: [1, 1, 1] };
 let tokenSeleccion = 0;
 
 export const useModelo = create<EstadoModelo>((set, get) => {
+  const cargarAberturas = async (
+    elementos: Elemento[],
+    mallas: ElementoMalla[],
+    referencias: Referencias,
+  ): Promise<Abertura[]> => {
+    const ids = elementos
+      .filter((e) => e.clase === "IfcDoor" || e.clase === "IfcWindow")
+      .map((e) => e.globalid);
+    if (ids.length === 0) return [];
+    const propiedades = await Promise.all(
+      ids.map((globalid) =>
+        rpc<PropiedadesElemento>("modelo.propiedades", { globalid }).catch(() => null),
+      ),
+    );
+    return construirAberturas(
+      propiedades.filter((p): p is PropiedadesElemento => p !== null),
+      mallas,
+      referencias,
+    );
+  };
+
   const cargar = async (info: RespuestaInfo) => {
     const inicio = performance.now();
-    const [niveles, elementos, teselado, vistasCrudas, tipos, referencias] = await Promise.all([
-      rpc<Nivel[]>("modelo.niveles"),
-      rpc<Elemento[]>("modelo.elementos"),
-      rpc<RespuestaTeselado>("geometria.teselar", { globalids: null }),
-      rpc<unknown>("vistas.leer"),
-      rpc<Array<{ globalid: string; nombre: string; espesor: number }>>("tipos.listar", {
-        clase: "IfcWallType",
-      }),
-      rpc<Referencias>("modelo.referencias"),
-    ]);
+    const [niveles, elementos, teselado, vistasCrudas, tipos, referencias, estilosCrudos] =
+      await Promise.all([
+        rpc<Nivel[]>("modelo.niveles"),
+        rpc<Elemento[]>("modelo.elementos"),
+        rpc<RespuestaTeselado>("geometria.teselar", { globalids: null }),
+        rpc<unknown>("vistas.leer"),
+        rpc<Array<{ globalid: string; nombre: string; espesor: number }>>("tipos.listar", {
+          clase: "IfcWallType",
+        }),
+        rpc<Referencias>("modelo.referencias"),
+        rpc<unknown>("estilos.leer").catch(() => null),
+      ]);
     const mallas = teselado.elementos.map(decodificarMalla);
     const caja = cajaDeMallas(mallas);
+    const aberturas = await cargarAberturas(elementos, mallas, referencias);
     let vistas = normalizarVistas(vistasCrudas);
     let persistidas = vistas.length > 0;
     if (vistas.length === 0) {
@@ -212,6 +250,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       mallas,
       caja,
       vistas,
+      estilos: normalizarEstilos(estilosCrudos),
+      aberturas,
       vistasPersistidas: persistidas,
       vistaActivaId: activa?.id ?? null,
       seleccion: null,
@@ -247,6 +287,11 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     }
   };
 
+  const persistirEstilos = async (estilos: Estilos) => {
+    await rpc("estilos.guardar", { estilos });
+    set({ estilos, conCambios: true, error: null });
+  };
+
   const guardarEn = async (ruta: string | null, como: boolean): Promise<boolean> => {
     const estado = get();
     if (!ruta && !estado.ruta) {
@@ -258,6 +303,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       set({ cargando: true, error: null });
       // Las vistas automáticas también se escriben en el pset al guardar.
       await rpc("vistas.guardar", { lista: estado.vistas });
+      await rpc("estilos.guardar", { estilos: estado.estilos });
       const info = await rpc<RespuestaInfo>("proyecto.guardar", {
         ruta: como || !estado.ruta ? ruta : null,
       });
@@ -299,6 +345,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       (m) => !borrados.has(m.globalid) && !tocados.includes(m.globalid),
     );
     if (teselado) mallas = [...mallas, ...teselado.elementos.map(decodificarMalla)];
+    const aberturas = await cargarAberturas(elementos, mallas, referencias);
     const seleccionados = get().seleccionados.filter((g) => !borrados.has(g));
     const seleccion = seleccionados[0] ?? null;
     set({
@@ -310,6 +357,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       referencias,
       mallas,
       caja: cajaDeMallas(mallas),
+      aberturas,
       seleccion,
       seleccionados,
       propiedades: seleccion ? get().propiedades : null,
@@ -345,6 +393,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     mallas: [],
     caja: CAJA_VACIA,
     vistas: [],
+    estilos: estilosPorDefecto(),
+    aberturas: [],
     vistaActivaId: null,
     seleccion: null,
     seleccionados: [],
@@ -357,6 +407,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     preguntaGuardar: null,
     tiempoCargaMs: null,
     vistasPersistidas: false,
+    dialogoEstilos: false,
     herramienta: null,
     opcionesMuro: { tipo: "", altura: 2.6, alineacion: "centro" },
     tiposMuro: [],
@@ -445,6 +496,17 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       set({ vistas, conCambios: true });
       await persistirVistas(vistas);
     },
+
+    guardarEstilos: async (estilos) => {
+      try {
+        await persistirEstilos(estilos);
+      } catch (e) {
+        set({ error: e instanceof Error ? e.message : String(e) });
+      }
+    },
+
+    abrirDialogoEstilos: () => set({ dialogoEstilos: true }),
+    cerrarDialogoEstilos: () => set({ dialogoEstilos: false }),
 
     seleccionar: async (globalid, agregar = false) => {
       const token = ++tokenSeleccion;

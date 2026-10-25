@@ -3,6 +3,7 @@ import {
   areaPoligono2D,
   areaSeccion,
   colocarSimbolo,
+  dividirEnCapas,
   geometriaPuerta,
   geometriaVentana,
   interseccionPlanoMalla,
@@ -111,9 +112,9 @@ describe("simbología de puerta", () => {
     // El arco va de la posición cerrada (ancho, 0) a la abierta (0, ±ancho).
     expect(derecha.arco[0][0]).toBeCloseTo(0.9, 9);
     expect(derecha.arco[0][1]).toBeCloseTo(0, 9);
-    expect(derecha.arco.at(-1)?.[0]).toBeCloseTo(0, 9);
-    expect(derecha.arco.at(-1)?.[1]).toBeCloseTo(0.9, 9);
-    expect(izquierda.arco.at(-1)?.[1]).toBeCloseTo(-0.9, 9);
+    expect(derecha.arco[derecha.arco.length - 1][0]).toBeCloseTo(0, 9);
+    expect(derecha.arco[derecha.arco.length - 1][1]).toBeCloseTo(0.9, 9);
+    expect(izquierda.arco[izquierda.arco.length - 1][1]).toBeCloseTo(-0.9, 9);
     // Todos los puntos caen del lado correcto salvo el punto de arranque.
     expect(derecha.arco.slice(1).every(([, y]) => y >= 0)).toBe(true);
     expect(izquierda.arco.slice(1).every(([, y]) => y <= 0)).toBe(true);
@@ -127,12 +128,31 @@ describe("simbología de puerta", () => {
     const { hoja } = geometriaPuerta({ ancho: 0.9 });
     expect(areaPoligono2D(hoja)).toBeCloseTo(0.9 * 0.04, 9);
     expect(hoja).toHaveLength(5);
-    expect(hoja[0]).toEqual(hoja.at(-1));
+    expect(hoja[0]).toEqual(hoja[hoja.length - 1]);
   });
 });
 
-describe("simbología de ventana", () => {
-  it("traza tres líneas paralelas y el alféizar", () => {
+describe("capas de muro", () => {
+  it("divide la sección en bandas con el espesor de cada capa", () => {
+    const rectangulo: Array<[number, number]> = [
+      [0, 0],
+      [4, 0],
+      [4, 0.2],
+      [0, 0.2],
+    ];
+    const capas = dividirEnCapas(rectangulo, [
+      { material: "Block", espesor: 0.12 },
+      { material: "Aislante", espesor: 0.08 },
+    ]);
+    expect(capas).toHaveLength(2);
+    expect(capas[0].material).toBe("Block");
+    expect(areaPoligono2D(capas[0].puntos)).toBeCloseTo(4 * 0.12, 9);
+    expect(capas[1].material).toBe("Aislante");
+    expect(areaPoligono2D(capas[1].puntos)).toBeCloseTo(4 * 0.08, 9);
+  });
+});
+
+describe("simbología de ventana", () => {  it("traza tres líneas paralelas y el alféizar", () => {
     const { lineas, alfeizar } = geometriaVentana({ ancho: 1.2, espesor: 0.2 });
     expect(lineas).toHaveLength(5);
     expect(lineas[0]).toEqual([

@@ -16,8 +16,6 @@ export interface PolilineaSeccion {
   area: number;
 }
 
-const EPS = 1e-7;
-
 function distanciaPlano(punto: Punto3, plano: PlanoSeccion): number {
   return punto[0] * plano.normal[0] + punto[1] * plano.normal[1] + punto[2] * plano.normal[2] + plano.constante;
 }
@@ -26,11 +24,6 @@ function distanciaPlano(punto: Punto3, plano: PlanoSeccion): number {
 function corteArista(a: Punto3, b: Punto3, da: number, db: number): Punto3 {
   const t = da / (da - db);
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-}
-
-function clave(punto: Punto3, eps: number): string {
-  const q = (v: number) => Math.round(v / eps);
-  return `${q(punto[0])},${q(punto[1])},${q(punto[2])}`;
 }
 
 function iguales(a: Punto3, b: Punto3, eps: number): boolean {
@@ -149,7 +142,7 @@ function unirSegmentos(
     }
     if (puntos.length >= 3) {
       if (cerrada) puntos.pop();
-      const limpios = simplificar(puntos, normal, eps);
+      const limpios = simplificar(puntos, eps);
       salida.push({
         puntos: limpios,
         cerrada,
@@ -161,7 +154,7 @@ function unirSegmentos(
 }
 
 /** Quita vértices intermedios colineales para dejar una polilínea limpia. */
-function simplificar(puntos: Punto3[], normal: Punto3, eps: number): Punto3[] {
+function simplificar(puntos: Punto3[], eps: number): Punto3[] {
   if (puntos.length < 4) return puntos;
   const salida: Punto3[] = [];
   for (let i = 0; i < puntos.length; i += 1) {
@@ -276,8 +269,7 @@ export function geometriaVentana(opciones: {
   return { lineas, alfeizar };
 }
 
-/** Coloca puntos locales (u, v) en el mundo: rotación, espejo y traslación. */
-export function colocarSimbolo(
+/** Coloca puntos locales (u, v) en el mundo: rotación, espejo y traslación. */export function colocarSimbolo(
   puntos: Punto2[],
   centro: Punto2,
   angulo: number,
@@ -289,4 +281,102 @@ export function colocarSimbolo(
     const vv = volteado ? -v : v;
     return [centro[0] + u * cos - vv * sen, centro[1] + u * sen + vv * cos];
   });
+}
+
+// --------------------------------------------------------------- capas de muro
+
+export interface CapaPoligono {
+  puntos: Punto2[];
+  material: string;
+}
+
+function recortarPorRango(
+  puntos: Punto2[],
+  eje: (p: Punto2) => number,
+  minimo: number,
+  maximo: number,
+): Punto2[] {
+  const recortar = (entrada: Punto2[], dentro: (p: Punto2) => boolean, corte: (a: Punto2, b: Punto2) => Punto2) => {
+    const salida: Punto2[] = [];
+    for (let i = 0; i < entrada.length; i += 1) {
+      const actual = entrada[i];
+      const anterior = entrada[(i + entrada.length - 1) % entrada.length];
+      const dentroActual = dentro(actual);
+      const dentroAnterior = dentro(anterior);
+      if (dentroActual) {
+        if (!dentroAnterior) salida.push(corte(anterior, actual));
+        salida.push(actual);
+      } else if (dentroAnterior) {
+        salida.push(corte(anterior, actual));
+      }
+    }
+    return salida;
+  };
+  let salida = recortar(
+    puntos,
+    (p) => eje(p) >= minimo,
+    (a, b) => {
+      const t = (minimo - eje(a)) / (eje(b) - eje(a));
+      return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    },
+  );
+  salida = recortar(
+    salida,
+    (p) => eje(p) <= maximo,
+    (a, b) => {
+      const t = (maximo - eje(a)) / (eje(b) - eje(a));
+      return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    },
+  );
+  return salida;
+}
+
+/**
+ * Divide el polígono de una sección en bandas paralelas, una por capa del
+ * IfcMaterialLayerSet, midiendo el espesor en el eje corto del polígono.
+ */
+export function dividirEnCapas(
+  poligono: Punto2[],
+  capas: Array<{ material: string; espesor: number }>,
+): CapaPoligono[] {
+  if (poligono.length < 3) return [];
+  const validas = capas.filter((c) => c.espesor > 0);
+  if (validas.length <= 1) {
+    return [{ puntos: poligono, material: validas[0]?.material ?? "Genérico" }];
+  }
+  // Eje corto: se prueban los ángulos de las aristas y se queda el eje en el que el
+  // polígono mide menos (el espesor del muro).
+  let mejor = { ancho: Infinity, cos: 1, sen: 0 };
+  for (let i = 0; i < poligono.length; i += 1) {
+    const a = poligono[i];
+    const b = poligono[(i + 1) % poligono.length];
+    const largo = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (largo < 1e-9) continue;
+    const cos = (b[0] - a[0]) / largo;
+    const sen = (b[1] - a[1]) / largo;
+    let minimo = Infinity;
+    let maximo = -Infinity;
+    for (const [x, y] of poligono) {
+      const v = -x * sen + y * cos;
+      minimo = Math.min(minimo, v);
+      maximo = Math.max(maximo, v);
+    }
+    if (maximo - minimo < mejor.ancho) mejor = { ancho: maximo - minimo, cos, sen };
+  }
+  const eje = (p: Punto2) => -p[0] * mejor.sen + p[1] * mejor.cos;
+  const valores = poligono.map(eje);
+  const minimo = Math.min(...valores);
+  const maximo = Math.max(...valores);
+  const total = validas.reduce((s, c) => s + c.espesor, 0);
+  const factor = total > 0 ? (maximo - minimo) / total : 1;
+
+  const salida: CapaPoligono[] = [];
+  let cursor = minimo;
+  for (const capa of validas) {
+    const fin = cursor + capa.espesor * factor;
+    const banda = recortarPorRango(poligono, eje, cursor, fin);
+    if (banda.length >= 3) salida.push({ puntos: banda, material: capa.material });
+    cursor = fin;
+  }
+  return salida;
 }

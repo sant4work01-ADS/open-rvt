@@ -268,6 +268,7 @@ export function App() {
         guardar: () => void useModelo.getState().guardar(),
         guardarComo: () => void useModelo.getState().guardarComo(),
         nuevaVistaCorte: () => useModelo.getState().iniciarCorte(),
+        estilosObjeto: () => useModelo.getState().abrirDialogoEstilos(),
         // OPEN-RVT: herramientas de modelado (spec O003b).
         nuevoNivel: () => {
           const estado = useModelo.getState();

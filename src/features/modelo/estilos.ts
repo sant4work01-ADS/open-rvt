@@ -137,7 +137,7 @@ const PATRONES_RELLENO: PatronRelleno[] = [
   "vidrio",
   "generico",
 ];
-const MATERIALES: MaterialNombre[] = [
+export const MATERIALES: MaterialNombre[] = [
   "block",
   "tabique",
   "concreto",

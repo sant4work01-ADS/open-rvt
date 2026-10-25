@@ -84,6 +84,8 @@ export interface ElementoMalla {
   categoria: Categoria;
   /** O005: tipo IFC del elemento (nombre del IfcWallType en muros de O003b). */
   tipo: string;
+  /** O005: capas del IfcMaterialLayerSet, de exterior a interior. */
+  capas: Array<{ material: string; espesor: number }>;
   vertices: Float32Array;
   indices: Uint32Array;
 }
@@ -113,6 +115,7 @@ export interface ElementoMallaCrudo {
   opacidad: number;
   categoria: Categoria;
   tipo: string;
+  capas: Array<{ material: string; espesor: number }>;
   vertices: string;
   indices: string;
 }

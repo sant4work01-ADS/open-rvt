@@ -169,6 +169,8 @@ describe("caja de las mallas", () => {
       color: "#cccccc",
       opacidad: 1,
       categoria: "muros",
+      tipo: "Block 15",
+      capas: [],
       vertices: new Float32Array(vertices),
       indices: new Uint32Array([0, 1, 2]),
     });

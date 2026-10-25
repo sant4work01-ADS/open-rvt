@@ -64,8 +64,16 @@ function CampoNumero({
 function PropiedadesVista({ vista }: { vista: Vista }) {
   const actualizar = useModelo((s) => s.actualizarVista);
   const niveles = useModelo((s) => s.niveles);
+  const estilos = useModelo((s) => s.estilos);
   const cambiar = (cambios: Partial<Vista>) => {
     void actualizar(vista.id, cambios);
+  };
+  const cambiarEstilo = (
+    categoria: (typeof CATEGORIAS)[number]["id"],
+    cambio: { oculta?: boolean; corte?: number | null; proyeccion?: number },
+  ) => {
+    const previo = vista.estilos ?? {};
+    cambiar({ estilos: { ...previo, [categoria]: { ...previo[categoria], ...cambio } } });
   };
   const visibles = vista.nivelesVisibles.length === 0
     ? niveles.map((n) => n.globalid)
@@ -180,6 +188,66 @@ function PropiedadesVista({ vista }: { vista: Vista }) {
             </label>
           ))}
         </div>
+      </fieldset>
+
+      {vista.tipo === "planta" && (
+        <CampoNumero
+          etiqueta="Sobre el corte, hasta (m)"
+          testid="vista-altura-arriba"
+          valor={vista.alturaArriba ?? 3}
+          onCambio={(alturaArriba) => cambiar({ alturaArriba })}
+        />
+      )}
+
+      <fieldset
+        data-testid="vista-estilos-categorias"
+        className="flex flex-col gap-1 border-t pt-2"
+      >
+        <legend className="mb-1 font-semibold">Estilos de objeto (esta vista)</legend>
+        {CATEGORIAS.map((categoria) => {
+          const cambio = vista.estilos?.[categoria.id];
+          const defecto = estilos.categorias[categoria.id];
+          return (
+            <div key={categoria.id} className="flex items-center gap-1">
+              <label className="flex w-20 items-center gap-1" title={`Ocultar ${categoria.nombre}`}>
+                <input
+                  type="checkbox"
+                  data-testid={`vista-estilo-${categoria.id}-oculta`}
+                  checked={cambio?.oculta === true}
+                  onChange={(e) => cambiarEstilo(categoria.id, { oculta: e.target.checked })}
+                />
+                <span className="truncate">{categoria.nombre}</span>
+              </label>
+              <input
+                type="number"
+                step="0.05"
+                min="0"
+                aria-label={`Grosor de corte de ${categoria.nombre}`}
+                data-testid={`vista-estilo-${categoria.id}-corte`}
+                value={cambio?.corte ?? defecto.corte ?? ""}
+                placeholder={defecto.corte === null ? "—" : String(defecto.corte)}
+                onChange={(e) => {
+                  const valor = Number(e.target.value);
+                  if (Number.isFinite(valor)) cambiarEstilo(categoria.id, { corte: valor });
+                }}
+                className="w-16 rounded border bg-background px-1 py-0.5 text-right"
+              />
+              <input
+                type="number"
+                step="0.02"
+                min="0"
+                aria-label={`Grosor de proyección de ${categoria.nombre}`}
+                data-testid={`vista-estilo-${categoria.id}-proyeccion`}
+                value={cambio?.proyeccion ?? defecto.proyeccion}
+                onChange={(e) => {
+                  const valor = Number(e.target.value);
+                  if (Number.isFinite(valor)) cambiarEstilo(categoria.id, { proyeccion: valor });
+                }}
+                className="w-16 rounded border bg-background px-1 py-0.5 text-right"
+              />
+            </div>
+          );
+        })}
       </fieldset>
 
       <label className="flex items-center justify-between gap-2 border-t pt-2">
