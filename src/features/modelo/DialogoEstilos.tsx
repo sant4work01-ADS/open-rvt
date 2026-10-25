@@ -1,6 +1,6 @@
 // OPEN-RVT: diálogo «Estilos de objeto» de O005. Edita la tabla de plumillas y los
 // patrones de relleno por material; se guarda en el pset OPENRVT_Estilos.
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { useModelo } from "./estado";
 import {
@@ -14,7 +14,7 @@ import {
   type PatronRelleno,
 } from "./estilos";
 
-export const MATERIALES_UI: ReadonlyArray<{ id: MaterialNombre; nombre: string }> = [
+const MATERIALES_UI: ReadonlyArray<{ id: MaterialNombre; nombre: string }> = [
   { id: "block", nombre: "Block" },
   { id: "tabique", nombre: "Tabique" },
   { id: "concreto", nombre: "Concreto" },
@@ -44,18 +44,11 @@ const LINEAS: ReadonlyArray<{ id: PatronLinea; nombre: string }> = [
 ];
 
 export function DialogoEstilos() {
-  const abierto = useModelo((s) => s.dialogoEstilos);
   const estilos = useModelo((s) => s.estilos);
   const guardar = useModelo((s) => s.guardarEstilos);
   const cerrar = useModelo((s) => s.cerrarDialogoEstilos);
   const [pestana, setPestana] = useState<"categorias" | "materiales">("categorias");
   const [borrador, setBorrador] = useState<Estilos>(estilos);
-
-  useEffect(() => {
-    if (abierto) setBorrador(estilos);
-  }, [abierto, estilos]);
-
-  if (!abierto) return null;
 
   const cambiarCategoria = (id: (typeof CATEGORIAS_ESTILO)[number], cambio: Partial<EstiloCategoria>) => {
     setBorrador((previo) => ({

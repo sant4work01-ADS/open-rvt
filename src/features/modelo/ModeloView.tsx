@@ -28,6 +28,7 @@ export function ModeloView() {
   const cargando = useModelo((s) => s.cargando);
   const error = useModelo((s) => s.error);
   const fijarVista = useModelo((s) => s.fijarVista);
+  const dialogoEstilos = useModelo((s) => s.dialogoEstilos);
   const seleccionar = useModelo((s) => s.seleccionar);
   const anadirPuntoCorte = useModelo((s) => s.anadirPuntoCorte);
   const [panelAbierto, setPanelAbierto] = useState(true);
@@ -122,7 +123,7 @@ export function ModeloView() {
         </div>
       </div>
       {panelAbierto && <PanelPropiedades />}
-      <DialogoEstilos />
+      {dialogoEstilos && <DialogoEstilos />}
     </div>
   );
 }
