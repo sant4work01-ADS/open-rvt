@@ -16,3 +16,6 @@ Esto cambia el orden de la ruta C de `docs/caminos-posibles.md`: el «visor + cu
 ## Interfaz (decisión del usuario, 2026-10-24)
 - Igual que PresupuestosPro: ribbon, sidebar y área de trabajo. Es una app propia de escritorio (Tauri), **no Blender**.
 - Blender queda solo como motor de render, si se usa.
+
+## Plataformas (decisión del usuario, 2026-10-24)
+Multiplataforma: **Windows y Linux** desde el inicio. Toda dependencia debe tener versión para las dos; IfcOpenShell, Tauri y web-ifc la tienen.
