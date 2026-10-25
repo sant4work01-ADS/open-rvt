@@ -111,6 +111,31 @@ async function clicMundo(ses, x, y) {
   await esperar(350);
 }
 
+async function zoomMundo(ses, x, y, pasos = 3) {
+  const punto = await proyectar(ses, x, y);
+  await ses.driver.executeScript(
+    (punto, pasos) => {
+      const canvas = document.querySelector('[data-testid="visor"] canvas');
+      if (!canvas) throw new Error("no hay canvas");
+      for (let i = 0; i < pasos; i += 1) {
+        canvas.dispatchEvent(
+          new WheelEvent("wheel", {
+            bubbles: true,
+            cancelable: true,
+            deltaY: -120,
+            deltaMode: 0,
+            clientX: punto.x,
+            clientY: punto.y,
+          }),
+        );
+      }
+    },
+    punto,
+    pasos,
+  );
+  await esperar(700);
+}
+
 async function tecla(ses, key, code = key) {
   await ses.driver.executeScript(
     (key, code) => {
@@ -221,7 +246,10 @@ test("O007c: castillos en muros, cerramientos, retícula con zapatas y trabes", 
     await esperar(500);
     await elegirVista(ses, "Planta Nivel 0");
     await ses.captura(path.join(CAPTURAS, "o007c_castillos_auto.png"));
+    // Acercamiento a la esquina superior derecha para revisar castillo y acabados.
+    await zoomMundo(ses, 7, 5, 3);
     await ses.captura(path.join(CAPTURAS, "o007c_esquina_castillo.png"));
+    await elegirVista(ses, "Planta Nivel 0");
     for (const archivo of ["o007c_castillos_auto.png", "o007c_esquina_castillo.png"]) {
       const medidas = dimensionesPng(path.join(CAPTURAS, archivo));
       assert.ok(medidas.ancho > 1000 && medidas.alto > 600);
@@ -251,23 +279,29 @@ test("O007c: castillos en muros, cerramientos, retícula con zapatas y trabes", 
     await activar(ses, "cmd-columna");
     await activar(ses, "columna-con-zapata");
     await activar(ses, "columna-en-cruces");
-    await esperar(1200);
+    await ses.driver.wait(async () => {
+      const actuales = await estructura(ses);
+      return (
+        actuales.filter((e) => e.estructura.alias === "columna").length === 9 &&
+        actuales.filter(
+          (e) => e.clase === "IfcFooting" && e.estructura.alias === "zapata",
+        ).length === 9
+      );
+    }, 20_000, "no aparecieron las 9 columnas con sus zapatas");
     elementos = await estructura(ses);
-    assert.equal(elementos.filter((e) => e.estructura.alias === "columna").length, 9);
-    assert.equal(
-      elementos.filter((e) => e.clase === "IfcFooting" && e.estructura.alias === "zapata")
-        .length,
-      9,
-    );
 
     // 5. Contratrabes entre zapatas y trabes entre columnas.
     await activar(ses, "cmd-unir-zapatas");
-    await esperar(800);
+    await ses.driver.wait(async () => {
+      const actuales = await estructura(ses);
+      return actuales.filter((e) => e.estructura.alias === "contratrabe").length === 12;
+    }, 20_000, "no aparecieron los 12 contratrabes");
     await activar(ses, "cmd-unir-trabes");
-    await esperar(800);
+    await ses.driver.wait(async () => {
+      const actuales = await estructura(ses);
+      return actuales.filter((e) => e.estructura.alias === "trabe").length === 12;
+    }, 20_000, "no aparecieron las 12 trabes");
     elementos = await estructura(ses);
-    assert.equal(elementos.filter((e) => e.estructura.alias === "contratrabe").length, 12);
-    assert.equal(elementos.filter((e) => e.estructura.alias === "trabe").length, 12);
 
     // 6. Mover el eje B (y = 2) medio metro: sus columnas y zapatas lo siguen.
     const ejeB = ejes.find((e) => e.etiqueta === "B");

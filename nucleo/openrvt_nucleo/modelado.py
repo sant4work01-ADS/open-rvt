@@ -2455,18 +2455,20 @@ class ModeladoMixin:
             return self._resultado(mensaje="Sin desplazamiento.")
         self._instantanea()
         afectados: list[Any] = []
-        vistos: set[int] = set()
+        # Se comparan GlobalId, no id() de los envoltorios: un envoltorio liberado
+        # puede reutilizar la dirección de memoria y saltarse un elemento.
+        vistos: set[str] = set()
         for gid in gids:
             for producto in self._productos_de(gid):
-                if id(producto) in vistos:
+                if _gid(producto) in vistos:
                     continue
-                vistos.add(id(producto))
+                vistos.add(_gid(producto))
                 afectados.append(producto)
                 # O007c: mover la columna mueve su zapata.
                 if producto.is_a("IfcColumn"):
                     for zapata in self._zapatas_de_columna(producto):
-                        if id(zapata) not in vistos:
-                            vistos.add(id(zapata))
+                        if _gid(zapata) not in vistos:
+                            vistos.add(_gid(zapata))
                             afectados.append(zapata)
         # Se calculan todas las matrices antes de tocar nada: mover un muro desplaza a
         # sus vanos (que cuelgan de él), pero un relleno puede tener colocación propia.
@@ -2555,7 +2557,9 @@ class ModeladoMixin:
                 )
         self._instantanea()
         borrados: list[str] = []
-        vistos: set[int] = set()
+        # GlobalId en lugar de id(): los envoltorios de IfcOpenShell se liberan al
+        # borrarlos y Python puede reutilizar su dirección de memoria.
+        vistos: set[str] = set()
         for gid in expandidos:
             try:
                 entidad = self._entidad_por_gid(gid)
@@ -2564,9 +2568,9 @@ class ModeladoMixin:
             productos = self._productos_de(_gid(entidad))
             # De relleno a vano y de vano a muro, para no dejar relaciones colgando.
             for producto in reversed(productos):
-                if id(producto) in vistos:
+                if _gid(producto) in vistos:
                     continue
-                vistos.add(id(producto))
+                vistos.add(_gid(producto))
                 if producto.is_a("IfcWall"):
                     self._quitar_uniones(producto)
                 self._quitar_conexiones(producto)
