@@ -46,7 +46,11 @@ while IFS= read -r linea; do
     identicos=$((identicos + 1))
   else
     adaptados=$((adaptados + 1))
-    diff -ru "$b" "$a" || true
+    if [ -d "$b" ]; then
+      diff -ru "$b" "$a" || true
+    else
+      diff -u "$b" "$a" || true
+    fi
   fi
 
   # ¿PP cambió este archivo después del commit de origen?
