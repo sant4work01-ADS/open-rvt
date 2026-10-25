@@ -35,12 +35,17 @@
     "pestanasNombres": {
       "inicio": "Home",
       "principal": "Home",
-      "vista": "View"
+      "vista": "View",
+      "modelar": "Model"
     },
     "grupos": {
       "Archivo": "File",
       "Modelo": "Model",
-      "Tema": "Theme"
+      "Tema": "Theme",
+      "Datos": "Data",
+      "Construir": "Build",
+      "Modificar": "Modify",
+      "Historial": "History"
     },
     "comandos": {
       "nuevo": "New",
@@ -54,7 +59,17 @@
       "deshacer": "Undo",
       "cortar": "Cut",
       "copiar": "Copy",
-      "pegar": "Paste"
+      "pegar": "Paste",
+      "nivel": "Level",
+      "eje": "Grid",
+      "muro": "Wall",
+      "losa": "Slab",
+      "losa-desde-muros": "From walls",
+      "puerta": "Door",
+      "ventana": "Window",
+      "mover": "Move",
+      "borrar": "Delete",
+      "rehacer": "Redo"
     },
     "descripciones": {
       "nuevo": "Create an empty IFC model",
@@ -64,7 +79,19 @@
       "nuevo-corte": "Draw a line with two clicks on a plan",
       "tema-sistema": "Follow the system theme",
       "tema-claro": "Light theme",
-      "tema-oscuro": "Dark theme"
+      "tema-oscuro": "Dark theme",
+      "nivel": "Create a level and its plan view",
+      "eje": "Draw a grid axis with two clicks",
+      "muro": "Draw chained walls",
+      "losa": "Draw a slab by vertices or from walls",
+      "losa-desde-muros": "Create the slab from the selected wall loop",
+      "puerta": "Place a door on a wall",
+      "ventana": "Place a window on a wall",
+      "mover": "Move the selection between two points",
+      "copiar": "Copy the selection between two points",
+      "borrar": "Delete the selected elements",
+      "deshacer": "Undo the last command",
+      "rehacer": "Redo the last undone command"
     },
     "masOpciones": "More options"
   },

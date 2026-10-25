@@ -11,6 +11,7 @@ import { useTema, aplicarTema, ESCALA_DEFECTO, bajarEscala, subirEscala } from "
 import { ConfiguracionView } from "@/features/configuracion/ConfiguracionView";
 import { AyudaView } from "@/features/ayuda/AyudaView";
 import { ModeloView } from "@/features/modelo/ModeloView";
+import { NivelesView } from "@/features/modelo/NivelesView";
 import { useModelo } from "@/features/modelo/estado";
 import { Ribbon } from "@/features/ribbon/Ribbon";
 import { construirComandosRibbon } from "@/features/ribbon/comandos";
@@ -42,6 +43,7 @@ export function App() {
   const { pref, fijar, iniciar } = useTema();
   const nombreArchivo = useModelo((s) => s.nombreArchivo);
   const conCambios = useModelo((s) => s.conCambios);
+  const herramientaActiva = useModelo((s) => s.herramienta);
   const tituloDocumento = nombreArchivo
     ? `${tr("comun.app", "OPEN-RVT")} — ${nombreArchivo}${conCambios ? " *" : ""}`
     : tr("comun.app", "OPEN-RVT");
@@ -151,6 +153,97 @@ export function App() {
     return () => window.removeEventListener("keydown", alTeclear);
   }, [irAModulo]);
 
+  // Atajos de modelado (spec O003b): letras al estilo Revit, Supr, Ctrl+Z/Y y Esc.
+  const bufferTeclas = useRef({ texto: "", instante: 0 });
+  useEffect(() => {
+    const alTeclear = (e: KeyboardEvent) => {
+      const objetivo = e.target as HTMLElement | null;
+      const enTexto =
+        !!objetivo &&
+        (objetivo.isContentEditable ||
+          objetivo.tagName === "TEXTAREA" ||
+          (objetivo.tagName === "INPUT" &&
+            !["checkbox", "radio", "button", "range"].includes(
+              (objetivo as HTMLInputElement).type,
+            )));
+      const estado = useModelo.getState();
+      if (e.key === "Escape") {
+        if (estado.herramienta) {
+          estado.cancelarHerramienta();
+          e.preventDefault();
+        } else if (estado.seleccionados.length > 0) {
+          void estado.seleccionar(null);
+        }
+        return;
+      }
+      if (enTexto) return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        void estado.deshacer();
+        return;
+      }
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        (e.key.toLowerCase() === "y" || (e.shiftKey && e.key.toLowerCase() === "z"))
+      ) {
+        e.preventDefault();
+        void estado.rehacer();
+        return;
+      }
+      if (e.key === "Delete") {
+        e.preventDefault();
+        void estado.borrarSeleccion();
+        return;
+      }
+      if (e.code === "Space" && (estado.herramienta === "puerta" || estado.herramienta === "ventana")) {
+        e.preventDefault();
+        estado.voltearAbertura();
+        return;
+      }
+      if (estado.herramienta === "muro" && estado.puntosHerramienta.length > 0) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          void estado.confirmarLongitud(e.shiftKey);
+          return;
+        }
+        if (e.key === "Backspace" || e.key === "," || e.key === "." || /^\d$/.test(e.key)) {
+          e.preventDefault();
+          estado.teclearLongitud(e.key);
+          return;
+        }
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const ahora = performance.now();
+      const buffer = bufferTeclas.current;
+      if (ahora - buffer.instante > 900) buffer.texto = "";
+      buffer.instante = ahora;
+      buffer.texto = (buffer.texto + e.key.toLowerCase()).slice(-2);
+      const acciones: Record<string, () => void> = {
+        wa: () => estado.activarHerramienta("muro"),
+        sb: () => estado.activarHerramienta("losa"),
+        dr: () => estado.activarHerramienta("puerta"),
+        wn: () => estado.activarHerramienta("ventana"),
+        gr: () => estado.activarHerramienta("eje"),
+        ll: () => {
+          const niveles = estado.niveles;
+          const siguiente =
+            niveles.length > 0 ? Math.max(...niveles.map((n) => n.elevacion)) + 3 : 0;
+          void estado.crearNivel(`Nivel ${niveles.length}`, siguiente);
+        },
+        mv: () => estado.activarHerramienta("mover"),
+        co: () => estado.activarHerramienta("copiar"),
+      };
+      const accion = acciones[buffer.texto];
+      if (accion) {
+        buffer.texto = "";
+        e.preventDefault();
+        accion();
+      }
+    };
+    window.addEventListener("keydown", alTeclear);
+    return () => window.removeEventListener("keydown", alTeclear);
+  }, []);
+
   // Atajos globales; sin modelo abierto solo actúan las preferencias de la app.
   useAtajosGlobales(
     {
@@ -175,12 +268,33 @@ export function App() {
         guardar: () => void useModelo.getState().guardar(),
         guardarComo: () => void useModelo.getState().guardarComo(),
         nuevaVistaCorte: () => useModelo.getState().iniciarCorte(),
+        // OPEN-RVT: herramientas de modelado (spec O003b).
+        nuevoNivel: () => {
+          const estado = useModelo.getState();
+          const siguiente =
+            estado.niveles.length > 0
+              ? Math.max(...estado.niveles.map((n) => n.elevacion)) + 3
+              : 0;
+          void estado.crearNivel(`Nivel ${estado.niveles.length}`, siguiente);
+        },
+        nuevoEje: () => useModelo.getState().activarHerramienta("eje"),
+        herramientaMuro: () => useModelo.getState().activarHerramienta("muro"),
+        herramientaLosa: () => useModelo.getState().activarHerramienta("losa"),
+        losaDesdeMuros: () => void useModelo.getState().losaDesdeMuros(),
+        herramientaPuerta: () => useModelo.getState().activarHerramienta("puerta"),
+        herramientaVentana: () => useModelo.getState().activarHerramienta("ventana"),
+        herramientaMover: () => useModelo.getState().activarHerramienta("mover"),
+        herramientaCopiar: () => useModelo.getState().activarHerramienta("copiar"),
+        borrarSeleccion: () => void useModelo.getState().borrarSeleccion(),
+        deshacer: () => void useModelo.getState().deshacer(),
+        rehacer: () => void useModelo.getState().rehacer(),
+        herramientaActiva,
         temaSistema: () => fijar("sistema"),
         temaClaro: () => fijar("claro"),
         temaOscuro: () => fijar("oscuro"),
         temaActivo: pref,
       }),
-    [fijar, pref],
+    [fijar, pref, herramientaActiva],
   );
 
   const comandos = useMemo<Comando[]>(() => {
@@ -246,7 +360,7 @@ export function App() {
             {activo === "modelo" ? (
               <ModeloView />
             ) : activo === "niveles" ? (
-              <div data-testid="vista-niveles" className="min-h-0 flex-1" />
+              <NivelesView />
             ) : activo === "configuracion" ? (
               <>
                 <div className="flex h-9 shrink-0 items-center border-b px-3 font-medium">

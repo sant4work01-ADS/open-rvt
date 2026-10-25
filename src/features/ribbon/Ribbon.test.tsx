@@ -13,6 +13,19 @@ function montar(extra: Partial<Parameters<typeof construirComandosRibbon>[0]> = 
     guardar: vi.fn(),
     guardarComo: vi.fn(),
     nuevaVistaCorte: vi.fn(),
+    nuevoNivel: vi.fn(),
+    nuevoEje: vi.fn(),
+    herramientaMuro: vi.fn(),
+    herramientaLosa: vi.fn(),
+    losaDesdeMuros: vi.fn(),
+    herramientaPuerta: vi.fn(),
+    herramientaVentana: vi.fn(),
+    herramientaMover: vi.fn(),
+    herramientaCopiar: vi.fn(),
+    borrarSeleccion: vi.fn(),
+    deshacer: vi.fn(),
+    rehacer: vi.fn(),
+    herramientaActiva: null,
     temaSistema: vi.fn(),
     temaClaro: vi.fn(),
     temaOscuro: vi.fn(),
@@ -27,9 +40,9 @@ function montar(extra: Partial<Parameters<typeof construirComandosRibbon>[0]> = 
 }
 
 describe("Ribbon", () => {
-  it("solo tiene las pestañas Inicio y Vista, con Inicio activa", () => {
+  it("tiene las pestañas Inicio, Modelar y Vista, con Inicio activa", () => {
     montar();
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Inicio", "Vista"]);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Inicio", "Modelar", "Vista"]);
     expect(screen.getByRole("tab", { name: "Inicio" })).toHaveAttribute("aria-selected", "true");
   });
 
@@ -74,6 +87,19 @@ describe("Ribbon", () => {
           guardar: vi.fn(),
           guardarComo: vi.fn(),
           nuevaVistaCorte: vi.fn(),
+          nuevoNivel: vi.fn(),
+          nuevoEje: vi.fn(),
+          herramientaMuro: vi.fn(),
+          herramientaLosa: vi.fn(),
+          losaDesdeMuros: vi.fn(),
+          herramientaPuerta: vi.fn(),
+          herramientaVentana: vi.fn(),
+          herramientaMover: vi.fn(),
+          herramientaCopiar: vi.fn(),
+          borrarSeleccion: vi.fn(),
+          deshacer: vi.fn(),
+          rehacer: vi.fn(),
+          herramientaActiva: null,
           temaSistema: vi.fn(),
           temaClaro: vi.fn(),
           temaOscuro: vi.fn(),
