@@ -14,9 +14,12 @@ from typing import Any
 
 LOG = logging.getLogger("openrvt_nucleo")
 
+ERROR_IMPORTACION: str | None = None
+
 try:  # El fallo de importación se informa como error de comando, no tumba el proceso.
     from .modelo import ErrorNucleo, ModeloNucleo
 except Exception as exc:  # pragma: no cover - depende del entorno
+    ERROR_IMPORTACION = str(exc)
     LOG.critical("no se pudo importar IfcOpenShell: %s", exc)
     ModeloNucleo = None  # type: ignore[assignment]
 
@@ -28,8 +31,9 @@ except Exception as exc:  # pragma: no cover - depende del entorno
 
 
 def _sin_modelo() -> ErrorNucleo:
+    detalle = f" ({ERROR_IMPORTACION})" if ERROR_IMPORTACION else ""
     return ErrorNucleo(
-        "Núcleo IFC no disponible: falta IfcOpenShell en el intérprete de Python.",
+        f"Núcleo IFC no disponible: falta IfcOpenShell en el intérprete de Python.{detalle}",
         -32010,
     )
 
@@ -56,7 +60,10 @@ class Servidor:
             if self.modelo is None:
                 return {
                     "disponible": False,
-                    "detalle": "falta IfcOpenShell en el intérprete de Python",
+                    "detalle": (
+                        "falta IfcOpenShell en el intérprete de Python"
+                        + (f": {ERROR_IMPORTACION}" if ERROR_IMPORTACION else "")
+                    ),
                 }
             import ifcopenshell
 
