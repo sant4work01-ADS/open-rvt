@@ -128,7 +128,7 @@ export function App() {
           evento.preventDefault();
           if (await modelo.asegurarSinCambios()) {
             permitirCierre.current = true;
-            await ventana.close();
+            await ventana.destroy();
           }
         });
         if (vivo) quitar = desuscribir;
