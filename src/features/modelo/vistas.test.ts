@@ -186,3 +186,19 @@ describe("caja de las mallas", () => {
     expect(cajaDeMallas([])).toEqual({ min: [-1, -1, -1], max: [1, 1, 1] });
   });
 });
+
+describe("sobrescritura de estilos por vista (O005)", () => {
+  it("conserva ocultar y grosores al guardar y leer las vistas", () => {
+    const vistas = crearVistas(NIVELES);
+    const planta = { ...vistas[0] };
+    planta.estilos = {
+      muros: { corte: 0.7 },
+      puertas: { oculta: true },
+      losas: { proyeccion: 0.2 },
+    };
+    planta.alturaArriba = 4.5;
+    const leidas = leerVistas(serializarVistas([planta]));
+    expect(leidas[0].estilos).toEqual(planta.estilos);
+    expect(leidas[0].alturaArriba).toBe(4.5);
+  });
+});

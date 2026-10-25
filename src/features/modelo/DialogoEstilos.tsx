@@ -13,7 +13,6 @@ import {
   type PatronLinea,
   type PatronRelleno,
 } from "./estilos";
-import { CATEGORIAS } from "./tipos";
 
 export const MATERIALES_UI: ReadonlyArray<{ id: MaterialNombre; nombre: string }> = [
   { id: "block", nombre: "Block" },
@@ -268,6 +267,3 @@ export function DialogoEstilos() {
     </Modal>
   );
 }
-
-/** Categorías de la tabla que también son categorías de elemento. */
-export const CATEGORIAS_CON_ESTILO = CATEGORIAS;
