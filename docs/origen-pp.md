@@ -13,6 +13,7 @@ commit **`fd60cde`** («Ayuda: novedades de la versión 0.13.18»).
 | Archivo en OPEN-RVT | Archivo en PP | Estado | Motivo de la adaptación |
 | --- | --- | --- | --- |
 | `package.json` | `package.json` | adaptado | Nombre `open-rvt`; se quitaron glide-data-grid, marked, lodash, zod, react-hook-form, react-hotkeys-hook, pdfjs-dist, selenium y demás dependencias que ya no usa nadie. |
+| `eslint.config.js` | `eslint.config.js` | intacto | — |
 | `vite.config.ts` | `vite.config.ts` | adaptado | Se quitó la deduplicación y los comentarios de Glide; el resto (alias `@`, jsdom, setup) es igual. |
 | `.gitignore` | `.gitignore` | adaptado | Se añadieron las salidas de `dist`, `target`, `src-tauri/gen` y `e2e/salida`. |
 | `Cargo.toml` | `Cargo.toml` | adaptado | Workspace con el único miembro `src-tauri`; sin los crates de PP. |

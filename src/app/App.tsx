@@ -94,7 +94,6 @@ export function App() {
       escalaMenos: () => useTema.getState().fijarEscala(bajarEscala(useTema.getState().escala)),
       escalaNormal: () => useTema.getState().fijarEscala(ESCALA_DEFECTO),
     },
-    false,
   );
 
   const comandosRibbon = useMemo(

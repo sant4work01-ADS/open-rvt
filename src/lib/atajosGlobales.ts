@@ -39,7 +39,8 @@ export function hayDialogoAbierto(): boolean {
 }
 
 /** Instala los atajos globales. */
-export function useAtajosGlobales(acciones: AccionesGlobales, _hayObra: boolean) {
+// OPEN-RVT: sin obra que abrir/cerrar; se quitó el segundo parámetro `hayObra`.
+export function useAtajosGlobales(acciones: AccionesGlobales) {
   const ref = useRef(acciones);
   useEffect(() => {
     ref.current = acciones;
