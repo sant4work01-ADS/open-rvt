@@ -23,3 +23,6 @@ modelo y la geometría, y un visor ligero (That Open / three.js) para 3D y plant
 4. Familias paramétricas y lo demás.
 
 Primera impresión (Opus): C es la más realista; el paso 1 ya aporta y conecta con PresupuestosPro.
+
+## Decisión del usuario (2026-10-24)
+**El editor va primero:** crear y editar elementos sobre el núcleo IFC. La cuantificación y el enlace a PresupuestosPro vienen después. Ver `ideas/2026-10-24-editor-primero-y-plantillas.md`.
