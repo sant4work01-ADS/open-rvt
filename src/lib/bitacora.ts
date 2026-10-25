@@ -347,12 +347,13 @@ async function datosDelSistema(): Promise<Record<string, unknown>> {
     /* sin backend */
   }
   try {
-    const respuesta = await commands.nucleoLlamar("nucleo.ping", {});
-    if (respuesta.status === "ok") {
-      const datos = respuesta.data as { disponible?: boolean; ifcopenshell?: string; python?: string };
-      python = datos.python ?? "";
-      ifcopenshell = datos.disponible ? (datos.ifcopenshell ?? "") : "no disponible";
-    }
+    const datos = await llamarConBitacora<{
+      disponible?: boolean;
+      ifcopenshell?: string;
+      python?: string;
+    }>("nucleo.ping");
+    python = datos.python ?? "";
+    ifcopenshell = datos.disponible ? (datos.ifcopenshell ?? "") : "no disponible";
   } catch {
     python = "no disponible";
     ifcopenshell = "no disponible";
