@@ -281,6 +281,10 @@ class ModeloNucleo:
         modelo = self._exigir_modelo()
         por_clase: dict[str, int] = {}
         for elemento in self._elementos_ordenados():
+            # Los conteos de la barra de estado siguen las ocho clases medidas en O001;
+            # el visor recibe además miembros, barandillas y otros elementos.
+            if elemento.is_a() not in CLASES_OBJETIVO:
+                continue
             clase = elemento.is_a()
             por_clase[clase] = por_clase.get(clase, 0) + 1
         proyecto = modelo.by_type("IfcProject")

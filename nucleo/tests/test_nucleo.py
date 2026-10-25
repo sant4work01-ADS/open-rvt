@@ -79,7 +79,7 @@ def test_fzk_haus_niveles_y_conteos_como_o001():
         "IfcWallStandardCase": 13,
         "IfcWindow": 11,
     }
-    assert nucleo.info()["elementos"] == 38 + 42 + 2  # elementos + miembros + barandillas
+    assert nucleo.info()["elementos"] == 38  # las ocho clases medidas en O001
 
 
 def test_fzk_haus_teselado_igual_a_o001():

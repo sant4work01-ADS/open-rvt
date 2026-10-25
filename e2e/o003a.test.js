@@ -163,7 +163,7 @@ test("O003a: FZK-Haus abre con 2 plantas, 4 alzados, iso y perspectiva", async (
       "3D Perspectiva",
     ]);
     assert.equal(await textoDom(ses, '[data-testid="estado-esquema"]'), "IFC4");
-    assert.match(await textoDom(ses, '[data-testid="estado-elementos"]'), /^82 elementos$/);
+    assert.match(await textoDom(ses, '[data-testid="estado-elementos"]'), /^38 elementos$/);
     assert.match(await textoDom(ses, '[data-testid="estado-modelo"]'), /^AC20-FZK-Haus\.ifc/);
 
     const capturas = [
