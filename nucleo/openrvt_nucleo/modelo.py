@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import ifcopenshell
+from .acero import AceroMixin
 from .biblioteca import BibliotecaMixin
 from .modelado import ModeladoMixin
 
@@ -138,7 +139,7 @@ def _categoria(clase: str) -> str:
     return "otros"
 
 
-class ModeloNucleo(BibliotecaMixin, ModeladoMixin):
+class ModeloNucleo(BibliotecaMixin, ModeladoMixin, AceroMixin):
     """Estado del modelo abierto en el proceso Python."""
 
     def __init__(self) -> None:
@@ -256,6 +257,7 @@ class ModeloNucleo(BibliotecaMixin, ModeladoMixin):
         self._crear_materiales_semilla()
         self.crear_tipos_muro()
         self.crear_tipos_ejemplo()
+        self.crear_tipos_estructura()
         return self.info()
 
     def abrir(self, ruta: str) -> dict[str, Any]:
@@ -275,6 +277,7 @@ class ModeloNucleo(BibliotecaMixin, ModeladoMixin):
         self._rehacer.clear()
         # O007a: si el archivo no trae biblioteca, se siembra al abrirlo.
         self._asegurar_biblioteca()
+        self.crear_tipos_estructura()
         return self.info()
 
     def guardar(self, ruta: str | None = None) -> dict[str, Any]:
