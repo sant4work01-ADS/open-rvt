@@ -19,3 +19,6 @@ Esto cambia el orden de la ruta C de `docs/caminos-posibles.md`: el «visor + cu
 
 ## Plataformas (decisión del usuario, 2026-10-24)
 Multiplataforma: **Windows y Linux** desde el inicio. Toda dependencia debe tener versión para las dos; IfcOpenShell, Tauri y web-ifc la tienen.
+
+## Motor (decisión del usuario, 2026-10-24)
+**IfcOpenShell es el núcleo.** Su peso, de unos 45 MB en el instalador, no es problema: «yo pensé que hablábamos de varios GB». No se reescribe en Rust. O001 y O001b siguen para medir rendimiento y edición, y para ver si web-ifc sirve como visor rápido dentro del webview.
