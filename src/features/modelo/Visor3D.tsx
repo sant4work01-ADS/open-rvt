@@ -13,10 +13,16 @@ import { categoriaVisible, dibujaSiluetaSobreCorte } from "./vistas";
 import { useModelo } from "./estado";
 import { colocarAbertura, type Punto2 } from "./herramientas";
 import {
+  calcularFamiliasCotas,
+  formatearCota,
+  parsearCota,
+} from "./cotas";
+import {
   categoriaOculta,
   factorEscala,
   grosorMm,
   materialPorCapa,
+  mmAMundo,
   mmAPx,
   PATRONES_LINEA_DASH,
   type Estilos,
@@ -75,6 +81,29 @@ interface Navegacion {
     direccion: THREE.Vector3;
     distancia: number;
   };
+}
+
+/** O006a: texto de cota que se puede editar con doble clic. */
+interface CotaInteractiva {
+  tipo: "parcial" | "total" | "nivel" | "elevacion";
+  texto: string;
+  valor: number;
+  punto: [number, number, number];
+  referencia?: string;
+  mover?: string;
+  nivel?: string;
+  nombre?: string;
+}
+
+interface CotaEnEdicion {
+  tipo: CotaInteractiva["tipo"];
+  referencia?: string;
+  mover?: string;
+  nivel?: string;
+  nombre?: string;
+  valor: number;
+  izquierda: number;
+  arriba: number;
 }
 
 const ARRIBA = new THREE.Vector3(0, 0, 1);
@@ -297,6 +326,50 @@ function etiquetaCota(
   return sprite;
 }
 
+/**
+ * O006a: texto de cota sin recuadro, con un halo del color del fondo para que se lea
+ * sobre la línea. La altura se da en unidades de mundo (mm de papel ya convertidos).
+ */
+function textoCota(
+  texto: string,
+  color: string,
+  fondo: string,
+  altoMundo: number,
+): THREE.Sprite | null {
+  if (typeof document === "undefined") return null;
+  const canvas = document.createElement("canvas");
+  const fuente = "bold 40px sans-serif";
+  const medicion = document.createElement("canvas").getContext("2d");
+  if (!medicion) return null;
+  medicion.font = fuente;
+  const anchoTexto = Math.ceil(medicion.measureText(texto).width);
+  canvas.width = Math.max(32, anchoTexto + 24);
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.font = fuente;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = fondo;
+  ctx.strokeText(texto, canvas.width / 2, 34);
+  ctx.fillStyle = color;
+  ctx.fillText(texto, canvas.width / 2, 34);
+  const textura = new THREE.CanvasTexture(canvas);
+  textura.colorSpace = THREE.SRGBColorSpace;
+  const material = new THREE.SpriteMaterial({
+    map: textura,
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+  });
+  const sprite = new THREE.Sprite(material);
+  // La altura pedida es la del texto (mm de papel); el lienzo tiene aire arriba y abajo.
+  const altoSprite = altoMundo * (64 / 40);
+  sprite.scale.set((altoSprite * canvas.width) / canvas.height, altoSprite, 1);
+  return sprite;
+}
+
 /** Genera la textura de un patrón de relleno (un período de escala en mm de papel). */
 function texturaPatron(
   patron: PatronRelleno,
@@ -509,6 +582,16 @@ export function Visor3D({
     typeof document !== "undefined" ? document.documentElement.classList.contains("dark") : false,
   );
   const [dimensiones, setDimensiones] = useState({ ancho: 1, alto: 1 });
+  // O006a: textos de cota dibujados y edición en el sitio.
+  const cotasInteraccion = useRef<CotaInteractiva[]>([]);
+  const [cotaEditando, setCotaEditando] = useState<CotaEnEdicion | null>(null);
+  const [textoCotaEditando, setTextoCotaEditando] = useState("");
+  const moverSiguientes = useModelo((s) => s.cotasMoverSiguientes);
+  const fijarMoverSiguientes = useModelo((s) => s.fijarCotasMoverSiguientes);
+  const separarEjes = useModelo((s) => s.separarEjes);
+  const separarNiveles = useModelo((s) => s.separarNiveles);
+  const editarNivel = useModelo((s) => s.editarNivel);
+  const fijarAviso = useModelo((s) => s.fijarAviso);
 
   const nivelGlobalidPorNombre = useMemo(() => {
     const mapa = new Map<string, string>();
@@ -517,7 +600,27 @@ export function Visor3D({
   }, [niveles]);
 
   // O005c: los ejes también encuadran la planta (burbujas incluidas).
-  const cajaVista = useMemo(() => cajaConEjes(caja, referencias.ejes), [caja, referencias]);
+  const cajaVista = useMemo(() => {
+    let base = cajaConEjes(caja, referencias.ejes);
+    if (vista.tipo === "alzado" || vista.tipo === "corte") {
+      // O006a: la cámara debe dejar ver las cabezas de nivel y las cotas de afuera.
+      const elevaciones = niveles.map((n) => n.elevacion);
+      const minZ = Math.min(base.min[2], ...elevaciones);
+      const maxZ = Math.max(base.max[2], ...elevaciones);
+      base = {
+        min: [base.min[0] - 4.0, base.min[1] - 4.0, minZ - 0.6],
+        max: [base.max[0] + 4.0, base.max[1] + 4.0, maxZ + 0.6],
+      };
+    } else if (vista.tipo === "planta" && vista.cotasEjes !== false) {
+      // Las cotas quedan afuera de las burbujas; el margen extra evita recortarlas.
+      const margen = 1.6;
+      base = {
+        min: [base.min[0] - margen, base.min[1] - margen, base.min[2]],
+        max: [base.max[0] + margen, base.max[1] + margen, base.max[2]],
+      };
+    }
+    return base;
+  }, [caja, referencias, niveles, vista.tipo, vista.cotasEjes]);
 
   useEffect(() => {
     const observador = new MutationObserver(() =>
@@ -1186,11 +1289,388 @@ export function Visor3D({
       }
     }
 
+    // O006a: cotas de ejes automáticas en planta. Se derivan de los ejes; no son
+    // IfcAnnotation y no se guardan en el IFC.
+    const datosCotas: Array<{ vertical: boolean; parciales: string[]; total: string | null }> = [];
+    cotasInteraccion.current = [];
+    if (vista.tipo === "planta" && vista.cotasEjes !== false) {
+      const familias = calcularFamiliasCotas(referencias.ejes);
+      const mmCota = grosorDe("cotas", "proyeccion");
+      if (mmCota !== null) {
+        const colorCota = oscuro ? "#e8eaed" : estilos.categorias.cotas.color;
+        const materialCota = crearMaterialLinea({
+          mm: mmCota,
+          escala: vista.escala,
+          color: colorCota,
+          registro,
+          mundoPorPx,
+          profundidad: false,
+        });
+        const altoBurbuja = Math.max(tamano * 0.035, 0.35);
+        const separacion = mmAMundo(1, vista.escala);
+        const marca = mmAMundo(2, vista.escala);
+        const altoTexto = mmAMundo(2.5, vista.escala);
+        const sepParcial = altoBurbuja / 2 + mmAMundo(5, vista.escala);
+        const sepTotal = sepParcial + mmAMundo(6, vista.escala);
+        const exceso = mmAMundo(2, vista.escala);
+        const fondo = oscuro ? "#1f2328" : "#ffffff";
+        const zCota = corteZ + 0.06;
+        for (const familia of familias) {
+          if (familia.ejes.length < 2 || !familia.total) continue;
+          const [ux, uy] = familia.direccion;
+          const [nx, ny] = familia.normal;
+          const tBase = familia.bordeBurbujas;
+          const punto = (s: number, t: number): [number, number, number] => [
+            nx * s + ux * t,
+            ny * s + uy * t,
+            zCota,
+          ];
+          // Líneas de extensión: 1 mm de separación con la burbuja y un poco de exceso.
+          for (const eje of familia.ejes) {
+            const s = eje.x2 * nx + eje.y2 * ny;
+            const t = eje.x2 * ux + eje.y2 * uy;
+            lineaCerrada(
+              [punto(s, t + separacion), punto(s, tBase + sepTotal + exceso)],
+              materialCota,
+              3,
+              grupoLocal,
+            );
+          }
+          const marcar = (s: number, t: number) => {
+            const bx = nx * s + ux * t;
+            const by = ny * s + uy * t;
+            const dx = (nx + ux) / Math.SQRT2;
+            const dy = (ny + uy) / Math.SQRT2;
+            lineaCerrada(
+              [
+                [bx - (dx * marca) / 2, by - (dy * marca) / 2, zCota],
+                [bx + (dx * marca) / 2, by + (dy * marca) / 2, zCota],
+              ],
+              materialCota,
+              3.1,
+              grupoLocal,
+            );
+          };
+          const textos = { vertical: familia.ejes[0].vertical, parciales: [] as string[], total: null as string | null };
+          // Cadena de parciales.
+          for (const cota of familia.parciales) {
+            const t = tBase + sepParcial;
+            lineaCerrada(
+              [punto(cota.desde, t), punto(cota.hasta, t)],
+              materialCota,
+              3,
+              grupoLocal,
+            );
+            marcar(cota.desde, t);
+            marcar(cota.hasta, t);
+            const etiqueta = formatearCota(cota.valor);
+            const sprite = textoCota(etiqueta, colorCota, fondo, altoTexto);
+            if (sprite) {
+              const sm = (cota.desde + cota.hasta) / 2;
+              const pos = punto(sm, t + altoTexto * 0.9);
+              sprite.position.set(pos[0], pos[1], zCota + 0.01);
+              sprite.renderOrder = 20;
+              grupoLocal.add(sprite);
+              cotasInteraccion.current.push({
+                tipo: "parcial",
+                texto: etiqueta,
+                valor: cota.valor,
+                punto: pos,
+                referencia: cota.referencia,
+                mover: cota.mover,
+              });
+            }
+            textos.parciales.push(etiqueta);
+          }
+          // Cota total, más afuera y de lectura.
+          const tTotal = tBase + sepTotal;
+          lineaCerrada(
+            [punto(familia.total.desde, tTotal), punto(familia.total.hasta, tTotal)],
+            materialCota,
+            3,
+            grupoLocal,
+          );
+          marcar(familia.total.desde, tTotal);
+          marcar(familia.total.hasta, tTotal);
+          const etiquetaTotal = formatearCota(familia.total.valor);
+          const spriteTotal = textoCota(etiquetaTotal, colorCota, fondo, altoTexto);
+          if (spriteTotal) {
+            const sm = (familia.total.desde + familia.total.hasta) / 2;
+            const pos = punto(sm, tTotal + altoTexto * 0.9);
+            spriteTotal.position.set(pos[0], pos[1], zCota + 0.01);
+            spriteTotal.renderOrder = 20;
+            grupoLocal.add(spriteTotal);
+            cotasInteraccion.current.push({
+              tipo: "total",
+              texto: etiquetaTotal,
+              valor: familia.total.valor,
+              punto: pos,
+            });
+          }
+          textos.total = etiquetaTotal;
+          datosCotas.push(textos);
+        }
+      }
+    }
+
+    // O006a: niveles y ejes en alzados y cortes. La línea de nivel va de extremo a
+    // extremo del modelo más 1 m por lado; la cabeza y las cotas quedan en el extremo.
+    const datosNiveles: Array<{
+      nombre: string;
+      elevacion: string;
+      cabezas: string[];
+      parciales: string[];
+      total: string | null;
+    }> = [];
+    if (vista.tipo === "alzado" || vista.tipo === "corte") {
+      const mmNiveles = grosorDe("niveles", "proyeccion");
+      if (mmNiveles !== null) {
+        const d: [number, number] =
+          vista.tipo === "alzado"
+            ? [direccionAlzado(vista.orientacion ?? "sur")[0], direccionAlzado(vista.orientacion ?? "sur")[1]]
+            : normalCorte(vista);
+        let h: [number, number] = [-d[1], d[0]];
+        if (vista.tipo === "corte" && vista.puntoA && vista.puntoB) {
+          const dx = vista.puntoB[0] - vista.puntoA[0];
+          const dy = vista.puntoB[1] - vista.puntoA[1];
+          const largo = Math.hypot(dx, dy);
+          if (largo > 1e-9) h = [dx / largo, dy / largo];
+        }
+        const centro = centroCaja(caja);
+        const profundidad = centro[0] * d[0] + centro[1] * d[1];
+        const planoPunto = vista.puntoA
+          ? new THREE.Vector2(vista.puntoA[0], vista.puntoA[1])
+          : new THREE.Vector2(centro[0], centro[1]);
+        const colorNivel = oscuro ? "#e8eaed" : estilos.categorias.niveles.color;
+        const colorEje = oscuro ? "#e0b07a" : estilos.categorias.ejes.color;
+        const materialNivel = crearMaterialLinea({
+          mm: mmNiveles,
+          escala: vista.escala,
+          color: colorNivel,
+          patron: "trazo-punto",
+          registro,
+          mundoPorPx,
+          profundidad: false,
+        });
+        const materialEjeNivel = crearMaterialLinea({
+          mm: grosorDe("ejes", "proyeccion") ?? mmNiveles,
+          escala: vista.escala,
+          color: colorEje,
+          patron: "trazo-punto",
+          registro,
+          mundoPorPx,
+          profundidad: false,
+        });
+        const puntoHZ = (t: number, z: number): [number, number, number] => [
+          h[0] * t + d[0] * profundidad,
+          h[1] * t + d[1] * profundidad,
+          z,
+        ];
+        const proyectarT = (x: number, y: number) => x * h[0] + y * h[1];
+        const esquinasXY: Array<[number, number]> = [
+          [caja.min[0], caja.min[1]],
+          [caja.min[0], caja.max[1]],
+          [caja.max[0], caja.min[1]],
+          [caja.max[0], caja.max[1]],
+        ];
+        const proyecciones = esquinasXY.map(([x, y]) => proyectarT(x, y));
+        const tMin = Math.min(...proyecciones) - 1;
+        const tMax = Math.max(...proyecciones) + 1;
+        const zMin = Math.min(caja.min[2], ...niveles.map((n) => n.elevacion));
+        const zMax = Math.max(caja.max[2], ...niveles.map((n) => n.elevacion));
+        const ordenados = [...niveles].sort((a, b) => a.elevacion - b.elevacion);
+        const marca = mmAMundo(2, vista.escala);
+        const altoTexto = mmAMundo(2.5, vista.escala);
+        const fondo = oscuro ? "#1f2328" : "#ffffff";
+        const firmado = (z: number) => `${z >= 0 ? "+" : ""}${z.toFixed(2)}`;
+        const marcarHZ = (t: number, z: number) => {
+          const base = puntoHZ(t, z);
+          const dx = h[0] / Math.SQRT2;
+          const dy = h[1] / Math.SQRT2;
+          const dz = 1 / Math.SQRT2;
+          lineaCerrada(
+            [
+              [base[0] - (dx * marca) / 2, base[1] - (dy * marca) / 2, z - (dz * marca) / 2],
+              [base[0] + (dx * marca) / 2, base[1] + (dy * marca) / 2, z + (dz * marca) / 2],
+            ],
+            materialNivel,
+            3.1,
+            grupoLocal,
+          );
+        };
+
+        const cabezas: string[] = [];
+        for (const nivel of ordenados) {
+          const z = nivel.elevacion;
+          lineaCerrada(
+            [puntoHZ(tMin, z), puntoHZ(tMax, z)],
+            materialNivel,
+            3,
+            grupoLocal,
+          );
+          // Cabeza de nivel: triángulo en el extremo.
+          lineaCerrada(
+            [
+              puntoHZ(tMax, z - 0.15),
+              puntoHZ(tMax, z + 0.15),
+              puntoHZ(tMax - 0.3, z),
+              puntoHZ(tMax, z - 0.15),
+            ],
+            materialNivel,
+            3,
+            grupoLocal,
+          );
+          const texto = `${nivel.nombre}  ${firmado(z)}`;
+          cabezas.push(texto);
+          const sprite = textoCota(texto, colorNivel, fondo, altoTexto);
+          if (sprite) {
+            const pos = puntoHZ(tMax + 0.35, z + altoTexto * 0.95);
+            sprite.position.set(pos[0], pos[1], pos[2]);
+            sprite.renderOrder = 20;
+            grupoLocal.add(sprite);
+            cotasInteraccion.current.push({
+              tipo: "elevacion",
+              texto,
+              valor: z,
+              punto: pos,
+              nivel: nivel.globalid,
+              nombre: nivel.nombre,
+            });
+          }
+        }
+
+        if (ordenados.length >= 2) {
+          const tParcial = tMax + 1.5;
+          const tTotal = tMax + 2.5;
+          const textos = {
+            nombre: "Niveles",
+            elevacion: "",
+            cabezas,
+            parciales: [] as string[],
+            total: null as string | null,
+          };
+          for (const nivel of ordenados) {
+            lineaCerrada(
+              [puntoHZ(tMax - 0.1, nivel.elevacion), puntoHZ(tTotal + 0.15, nivel.elevacion)],
+              materialNivel,
+              3,
+              grupoLocal,
+            );
+            marcarHZ(tParcial, nivel.elevacion);
+            marcarHZ(tTotal, nivel.elevacion);
+          }
+          for (let i = 0; i + 1 < ordenados.length; i += 1) {
+            const inferior = ordenados[i];
+            const superior = ordenados[i + 1];
+            const valor = superior.elevacion - inferior.elevacion;
+            lineaCerrada(
+              [puntoHZ(tParcial, inferior.elevacion), puntoHZ(tParcial, superior.elevacion)],
+              materialNivel,
+              3,
+              grupoLocal,
+            );
+            const etiqueta = formatearCota(valor);
+            const sprite = textoCota(etiqueta, colorNivel, fondo, altoTexto);
+            if (sprite) {
+              const pos = puntoHZ(tParcial + 0.35, (inferior.elevacion + superior.elevacion) / 2);
+              sprite.position.set(pos[0], pos[1], pos[2]);
+              sprite.renderOrder = 20;
+              grupoLocal.add(sprite);
+              cotasInteraccion.current.push({
+                tipo: "nivel",
+                texto: etiqueta,
+                valor,
+                punto: pos,
+                referencia: inferior.globalid,
+                mover: superior.globalid,
+              });
+            }
+            textos.parciales.push(etiqueta);
+          }
+          const primero = ordenados[0];
+          const ultimo = ordenados[ordenados.length - 1];
+          const total = ultimo.elevacion - primero.elevacion;
+          lineaCerrada(
+            [puntoHZ(tTotal, primero.elevacion), puntoHZ(tTotal, ultimo.elevacion)],
+            materialNivel,
+            3,
+            grupoLocal,
+          );
+          const etiquetaTotal = formatearCota(total);
+          const spriteTotal = textoCota(etiquetaTotal, colorNivel, fondo, altoTexto);
+          if (spriteTotal) {
+            const pos = puntoHZ(tTotal + 0.35, (primero.elevacion + ultimo.elevacion) / 2);
+            spriteTotal.position.set(pos[0], pos[1], pos[2]);
+            spriteTotal.renderOrder = 20;
+            grupoLocal.add(spriteTotal);
+            cotasInteraccion.current.push({
+              tipo: "total",
+              texto: etiquetaTotal,
+              valor: total,
+              punto: pos,
+            });
+          }
+          textos.total = etiquetaTotal;
+          datosNiveles.push(textos);
+        }
+
+        // Ejes que cruzan el plano de la vista: línea vertical y burbuja abajo.
+        const altoBurbuja = Math.max(tamano * 0.035, 0.35);
+        for (const eje of referencias.ejes) {
+          const ax = eje.x1 - planoPunto.x;
+          const ay = eje.y1 - planoPunto.y;
+          const bx = eje.x2 - planoPunto.x;
+          const by = eje.y2 - planoPunto.y;
+          const da = ax * d[0] + ay * d[1];
+          const db = bx * d[0] + by * d[1];
+          if (Math.abs(da - db) < 1e-9) continue;
+          const t = da / (da - db);
+          if (t < -1e-6 || t > 1 + 1e-6) continue;
+          const x = eje.x1 + t * (eje.x2 - eje.x1);
+          const y = eje.y1 + t * (eje.y2 - eje.y1);
+          const s = proyectarT(x, y);
+          lineaCerrada(
+            [puntoHZ(s, zMin - 0.3), puntoHZ(s, zMax + 0.3)],
+            materialEjeNivel,
+            2.9,
+            grupoLocal,
+          );
+          const burbuja = burbujaEje(
+            eje.etiqueta,
+            colorEje,
+            oscuro ? "#1f2328" : "#ffffff",
+          );
+          if (burbuja) {
+            const pos = puntoHZ(s, zMin - 0.65);
+            burbuja.position.set(pos[0], pos[1], pos[2]);
+            burbuja.scale.set(altoBurbuja, altoBurbuja, 1);
+            burbuja.renderOrder = 20;
+            grupoLocal.add(burbuja);
+          }
+        }
+      }
+    }
+
     // Datos para las pruebas y las capturas: lo que realmente se está dibujando.
     const nodoVisor = contenedor.current;
     if (nodoVisor) {
       nodoVisor.dataset.ejes = String(referencias.ejes.length);
       nodoVisor.dataset.ejesEtiquetas = referencias.ejes.map((eje) => eje.etiqueta).join(",");
+      nodoVisor.dataset.cotas = JSON.stringify(datosCotas);
+      nodoVisor.dataset.cotasParciales = datosCotas
+        .flatMap((f) => f.parciales)
+        .join(",");
+      nodoVisor.dataset.cotasTotales = datosCotas
+        .map((f) => f.total ?? "")
+        .filter(Boolean)
+        .join(",");
+      nodoVisor.dataset.nivelesCotas = JSON.stringify(datosNiveles);
+      nodoVisor.dataset.nivelesTexto = datosNiveles
+        .flatMap((n) => [n.nombre, n.elevacion, ...n.cabezas, ...n.parciales, n.total ?? ""])
+        .join(" ");
+      nodoVisor.dataset.cotasEditables = String(
+        cotasInteraccion.current.filter((c) => c.tipo !== "total").length,
+      );
       nodoVisor.dataset.mallasDibujadas = String(visibles.length);
       nodoVisor.dataset.seccionPolilineas = String(polilineasSeccion);
       nodoVisor.dataset.estiloMurosCorte = String(
@@ -1291,6 +1771,7 @@ export function Visor3D({
     referencias,
     cajaVista,
     dimensiones.alto,
+    niveles,
   ]);
 
   // O003b: marcadores de la herramienta de dibujo (puntos, snap y vista previa).
@@ -1509,6 +1990,31 @@ export function Visor3D({
     }
     aplicarCamara();
   }, [aplicarCamara, cajaVista, vista]);
+
+  const confirmarCota = async () => {
+    if (!cotaEditando) return;
+    let valor: number | null = parsearCota(textoCotaEditando);
+    if (cotaEditando.tipo === "elevacion") {
+      const crudo = textoCotaEditando.trim().replace(",", ".");
+      const numero = Number(crudo);
+      valor = Number.isFinite(numero) ? numero : null;
+    }
+    if (valor === null) {
+      fijarAviso(
+        "Cota no válida. Escriba un número positivo en metros (4.50) o en centímetros (450cm).",
+      );
+      return;
+    }
+    const edicion = cotaEditando;
+    setCotaEditando(null);
+    if (edicion.tipo === "parcial" && edicion.referencia && edicion.mover) {
+      await separarEjes(edicion.referencia, edicion.mover, valor, moverSiguientes);
+    } else if (edicion.tipo === "nivel" && edicion.referencia && edicion.mover) {
+      await separarNiveles(edicion.referencia, edicion.mover, valor, moverSiguientes);
+    } else if (edicion.tipo === "elevacion" && edicion.nivel && edicion.nombre) {
+      await editarNivel(edicion.nivel, edicion.nombre, valor);
+    }
+  };
 
   // Rueda: zoom hacia el cursor en ortográficas y acercamiento en 3D.
   useEffect(() => {
@@ -1752,6 +2258,47 @@ export function Visor3D({
       }
     };
     const alDobleClic = (evento: MouseEvent) => {
+      const camera = camara.current;
+      if (camera && cotasInteraccion.current.length > 0) {
+        const rect = nodo.getBoundingClientRect();
+        let mejor: CotaInteractiva | null = null;
+        let mejorDistancia = Infinity;
+        for (const cota of cotasInteraccion.current) {
+          const proyectado = new THREE.Vector3(...cota.punto).project(camera);
+          const x = rect.left + ((proyectado.x + 1) / 2) * rect.width;
+          const y = rect.top + ((1 - proyectado.y) / 2) * rect.height;
+          const medioAncho = Math.max(18, cota.texto.length * 7);
+          if (
+            Math.abs(evento.clientX - x) <= medioAncho &&
+            Math.abs(evento.clientY - y) <= 18
+          ) {
+            const distancia = Math.hypot(evento.clientX - x, evento.clientY - y);
+            if (distancia < mejorDistancia) {
+              mejorDistancia = distancia;
+              mejor = cota;
+            }
+          }
+        }
+        if (mejor) {
+          evento.preventDefault();
+          if (mejor.tipo === "total") {
+            fijarAviso("La cota total es de lectura; edite una cota parcial.");
+            return;
+          }
+          setCotaEditando({
+            tipo: mejor.tipo,
+            referencia: mejor.referencia,
+            mover: mejor.mover,
+            nivel: mejor.nivel,
+            nombre: mejor.nombre,
+            valor: mejor.valor,
+            izquierda: Math.max(90, Math.min(rect.width - 90, evento.clientX - rect.left)),
+            arriba: Math.max(8, Math.min(rect.height - 90, evento.clientY - rect.top - 70)),
+          });
+          setTextoCotaEditando(mejor.valor.toFixed(2));
+          return;
+        }
+      }
       if (!herramienta) return;
       evento.preventDefault();
       void dobleClicEnPlanta();
@@ -1803,6 +2350,7 @@ export function Visor3D({
     clicEnPlanta,
     dobleClicEnPlanta,
     ventanaSeleccion,
+    fijarAviso,
   ]);
 
   useEffect(() => {
@@ -1823,6 +2371,24 @@ export function Visor3D({
       if (!camera) return null;
       camera.updateMatrixWorld();
       const punto = new THREE.Vector3(x, y, z).project(camera);
+      const rect = nodo.getBoundingClientRect();
+      return {
+        x: rect.left + ((punto.x + 1) / 2) * rect.width,
+        y: rect.top + ((1 - punto.y) / 2) * rect.height,
+      };
+    };
+    // O006a: posición en pantalla de un texto de cota (para el doble clic de las E2E).
+    (nodo as unknown as Record<string, unknown>).__openrvtCotaAPantalla = (
+      texto: string,
+      indice = 0,
+    ) => {
+      const camera = camara.current;
+      if (!camera) return null;
+      const candidatas = cotasInteraccion.current.filter((c) => c.texto === texto);
+      const cota = candidatas[indice];
+      if (!cota) return null;
+      camera.updateMatrixWorld();
+      const punto = new THREE.Vector3(...cota.punto).project(camera);
       const rect = nodo.getBoundingClientRect();
       return {
         x: rect.left + ((punto.x + 1) / 2) * rect.width,
@@ -1876,6 +2442,44 @@ export function Visor3D({
           </button>
         )}
       </div>
+      {cotaEditando && (
+        <div
+          data-testid="cota-editor"
+          className="absolute z-30 flex -translate-x-1/2 flex-col gap-1 rounded border bg-background p-2 text-xs shadow-lg"
+          style={{ left: cotaEditando.izquierda, top: cotaEditando.arriba }}
+        >
+          <div className="flex items-center gap-1">
+            <input
+              data-testid="cota-campo"
+              autoFocus
+              value={textoCotaEditando}
+              onChange={(e) => setTextoCotaEditando(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void confirmarCota();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  setCotaEditando(null);
+                }
+              }}
+              className="w-28 rounded border bg-background px-2 py-1 text-right"
+            />
+            <span className="text-muted-foreground">m</span>
+          </div>
+          {cotaEditando.tipo !== "elevacion" && (
+            <label className="flex items-center gap-1 whitespace-nowrap text-muted-foreground">
+              <input
+                type="checkbox"
+                data-testid="cota-mover-siguientes"
+                checked={moverSiguientes}
+                onChange={(e) => fijarMoverSiguientes(e.target.checked)}
+              />
+              {cotaEditando.tipo === "nivel" ? "Mover los de arriba" : "Mover los siguientes"}
+            </label>
+          )}
+        </div>
+      )}
       {modoCorte && (
         <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded bg-background/90 px-3 py-1 text-xs shadow">
           {puntoCorte ? "Haga el segundo clic" : "Haga el primer clic en la planta"}

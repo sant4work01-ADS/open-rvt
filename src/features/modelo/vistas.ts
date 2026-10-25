@@ -272,6 +272,7 @@ export function cajaConEjes(caja: Caja, ejes: EjeReferencia[]): Caja {
       estilo: "lineas-ocultas",
       escala: 100,
       alturaArriba: 3,
+      cotasEjes: true,
     });
   });
 
@@ -433,6 +434,7 @@ export function normalizarVista(valor: unknown): Vista | null {
       typeof v.alturaArriba === "number" && Number.isFinite(v.alturaArriba)
         ? v.alturaArriba
         : undefined,
+    cotasEjes: v.cotasEjes !== false,
   };
 }
 

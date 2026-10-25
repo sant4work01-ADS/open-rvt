@@ -98,6 +98,8 @@ interface EstadoModelo {
   vistasPersistidas: boolean;
   /** O005: diálogo de estilos de objeto abierto. */
   dialogoEstilos: boolean;
+  /** O006a: diálogo «Crear ejes por separaciones». */
+  dialogoCotas: boolean;
 
   // O003b: herramientas de modelado.
   herramienta: Herramienta | null;
@@ -133,6 +135,31 @@ interface EstadoModelo {
   crearEje: (etiqueta: string, x1: number, y1: number, x2: number, y2: number) => Promise<void>;
   editarEje: (globalid: string, etiqueta: string) => Promise<void>;
   borrarEje: (globalid: string) => Promise<void>;
+  /** O006a: retícula completa desde separaciones (una sola operación). */
+  crearEjesPorSeparaciones: (
+    direccion: "vertical" | "horizontal",
+    origen: number,
+    separaciones: number[],
+    longitud: number,
+    primeraEtiqueta: string,
+  ) => Promise<boolean>;
+  /** O006a: la cota manda; mueve el eje (y la cadena) a la distancia pedida. */
+  separarEjes: (
+    referencia: string,
+    mover: string,
+    distancia: number,
+    cadena: boolean,
+  ) => Promise<boolean>;
+  /** O006a: la cota de nivel manda; mueve el nivel superior y, si toca, los de arriba. */
+  separarNiveles: (
+    inferior: string,
+    superior: string,
+    altura: number,
+    cadena: boolean,
+  ) => Promise<boolean>;
+  /** O006a: elección de la casilla «Mover los siguientes» durante la sesión. */
+  cotasMoverSiguientes: boolean;
+  fijarCotasMoverSiguientes: (valor: boolean) => void;
   losaDesdeMuros: () => Promise<void>;
   editarElemento: (globalid: string, cambios: Record<string, unknown>) => Promise<void>;
 
@@ -148,6 +175,8 @@ interface EstadoModelo {
   guardarEstilos: (estilos: Estilos) => Promise<void>;
   abrirDialogoEstilos: () => void;
   cerrarDialogoEstilos: () => void;
+  abrirDialogoCotas: () => void;
+  cerrarDialogoCotas: () => void;
   seleccionar: (globalid: string | null, agregar?: boolean) => Promise<void>;
   iniciarCorte: () => void;
   cancelarCorte: () => void;
@@ -194,6 +223,27 @@ function nombreDeRuta(ruta: string | null, nombreModelo: string): string {
 
 const CAJA_VACIA: Caja = { min: [-1, -1, -1], max: [1, 1, 1] };
 let tokenSeleccion = 0;
+
+/**
+ * O006a: al mover niveles, las plantas conservan su plano de corte y su fondo
+ * relativos a la nueva elevación. La cadena puede mover varios niveles a la vez.
+ */
+function sincronizarPlantas(vistas: Vista[], niveles: Nivel[]): Vista[] {
+  const ordenados = [...niveles].sort((a, b) => a.elevacion - b.elevacion);
+  return vistas.map((vista) => {
+    if (vista.tipo !== "planta" || !vista.nivel) return vista;
+    const nivel = niveles.find((n) => n.globalid === vista.nivel);
+    if (!nivel) return vista;
+    const indice = ordenados.findIndex((n) => n.globalid === nivel.globalid);
+    return {
+      ...vista,
+      nombre: `Planta ${nivel.nombre}`,
+      alturaPlano: nivel.elevacion + 1.2,
+      profundidad:
+        indice > 0 ? ordenados[indice - 1].elevacion : nivel.elevacion - 1,
+    };
+  });
+}
 
 export const useModelo = create<EstadoModelo>((set, get) => {
   const cargarAberturas = async (
@@ -500,6 +550,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     tiempoCargaMs: null,
     vistasPersistidas: false,
     dialogoEstilos: false,
+    dialogoCotas: false,
     herramienta: null,
     opcionesMuro: { tipo: "", altura: 2.6, alineacion: "centro" },
     tiposMuro: [],
@@ -510,6 +561,9 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     longitudTecleada: "",
     voltearSiguiente: false,
     etiquetaEje: "",
+    cotasMoverSiguientes: true,
+
+    fijarCotasMoverSiguientes: (valor) => set({ cotasMoverSiguientes: valor }),
 
     nuevo: async () => {
       if (!(await get().asegurarSinCambios())) return false;
@@ -599,6 +653,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
     abrirDialogoEstilos: () => set({ dialogoEstilos: true }),
     cerrarDialogoEstilos: () => set({ dialogoEstilos: false }),
+    abrirDialogoCotas: () => set({ dialogoCotas: true }),
+    cerrarDialogoCotas: () => set({ dialogoCotas: false }),
 
     seleccionar: async (globalid, agregar = false) => {
       const token = ++tokenSeleccion;
@@ -1062,6 +1118,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
           categorias: CATEGORIAS_TODAS(),
           estilo: "sombreado",
           escala: 100,
+          cotasEjes: true,
         };
         const vistas = [...get().vistas, vista];
         set({ vistas, vistaActivaId: vista.id });
@@ -1073,11 +1130,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     editarNivel: async (globalid, nombre, elevacion) => {
       const ok = await ejecutar("niveles.editar", { globalid, nombre, elevacion });
       if (!ok) return;
-      const vistas = get().vistas.map((v) =>
-        v.tipo === "planta" && v.nivel === globalid
-          ? { ...v, nombre: `Planta ${nombre}`, alturaPlano: elevacion + 1.2 }
-          : v,
-      );
+      const vistas = sincronizarPlantas(get().vistas, get().niveles);
       set({ vistas });
       await persistirVistas(vistas);
     },
@@ -1097,6 +1150,46 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
     crearEje: async (etiqueta, x1, y1, x2, y2) => {
       await ejecutar("ejes.crear", { etiqueta, x1, y1, x2, y2 });
+    },
+
+    crearEjesPorSeparaciones: async (
+      direccion,
+      origen,
+      separaciones,
+      longitud,
+      primeraEtiqueta,
+    ) => {
+      const ok = await ejecutar("ejes.crear_por_separaciones", {
+        direccion,
+        origen,
+        separaciones,
+        longitud,
+        primera_etiqueta: primeraEtiqueta,
+      });
+      return ok;
+    },
+
+    separarEjes: async (referencia, mover, distancia, cadena) => {
+      return ejecutar("ejes.separacion", {
+        referencia,
+        mover,
+        distancia,
+        cadena,
+      });
+    },
+
+    separarNiveles: async (inferior, superior, altura, cadena) => {
+      const ok = await ejecutar("niveles.separacion", {
+        inferior,
+        superior,
+        altura,
+        cadena,
+      });
+      if (!ok) return false;
+      const vistas = sincronizarPlantas(get().vistas, get().niveles);
+      set({ vistas });
+      await persistirVistas(vistas);
+      return true;
     },
 
     editarEje: async (globalid, etiqueta) => {

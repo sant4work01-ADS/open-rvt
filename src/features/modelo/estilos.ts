@@ -22,7 +22,13 @@ export type MaterialNombre =
   | "vidrio"
   | "generico";
 
-export type CategoriaEstilo = Categoria | "ejes" | "ocultas" | "arriba-corte";
+export type CategoriaEstilo =
+  | Categoria
+  | "ejes"
+  | "cotas"
+  | "niveles"
+  | "ocultas"
+  | "arriba-corte";
 
 export interface EstiloCategoria {
   /** Grosor de corte en mm de papel a 1:100. `null` si la categoría no se corta. */
@@ -62,6 +68,8 @@ export const CATEGORIAS_ESTILO: readonly CategoriaEstilo[] = [
   "escaleras",
   "otros",
   "ejes",
+  "cotas",
+  "niveles",
   "ocultas",
   "arriba-corte",
 ];
@@ -77,6 +85,8 @@ const NOMBRES: Record<CategoriaEstilo, string> = {
   escaleras: "Escaleras",
   otros: "Otros",
   ejes: "Ejes",
+  cotas: "Cotas",
+  niveles: "Niveles",
   ocultas: "Líneas ocultas",
   "arriba-corte": "Arriba del corte en planta",
 };
@@ -100,6 +110,8 @@ export function estilosPorDefecto(): Estilos {
       escaleras: { corte: 0.25, proyeccion: 0.13, color: negro, patron: "continua" },
       otros: { corte: 0.25, proyeccion: 0.13, color: negro, patron: "continua" },
       ejes: { corte: null, proyeccion: 0.13, color: "#8a5a2b", patron: "trazo-punto" },
+      cotas: { corte: null, proyeccion: 0.13, color: "#1f2328", patron: "continua" },
+      niveles: { corte: null, proyeccion: 0.13, color: "#1f2328", patron: "trazo-punto" },
       ocultas: { corte: null, proyeccion: 0.13, color: "#6b7280", patron: "discontinua" },
       "arriba-corte": {
         corte: null,
@@ -229,6 +241,11 @@ export function mmAPx(mm: number, escala: EscalaVista, mundoPorPx: number): numb
   if (!(mundoPorPx > 0)) return 1;
   // La tabla está a 1:100; el factor por escala la corrige sin duplicar la razón.
   return ((mm / 1000) * 100 * factorEscala(escala)) / mundoPorPx;
+}
+
+/** Convierte milímetros de papel a unidades de mundo (metros) a la escala de la vista. */
+export function mmAMundo(mm: number, escala: EscalaVista): number {
+  return ((mm / 1000) * 100 * factorEscala(escala));
 }
 
 /** Grosor de una categoría ya con la escala y la sobrescritura de la vista. */
