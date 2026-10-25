@@ -1143,13 +1143,16 @@ class ModeladoMixin:
     def _cuerpo_muro(self, muro: Any) -> Any:
         """Genera el cuerpo del muro con los vanos ya descontados."""
         datos = self._datos_muro(muro)
+        # O007a: el desplazamiento sale de la línea de ubicación del tipo (o de la
+        # alineación propia de la instancia cuando el usuario la eligió).
+        offset = self._desfase_de_muro(muro, datos["espesor"])
         cuerpo = geometry_api.add_wall_representation(
             self.modelo,
             context=self._contexto(),
             length=max(datos["longitud"], 0.001),
             height=max(datos["altura"], 0.001),
             thickness=max(datos["espesor"], 0.001),
-            offset=self._desfase_alineacion(datos["alineacion"], datos["espesor"]),
+            offset=offset,
         )
         vanos = []
         for rel in getattr(muro, "HasOpenings", ()) or ():
@@ -1166,7 +1169,7 @@ class ModeladoMixin:
                     datos["espesor"],
                     info["antepecho"],
                     info["distancia"],
-                    self._desfase_alineacion(datos["alineacion"], datos["espesor"]),
+                    offset,
                 )
             )
         cuerpo.RepresentationIdentifier = "Body"

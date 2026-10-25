@@ -170,6 +170,46 @@ class Servidor:
             return self._exigir().ejes_listar()
         if metodo == "tipos.listar":
             return self._exigir().tipos_listar(str(params.get("clase") or "IfcWallType"))
+        if metodo == "tipos.obtener":
+            return self._exigir().tipos_obtener(str(params.get("globalid") or ""))
+        if metodo == "tipos.crear":
+            return self._exigir().tipos_crear(
+                str(params.get("clase") or "IfcWallType"),
+                str(params.get("nombre") or ""),
+                params.get("datos"),
+            )
+        if metodo == "tipos.duplicar":
+            return self._exigir().tipos_duplicar(
+                str(params.get("globalid") or ""), str(params.get("nombre") or "")
+            )
+        if metodo == "tipos.editar":
+            return self._exigir().tipos_editar(
+                str(params.get("globalid") or ""), params.get("datos")
+            )
+        if metodo == "tipos.borrar":
+            return self._exigir().tipos_borrar(str(params.get("globalid") or ""))
+        if metodo == "tipos.instancias":
+            return self._exigir().tipos_instancias(str(params.get("globalid") or ""))
+        if metodo == "materiales.listar":
+            return self._exigir().materiales_listar()
+        if metodo == "materiales.crear":
+            return self._exigir().material_crear(
+                str(params.get("nombre") or ""), params.get("campos") or params
+            )
+        if metodo == "materiales.editar":
+            return self._exigir().material_editar(
+                str(params.get("nombre") or params.get("id") or ""),
+                params.get("campos") or params,
+            )
+        if metodo == "materiales.borrar":
+            return self._exigir().material_borrar(
+                str(params.get("nombre") or params.get("id") or "")
+            )
+        if metodo == "elementos.cambiar_tipo":
+            return self._exigir().elemento_cambiar_tipo(
+                str(params.get("globalid") or ""),
+                params.get("tipo") or params.get("tipo_globalid") or "",
+            )
         if metodo == "muros.crear":
             return self._exigir().muro_crear(
                 str(params.get("tipo") or ""),
