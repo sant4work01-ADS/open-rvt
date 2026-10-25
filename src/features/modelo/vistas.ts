@@ -14,6 +14,7 @@ import {
   type TipoVista,
   type Vista,
 } from "./tipos";
+import type { EstiloCategoriaVista } from "./estilos";
 
 export type Vector3 = [number, number, number];
 
@@ -243,10 +244,12 @@ export function crearVistas(niveles: Nivel[]): Vista[] {
       nivel: nivel.globalid,
       alturaPlano: nivel.elevacion + 1.2,
       profundidad: inferior,
-      nivelesVisibles: [...idsNiveles],
+      // O005b: una planta nueva muestra solo su nivel; el resto se desmarca.
+      nivelesVisibles: [nivel.globalid],
       categorias: { ...categorias },
-      estilo: "sombreado",
+      estilo: "lineas-ocultas",
       escala: 100,
+      alturaArriba: 3,
     });
   });
 
@@ -259,7 +262,7 @@ export function crearVistas(niveles: Nivel[]): Vista[] {
       orientacion,
       nivelesVisibles: [...idsNiveles],
       categorias: { ...categorias },
-      estilo: "aristas",
+      estilo: "lineas-ocultas",
       escala: 100,
     });
   });
@@ -317,7 +320,7 @@ export function crearVistaCorte(datos: {
     profundidad: 10,
     nivelesVisibles: [...datos.nivelesVisibles],
     categorias: { ...(datos.categorias ?? CATEGORIAS_TODAS()) },
-    estilo: datos.estilo ?? "aristas",
+    estilo: datos.estilo ?? "lineas-ocultas",
     escala: datos.escala ?? 100,
   };
 }
@@ -371,6 +374,21 @@ export function normalizarVista(valor: unknown): Vista | null {
   const direccion = Array.isArray(v.direccion) && v.direccion.length === 2
     ? ([Number(v.direccion[0]), Number(v.direccion[1])] as [number, number])
     : undefined;
+  const estilos: Partial<Record<Categoria, EstiloCategoriaVista>> = {};
+  if (v.estilos && typeof v.estilos === "object") {
+    for (const [clave, valor] of Object.entries(v.estilos as Record<string, unknown>)) {
+      if (!CATEGORIAS_VALIDAS.has(clave as Categoria) || !valor || typeof valor !== "object") continue;
+      const e = valor as Record<string, unknown>;
+      const cambio: EstiloCategoriaVista = {};
+      if (typeof e.oculta === "boolean") cambio.oculta = e.oculta;
+      if (e.corte === null) cambio.corte = null;
+      else if (typeof e.corte === "number" && Number.isFinite(e.corte)) cambio.corte = e.corte;
+      if (typeof e.proyeccion === "number" && Number.isFinite(e.proyeccion)) {
+        cambio.proyeccion = e.proyeccion;
+      }
+      estilos[clave as Categoria] = cambio;
+    }
+  }
   return {
     id: typeof v.id === "string" && v.id ? v.id : `vista-${Math.random().toString(36).slice(2)}`,
     nombre: typeof v.nombre === "string" && v.nombre ? v.nombre : "Vista",
@@ -388,6 +406,11 @@ export function normalizarVista(valor: unknown): Vista | null {
     puntoA,
     puntoB,
     direccion,
+    estilos: Object.keys(estilos).length > 0 ? estilos : undefined,
+    alturaArriba:
+      typeof v.alturaArriba === "number" && Number.isFinite(v.alturaArriba)
+        ? v.alturaArriba
+        : undefined,
   };
 }
 
@@ -444,4 +467,57 @@ export function numeroDeCorte(vistas: Vista[]): number {
 /** Comprueba si una categoría está visible en una vista. */
 export function categoriaVisible(vista: Vista, categoria: Categoria): boolean {
   return vista.categorias[categoria] !== false;
+}
+
+/** Categorías que se dibujan por encima del corte en una planta (silueta). */
+export const CATEGORIAS_SOBRE_CORTE: readonly Categoria[] = ["losas", "cubiertas", "vigas"];
+
+/**
+ * O005b: en una planta solo se dibuja la silueta de lo que queda sobre el corte si es
+ * una losa, cubierta o viga **del mismo nivel** de la planta. Así no se cuelan las
+ * viguetas ni los elementos del piso de arriba.
+ */
+export function dibujaSiluetaSobreCorte(
+  vista: Vista,
+  categoria: Categoria,
+  nivelGlobalid: string | undefined,
+  cotaMinima: number,
+): boolean {
+  if (vista.tipo !== "planta") return false;
+  if (!CATEGORIAS_SOBRE_CORTE.includes(categoria)) return false;
+  if (!vista.nivel || nivelGlobalid !== vista.nivel) return false;
+  if (vista.alturaPlano === undefined) return false;
+  const corte = vista.alturaPlano;
+  return (
+    cotaMinima > corte + 1e-4 && cotaMinima <= corte + (vista.alturaArriba ?? 3)
+  );
+}
+
+/**
+ * Migra las vistas guardadas con el criterio viejo (todos los niveles marcados) al
+ * nuevo: cada planta muestra solo su nivel, salvo que el usuario la haya editado.
+ */
+export function migrarNivelesVisibles(
+  vistas: Vista[],
+  niveles: Array<{ globalid: string }>,
+): { vistas: Vista[]; cambiadas: boolean } {
+  const todos = new Set(niveles.map((n) => n.globalid));
+  let cambiadas = false;
+  const migradas = vistas.map((vista) => {
+    if (vista.tipo !== "planta" || !vista.nivel || !todos.has(vista.nivel)) return vista;
+    const sinNiveles = vista.nivelesVisibles.length === 0;
+    const conTodos =
+      !sinNiveles &&
+      vista.nivelesVisibles.length === todos.size &&
+      vista.nivelesVisibles.every((id) => todos.has(id));
+    if (!sinNiveles && !conTodos) return vista;
+    // Si ya mostraba exactamente su nivel no hay nada que migrar: no se marca la
+    // obra como modificada al abrirla.
+    if (vista.nivelesVisibles.length === 1 && vista.nivelesVisibles[0] === vista.nivel) {
+      return vista;
+    }
+    cambiadas = true;
+    return { ...vista, nivelesVisibles: [vista.nivel] };
+  });
+  return { vistas: migradas, cambiadas };
 }

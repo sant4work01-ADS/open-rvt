@@ -83,6 +83,8 @@ export interface AccionesRibbon {
   temaActivo: "sistema" | "claro" | "oscuro";
   /** Nueva vista de corte (pestaña Vista). */
   nuevaVistaCorte: () => void;
+  /** O005: diálogo de estilos de objeto (pestaña Vista). */
+  estilosObjeto: () => void;
   // OPEN-RVT: herramientas de modelado (spec O003b).
   nuevoNivel: () => void;
   nuevoEje: () => void;
@@ -156,6 +158,17 @@ export function construirComandosRibbon(a: AccionesRibbon): ComandoRibbon[] {
     },
 
     // ---------- Modelo / vistas ----------
+    {
+      id: "estilos",
+      texto: "Estilos de objeto",
+      icono: Layers,
+      grupo: "Dibujo",
+      pestana: "vista",
+      tamano: "grande",
+      habilitado: true,
+      descripcion: "Editar plumillas, rellenos y materiales del dibujo",
+      accion: a.estilosObjeto,
+    },
     {
       id: "nuevo-corte",
       texto: "Nueva vista de corte",

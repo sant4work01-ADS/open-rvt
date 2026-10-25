@@ -2,6 +2,8 @@
 // `nucleo_llamar`; la cámara y las vistas viven en el frontend para poder dibujarlas
 // con three.js.
 
+import type { EstiloCategoriaVista } from "./estilos";
+
 export type TipoVista = "planta" | "alzado" | "corte" | "iso" | "perspectiva";
 export type Orientacion = "norte" | "sur" | "este" | "oeste";
 export type EstiloVista = "sombreado" | "aristas" | "lineas-ocultas";
@@ -51,6 +53,10 @@ export interface Vista {
   puntoB?: [number, number];
   /** Cortes: normal de la traza en XY (dirección de la mirada). */
   direccion?: [number, number];
+  /** O005: sobrescritura de estilos por categoría dentro de esta vista. */
+  estilos?: Partial<Record<Categoria, EstiloCategoriaVista>>;
+  /** O005: qué se proyecta por encima del corte en planta (m). */
+  alturaArriba?: number;
 }
 
 export interface Nivel {
@@ -76,8 +82,28 @@ export interface ElementoMalla {
   color: string;
   opacidad: number;
   categoria: Categoria;
+  /** O005: tipo IFC del elemento (nombre del IfcWallType en muros de O003b). */
+  tipo: string;
+  /** O005: capas del IfcMaterialLayerSet, de exterior a interior. */
+  capas: Array<{ material: string; espesor: number }>;
   vertices: Float32Array;
   indices: Uint32Array;
+}
+
+/** O005: datos de una puerta o ventana para dibujar su simbología en planta. */
+export interface Abertura {
+  globalid: string;
+  clase: "IfcDoor" | "IfcWindow";
+  /** Centro de la abertura en planta (coordenadas del IFC). */
+  centro: [number, number];
+  /** Ángulo del eje del muro en radianes (dirección de la longitud). */
+  angulo: number;
+  ancho: number;
+  espesor: number;
+  antepecho: number;
+  volteado: boolean;
+  /** Categoría del elemento (puertas o ventanas). */
+  categoria: Categoria;
 }
 
 export interface ElementoMallaCrudo {
@@ -88,6 +114,8 @@ export interface ElementoMallaCrudo {
   color: string;
   opacidad: number;
   categoria: Categoria;
+  tipo: string;
+  capas: Array<{ material: string; espesor: number }>;
   vertices: string;
   indices: string;
 }

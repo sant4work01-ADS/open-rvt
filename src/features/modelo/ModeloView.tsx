@@ -9,11 +9,14 @@ import { Visor3D } from "./Visor3D";
 import { NavegadorVistas } from "./NavegadorVistas";
 import { PanelPropiedades } from "./PanelPropiedades";
 import { BarraHerramienta } from "./BarraHerramienta";
+import { DialogoEstilos } from "./DialogoEstilos";
 
 export function ModeloView() {
   const ruta = useModelo((s) => s.ruta);
   const esquema = useModelo((s) => s.esquema);
   const mallas = useModelo((s) => s.mallas);
+  const estilos = useModelo((s) => s.estilos);
+  const aberturas = useModelo((s) => s.aberturas);
   const vistas = useModelo((s) => s.vistas);
   const vistaActivaId = useModelo((s) => s.vistaActivaId);
   const caja = useModelo((s) => s.caja);
@@ -25,6 +28,7 @@ export function ModeloView() {
   const cargando = useModelo((s) => s.cargando);
   const error = useModelo((s) => s.error);
   const fijarVista = useModelo((s) => s.fijarVista);
+  const dialogoEstilos = useModelo((s) => s.dialogoEstilos);
   const seleccionar = useModelo((s) => s.seleccionar);
   const anadirPuntoCorte = useModelo((s) => s.anadirPuntoCorte);
   const [panelAbierto, setPanelAbierto] = useState(true);
@@ -80,6 +84,8 @@ export function ModeloView() {
               vistas={vistas}
               niveles={niveles}
               mallas={mallas}
+              estilos={estilos}
+              aberturas={aberturas}
               caja={caja}
               seleccion={seleccion}
               seleccionados={seleccionados}
@@ -117,6 +123,7 @@ export function ModeloView() {
         </div>
       </div>
       {panelAbierto && <PanelPropiedades />}
+      {dialogoEstilos && <DialogoEstilos />}
     </div>
   );
 }

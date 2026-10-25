@@ -458,6 +458,32 @@ class ModeloNucleo(ModeladoMixin):
                     if datos is None:
                         clase = producto.is_a()
                         categoria = _categoria(clase)
+                        capas: list[dict[str, Any]] = []
+                        try:
+                            import ifcopenshell.util.element as util_elemento
+
+                            for material in util_elemento.get_materials(producto):
+                                for capa in (
+                                    getattr(material, "MaterialLayers", ())
+                                    or getattr(material, "Layers", ())
+                                    or ()
+                                ):
+                                    capas.append(
+                                        {
+                                            "material": _texto(
+                                                getattr(
+                                                    getattr(capa, "Material", None),
+                                                    "Name",
+                                                    "",
+                                                )
+                                            ),
+                                            "espesor": float(
+                                                getattr(capa, "LayerThickness", 0.0) or 0.0
+                                            ),
+                                        }
+                                    )
+                        except Exception:
+                            capas = []
                         datos = {
                             "globalid": gid,
                             "clase": clase,
@@ -466,6 +492,8 @@ class ModeloNucleo(ModeladoMixin):
                             "color": COLOR.get(categoria, COLOR["otros"]),
                             "opacidad": OPACIDAD.get(categoria, 1.0),
                             "categoria": categoria,
+                            "tipo": self._tipo_de(producto),
+                            "capas": capas,
                             "vertices": [],
                             "indices": [],
                             "_base": 0,
@@ -499,13 +527,13 @@ class ModeloNucleo(ModeladoMixin):
             raise ErrorNucleo("El modelo no tiene IfcProject.", -32006)
         return proyectos[0]
 
-    def _pset_vistas(self, crear: bool) -> Any:
+    def _pset_proyecto(self, nombre: str, descripcion: str, crear: bool) -> Any:
         proyecto = self._proyecto()
         for rel in getattr(proyecto, "IsDefinedBy", ()) or ():
             if not rel.is_a("IfcRelDefinesByProperties"):
                 continue
             pset = getattr(rel, "RelatingPropertyDefinition", None)
-            if pset is not None and getattr(pset, "Name", "") == "OPENRVT_Vistas":
+            if pset is not None and getattr(pset, "Name", "") == nombre:
                 return pset
         if not crear:
             return None
@@ -514,8 +542,8 @@ class ModeloNucleo(ModeladoMixin):
             "IfcPropertySet",
             GlobalId=ifcopenshell.guid.new(),
             OwnerHistory=None,
-            Name="OPENRVT_Vistas",
-            Description="Vistas guardadas por OPEN-RVT",
+            Name=nombre,
+            Description=descripcion,
             HasProperties=[],
         )
         modelo.create_entity(
@@ -529,10 +557,19 @@ class ModeloNucleo(ModeladoMixin):
         )
         return pset
 
-    def leer_vistas(self) -> list[Any]:
-        pset = self._pset_vistas(crear=False)
+    def _pset_vistas(self, crear: bool) -> Any:
+        return self._pset_proyecto(
+            "OPENRVT_Vistas", "Vistas guardadas por OPEN-RVT", crear
+        )
+
+    def _pset_estilos(self, crear: bool) -> Any:
+        return self._pset_proyecto(
+            "OPENRVT_Estilos", "Estilos de dibujo guardados por OPEN-RVT", crear
+        )
+
+    def _leer_datos_pset(self, pset: Any) -> Any:
         if pset is None:
-            return []
+            return None
         for propiedad in getattr(pset, "HasProperties", ()) or ():
             if getattr(propiedad, "Name", "") != "Datos":
                 continue
@@ -541,21 +578,15 @@ class ModeloNucleo(ModeladoMixin):
             if texto is None:
                 texto = getattr(valor, "wrapped_value", None)
             if texto is None:
-                continue
+                return None
             try:
-                datos = json.loads(texto)
+                return json.loads(texto)
             except (TypeError, ValueError):
-                return []
-            return datos if isinstance(datos, list) else []
-        return []
+                return None
+        return None
 
-    def guardar_vistas(self, lista: Any) -> list[Any]:
-        if not isinstance(lista, list):
-            raise ErrorNucleo("Las vistas deben ser una lista.", -32602)
-        self._exigir_modelo()
-        texto = json.dumps(lista, ensure_ascii=False, separators=(",", ":"))
-        self._instantanea()
-        pset = self._pset_vistas(crear=True)
+    def _guardar_datos_pset(self, pset: Any, datos: Any, descripcion: str) -> Any:
+        texto = json.dumps(datos, ensure_ascii=False, separators=(",", ":"))
         modelo = self._exigir_modelo()
         for propiedad in list(getattr(pset, "HasProperties", ()) or ()):
             if getattr(propiedad, "Name", "") == "Datos":
@@ -564,12 +595,40 @@ class ModeloNucleo(ModeladoMixin):
             modelo.create_entity(
                 "IfcPropertySingleValue",
                 Name="Datos",
-                Description="JSON de las vistas",
+                Description=descripcion,
                 NominalValue=modelo.create_entity("IfcText", texto),
             )
         ]
+        return datos
+
+    def leer_vistas(self) -> list[Any]:
+        datos = self._leer_datos_pset(self._pset_vistas(crear=False))
+        return datos if isinstance(datos, list) else []
+
+    def guardar_vistas(self, lista: Any) -> list[Any]:
+        if not isinstance(lista, list):
+            raise ErrorNucleo("Las vistas deben ser una lista.", -32602)
+        self._exigir_modelo()
+        self._instantanea()
+        self._guardar_datos_pset(self._pset_vistas(crear=True), lista, "JSON de las vistas")
         self.con_cambios = True
         return lista
+
+    # ------------------------------------------------------------------ estilos O005
+    def leer_estilos(self) -> Any:
+        datos = self._leer_datos_pset(self._pset_estilos(crear=False))
+        return datos if isinstance(datos, dict) else None
+
+    def guardar_estilos(self, datos: Any) -> Any:
+        if not isinstance(datos, dict):
+            raise ErrorNucleo("Los estilos deben ser un objeto JSON.", -32602)
+        self._exigir_modelo()
+        self._instantanea()
+        self._guardar_datos_pset(
+            self._pset_estilos(crear=True), datos, "JSON de los estilos de dibujo"
+        )
+        self.con_cambios = True
+        return datos
 
     # ------------------------------------------------------------------ historial
     def deshacer(self) -> dict[str, Any]:

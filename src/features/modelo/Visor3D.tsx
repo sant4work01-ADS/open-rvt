@@ -3,10 +3,38 @@
 // relleno de sección por stencil (técnica del ejemplo webgl_clipping_stencil).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import type { Caja, ElementoMalla, Nivel, Vista } from "./tipos";
-import { categoriaVisible } from "./vistas";
+import { Line2 } from "three/examples/jsm/lines/Line2.js";
+import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
+import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
+import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
+import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
+import type { Abertura, Caja, ElementoMalla, Nivel, Vista } from "./tipos";
+import { categoriaVisible, dibujaSiluetaSobreCorte } from "./vistas";
 import { useModelo } from "./estado";
 import { colocarAbertura, type Punto2 } from "./herramientas";
+import {
+  categoriaOculta,
+  factorEscala,
+  grosorMm,
+  materialPorCapa,
+  mmAPx,
+  PATRONES_LINEA_DASH,
+  type Estilos,
+  type MaterialNombre,
+  type PatronLinea,
+  type PatronRelleno,
+} from "./estilos";
+import {
+  basePlano,
+  colocarSimbolo,
+  dividirEnCapas,
+  geometriaPuerta,
+  geometriaVentana,
+  interseccionPlanoMalla,
+  siluetaProyectada,
+  type Punto2 as PuntoSeccion,
+  type Punto3,
+} from "./seccion";
 import {
   ajustarAspecto,
   camaraOrtografica,
@@ -22,6 +50,8 @@ interface Props {
   vistas: Vista[];
   niveles: Nivel[];
   mallas: ElementoMalla[];
+  estilos: Estilos;
+  aberturas: Abertura[];
   caja: Caja;
   seleccion: string | null;
   seleccionados: string[];
@@ -138,8 +168,184 @@ function crearNavegacion(vista: Vista, caja: Caja, aspecto: number): Navegacion 
   };
 }
 
-function planosVista(vista: Vista, caja: Caja): {
-  planos: THREE.Plane[];
+interface EntradaGrosor {
+  material: LineMaterial;
+  mm: number;
+  escala: Vista["escala"];
+}
+
+interface OpcionesLinea {
+  mm: number;
+  escala: Vista["escala"];
+  color: string;
+  patron?: PatronLinea;
+  profundidad?: boolean;
+  registro?: EntradaGrosor[];
+  mundoPorPx: number;
+}
+
+/** Crea un LineMaterial con grosor en mm de papel, patrón y registro para el zoom. */
+function crearMaterialLinea(opciones: OpcionesLinea): LineMaterial {
+  const grosor = Math.max(mmAPx(opciones.mm, opciones.escala, opciones.mundoPorPx), 0.8);
+  const material = new LineMaterial({
+    color: new THREE.Color(opciones.color),
+    linewidth: grosor,
+    worldUnits: false,
+    depthTest: opciones.profundidad !== false,
+    transparent: true,
+  });
+  const patron = opciones.patron ?? "continua";
+  if (patron !== "continua") {
+    const dash = PATRONES_LINEA_DASH[patron];
+    material.dashed = true;
+    material.dashSize = dash.dash;
+    material.gapSize = dash.gap;
+  }
+  const resolucion = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+  material.resolution.set(window.innerWidth * resolucion, window.innerHeight * resolucion);
+  opciones.registro?.push({ material, mm: opciones.mm, escala: opciones.escala });
+  return material;
+}
+
+/** Contorno cerrado con Line2 (grosor real en WebGL). */
+function lineaCerrada(
+  puntos: Array<[number, number, number]>,
+  material: LineMaterial,
+  orden: number,
+  grupo: THREE.Group,
+): Line2 {
+  const geometria = new LineGeometry();
+  geometria.setPositions(puntos.flat());
+  const linea = new Line2(geometria, material);
+  linea.computeLineDistances();
+  linea.renderOrder = orden;
+  grupo.add(linea);
+  return linea;
+}
+
+// Las texturas se reutilizan entre elementos y vistas.
+const CACHE_TEXTURAS = new Map<string, THREE.Texture>();
+
+/** Genera la textura de un patrón de relleno (un período de escala en mm de papel). */
+function texturaPatron(
+  patron: PatronRelleno,
+  escalaMm: number,
+  color: string,
+): THREE.CanvasTexture | null {
+  if (patron === "tierra" || patron === "vidrio") return null;
+  const clave = `${patron}-${escalaMm}-${color}`;
+  const existente = CACHE_TEXTURAS.get(clave);
+  if (existente) return existente as THREE.CanvasTexture;
+  if (typeof document === "undefined") return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.clearRect(0, 0, 64, 64);
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 1.4;
+  const linea = (x1: number, y1: number, x2: number, y2: number) => {
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  };
+  switch (patron) {
+    case "diagonal":
+      for (const d of [-64, 0, 64]) linea(d, 64, d + 64, 0);
+      break;
+    case "diagonal-doble":
+      for (const d of [-64, 0, 64]) {
+        linea(d, 64, d + 64, 0);
+        linea(d, 0, d + 64, 64);
+      }
+      break;
+    case "concreto":
+      for (const [x, y] of [[8, 12], [26, 40], [46, 10], [58, 34], [18, 58], [52, 58]]) {
+        ctx.beginPath();
+        ctx.arc(x, y, 1.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      for (const [x, y] of [[14, 30], [38, 22], [30, 52]]) {
+        ctx.beginPath();
+        ctx.moveTo(x, y - 3);
+        ctx.lineTo(x + 3, y + 2);
+        ctx.lineTo(x - 3, y + 2);
+        ctx.closePath();
+        ctx.fill();
+      }
+      break;
+    case "ondas":
+      for (let fila = 0; fila < 2; fila += 1) {
+        ctx.beginPath();
+        for (let x = 0; x <= 64; x += 2) {
+          const y = 16 + fila * 32 + Math.sin((x / 64) * Math.PI * 4) * 5;
+          if (x === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+      break;
+    case "madera":
+      for (let x = 8; x < 64; x += 12) {
+        ctx.beginPath();
+        for (let y = 0; y <= 64; y += 4) {
+          const xx = x + Math.sin((y / 64) * Math.PI * 3 + x) * 2.5;
+          if (y === 0) ctx.moveTo(xx, y);
+          else ctx.lineTo(xx, y);
+        }
+        ctx.stroke();
+      }
+      break;
+    default:
+      return null;
+  }
+  const textura = new THREE.CanvasTexture(canvas);
+  textura.wrapS = THREE.RepeatWrapping;
+  textura.wrapT = THREE.RepeatWrapping;
+  // Un período del patrón ocupa `escalaMm` de papel = escalaMm × 0,1 m a 1:100.
+  const periodo = Math.max(escalaMm * 0.1, 0.02);
+  textura.repeat.set(1 / periodo, 1 / periodo);
+  textura.colorSpace = THREE.SRGBColorSpace;
+  CACHE_TEXTURAS.set(clave, textura);
+  return textura;
+}
+
+/** Material de relleno para un material de la tabla. */
+function materialRelleno(
+  nombre: MaterialNombre,
+  estilos: Estilos,
+  colorTrazo: string,
+): THREE.Material {
+  const estilo = estilos.materiales[nombre];
+  if (estilo.patron === "generico") {
+    return new THREE.MeshBasicMaterial({
+      color: new THREE.Color(colorTrazo),
+      transparent: true,
+      opacity: 0.3,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+    });
+  }
+  const textura = texturaPatron(estilo.patron, estilo.escala, colorTrazo);
+  if (!textura) {
+    return new THREE.MeshBasicMaterial({ visible: false });
+  }
+  return new THREE.MeshBasicMaterial({
+    map: textura,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+  });
+}
+
+function planosVista(vista: Vista, caja: Caja): {  planos: THREE.Plane[];
   relleno: { plano: THREE.Plane; origen: THREE.Vector3 } | null;
 } {
   const centro = centroCaja(caja);
@@ -179,6 +385,8 @@ export function Visor3D({
   vistas,
   niveles,
   mallas,
+  estilos,
+  aberturas,
   caja,
   seleccion,
   seleccionados,
@@ -196,6 +404,7 @@ export function Visor3D({
   const grupo = useRef<THREE.Group | null>(null);
   const grupoHerramienta = useRef<THREE.Group | null>(null);
   const meshes = useRef<THREE.Mesh[]>([]);
+  const grosores = useRef<EntradaGrosor[]>([]);
   const navegacion = useRef<Navegacion | null>(null);
   const arrastre = useRef<{
     x: number;
@@ -381,6 +590,7 @@ export function Visor3D({
 
   // Vista activa y geometría: filtros de categorías/niveles, recorte y relleno.
   useEffect(() => {
+    const inicioEfecto = performance.now();
     const grupoLocal = grupo.current;
     if (!grupoLocal) return;
     while (grupoLocal.children.length) {
@@ -396,27 +606,109 @@ export function Visor3D({
     meshes.current = [];
 
     const { planos, relleno } = planosVista(vista, caja);
+    const diseno = vista.estilo === "lineas-ocultas";
     const fondo = colorDeFondo(oscuro);
-    const colorArista = new THREE.Color(0x000000);
+    const colorTrazo = oscuro ? "#e8eaed" : "#1f2328";
+    const colorArista = new THREE.Color(colorTrazo);
     const tamano = Math.max(diagonalCaja(caja), 2);
     const nivelesVisibles = new Set(vista.nivelesVisibles);
     const visibles = mallas.filter((malla) => {
       if (!categoriaVisible(vista, malla.categoria)) return false;
+      if (categoriaOculta(vista, malla.categoria)) return false;
       const gid = nivelGlobalidPorNombre.get(malla.nivel);
       if (nivelesVisibles.size > 0 && gid && !nivelesVisibles.has(gid)) return false;
       return true;
     });
 
-    const stencilBase = relleno
-      ? new THREE.MeshBasicMaterial({
-          depthWrite: false,
-          depthTest: false,
-          colorWrite: false,
-          stencilWrite: true,
-          stencilFunc: THREE.AlwaysStencilFunc,
-          clippingPlanes: planos,
-        })
-      : null;
+    // Grosor en píxeles: mm de papel de la tabla × escala de la vista × zoom actual.
+    const camaraActual = camara.current;
+    let mundoPorPx = Math.max(tamano / 900, 1e-4);
+    if (camaraActual instanceof THREE.OrthographicCamera) {
+      mundoPorPx = Math.max((camaraActual.top - camaraActual.bottom) / Math.max(dimensiones.alto, 1), 1e-6);
+    } else if (camaraActual instanceof THREE.PerspectiveCamera) {
+      const nav = navegacion.current;
+      mundoPorPx = Math.max(
+        (2 * (nav?.distancia ?? 10) * Math.tan((camaraActual.fov * Math.PI) / 360)) /
+          Math.max(dimensiones.alto, 1),
+        1e-6,
+      );
+    }
+    grosores.current = [];
+    const registro = grosores.current;
+    const grosorDe = (categoria: Parameters<typeof grosorMm>[2], tipo: "corte" | "proyeccion") =>
+      grosorMm(estilos, vista, categoria, tipo);
+
+    // Plano de sección exacto y origen para colocar rellenos y contornos.
+    const corteZ = vista.alturaPlano ?? caja.max[2];
+    let planoSeccion: { normal: Punto3; constante: number } | null = null;
+    let origenSeccion: THREE.Vector3 | null = null;
+    if (vista.tipo === "planta") {
+      planoSeccion = { normal: [0, 0, 1], constante: -corteZ };
+      origenSeccion = new THREE.Vector3(0, 0, corteZ);
+    } else if (vista.tipo === "corte") {
+      const [nx, ny] = normalCorte(vista);
+      const origen = centroCorte(vista, caja);
+      planoSeccion = {
+        normal: [nx, ny, 0],
+        constante: -(nx * origen.x + ny * origen.y),
+      };
+      origenSeccion = origen;
+    }
+    const desplazamientoSeccion = planoSeccion
+      ? new THREE.Vector3(
+          planoSeccion.normal[0] * -0.004,
+          planoSeccion.normal[1] * -0.004,
+          planoSeccion.normal[2] * -0.004,
+        )
+      : new THREE.Vector3();
+    const base = planoSeccion ? basePlano(planoSeccion.normal) : null;
+    const normalSeccion = planoSeccion
+      ? new THREE.Vector3(...planoSeccion.normal).normalize()
+      : new THREE.Vector3(0, 0, 1);
+
+    let polilineasSeccion = 0;
+
+    /** Coloca un polígono de relleno en el plano de sección. */
+    const agregarRelleno = (
+      puntos: Punto3[],
+      material: MaterialNombre,
+      group: THREE.Group,
+    ): void => {
+      if (!base || puntos.length < 3) return;
+      const origen = origenSeccion ?? new THREE.Vector3();
+      const local = puntos.map(
+        ([x, y, z]) =>
+          new THREE.Vector2(
+            (x - origen.x) * base.u[0] + (y - origen.y) * base.u[1] + (z - origen.z) * base.u[2],
+            (x - origen.x) * base.v[0] + (y - origen.y) * base.v[1] + (z - origen.z) * base.v[2],
+          ),
+      );
+      const forma = new THREE.Shape(local);
+      const geometria = new THREE.ShapeGeometry(forma);
+      const material2d = materialRelleno(material, estilos, colorTrazo);
+      const malla = new THREE.Mesh(geometria, material2d);
+      malla.matrixAutoUpdate = false;
+      malla.matrix.makeBasis(
+        new THREE.Vector3(...base.u),
+        new THREE.Vector3(...base.v),
+        normalSeccion,
+      );
+      malla.matrix.setPosition(origen);
+      malla.renderOrder = 1.05;
+      group.add(malla);
+    };
+
+    const stencilBase =
+      relleno && vista.estilo === "sombreado"
+        ? new THREE.MeshBasicMaterial({
+            depthWrite: false,
+            depthTest: false,
+            colorWrite: false,
+            stencilWrite: true,
+            stencilFunc: THREE.AlwaysStencilFunc,
+            clippingPlanes: planos,
+          })
+        : null;
 
     for (const elemento of visibles) {
       const geometria = new THREE.BufferGeometry();
@@ -430,8 +722,39 @@ export function Visor3D({
       const color = seleccionado
         ? new THREE.Color(0x2f7dd1)
         : new THREE.Color(elemento.color);
+
+      // Cota inferior/superior del elemento para separar lo que queda arriba del corte.
+      let minZ = Infinity;
+      let maxZ = -Infinity;
+      let minD = Infinity;
+      let maxD = -Infinity;
+      for (let i = 0; i < elemento.vertices.length; i += 3) {
+        const x = elemento.vertices[i];
+        const y = elemento.vertices[i + 1];
+        const z = elemento.vertices[i + 2];
+        minZ = Math.min(minZ, z);
+        maxZ = Math.max(maxZ, z);
+        if (planoSeccion) {
+          const d =
+            x * planoSeccion.normal[0] +
+            y * planoSeccion.normal[1] +
+            z * planoSeccion.normal[2];
+          minD = Math.min(minD, d);
+          maxD = Math.max(maxD, d);
+        }
+      }
+      // O005b: por encima del corte solo se dibuja la silueta de losas, cubiertas y
+      // vigas del mismo nivel. El resto (viguetas y elementos del piso de arriba) no
+      // aparece en la planta.
+      const encimaDelCorte =
+        vista.tipo === "planta" && planoSeccion !== null && minZ > corteZ + 1e-4;
+      const nivelDelElemento = nivelGlobalidPorNombre.get(elemento.nivel);
+      const siluetaArriba =
+        encimaDelCorte &&
+        dibujaSiluetaSobreCorte(vista, elemento.categoria, nivelDelElemento, minZ);
+
       const material =
-        vista.estilo === "lineas-ocultas"
+        diseno
           ? new THREE.MeshBasicMaterial({
               color: seleccionado ? color : fondo,
               side: THREE.DoubleSide,
@@ -445,13 +768,70 @@ export function Visor3D({
               clippingPlanes: planos,
               emissive: seleccionado ? 0x123a66 : 0x000000,
             });
-      const malla = new THREE.Mesh(geometria, material);
-      malla.userData.globalid = elemento.globalid;
-      malla.renderOrder = 0;
-      grupoLocal.add(malla);
-      meshes.current.push(malla);
+      // Lo que queda por encima del corte no se dibuja como cara: solo su silueta
+      // discontinua, para que no tape la planta.
+      if (!encimaDelCorte) {
+        const malla = new THREE.Mesh(geometria, material);
+        malla.userData.globalid = elemento.globalid;
+        malla.renderOrder = 0;
+        grupoLocal.add(malla);
+        meshes.current.push(malla);
+      } else {
+        material.dispose();
+      }
 
-      if (vista.estilo !== "sombreado") {
+      const categoriaEstilo = elemento.categoria;
+      if (diseno) {
+        if (siluetaArriba) {
+          const mm = grosorDe("arriba-corte", "proyeccion");
+          const siluetas =
+            mm === null ? [] : siluetaProyectada(elemento.vertices, elemento.indices);
+          if (mm !== null && siluetas.length > 0) {
+            const materialLinea = crearMaterialLinea({
+              mm,
+              escala: vista.escala,
+              color: seleccionado ? "#ff8a00" : estilos.categorias["arriba-corte"].color,
+              // Siempre trazo discontinuo largo, como pide la spec.
+              patron: "discontinua-larga",
+              registro,
+              mundoPorPx,
+              profundidad: true,
+            });
+            const zSilueta = corteZ + 0.04;
+            for (const polilinea of siluetas) {
+              const puntos = polilinea.map(([x, y]) => [x, y, zSilueta] as [number, number, number]);
+              if (puntos.length < 2) continue;
+              const primero = puntos[0];
+              const ultimo = puntos[puntos.length - 1];
+              if (Math.hypot(primero[0] - ultimo[0], primero[1] - ultimo[1]) > 1e-4) {
+                puntos.push(primero);
+              }
+              lineaCerrada(puntos, materialLinea, 0.6, grupoLocal);
+            }
+          }
+        } else if (!encimaDelCorte) {
+          const bordes = new THREE.EdgesGeometry(geometria, 30);
+          const mm = grosorDe(categoriaEstilo, "proyeccion");
+          if (mm !== null) {
+            const materialLinea = crearMaterialLinea({
+              mm,
+              escala: vista.escala,
+              color: seleccionado ? "#ff8a00" : estilos.categorias[categoriaEstilo].color,
+              patron: "continua",
+              registro,
+              mundoPorPx,
+              profundidad: true,
+            });
+            materialLinea.clippingPlanes = planos;
+            const segmentos = new LineSegmentsGeometry().fromEdgesGeometry(bordes);
+            const lineas = new LineSegments2(segmentos, materialLinea);
+            lineas.computeLineDistances();
+            lineas.renderOrder = 0.5;
+            grupoLocal.add(lineas);
+          }
+          bordes.dispose();
+        }
+      } else if (vista.estilo !== "sombreado" && !encimaDelCorte) {
         const aristas = new THREE.LineSegments(
           new THREE.EdgesGeometry(geometria, 30),
           new THREE.LineBasicMaterial({
@@ -462,6 +842,95 @@ export function Visor3D({
         aristas.userData.globalid = elemento.globalid;
         aristas.renderOrder = 0.5;
         grupoLocal.add(aristas);
+      }
+
+      // Sección real del plano de corte con esta malla (solo si lo atraviesa).
+      const atraviesa =
+        planoSeccion !== null &&
+        minD <= -planoSeccion.constante + 1e-4 &&
+        maxD >= -planoSeccion.constante - 1e-4;
+      if (diseno && planoSeccion && origenSeccion && !encimaDelCorte && atraviesa) {
+        const polilineas = interseccionPlanoMalla(
+          elemento.vertices,
+          elemento.indices,
+          planoSeccion,
+        );
+        if (polilineas.length > 0) {
+          const mmCorte = grosorDe(categoriaEstilo, "corte");
+          const colorCorte = seleccionado
+            ? "#ff8a00"
+            : estilos.categorias[categoriaEstilo].color;
+          for (const polilinea of polilineas) {
+            polilineasSeccion += 1;
+            const puntos = polilinea.puntos.map((p) => [
+              p[0] + desplazamientoSeccion.x,
+              p[1] + desplazamientoSeccion.y,
+              p[2] + desplazamientoSeccion.z,
+            ] as [number, number, number]);
+            if (puntos.length >= 2) {
+              if (mmCorte !== null) {
+                const materialCorte = crearMaterialLinea({
+                  mm: mmCorte,
+                  escala: vista.escala,
+                  color: colorCorte,
+                  registro,
+                  mundoPorPx,
+                  profundidad: false,
+                });
+                lineaCerrada([...puntos, puntos[0]], materialCorte, 1.3, grupoLocal);
+              }
+              // Relleno por material: una banda por capa del IfcMaterialLayerSet.
+              if (!base) continue;
+              const mapa2d = polilinea.puntos.map(([x, y, z]) => {
+                const dx = x - origenSeccion.x;
+                const dy = y - origenSeccion.y;
+                const dz = z - origenSeccion.z;
+                return [
+                  dx * base.u[0] + dy * base.u[1] + dz * base.u[2],
+                  dx * base.v[0] + dy * base.v[1] + dz * base.v[2],
+                ] as PuntoSeccion;
+              });
+              const capas = elemento.capas ?? [];
+              const bandas =
+                capas.length > 1
+                  ? dividirEnCapas(mapa2d, capas)
+                  : [{ puntos: mapa2d, material: elemento.tipo }];
+              for (const banda of bandas) {
+                const puntos3 = banda.puntos.map(([u, v]) => {
+                  const dx = origenSeccion.x + base.u[0] * u + base.v[0] * v;
+                  const dy = origenSeccion.y + base.u[1] * u + base.v[1] * v;
+                  const dz = origenSeccion.z + base.u[2] * u + base.v[2] * v;
+                  return [dx, dy, dz] as Punto3;
+                });
+                agregarRelleno(
+                  puntos3,
+                  materialPorCapa(banda.material),
+                  grupoLocal,
+                );
+              }
+              if (capas.length > 1) {
+                // Línea fina entre capas: contorno de cada banda con trazo de 0,1 mm.
+                for (const banda of bandas) {
+                  const mm = 0.1 * factorEscala(vista.escala);
+                  const materialBanda = crearMaterialLinea({
+                    mm,
+                    escala: vista.escala,
+                    color: colorCorte,
+                    registro,
+                    mundoPorPx,
+                    profundidad: false,
+                  });
+                  const puntosBanda = banda.puntos.map(([u, v]) => [
+                    origenSeccion!.x + base.u[0] * u + base.v[0] * v + desplazamientoSeccion.x,
+                    origenSeccion!.y + base.u[1] * u + base.v[1] * v + desplazamientoSeccion.y,
+                    origenSeccion!.z + base.u[2] * u + base.v[2] * v + desplazamientoSeccion.z,
+                  ] as [number, number, number]);
+                  lineaCerrada([...puntosBanda, puntosBanda[0]], materialBanda, 1.2, grupoLocal);
+                }
+              }
+            }
+          }
+        }
       }
 
       if (stencilBase && relleno) {
@@ -484,9 +953,9 @@ export function Visor3D({
       }
     }
 
-    // Relleno de la sección donde el stencil no queda a cero.
-    if (relleno && visibles.length > 0) {
-      const materialRelleno = new THREE.MeshBasicMaterial({
+    // Relleno de la sección por stencil solo en «Sombreado».
+    if (relleno && vista.estilo === "sombreado" && visibles.length > 0) {
+      const materialStencil = new THREE.MeshBasicMaterial({
         color: new THREE.Color(0x4a4a4a),
         side: THREE.DoubleSide,
         depthWrite: false,
@@ -499,13 +968,116 @@ export function Visor3D({
         polygonOffset: true,
         polygonOffsetFactor: -1,
       });
-      const tapa = new THREE.Mesh(new THREE.PlaneGeometry(tamano * 2, tamano * 2), materialRelleno);
+      const tapa = new THREE.Mesh(new THREE.PlaneGeometry(tamano * 2, tamano * 2), materialStencil);
       const normal = relleno.plano.normal.clone().normalize();
       tapa.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
       tapa.position.copy(relleno.origen);
       tapa.renderOrder = 1.1;
       tapa.onAfterRender = (rendererLocal) => rendererLocal.clearStencil();
       grupoLocal.add(tapa);
+    }
+
+    // O005: simbología 2D de puertas y ventanas, solo en plantas.
+    if (vista.tipo === "planta") {
+      const z = corteZ + 0.02;
+      for (const abertura of aberturas) {
+        const esPuerta = abertura.clase === "IfcDoor";
+        if (!categoriaVisible(vista, abertura.categoria)) continue;
+        if (categoriaOculta(vista, abertura.categoria)) continue;
+        const mm = grosorDe(abertura.categoria, "corte") ?? 0.25;
+        const mmFino = grosorDe(abertura.categoria, "proyeccion") ?? 0.13;
+        const colorSimbolo = estilos.categorias[abertura.categoria].color;
+        const a3 = (p: Punto2): [number, number, number] => [p[0], p[1], z];
+        if (esPuerta) {
+          const { hoja, arco } = geometriaPuerta({
+            ancho: abertura.ancho,
+            volteado: abertura.volteado,
+          });
+          const hojaMundo = colocarSimbolo(hoja, abertura.centro, abertura.angulo);
+          const arcoMundo = colocarSimbolo(arco, abertura.centro, abertura.angulo);
+          const materialHoja = crearMaterialLinea({
+            mm,
+            escala: vista.escala,
+            color: colorSimbolo,
+            registro,
+            mundoPorPx,
+            profundidad: false,
+          });
+          lineaCerrada(hojaMundo.map(a3), materialHoja, 2, grupoLocal);
+          const materialArco = crearMaterialLinea({
+            mm: Math.min(mmFino, 0.18),
+            escala: vista.escala,
+            color: colorSimbolo,
+            registro,
+            mundoPorPx,
+            profundidad: false,
+          });
+          lineaCerrada(arcoMundo.map(a3), materialArco, 2, grupoLocal);
+        } else {
+          const { lineas, alfeizar } = geometriaVentana({
+            ancho: abertura.ancho,
+            espesor: abertura.espesor,
+          });
+          const materialVentana = crearMaterialLinea({
+            mm: mmFino,
+            escala: vista.escala,
+            color: colorSimbolo,
+            registro,
+            mundoPorPx,
+            profundidad: false,
+          });
+          for (const linea of lineas) {
+            lineaCerrada(
+              colocarSimbolo(linea, abertura.centro, abertura.angulo).map(a3),
+              materialVentana,
+              2,
+              grupoLocal,
+            );
+          }
+          const materialAlfeizar = crearMaterialLinea({
+            mm: 0.1,
+            escala: vista.escala,
+            color: colorSimbolo,
+            registro,
+            mundoPorPx,
+            profundidad: false,
+          });
+          lineaCerrada(
+            colocarSimbolo(alfeizar, abertura.centro, abertura.angulo).map(a3),
+            materialAlfeizar,
+            1.9,
+            grupoLocal,
+          );
+        }
+      }
+    }
+
+    // Datos para las pruebas y las capturas: lo que realmente se está dibujando.
+    const nodoVisor = contenedor.current;
+    if (nodoVisor) {
+      nodoVisor.dataset.seccionPolilineas = String(polilineasSeccion);
+      nodoVisor.dataset.estiloMurosCorte = String(
+        grosorMm(estilos, vista, "muros", "corte") ?? "",
+      );
+      nodoVisor.dataset.estiloMurosProyeccion = String(
+        grosorMm(estilos, vista, "muros", "proyeccion") ?? "",
+      );
+      nodoVisor.dataset.rellenoMateriales = String(
+        Object.values(estilos.materiales).filter((m) => m.patron !== "vidrio").length,
+      );
+      nodoVisor.dataset.estiloVista = vista.estilo;
+      nodoVisor.dataset.redibujo = String(
+        Number(nodoVisor.dataset.redibujo ?? "0") + 1,
+      );
+      nodoVisor.dataset.redibujoMs = String(
+        Math.round(performance.now() - inicioEfecto),
+      );
+      const tamanoBuffer = renderer.current?.getDrawingBufferSize(new THREE.Vector2());
+      if (tamanoBuffer) {
+        for (const entrada of registro) {
+          entrada.material.resolution.set(tamanoBuffer.x, tamanoBuffer.y);
+        }
+      }
     }
 
     // Trazas de los cortes sobre las plantas, con flechas en los extremos.
@@ -577,6 +1149,9 @@ export function Visor3D({
     seleccionados,
     puntoCorte,
     nivelGlobalidPorNombre,
+    estilos,
+    aberturas,
+    dimensiones.alto,
   ]);
 
   // O003b: marcadores de la herramienta de dibujo (puntos, snap y vista previa).
@@ -775,6 +1350,29 @@ export function Visor3D({
   useEffect(() => {
     const nodo = contenedor.current;
     if (!nodo) return;
+    const actualizarGrosores = () => {
+      const camera = camara.current;
+      if (!camera) return;
+      const alto = Math.max(nodo.clientHeight, 1);
+      const ancho = Math.max(nodo.clientWidth, 1);
+      let mundoPorPx = diagonalCaja(caja) / alto;
+      if (camera instanceof THREE.OrthographicCamera) {
+        mundoPorPx = Math.max((camera.top - camera.bottom) / alto, 1e-6);
+      } else if (camera instanceof THREE.PerspectiveCamera) {
+        const nav = navegacion.current;
+        mundoPorPx = Math.max(
+          (2 * (nav?.distancia ?? 10) * Math.tan((camera.fov * Math.PI) / 360)) / alto,
+          1e-6,
+        );
+      }
+      for (const entrada of grosores.current) {
+        entrada.material.linewidth = Math.max(
+          mmAPx(entrada.mm, entrada.escala, mundoPorPx),
+          0.8,
+        );
+        entrada.material.resolution.set(ancho, alto);
+      }
+    };
     const alRodar = (evento: WheelEvent) => {
       evento.preventDefault();
       const camera = camara.current;
@@ -810,10 +1408,11 @@ export function Visor3D({
         nav.distancia = Math.max(0.5, nav.distancia * factor);
         aplicarCamara();
       }
+      actualizarGrosores();
     };
     nodo.addEventListener("wheel", alRodar, { passive: false });
     return () => nodo.removeEventListener("wheel", alRodar);
-  }, [aplicarCamara]);
+  }, [aplicarCamara, caja]);
 
   // Paneo, órbita, selección y puntos del corte.
   useEffect(() => {
