@@ -91,22 +91,28 @@ recortar_ifcopenshell() {
   local sp="$1"
   local ifc="$sp/ifcopenshell"
   [[ -d "$ifc" ]] || return 0
-  rm -f "$ifc"/ifcopenshell_geometry_dae.so "$ifc"/ifcopenshell_geometry_glb.so
-  rm -f "$ifc"/ifcopenshell_geometry_igs.so "$ifc"/ifcopenshell_geometry_obj.so
-  rm -f "$ifc"/ifcopenshell_geometry_stp.so "$ifc"/ifcopenshell_geometry_svg.so
-  rm -f "$ifc"/ifcopenshell_geometry_svgfill.so "$ifc"/ifcopenshell_geometry_ttl.so
-  rm -f "$ifc"/ifcopenshell_geometry_kernel_cgal.so
-  rm -f "$ifc"/ifcopenshell_geometry_kernel_cgalsimple.so
-  rm -f "$ifc"/ifcopenshell_geometry_kernel_manifold.so
-  rm -f "$ifc"/ifcopenshell_geometry_kernel_passthrough.so
-  rm -f "$ifc"/ifcopenshell_document_json_*.so "$ifc"/ifcopenshell_document_xml_*.so
-  rm -f "$ifc"/ifcopenshell_geometry_writer_*.so
-  rm -f "$ifc"/ifcopenshell_geometry_tree_opencascade_*.so
-  rm -f "$ifc"/libOpenCOLLADA*.so "$ifc"/libGeneratedSaxParser.so
-  rm -f "$ifc"/libMathMLSolver.so "$ifc"/libUTF.so
-  rm -f "$ifc"/libTKDEIGES.so.* "$ifc"/libTKV3d.so.* "$ifc"/libTKHLR.so.*
-  rm -f "$ifc"/libTKVCAF.so.* "$ifc"/libTKLCAF.so.* "$ifc"/libTKCAF.so.*
-  rm -f "$ifc"/libTKXCAF.so.* "$ifc"/libwgpu_native.so "$ifc"/libmanifold.so.*
+  local ext
+  for ext in so dll; do
+    rm -f "$ifc"/ifcopenshell_geometry_dae.$ext "$ifc"/ifcopenshell_geometry_glb.$ext
+    rm -f "$ifc"/ifcopenshell_geometry_igs.$ext "$ifc"/ifcopenshell_geometry_obj.$ext
+    rm -f "$ifc"/ifcopenshell_geometry_stp.$ext "$ifc"/ifcopenshell_geometry_svg.$ext
+    rm -f "$ifc"/ifcopenshell_geometry_svgfill.$ext "$ifc"/ifcopenshell_geometry_ttl.$ext
+    rm -f "$ifc"/ifcopenshell_geometry_kernel_cgal.$ext
+    rm -f "$ifc"/ifcopenshell_geometry_kernel_cgalsimple.$ext
+    rm -f "$ifc"/ifcopenshell_geometry_kernel_manifold.$ext
+    rm -f "$ifc"/ifcopenshell_geometry_kernel_passthrough.$ext
+    rm -f "$ifc"/ifcopenshell_document_json_*.$ext "$ifc"/ifcopenshell_document_xml_*.$ext
+    rm -f "$ifc"/ifcopenshell_geometry_writer_*.$ext
+    rm -f "$ifc"/ifcopenshell_geometry_tree_opencascade_*.$ext
+    rm -f "$ifc"/libOpenCOLLADA*.$ext "$ifc"/GeneratedSaxParser.$ext
+    rm -f "$ifc"/libMathMLSolver.$ext "$ifc"/libUTF.$ext "$ifc"/MathMLSolver.$ext "$ifc"/UTF.$ext
+    rm -f "$ifc"/libTKDEIGES.$ext* "$ifc"/libTKV3d.$ext* "$ifc"/libTKHLR.$ext*
+    rm -f "$ifc"/libTKVCAF.$ext* "$ifc"/libTKLCAF.$ext* "$ifc"/libTKCAF.$ext*
+    rm -f "$ifc"/libTKXCAF.$ext* "$ifc"/libwgpu_native.$ext "$ifc"/libmanifold.$ext*
+    rm -f "$ifc"/TKDEIGES.$ext "$ifc"/TKV3d.$ext "$ifc"/TKHLR.$ext
+    rm -f "$ifc"/TKVCAF.$ext "$ifc"/TKLCAF.$ext "$ifc"/TKCAF.$ext
+    rm -f "$ifc"/TKXCAF.$ext "$ifc"/wgpu_native.$ext "$ifc"/manifold.$ext
+  done
 }
 
 # Recorte de la instalación completa de Linux: quita lo que no usa el núcleo.
