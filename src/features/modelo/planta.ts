@@ -18,6 +18,21 @@ export interface MuroPlanta {
   capas: CapaMuro[];
 }
 
+/**
+ * O007c: sección en planta de un castillo o una columna. El núcleo del muro se
+ * recorta contra ella; los acabados solo se cortan en las columnas y pasan por
+ * encima de los castillos.
+ */
+export interface SeccionPlanta {
+  globalid: string;
+  x: number;
+  y: number;
+  ancho: number;
+  fondo: number;
+  rotacion: number;
+  funcion: "castillo" | "columna";
+}
+
 export interface PoligonoPlanta {
   exterior: Punto2[];
   huecos: Punto2[][];
@@ -149,14 +164,50 @@ export function bandasMuro(muro: MuroPlanta, todos: MuroPlanta[] = []): Banda[] 
   }));
 }
 
-function bandasAjustadas(muro: MuroPlanta, todos: MuroPlanta[]): Banda[] {
+function poligonoSeccion(seccion: SeccionPlanta): Anillo {
+  const coseno = Math.cos(seccion.rotacion);
+  const seno = Math.sin(seccion.rotacion);
+  const hx = seccion.ancho / 2;
+  const hy = seccion.fondo / 2;
+  const punto = (x: number, y: number): Par => [
+    seccion.x + x * coseno - y * seno,
+    seccion.y + x * seno + y * coseno,
+  ];
+  return [
+    punto(-hx, -hy),
+    punto(hx, -hy),
+    punto(hx, hy),
+    punto(-hx, hy),
+    punto(-hx, -hy),
+  ];
+}
+
+function recortesDeSecciones(
+  secciones: SeccionPlanta[],
+  funcion: "núcleo" | "acabado",
+): PoligonoCru[] {
+  return secciones
+    .filter((seccion) => funcion === "núcleo" || seccion.funcion === "columna")
+    .map((seccion) => comoPoligono(poligonoSeccion(seccion)));
+}
+
+function bandasAjustadas(
+  muro: MuroPlanta,
+  todos: MuroPlanta[],
+  secciones: SeccionPlanta[] = [],
+): Banda[] {
   const recortesL = recortesDeMuro(muro, todos);
   const recortesT = murosPasantes(muro, todos);
   const salida: Banda[] = [];
   for (const banda of bandasMuro(muro, todos)) {
     // El núcleo se une por material; sus recortes solo hacen falta en T. Los
     // acabados sí se recortan contra el núcleo vecino también en L.
-    const recortes = banda.funcion === "núcleo" ? recortesT : recortesL;
+    const base = banda.funcion === "núcleo" ? recortesT : recortesL;
+    const propios = recortesDeSecciones(
+      secciones,
+      banda.funcion === "núcleo" ? "núcleo" : "acabado",
+    );
+    const recortes = [...base, ...propios];
     if (recortes.length === 0) {
       salida.push(banda);
       continue;
@@ -178,12 +229,21 @@ function comoPoligono(anillo: Anillo): PoligonoCru {
   return [anillo];
 }
 
-export function unirHuellas(muros: MuroPlanta[]): PoligonoPlanta[] {
+export function unirHuellas(
+  muros: MuroPlanta[],
+  secciones: SeccionPlanta[] = [],
+): PoligonoPlanta[] {
   if (muros.length === 0) return [];
   const entradas = muros.map((muro) => huellasAjustadas(muro, muros));
+  // O007c: el castillo completa la huella en la esquina (puede sobresalir del
+  // extremo del muro); la columna se dibuja aparte y no agranda el contorno.
+  const castillos = secciones
+    .filter((seccion) => seccion.funcion === "castillo")
+    .map((seccion) => comoPoligono(poligonoSeccion(seccion)));
   const unido = clip.union(
     entradas[0][0],
     ...entradas.slice(1).flat(),
+    ...castillos,
   );
   return unido.map((poligono) => ({
     exterior: poligono[0].map(([x, y]) => [x, y] as Punto2),
@@ -300,13 +360,20 @@ function anillosDe(poligono: PoligonoCru): Anillo[] {
   return poligono;
 }
 
-function segmentosVisibles(anillo: Anillo, contorno: PoligonoCru[]): Array<[Par, Par]> {
+function segmentosVisibles(
+  anillo: Anillo,
+  contorno: PoligonoCru[],
+  ocultos: PoligonoCru[] = [],
+): Array<[Par, Par]> {
   const segmentos: Array<[Par, Par]> = [];
   for (let i = 1; i < anillo.length; i += 1) {
     const a = anillo[i - 1];
     const b = anillo[i];
     const medio: Par = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
     if (contorno.length > 0 && distanciaAPoligonos(contorno, medio) <= 0.0015) continue;
+    // O007c: la cara del núcleo que coincide con el castillo no se dibuja: el
+    // castillo llena la sección y su contorno lo traza la simbología estructural.
+    if (ocultos.length > 0 && distanciaAPoligonos(ocultos, medio) <= 0.0015) continue;
     segmentos.push([a, b]);
   }
   return segmentos;
@@ -353,17 +420,23 @@ function segmentosAPolilineas(segmentos: Array<[Par, Par]>): Punto2[][] {
   return resultado.filter((linea) => linea.length >= 2);
 }
 
-export function lineasCapas(muros: MuroPlanta[]): CapaPlanta[] {
-  const contorno = unirHuellas(muros).map((p) => [
+export function lineasCapas(
+  muros: MuroPlanta[],
+  secciones: SeccionPlanta[] = [],
+): CapaPlanta[] {
+  const contorno = unirHuellas(muros, secciones).map((p) => [
     [...p.exterior],
     ...p.huecos.map((h) => [...h]),
   ] as PoligonoCru);
+  const castillos = secciones
+    .filter((seccion) => seccion.funcion === "castillo")
+    .map((seccion) => comoPoligono(poligonoSeccion(seccion)));
   const grupos = new Map<
     string,
     { material: string; funcion: string; poligonos: PoligonoCru[] }
   >();
   for (const muro of muros) {
-    for (const banda of bandasAjustadas(muro, muros)) {
+    for (const banda of bandasAjustadas(muro, muros, secciones)) {
       const clave = `${banda.material}|${banda.funcion}`;
       const grupo = grupos.get(clave) ?? {
         material: banda.material,
@@ -381,7 +454,13 @@ export function lineasCapas(muros: MuroPlanta[]): CapaPlanta[] {
     const segmentos: Array<[Par, Par]> = [];
     for (const poligono of unido) {
       for (const anillo of anillosDe(poligono)) {
-        segmentos.push(...segmentosVisibles(anillo, contorno));
+        segmentos.push(
+          ...segmentosVisibles(
+            anillo,
+            contorno,
+            grupo.funcion === "núcleo" ? castillos : [],
+          ),
+        );
       }
     }
     salida.push({
@@ -434,10 +513,14 @@ function recortarSegmento(
   return salida;
 }
 
-export function rayadoNucleo(muros: MuroPlanta[], paso = 0.1): Punto2[][] {
+export function rayadoNucleo(
+  muros: MuroPlanta[],
+  paso = 0.1,
+  secciones: SeccionPlanta[] = [],
+): Punto2[][] {
   const nucleos: PoligonoCru[] = [];
   for (const muro of muros) {
-    for (const banda of bandasAjustadas(muro, muros)) {
+    for (const banda of bandasAjustadas(muro, muros, secciones)) {
       if (banda.funcion !== "núcleo") continue;
       nucleos.push(comoPoligono(banda.poligono));
     }
@@ -474,12 +557,15 @@ export function rayadoNucleo(muros: MuroPlanta[], paso = 0.1): Punto2[][] {
   return salida;
 }
 
-/** O006e: contorno unido, líneas de capa recortadas y rayado del núcleo. */
-export function calcularPlantaMuros(muros: MuroPlanta[]): PlantaMuros {
+/** O006e/O007c: contorno unido, capas recortadas, castillos y rayado del núcleo. */
+export function calcularPlantaMuros(
+  muros: MuroPlanta[],
+  secciones: SeccionPlanta[] = [],
+): PlantaMuros {
   return {
-    contorno: unirHuellas(muros),
-    capas: lineasCapas(muros),
-    rayado: rayadoNucleo(muros),
+    contorno: unirHuellas(muros, secciones),
+    capas: lineasCapas(muros, secciones),
+    rayado: rayadoNucleo(muros, 0.1, secciones),
   };
 }
 
