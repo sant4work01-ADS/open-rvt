@@ -28,7 +28,7 @@ commit **`fd60cde`** («Ayuda: novedades de la versión 0.13.18»).
 | `src/vite-env.d.ts` | `src/vite-env.d.ts` | intacto | — |
 | `src/test-setup.ts` | `src/test-setup.ts` | adaptado | Sin los simulacros de Glide, del backend IPC de PP ni de sus diálogos. |
 | `src/test/utiles.tsx` | `src/test/utiles.tsx` | adaptado | `montarApp` ya no instala el backend falso de PP; reinicia el tema y monta `App`. |
-| `src/app/App.tsx` | `src/app/App.tsx` | adaptado | Sin vistas ni consultas de presupuesto; módulos Modelo, Niveles, Configuración y Ayuda; ribbon directo y barra de estado simple. En O003a conecta archivo, atajos, cierre con cambios y el núcleo IFC. |
+| `src/app/App.tsx` | `src/app/App.tsx` | adaptado | Sin vistas ni consultas de presupuesto; módulos Modelo, Niveles, Configuración y Ayuda; ribbon directo y barra de estado simple. En O003a conecta archivo, atajos, cierre con cambios y el núcleo IFC. En O003b añade los atajos de modelado (WA, SB, DR, WN, GR, LL, MV, CO, Supr, Ctrl+Z/Y y Esc) sobre la misma disposición. |
 | `src/app/App.test.tsx` | `src/app/App.test.tsx` | adaptado | Prueba el esqueleto nuevo (módulos, área vacía, ribbon, tema y escala). |
 | `src/app/BarraTitulo.tsx` | `src/app/BarraTitulo.tsx` | adaptado | Sin el botón del asistente ni el nombre de la obra: el título es siempre «OPEN-RVT». |
 | `src/app/BarraTitulo.test.tsx` | `src/app/BarraTitulo.test.tsx` | adaptado | Sin sesión de obra; se conservan las pruebas de ventana, foco y redimensión. |
@@ -48,7 +48,7 @@ commit **`fd60cde`** («Ayuda: novedades de la versión 0.13.18»).
 | `src/app/comportamientoNativo.ts` | `src/app/comportamientoNativo.ts` | adaptado | La tabla de atajos solo tiene los generales. |
 | `src/app/iconos.ts` | `src/app/iconos.ts` | intacto | — |
 | `src/app/modulos.ts` | `src/app/modulos.ts` | adaptado | Módulos de OPEN-RVT y sus iconos. |
-| `src/features/ribbon/Ribbon.tsx` | `src/features/presupuesto/ribbon/Ribbon.tsx` | adaptado | Solo las pestañas Inicio y Vista (ruta cambiada: el ribbon es común). |
+| `src/features/ribbon/Ribbon.tsx` | `src/features/presupuesto/ribbon/Ribbon.tsx` | adaptado | Solo las pestañas Inicio, Modelar y Vista (ruta cambiada: el ribbon es común). En O003b se añade la pestaña Modelar con los grupos Datos, Construir, Modificar e Historial. |
 | `src/features/ribbon/BarraCompacta.tsx` | `src/features/presupuesto/ribbon/BarraCompacta.tsx` | adaptado | Solo Inicio y Vista; queda disponible para cuando se active la barra compacta. |
 | `src/features/ribbon/comandos.ts` | `src/features/presupuesto/ribbon/comandos.ts` | adaptado | Tipos y ayudantes iguales; los comandos son Nuevo/Abrir/Guardar (deshabilitados) y Tema. |
 | `src/features/ribbon/Ribbon.test.tsx` | `src/features/presupuesto/ribbon/Ribbon.test.tsx` | adaptado | Prueba las dos pestañas, los comandos deshabilitados y el botón de tema. |
@@ -124,10 +124,13 @@ existen).
 | `src-tauri/src/nucleo.rs` | — | nuevo: puente del proceso Python, relanzado, timeout y avisos. |
 | `src/features/modelo/tipos.ts` | — | nuevo: tipos de vistas, mallas y propiedades. |
 | `src/features/modelo/vistas.ts` | — | nuevo: cámaras, creación automática de vistas y JSON de `OPENRVT_Vistas`. |
-| `src/features/modelo/estado.ts` | — | nuevo: estado del modelo, archivo y selección. |
-| `src/features/modelo/Visor3D.tsx` | Idea y convenciones de `three.js`; no es código de PP | nuevo: visor, recorte con stencil, navegación y selección. |
+| `src/features/modelo/estado.ts` | — | nuevo: estado del modelo, archivo y selección. En O003b centraliza las herramientas de dibujo, los comandos del núcleo, la selección múltiple y el refresco selectivo por GlobalId. |
+| `src/features/modelo/Visor3D.tsx` | Idea y convenciones de `three.js`; no es código de PP | nuevo: visor, recorte con stencil, navegación y selección. En O003b añade los enganches, la previsualización de muros/losas/aberturas y la ventana de selección por arrastre. |
 | `src/features/modelo/NavegadorVistas.tsx` | — | nuevo: árbol de vistas. |
-| `src/features/modelo/PanelPropiedades.tsx` | — | nuevo: propiedades de vista y elemento. |
+| `src/features/modelo/PanelPropiedades.tsx` | — | nuevo: propiedades de vista y elemento. En O003b las propiedades editables del elemento se guardan con Enter o al perder el foco. |
+| `src/features/modelo/herramientas.ts` | — | nuevo (O003b): matemática de snaps, ángulo a 15°, longitud tecleada y colocación de aberturas. |
+| `src/features/modelo/BarraHerramienta.tsx` | — | nuevo (O003b): opciones de la herramienta activa (tipo, altura y alineación del muro). |
+| `src/features/modelo/NivelesView.tsx` | — | nuevo (O003b): tabla de niveles y lista de ejes. |
 | `e2e/o003a.test.js` | `e2e/inicio.test.js` de O002 | nuevo: E2E del modelo, cortes, guardado y capturas. |
 
 `e2e/arnes.js` pasó de solo O002 a aceptar `compositar: true`: WebKitGTK necesita la
