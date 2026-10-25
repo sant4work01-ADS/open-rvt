@@ -7,7 +7,11 @@ const { Sesion } = require("./arnes");
 const RAIZ = path.resolve(__dirname, "..");
 
 test("O002: la ventana muestra título, ribbon, 4 módulos y el área de trabajo vacía", async () => {
-  const ses = await Sesion.abrir({ prueba: "o002-inicio", tamano: { ancho: 1600, alto: 900 } });
+  const ses = await Sesion.abrir({
+    prueba: "o002-inicio",
+    tamano: { ancho: 1600, alto: 900 },
+    lateralExpandido: true,
+  });
   try {
     assert.equal(await ses.driver.getTitle(), "OPEN-RVT");
     assert.equal(await ses.texto('[data-testid="estado-producto"]'), "OPEN-RVT");

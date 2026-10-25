@@ -86,11 +86,17 @@ class Sesion {
     }
   }
 
-  static async abrir({ prueba = "e2e", tamano } = {}) {
+  static async abrir({ prueba = "e2e", tamano, lateralExpandido = false } = {}) {
+    // Se resuelve antes de arrancar tauri-driver: si falta el binario, no queda un proceso suelto.
+    const binario = rutaBinario();
     const datos = fs.mkdtempSync(path.join(os.tmpdir(), "openrvt-e2e-"));
     fs.writeFileSync(
       path.join(datos, "config.json"),
-      JSON.stringify({ idioma: "es", idioma_migrado: true }),
+      JSON.stringify({
+        idioma: "es",
+        idioma_migrado: true,
+        lateral_expandido: lateralExpandido,
+      }),
     );
 
     const entorno = {
@@ -115,7 +121,7 @@ class Sesion {
     await esperarPuerto("127.0.0.1", puerto);
 
     const caps = new Capabilities();
-    caps.set("tauri:options", { application: rutaBinario() });
+    caps.set("tauri:options", { application: binario });
     caps.setBrowserName("wry");
 
     const driver = await new Builder()
