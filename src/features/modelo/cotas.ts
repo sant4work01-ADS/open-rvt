@@ -156,6 +156,24 @@ export function cotaEditable(cota: CotaLinea): boolean {
   return cota.tipo === "parcial" && cota.editable;
 }
 
+/**
+ * O006b: coloca el texto de una cota sobre su línea. Si el ancho del texto más la
+ * marca no cabe entre las dos marcas, se saca afuera del tramo (pegado a la marca
+ * derecha) para no encimarse; el visor dibuja entonces la línea guía.
+ */
+export function posicionTextoEntreMarcas(
+  desde: number,
+  hasta: number,
+  ancho: number,
+  marca: number,
+): { centro: number; fuera: boolean } {
+  if (ancho + marca <= Math.abs(hasta - desde)) {
+    return { centro: (desde + hasta) / 2, fuera: false };
+  }
+  const borde = Math.max(desde, hasta);
+  return { centro: borde + ancho / 2 + marca, fuera: true };
+}
+
 /** Elección de la casilla «Mover los siguientes», recordada durante la sesión. */
 let moverSiguientes = true;
 

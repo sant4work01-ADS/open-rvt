@@ -7,6 +7,7 @@ import {
   formatearCota,
   moverSiguientesCotas,
   parsearCota,
+  posicionTextoEntreMarcas,
 } from "./cotas";
 
 function eje(
@@ -127,5 +128,18 @@ describe("casilla «Mover los siguientes»", () => {
     expect(moverSiguientesCotas()).toBe(false);
     expect(calcularFamiliasCotas(VERTICALES)[0].parciales).toHaveLength(3);
     fijarMoverSiguientesCotas(true);
+  });
+});
+
+describe("O006b: colocación del texto de cota", () => {
+  it("si cabe, va centrado entre las dos marcas", () => {
+    expect(posicionTextoEntreMarcas(0, 5, 0.9, 0.2)).toEqual({ centro: 2.5, fuera: false });
+  });
+
+  it("si no cabe, se saca afuera pegado a la marca derecha", () => {
+    // Tramo de 0,8 m, texto de 1 m: 0,8 + 0,5 + 0,2 = 1,5.
+    expect(posicionTextoEntreMarcas(0, 0.8, 1, 0.2)).toEqual({ centro: 1.5, fuera: true });
+    // Con el tramo invertido también se saca por la derecha.
+    expect(posicionTextoEntreMarcas(0.8, 0, 1, 0.2)).toEqual({ centro: 1.5, fuera: true });
   });
 });

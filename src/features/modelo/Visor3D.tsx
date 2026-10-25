@@ -16,6 +16,7 @@ import {
   calcularFamiliasCotas,
   formatearCota,
   parsearCota,
+  posicionTextoEntreMarcas,
 } from "./cotas";
 import {
   categoriaOculta,
@@ -1368,16 +1369,17 @@ export function Visor3D({
           ): void => {
             const sprite = textoCota(etiqueta, colorCota, fondo, altoTexto);
             if (!sprite) return;
-            const ancho = sprite.scale.x;
-            const largo = Math.abs(hasta - desde);
-            const medio = (desde + hasta) / 2;
-            let s = medio;
-            if (ancho + marca > largo) {
-              // Fuera del tramo, pegado a la marca de la derecha, con línea guía.
+            const { centro: s, fuera } = posicionTextoEntreMarcas(
+              desde,
+              hasta,
+              sprite.scale.x,
+              marca,
+            );
+            if (fuera) {
+              // Línea guía desde el centro del tramo hasta el texto sacado afuera.
               const borde = Math.max(desde, hasta);
-              s = borde + ancho / 2 + marca;
               lineaCerrada(
-                [punto(medio, t), punto(borde + marca * 0.6, t + altoTexto * 0.15)],
+                [punto((desde + hasta) / 2, t), punto(borde + marca * 0.6, t + altoTexto * 0.15)],
                 materialCota,
                 1.4,
                 grupoLocal,
@@ -1559,26 +1561,23 @@ export function Visor3D({
           }
         }
 
-        if (ordenados.length >= 3) {
+        const textos = {
+          nombre: "Niveles",
+          elevacion: "",
+          cabezas,
+          parciales: [] as string[],
+          total: null as string | null,
+        };
+        if (ordenados.length >= 2) {
           const tParcial = tMax + 1.5;
-          // La total se separa de la cadena al menos 1,5 veces la altura del texto.
-          const tTotal = tParcial + Math.max(1, altoTexto * 1.5);
-          const textos = {
-            nombre: "Niveles",
-            elevacion: "",
-            cabezas,
-            parciales: [] as string[],
-            total: null as string | null,
-          };
           for (const nivel of ordenados) {
             lineaCerrada(
-              [puntoHZ(tMax - 0.1, nivel.elevacion), puntoHZ(tTotal + 0.15, nivel.elevacion)],
+              [puntoHZ(tMax - 0.1, nivel.elevacion), puntoHZ(tParcial + 0.15, nivel.elevacion)],
               materialNivel,
               3,
               grupoLocal,
             );
             marcarHZ(tParcial, nivel.elevacion);
-            marcarHZ(tTotal, nivel.elevacion);
           }
           for (let i = 0; i + 1 < ordenados.length; i += 1) {
             const inferior = ordenados[i];
@@ -1608,32 +1607,47 @@ export function Visor3D({
             }
             textos.parciales.push(etiqueta);
           }
-          const primero = ordenados[0];
-          const ultimo = ordenados[ordenados.length - 1];
-          const total = ultimo.elevacion - primero.elevacion;
-          lineaCerrada(
-            [puntoHZ(tTotal, primero.elevacion), puntoHZ(tTotal, ultimo.elevacion)],
-            materialNivel,
-            3,
-            grupoLocal,
-          );
-          const etiquetaTotal = formatearCota(total);
-          const spriteTotal = textoCota(etiquetaTotal, colorNivel, fondo, altoTexto);
-          if (spriteTotal) {
-            const pos = puntoHZ(tTotal + 0.35, (primero.elevacion + ultimo.elevacion) / 2);
-            spriteTotal.position.set(pos[0], pos[1], pos[2]);
-            spriteTotal.renderOrder = 20;
-            grupoLocal.add(spriteTotal);
-            cotasInteraccion.current.push({
-              tipo: "total",
-              texto: etiquetaTotal,
-              valor: total,
-              punto: pos,
-            });
+          // O006b: la total solo con dos o más entrepisos; con uno repetiría la
+          // misma medida de la parcial.
+          if (ordenados.length >= 3) {
+            // La total se separa de la cadena al menos 1,5 veces la altura del texto.
+            const tTotal = tParcial + Math.max(1, altoTexto * 1.5);
+            for (const nivel of ordenados) {
+              lineaCerrada(
+                [puntoHZ(tParcial + 0.15, nivel.elevacion), puntoHZ(tTotal + 0.15, nivel.elevacion)],
+                materialNivel,
+                3,
+                grupoLocal,
+              );
+              marcarHZ(tTotal, nivel.elevacion);
+            }
+            const primero = ordenados[0];
+            const ultimo = ordenados[ordenados.length - 1];
+            const total = ultimo.elevacion - primero.elevacion;
+            lineaCerrada(
+              [puntoHZ(tTotal, primero.elevacion), puntoHZ(tTotal, ultimo.elevacion)],
+              materialNivel,
+              3,
+              grupoLocal,
+            );
+            const etiquetaTotal = formatearCota(total);
+            const spriteTotal = textoCota(etiquetaTotal, colorNivel, fondo, altoTexto);
+            if (spriteTotal) {
+              const pos = puntoHZ(tTotal + 0.35, (primero.elevacion + ultimo.elevacion) / 2);
+              spriteTotal.position.set(pos[0], pos[1], pos[2]);
+              spriteTotal.renderOrder = 20;
+              grupoLocal.add(spriteTotal);
+              cotasInteraccion.current.push({
+                tipo: "total",
+                texto: etiquetaTotal,
+                valor: total,
+                punto: pos,
+              });
+            }
+            textos.total = etiquetaTotal;
           }
-          textos.total = etiquetaTotal;
-          datosNiveles.push(textos);
         }
+        datosNiveles.push(textos);
 
         // Ejes que cruzan el plano de la vista: línea vertical y burbuja abajo.
         const altoBurbuja = Math.max(tamano * 0.035, 0.35);
