@@ -38,3 +38,25 @@
   confirmada o de lo que diga el usuario. Si falta, pregunta.
 - **Prueba:** una batería de evals como la de PP, con planos de prueba y su modelo esperado, para
   medir qué modelos sirven antes de recomendarlos.
+
+## Caso de prueba 1: croquis a mano de un baño (`croquis/2026-10-26-bano-a-mano.jpg`)
+- **Lectura esperada:**
+  - Ejes: 1–2 a 2.80 m y A–B a 1.80 m.
+  - Muros perimetrales en los cuatro ejes.
+  - Inodoro contra el muro del eje 1, mirando al este.
+  - Mueble de lavabo contra el muro del eje A, junto al eje 2.
+  - Ventana en el muro A, cerca del eje 1, de 0.40 m de alto.
+  - Puerta en el muro B, junto al eje 2, de 0.90 × 2.20 m. Abre hacia adentro y la hoja queda
+    contra el muro del eje 2.
+- **Preguntas que debe hacer (no inventar):**
+  - Espesor de muro y si los ejes van al centro.
+  - Altura de entrepiso.
+  - Ancho y antepecho de la ventana, y su distancia al eje 1.
+  - Distancia de la puerta al eje 2.
+  - Medidas del mueble.
+  - Tipos de la biblioteca para el inodoro y el lavabo.
+- **Si el usuario dice «usa lo típico», propone y marca como supuesto:**
+  - muro de 15 cm a eje;
+  - entrepiso de 2.50 m;
+  - ventana de 0.60 × 0.40 m con antepecho de 1.80 m;
+  - mueble de 0.55 m de fondo.
