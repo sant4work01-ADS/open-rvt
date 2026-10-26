@@ -339,6 +339,10 @@ class Servidor:
             return self._exigir().medicion_guardar_partidas(
                 str(params.get("globalid") or ""), params.get("partidas")
             )
+        if metodo in ("medicion.partidas_omision", "tipos.partidas_omision"):
+            return self._exigir().medicion_partidas_omision(
+                str(params.get("globalid") or "")
+            )
         if metodo in ("vigas.crear", "viga.crear"):
             return self._exigir().viga_crear(
                 str(params.get("tipo") or ""),

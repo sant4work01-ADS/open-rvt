@@ -12,6 +12,7 @@ import { BarraHerramienta } from "./BarraHerramienta";
 import { DialogoEstilos } from "./DialogoEstilos";
 import { DialogoCotas } from "./DialogoCotas";
 import { DialogoCastillos } from "./DialogoCastillos";
+import { CantidadesView } from "./CantidadesView";
 import { EditorTipos } from "@/features/tipos/EditorTipos";
 
 export function ModeloView() {
@@ -41,7 +42,10 @@ export function ModeloView() {
   const anadirPuntoCorte = useModelo((s) => s.anadirPuntoCorte);
   const [panelAbierto, setPanelAbierto] = useState(true);
 
-  const vista = vistas.find((v) => v.id === vistaActivaId) ?? vistas[0];
+  const esCantidades = vistaActivaId === "cantidades";
+  const vista = esCantidades
+    ? null
+    : (vistas.find((v) => v.id === vistaActivaId) ?? vistas[0]);
 
   // O007a: el editor de tipos ocupa toda el área de trabajo.
   if (editorTipos) {
@@ -67,11 +71,17 @@ export function ModeloView() {
 
   return (
     <div data-testid="modelo-editor" className="flex min-h-0 flex-1 overflow-hidden">
-      <NavegadorVistas vistas={vistas} activaId={vista?.id ?? null} onElegir={fijarVista} />
+      <NavegadorVistas
+        vistas={vistas}
+        activaId={vista?.id ?? null}
+        onElegir={fijarVista}
+        cantidadesActiva={esCantidades}
+        onCantidades={() => fijarVista("cantidades")}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex h-8 shrink-0 items-center gap-2 border-b px-3 text-xs">
           <span className="font-medium" data-testid="vista-activa-nombre">
-            {vista?.nombre ?? "Sin vista"}
+            {esCantidades ? "Cantidades" : (vista?.nombre ?? "Sin vista")}
           </span>
           {vista && (
             <span className="text-muted-foreground">
@@ -91,7 +101,9 @@ export function ModeloView() {
         </div>
         <BarraHerramienta />
         <div className="relative flex min-h-0 flex-1">
-          {vista ? (
+          {esCantidades ? (
+            <CantidadesView />
+          ) : vista ? (
             <Visor3D
               vista={vista}
               vistas={vistas}

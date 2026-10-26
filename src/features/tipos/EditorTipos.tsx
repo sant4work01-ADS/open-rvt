@@ -22,21 +22,26 @@ import type {
   FuncionCapa,
   LineaUbicacion,
   MaterialBiblioteca,
+  PartidaMedicion,
   TipoElemento,
 } from "@/features/modelo/tipos";
 import {
+  actualizarCriterioPartida,
   capaPorDefecto,
   cmAMetros,
   colorCapa,
+  CRITERIOS_MEDICION,
   espesorCm,
   FUNCIONES,
   LINEAS_UBICACION,
   nombreDuplicado,
+  partidaNueva,
   posicionesCapas,
   posicionesVarillas,
   RAYADOS,
   totalCapas,
   UNIDADES,
+  unidadDeCriterio,
   validarCapas,
 } from "./editor";
 
@@ -68,6 +73,9 @@ interface Borrador {
   seccion: Record<string, string>;
   armado: Record<string, string>;
   acero?: ResumenTipo["acero"];
+  /** O009: partidas de medición y criterios válidos para la clase. */
+  partidas: PartidaMedicion[];
+  criterios: PartidaMedicion["Criterio"][];
 }
 
 const GRUPOS_ESTRUCTURA: ReadonlyArray<{ id: string; nombre: string; alias: string[] }> = [
@@ -384,6 +392,162 @@ function PreviewEstructura({ borrador }: { borrador: Borrador }) {
   );
 }
 
+function TablaMedicion({
+  borrador,
+  onCambiar,
+  onRestablecer,
+}: {
+  borrador: Borrador;
+  onCambiar: (partidas: PartidaMedicion[]) => void;
+  onRestablecer: () => void;
+}) {
+  const cambiar = (indice: number, cambios: Partial<PartidaMedicion>) => {
+    onCambiar(
+      borrador.partidas.map((partida, i) =>
+        i === indice ? { ...partida, ...cambios } : partida,
+      ),
+    );
+  };
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-auto p-3" data-testid="tabla-medicion">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold">Partidas de medición</h3>
+          <p className="text-xs text-muted-foreground">
+            Cada partida dice cómo se mide este tipo y con qué clave entra a
+            PresupuestosPro. Cambiar la tabla no regenera la geometría.
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-1">
+          <Button
+            type="button"
+            variant="outline"
+            data-testid="medicion-agregar"
+            onClick={() => onCambiar([...borrador.partidas, partidaNueva(borrador.criterios, borrador.capas)])}
+          >
+            <Plus size={13} /> Agregar partida
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            data-testid="medicion-restablecer"
+            onClick={onRestablecer}
+          >
+            Restablecer las de omisión
+          </Button>
+        </div>
+      </div>
+      <table className="w-full border-collapse text-xs" aria-label="Partidas de medición">
+        <thead>
+          <tr className="border-b text-left text-muted-foreground">
+            <th className="py-1 pr-2 font-medium">Nombre</th>
+            <th className="w-32 py-1 pr-2 font-medium">Clave PP</th>
+            <th className="w-16 py-1 pr-2 font-medium">Unidad</th>
+            <th className="w-56 py-1 pr-2 font-medium">Criterio</th>
+            <th className="w-40 py-1 pr-2 font-medium">Capa</th>
+            <th className="w-16 py-1 font-medium">Quitar</th>
+          </tr>
+        </thead>
+        <tbody>
+          {borrador.partidas.map((partida, indice) => (
+            <tr key={`partida-${indice}`} data-testid={`partida-fila-${indice}`} className="border-b">
+              <td className="py-1 pr-2">
+                <input
+                  data-testid={`partida-nombre-${indice}`}
+                  aria-label={`Nombre de la partida ${indice + 1}`}
+                  value={partida.Nombre}
+                  onChange={(e) => cambiar(indice, { Nombre: e.target.value })}
+                  className="h-7 w-full rounded border bg-background px-1"
+                />
+              </td>
+              <td className="py-1 pr-2">
+                <input
+                  data-testid={`partida-clave-${indice}`}
+                  aria-label={`Clave PP de la partida ${indice + 1}`}
+                  value={partida.ClavePP}
+                  onChange={(e) => cambiar(indice, { ClavePP: e.target.value })}
+                  placeholder="Sin clave"
+                  className="h-7 w-full rounded border bg-background px-1"
+                />
+              </td>
+              <td className="py-1 pr-2" data-testid={`partida-unidad-${indice}`}>
+                {unidadDeCriterio(partida.Criterio)}
+              </td>
+              <td className="py-1 pr-2">
+                <select
+                  data-testid={`partida-criterio-${indice}`}
+                  aria-label={`Criterio de la partida ${indice + 1}`}
+                  value={partida.Criterio}
+                  onChange={(e) =>
+                    cambiar(
+                      indice,
+                      actualizarCriterioPartida(
+                        partida,
+                        e.target.value as PartidaMedicion["Criterio"],
+                        borrador.capas,
+                      ),
+                    )
+                  }
+                  className="h-7 w-full rounded border bg-background px-1"
+                >
+                  {CRITERIOS_MEDICION.filter((c) => borrador.criterios.includes(c.id)).map(
+                    (c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nombre}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </td>
+              <td className="py-1 pr-2">
+                {partida.Criterio === "area_capa" ? (
+                  <select
+                    data-testid={`partida-capa-${indice}`}
+                    aria-label={`Capa de la partida ${indice + 1}`}
+                    value={partida.Capa ?? 0}
+                    onChange={(e) => cambiar(indice, { Capa: Number(e.target.value) })}
+                    className="h-7 w-full rounded border bg-background px-1"
+                  >
+                    {borrador.capas.map((capa, i) => (
+                      <option key={`${i}-${capa.material}`} value={i}>
+                        {i + 1}. {capa.material} ({capa.funcion})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </td>
+              <td className="py-1">
+                <button
+                  type="button"
+                  data-testid={`partida-quitar-${indice}`}
+                  title="Quitar partida"
+                  onClick={() =>
+                    onCambiar(borrador.partidas.filter((_p, i) => i !== indice))
+                  }
+                  className="rounded p-1 text-muted-foreground hover:bg-muted"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {borrador.partidas.length === 0 && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Este tipo no tiene partidas: no saldrá en Cantidades.
+        </p>
+      )}
+      <p className="mt-3 text-xs text-muted-foreground">
+        Las partidas sin clave se agrupan por nombre. Al aplicar, el cambio queda en un
+        paso de deshacer.
+      </p>
+    </div>
+  );
+}
+
 export function EditorTipos({
   onCerrar,
   tipoInicial = null,
@@ -392,6 +556,7 @@ export function EditorTipos({
   tipoInicial?: string | null;
 }) {
   const [pestana, setPestana] = useState<"capas" | "materiales">("capas");
+  const [vistaCentro, setVistaCentro] = useState<"general" | "medicion">("general");
   const [materiales, setMateriales] = useState<MaterialBiblioteca[]>([]);
   const [tipos, setTipos] = useState<ResumenTipo[]>([]);
   const [seleccion, setSeleccion] = useState<string | null>(null);
@@ -453,7 +618,10 @@ export function EditorTipos({
       seccion,
       armado,
       acero: tipo.acero as ResumenTipo["acero"],
+      partidas: (tipo.partidas ?? []).map((partida) => ({ ...partida })),
+      criterios: (tipo.criterios ?? []) as PartidaMedicion["Criterio"][],
     });
+    setVistaCentro("general");
   }, []);
 
   useEffect(() => {
@@ -658,17 +826,34 @@ export function EditorTipos({
             : valor;
       }
       const datos = esEstructural
-        ? { nombre: borrador.nombre, seccion, armado }
+        ? { nombre: borrador.nombre, seccion, armado, partidas: borrador.partidas }
         : {
             nombre: borrador.nombre,
             capas: borrador.capas,
             linea_ubicacion: borrador.linea,
             parametros: { LineaUbicacion: borrador.linea },
+            partidas: borrador.partidas,
           };
       const ok = await useModelo.getState().aplicarTipoEdicion(seleccion, datos);
       if (!ok) throw new Error("No se pudo aplicar el tipo.");
       setError(null);
       cerrar();
+    } catch (e) {
+      setError(textoDeError(e));
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  const restablecerPartidas = async () => {
+    if (!seleccion || !borrador) return;
+    setOcupado(true);
+    try {
+      const partidas = await rpc<PartidaMedicion[]>("medicion.partidas_omision", {
+        globalid: seleccion,
+      });
+      setBorrador({ ...borrador, partidas: partidas.map((p) => ({ ...p })) });
+      setError(null);
     } catch (e) {
       setError(textoDeError(e));
     } finally {
@@ -897,7 +1082,43 @@ export function EditorTipos({
 
           {/* Columna 2: parámetros del tipo */}
           <section className="flex min-w-0 flex-1 flex-col overflow-auto border-r">
-            {borrador ? (
+            <div className="flex gap-1 border-b p-2" role="tablist" aria-label="Pestañas del tipo">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={vistaCentro === "general"}
+                data-testid="pestana-general"
+                onClick={() => setVistaCentro("general")}
+                className={`rounded px-3 py-1 text-xs ${
+                  vistaCentro === "general"
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted"
+                }`}
+              >
+                {esEstructural ? "Sección y armado" : "Capas"}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={vistaCentro === "medicion"}
+                data-testid="pestana-medicion"
+                onClick={() => setVistaCentro("medicion")}
+                className={`rounded px-3 py-1 text-xs ${
+                  vistaCentro === "medicion"
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted"
+                }`}
+              >
+                Medición
+              </button>
+            </div>
+            {vistaCentro === "medicion" && borrador ? (
+              <TablaMedicion
+                borrador={borrador}
+                onCambiar={(partidas) => cambiarBorrador({ partidas })}
+                onRestablecer={() => void restablecerPartidas()}
+              />
+            ) : borrador ? (
               <>
                 <div className="flex flex-wrap items-end gap-3 border-b p-3">
                   <label className="flex flex-col gap-1 text-xs">

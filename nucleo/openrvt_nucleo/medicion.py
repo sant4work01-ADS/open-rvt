@@ -299,6 +299,12 @@ class MedicionMixin:
             )
         return salida
 
+    def medicion_partidas_omision(self, globalid: str) -> list[dict[str, Any]]:
+        """Partidas por omisión del tipo, sin tocar el modelo."""
+        self._exigir_modelo()
+        tipo = self._tipo_por_gid(globalid)
+        return self._partidas_omision(tipo=tipo)
+
     def medicion_guardar_partidas(
         self, globalid: str, partidas: Any
     ) -> dict[str, Any]:

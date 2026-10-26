@@ -23,7 +23,8 @@ export interface PeticionDialogo {
     | "abrir-json"
     | "guardar-zip"
     | "abrir-ifc"
-    | "guardar-ifc";
+    | "guardar-ifc"
+    | "guardar-medicion";
   titulo: string;
   /** Nombre de archivo sugerido (solo en los de guardar). */
   predeterminado: string;
@@ -185,6 +186,30 @@ export async function elegirDestinoZip(nombreSugerido: string): Promise<string |
   });
   if (!r) return null;
   return r.toLowerCase().endsWith(".zip") ? r : `${r}.zip`;
+}
+
+/** Destino de la medición para PresupuestosPro (.openrvt-medicion.json). */
+export async function elegirDestinoMedicion(nombreSugerido: string): Promise<string | null> {
+  const f = window.__PP_DIALOGO_PRUEBAS__;
+  if (f)
+    return f({
+      tipo: "guardar-medicion",
+      titulo: tr("comun.exportar-a-presupuestospro", "Exportar a PresupuestosPro"),
+      predeterminado: `${nombreSugerido}.openrvt-medicion.json`,
+    });
+  const r = await save({
+    defaultPath: `${nombreSugerido}.openrvt-medicion.json`,
+    filters: [
+      {
+        name: tr("comun.medicion-openrvt", "Medición de OPEN-RVT"),
+        extensions: ["json"],
+      },
+    ],
+  });
+  if (!r) return null;
+  return r.toLowerCase().endsWith(".openrvt-medicion.json")
+    ? r
+    : `${r}.openrvt-medicion.json`;
 }
 
 /** Archivo IFC para abrir (modelo del núcleo). */

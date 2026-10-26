@@ -5,6 +5,9 @@ interface Props {
   vistas: Vista[];
   activaId: string | null;
   onElegir: (id: string) => void;
+  /** O009: la vista Cantidades vive bajo 3D y no es una vista IFC guardada. */
+  cantidadesActiva?: boolean;
+  onCantidades?: () => void;
 }
 
 const GRUPOS: ReadonlyArray<{ titulo: string; tipos: Vista["tipo"][]; prueba: string }> = [
@@ -14,7 +17,13 @@ const GRUPOS: ReadonlyArray<{ titulo: string; tipos: Vista["tipo"][]; prueba: st
   { titulo: "3D", tipos: ["iso", "perspectiva"], prueba: "3d" },
 ];
 
-export function NavegadorVistas({ vistas, activaId, onElegir }: Props) {
+export function NavegadorVistas({
+  vistas,
+  activaId,
+  onElegir,
+  cantidadesActiva = false,
+  onCantidades,
+}: Props) {
   return (
     <aside
       data-testid="navegador-vistas"
@@ -61,6 +70,30 @@ export function NavegadorVistas({ vistas, activaId, onElegir }: Props) {
             </section>
           );
         })}
+        <section data-grupo="cantidades">
+          <h3 className="px-1 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Cantidades
+          </h3>
+          <ul className="flex flex-col">
+            <li>
+              <button
+                type="button"
+                data-testid="vista-cantidades-item"
+                data-tipo="cantidades"
+                aria-current={cantidadesActiva ? "true" : undefined}
+                onClick={() => onCantidades?.()}
+                className={
+                  cantidadesActiva
+                    ? "w-full truncate rounded bg-accent px-2 py-1 text-left text-xs font-medium text-accent-foreground"
+                    : "w-full truncate rounded px-2 py-1 text-left text-xs hover:bg-muted"
+                }
+                title="Cantidades de medición para PresupuestosPro"
+              >
+                Cantidades
+              </button>
+            </li>
+          </ul>
+        </section>
       </div>
     </aside>
   );

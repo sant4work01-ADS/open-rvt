@@ -101,6 +101,26 @@ export interface MaterialBiblioteca {
   espesor_tipico: number;
 }
 
+/** O009: una partida de medición del tipo (pset OPENRVT_Medicion). */
+export interface PartidaMedicion {
+  Nombre: string;
+  ClavePP: string;
+  Unidad: "m" | "m2" | "m3" | "kg" | "pza";
+  Criterio:
+    | "area_nucleo"
+    | "area_capa"
+    | "largo"
+    | "area"
+    | "volumen"
+    | "cimbra_borde"
+    | "acero"
+    | "cimbra"
+    | "plantilla"
+    | "excavacion"
+    | "piezas";
+  Capa: number | null;
+}
+
 export interface TipoElemento {
   globalid: string;
   nombre: string;
@@ -108,6 +128,9 @@ export interface TipoElemento {
   parametros: Record<string, unknown>;
   capas: CapaMuro[];
   instancias: number;
+  /** O009: partidas de medición y criterios válidos para la clase. */
+  partidas?: PartidaMedicion[];
+  criterios?: PartidaMedicion["Criterio"][];
   /** O007b: alias estructural (zapata, columna, castillo…). */
   alias?: string;
   seccion?: Record<string, number | string>;

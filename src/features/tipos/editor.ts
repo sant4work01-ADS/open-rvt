@@ -1,6 +1,12 @@
 // OPEN-RVT O007a: lógica pura del editor de tipos de muro. La tabla de capas, las
 // posiciones de la vista previa y la validación del núcleo se prueban sin React.
-import type { CapaMuro, FuncionCapa, LineaUbicacion, MaterialBiblioteca } from "@/features/modelo/tipos";
+import type {
+  CapaMuro,
+  FuncionCapa,
+  LineaUbicacion,
+  MaterialBiblioteca,
+  PartidaMedicion,
+} from "@/features/modelo/tipos";
 
 export const FUNCIONES: ReadonlyArray<{ id: FuncionCapa; nombre: string }> = [
   { id: "núcleo", nombre: "Núcleo" },
@@ -170,4 +176,82 @@ export function espesorCm(metros: number): string {
 export function cmAMetros(cm: string | number): number {
   const numero = typeof cm === "number" ? cm : Number(String(cm).replace(",", "."));
   return Number.isFinite(numero) ? numero / 100 : 0;
+}
+
+// ——— O009: medición ———
+
+export const CRITERIOS_MEDICION: ReadonlyArray<{
+  id: PartidaMedicion["Criterio"];
+  nombre: string;
+}> = [
+  { id: "area_nucleo", nombre: "Área del núcleo (m²)" },
+  { id: "area_capa", nombre: "Área de la capa (m²)" },
+  { id: "largo", nombre: "Largo del eje (m)" },
+  { id: "area", nombre: "Área del contorno (m²)" },
+  { id: "volumen", nombre: "Volumen neto (m³)" },
+  { id: "cimbra_borde", nombre: "Cimbra de borde (m²)" },
+  { id: "acero", nombre: "Acero (kg)" },
+  { id: "cimbra", nombre: "Cimbra (m²)" },
+  { id: "plantilla", nombre: "Plantilla (m²)" },
+  { id: "excavacion", nombre: "Excavación (m³)" },
+  { id: "piezas", nombre: "Piezas (pza)" },
+];
+
+export const UNIDAD_DE_CRITERIO: Record<PartidaMedicion["Criterio"], PartidaMedicion["Unidad"]> = {
+  area_nucleo: "m2",
+  area_capa: "m2",
+  largo: "m",
+  area: "m2",
+  volumen: "m3",
+  cimbra_borde: "m2",
+  acero: "kg",
+  cimbra: "m2",
+  plantilla: "m2",
+  excavacion: "m3",
+  piezas: "pza",
+};
+
+export function unidadDeCriterio(criterio: PartidaMedicion["Criterio"]): PartidaMedicion["Unidad"] {
+  return UNIDAD_DE_CRITERIO[criterio];
+}
+
+export function nombreDeCriterio(criterio: PartidaMedicion["Criterio"]): string {
+  return CRITERIOS_MEDICION.find((c) => c.id === criterio)?.nombre ?? criterio;
+}
+
+/** Nueva partida con el primer criterio válido del tipo y su primera capa. */
+export function partidaNueva(
+  criterios: ReadonlyArray<PartidaMedicion["Criterio"]>,
+  capas: ReadonlyArray<CapaMuro>,
+): PartidaMedicion {
+  const criterio = criterios[0] ?? "volumen";
+  return {
+    Nombre: nombreDeCriterio(criterio).replace(/\s*\([^)]*\)$/, ""),
+    ClavePP: "",
+    Unidad: unidadDeCriterio(criterio),
+    Criterio: criterio,
+    Capa: criterio === "area_capa" ? (capas.findIndex((c) => c.funcion === "acabado") >= 0
+      ? capas.findIndex((c) => c.funcion === "acabado")
+      : 0) : null,
+  };
+}
+
+export function actualizarCriterioPartida(
+  partida: PartidaMedicion,
+  criterio: PartidaMedicion["Criterio"],
+  capas: ReadonlyArray<CapaMuro>,
+): PartidaMedicion {
+  return {
+    ...partida,
+    Criterio: criterio,
+    Unidad: unidadDeCriterio(criterio),
+    Capa:
+      criterio === "area_capa"
+        ? partida.Capa ?? (capas.length > 0 ? 0 : null)
+        : null,
+  };
+}
+
+export function esCapaValida(indice: number | null, capas: ReadonlyArray<CapaMuro>): boolean {
+  return indice !== null && Number.isInteger(indice) && indice >= 0 && indice < capas.length;
 }
