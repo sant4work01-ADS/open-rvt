@@ -160,6 +160,46 @@ detection lasts 60 seconds after the last gesture.
   deltaMode, Ctrl and milliseconds between events) and each one's classification. If
   the touchpad still misbehaves, that panel is what to report.
 
+### Measurement and quantities
+
+Every type says **how it is measured**. In the type editor, the **Measurement** tab
+shows a table of items with Name, PP key, Unit, Criterion and Layer. The unit comes
+from the criterion and the layer appears only for "layer area".
+
+- **Walls:** core area (deducts openings, tie columns, columns, lintels and sill
+  beams), area of each finish layer (deducts openings, not tie columns) and axis
+  length.
+- **Slabs:** outline area, net volume and edge formwork.
+- **Structure:** net volume and steel; plus formwork for columns, beams and tie
+  columns, and lean concrete and excavation for pad footings.
+- **Doors and windows:** pieces.
+
+**Add item**, **Remove** and **Reset to defaults** edit the table; **Apply** saves it in
+the `OPENRVT_Medicion` property set without regenerating geometry. The change is undone
+in one step.
+
+The **Quantities** view, under 3D in the view navigator, groups by PP key and unit (or
+by name when the key is empty). Expanding an item shows its generator rows: axis,
+storey, description, factors and result with the element's GlobalId. Clicking a row
+selects the element in the model. Items without a key show the yellow warning "No PP
+key: add it to the type".
+
+**Export to PresupuestosPro…** asks for the `.openrvt-medicion.json` file and writes
+the interchange contract: format, version, project, IFC file, date and items with their
+total and rows. Each item total is exactly the sum of its results.
+
+## What's new in version 0.5.6
+
+- **Measurement items per type** in the `OPENRVT_Medicion` property set, with core,
+  layer, area, volume, formwork, steel, lean concrete, excavation and piece criteria.
+- **`medicion.calcular`** with generator rows per element, axes, storey, description
+  and results rounded to four decimals.
+- **`medicion.exportar`** to the `.openrvt-medicion.json` contract imported by
+  PresupuestosPro.
+- **Quantities view** with level filter, expandable rows, element selection and a
+  warning for items without a key.
+- **Sample for PP** in `docs/ejemplos/rectangulo.openrvt-medicion.json`.
+
 ## What's new in version 0.5.5
 
 - **Automatic tie columns** at corners, free ends and intermediate positions, with

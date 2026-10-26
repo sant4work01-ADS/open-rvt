@@ -160,6 +160,45 @@ La detección dura 60 segundos desde el último gesto.
   deltaMode, Ctrl y milisegundos entre eventos) y la clasificación de cada uno. Si el
   touchpad sigue fallando, ese panel sirve para reportarlo.
 
+### Medición y cantidades
+
+Cada tipo dice **cómo se mide**. En el editor de tipos, la pestaña **Medición** tiene
+una tabla de partidas con Nombre, Clave PP, Unidad, Criterio y Capa. La unidad sale del
+criterio y la capa solo aparece en «área de la capa».
+
+- **Muros:** área del núcleo (descuenta vanos, castillos, columnas, cerramientos y
+  dalas), área de cada capa de acabado (descuenta vanos, no castillos) y largo del eje.
+- **Losas:** área del contorno, volumen neto y cimbra de borde.
+- **Estructura:** volumen neto y acero; además, cimbra en columnas, trabes y castillos,
+  y plantilla y excavación en zapatas aisladas.
+- **Puertas y ventanas:** piezas.
+
+Los botones **Agregar partida**, **Quitar** y **Restablecer las de omisión** editan la
+tabla; **Aplicar** la guarda en el pset `OPENRVT_Medicion` y no regenera la geometría.
+El cambio se deshace en un paso.
+
+La vista **Cantidades**, en el navegador de vistas bajo 3D, agrupa por Clave PP y
+unidad (o por nombre si la clave está vacía). Al desplegar una partida se ven sus
+renglones generadores: eje, tramo, descripción, factores y resultado con el GlobalId
+del elemento. Un clic en un renglón selecciona el elemento en el modelo. Las partidas
+sin clave muestran el aviso amarillo «Sin clave de PP: ponla en el tipo».
+
+**Exportar a PresupuestosPro…** pide el archivo `.openrvt-medicion.json` y escribe el
+contrato de intercambio: formato, versión, proyecto, archivo IFC, fecha y partidas con
+su total y renglones. El total de cada partida es exactamente la suma de sus resultados.
+
+## Novedades de la versión 0.5.6
+
+- **Partidas de medición por tipo** en el pset `OPENRVT_Medicion`, con criterios de
+  núcleo, capa, área, volumen, cimbra, acero, plantilla, excavación y piezas.
+- **Cálculo `medicion.calcular`** con renglones generadores por elemento, ejes, tramo,
+  descripción y resultado redondeado a cuatro decimales.
+- **Exportación `medicion.exportar`** al contrato `.openrvt-medicion.json` que importa
+  PresupuestosPro.
+- **Vista Cantidades** con filtro por nivel, despliegue de renglones, selección del
+  elemento y aviso para las partidas sin clave.
+- **Ejemplo para PP** en `docs/ejemplos/rectangulo.openrvt-medicion.json`.
+
 ## Novedades de la versión 0.5.5
 
 - **Castillos automáticos** en esquinas, remates e intermedios, con separación
