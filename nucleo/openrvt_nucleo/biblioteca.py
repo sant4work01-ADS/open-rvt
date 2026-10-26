@@ -8,6 +8,7 @@ las instancias se regenera al editar el tipo; el eje queda fijo según
 
 from __future__ import annotations
 
+import json
 from typing import Any, Iterable
 
 import ifcopenshell
@@ -622,6 +623,24 @@ class BibliotecaMixin:
     def _total_capas(self, capas: Iterable[dict[str, Any]]) -> float:
         return round(sum(float(c["espesor"]) for c in capas), 9)
 
+    @staticmethod
+    def _mismas_capas(
+        anteriores: Iterable[dict[str, Any]], nuevas: Iterable[dict[str, Any]]
+    ) -> bool:
+        a = list(anteriores)
+        b = list(nuevas)
+        if len(a) != len(b):
+            return False
+        for capa_a, capa_b in zip(a, b):
+            if (
+                _texto(capa_a.get("material")) != _texto(capa_b.get("material"))
+                or _texto(capa_a.get("funcion")) != _texto(capa_b.get("funcion"))
+                or abs(float(capa_a.get("espesor") or 0.0)
+                       - float(capa_b.get("espesor") or 0.0)) > 1e-9
+            ):
+                return False
+        return True
+
     def _linea_tipo(self, tipo: Any) -> str:
         if tipo is None:
             return "eje_nucleo"
@@ -931,6 +950,7 @@ class BibliotecaMixin:
         self._guardar_pset(tipo, "OPENRVT_Seccion", seccion_norm)
         self._guardar_pset(tipo, "OPENRVT_Armado", armado_norm)
         self._aplicar_perfil_de_tipo(tipo, alias, seccion_norm)
+        self._guardar_partidas_omision(tipo)
         return tipo
 
     def crear_tipos_estructura(self) -> list[Any]:
@@ -977,6 +997,8 @@ class BibliotecaMixin:
             "parametros": parametros,
             "capas": capas,
             "instancias": len(self._instancias_de_tipo(tipo)),
+            "partidas": self._partidas_de_tipo(tipo),
+            "criterios": self._criterios_de_tipo(tipo),
         }
         alias, seccion, armado = self._seccion_y_armado(tipo)
         if alias is not None:
@@ -1077,6 +1099,7 @@ class BibliotecaMixin:
                 "LineaUbicacion": linea if linea in LINEAS_UBICACION else "eje_nucleo",
             },
         )
+        self._guardar_partidas_omision(tipo)
         return tipo
 
     def _asegurar_tipos_muro(self) -> None:
@@ -1174,6 +1197,7 @@ class BibliotecaMixin:
             parametros = dict(datos.get("parametros") or {})
             if parametros:
                 self._guardar_pset(tipo, "OPENRVT_Tipo", parametros)
+            self._guardar_partidas_omision(tipo)
         self.con_cambios = True
         return self._resultado(
             creados=[tipo],
@@ -1233,19 +1257,20 @@ class BibliotecaMixin:
         parametros = dict(self._parametros_tipo(tipo))
         if isinstance(datos.get("parametros"), dict):
             parametros.update(datos["parametros"])
+        if "partidas" in datos:
+            # O009: las partidas se guardan en su pset; nunca regeneran geometría.
+            partidas = self._normalizar_partidas(tipo, datos["partidas"])
+            self._guardar_pset(
+                tipo,
+                "OPENRVT_Medicion",
+                {"Partidas": json.dumps(partidas, ensure_ascii=False)},
+            )
         if tipo.is_a("IfcWallType"):
+            capas_previas = self.capas_de_tipo(tipo)
             if "capas" in datos:
                 capas = self._normalizar_capas(datos["capas"])
-                self._quitar_material_set(tipo)
-                capa_set = self._crear_capa_set(_nombre(tipo), capas)
-                material_api.assign_material(
-                    self.modelo,
-                    products=[tipo],
-                    type="IfcMaterialLayerSet",
-                    material=capa_set,
-                )
             else:
-                capas = self.capas_de_tipo(tipo)
+                capas = capas_previas
                 self._validar_capas(capas)
             linea = _texto(
                 datos.get("linea_ubicacion")
@@ -1254,30 +1279,44 @@ class BibliotecaMixin:
             )
             if linea not in LINEAS_UBICACION:
                 raise self._error(f"Línea de ubicación «{linea}» no válida.", -32602)
+            cambio_geometria = (
+                linea != self._linea_tipo(tipo)
+                or not self._mismas_capas(capas_previas, capas)
+            )
+            if cambio_geometria and "capas" in datos:
+                self._quitar_material_set(tipo)
+                capa_set = self._crear_capa_set(_nombre(tipo), capas)
+                material_api.assign_material(
+                    self.modelo,
+                    products=[tipo],
+                    type="IfcMaterialLayerSet",
+                    material=capa_set,
+                )
             parametros["LineaUbicacion"] = linea
             parametros["Espesor"] = self._total_capas(capas)
             self._guardar_pset(tipo, "OPENRVT_TipoMuro", parametros)
             espesor = parametros["Espesor"]
             modificados: list[Any] = []
-            for instancia in self._instancias_de_tipo(tipo):
-                if instancia.is_a("IfcWall"):
-                    info = self._datos_muro(instancia)
-                    self._guardar_pset(
-                        instancia,
-                        "OPENRVT_Muro",
-                        {
-                            "Longitud": info["longitud"],
-                            "Altura": info["altura"],
-                            "Espesor": espesor,
-                            "Alineacion": info["alineacion"],
-                        },
-                    )
-                    self._regenerar_muro(instancia)
-                    for vano in self._aberturas_del_muro(instancia):
-                        relleno = self._relleno_de(vano[0])
-                        if relleno is not None:
-                            self._regenerar_relleno(relleno, vano[0])
-                    modificados.append(instancia)
+            if cambio_geometria:
+                for instancia in self._instancias_de_tipo(tipo):
+                    if instancia.is_a("IfcWall"):
+                        info = self._datos_muro(instancia)
+                        self._guardar_pset(
+                            instancia,
+                            "OPENRVT_Muro",
+                            {
+                                "Longitud": info["longitud"],
+                                "Altura": info["altura"],
+                                "Espesor": espesor,
+                                "Alineacion": info["alineacion"],
+                            },
+                        )
+                        self._regenerar_muro(instancia)
+                        for vano in self._aberturas_del_muro(instancia):
+                            relleno = self._relleno_de(vano[0])
+                            if relleno is not None:
+                                self._regenerar_relleno(relleno, vano[0])
+                        modificados.append(instancia)
         elif self._es_clase_estructura(tipo.is_a()):
             alias = self._estructura_de_tipo(tipo) or "trabe"
             _, seccion_previa, armado_previo = self._seccion_y_armado(tipo)
@@ -1287,10 +1326,14 @@ class BibliotecaMixin:
             armado = self._normalizar_armado(
                 alias, {**armado_previo, **dict(datos.get("armado") or {})}
             )
+            cambio_geometria = (
+                seccion != seccion_previa or armado != armado_previo
+            )
             self._guardar_pset(tipo, "OPENRVT_Seccion", seccion)
             self._guardar_pset(tipo, "OPENRVT_Armado", armado)
-            self._aplicar_perfil_de_tipo(tipo, alias, seccion)
-            modificados = list(self._instancias_de_tipo(tipo))
+            if cambio_geometria:
+                self._aplicar_perfil_de_tipo(tipo, alias, seccion)
+            modificados = list(self._instancias_de_tipo(tipo)) if cambio_geometria else []
             for instancia in modificados:
                 self._regenerar_estructura(instancia)
         else:

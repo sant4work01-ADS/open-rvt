@@ -329,6 +329,16 @@ class Servidor:
             return self._exigir().cantidades_estructura(
                 params.get("nivel") or None
             )
+        if metodo == "medicion.calcular":
+            return self._exigir().medicion_calcular(params.get("nivel") or None)
+        if metodo == "medicion.exportar":
+            return self._exigir().medicion_exportar(
+                str(params.get("ruta") or "")
+            )
+        if metodo in ("medicion.guardar_partidas", "tipos.guardar_partidas"):
+            return self._exigir().medicion_guardar_partidas(
+                str(params.get("globalid") or ""), params.get("partidas")
+            )
         if metodo in ("vigas.crear", "viga.crear"):
             return self._exigir().viga_crear(
                 str(params.get("tipo") or ""),
