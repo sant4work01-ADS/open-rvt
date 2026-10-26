@@ -36,6 +36,15 @@ hay». La siguiente tanda de trabajo es solo de corrección y pulido. Nada de fu
 5. **Planta:** cotas sueltas en azul («2.00») arriba a la izquierda y abajo a la derecha que no
    pertenecen a nada visible. Revisar si son residuos.
 
+6. **El zoom se reinicia solo (lo odia):** cada acción que redibuja la vista (crear un nivel, un
+   eje, un muro, editar una cota, cambiar una propiedad) vuelve al zoom y el encuadre por
+   omisión.
+   - El zoom y el encuadre que deja el usuario se mantienen siempre, en todas las vistas
+     (planta, alzado y 3D) y por vista.
+   - Solo cambian con «Ajustar» (F) o cuando el usuario mueve la vista.
+   - Una vista recién abierta puede ajustarse una vez. Después, nunca automáticamente.
+   - Prueba: hacer zoom, crear y editar 5 elementos, y comprobar que la cámara no se movió.
+
 ## Cómo se trabaja
 - Una spec de correcciones con todo lo anterior, y cada punto con su prueba y su captura de
   antes y después.
