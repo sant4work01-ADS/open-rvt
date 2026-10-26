@@ -1,0 +1,340 @@
+{
+  "formato": "openrvt-medicion",
+  "version": 1,
+  "proyecto": "Modelo sin título",
+  "archivo_ifc": "",
+  "fecha": "2026-10-25T19:11:57",
+  "partidas": [
+    {
+      "clave": "",
+      "nombre": "Puerta",
+      "unidad": "pza",
+      "total": 1.0,
+      "renglones": [
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "IfcDoor · Puerta",
+          "piezas": 1,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 1.0,
+          "globalid": "3TNAR00Bv3f9ViNwGVTWE7"
+        }
+      ]
+    },
+    {
+      "clave": "MUR-B15",
+      "nombre": "Muro de Block de concreto 15",
+      "unidad": "m2",
+      "total": 60.51,
+      "renglones": [
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 16.31,
+          "globalid": "1QeFAG17T2hxKJYdSFc62c"
+        },
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 13.0,
+          "globalid": "0JR103C2XBdg_cu86F7bZ8"
+        },
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 18.2,
+          "globalid": "1QyJsW31PA3QHMH8BfNlIA"
+        },
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 13.0,
+          "globalid": "11UkeVkkzFKh7CxV5luUyu"
+        }
+      ]
+    },
+    {
+      "clave": "",
+      "nombre": "Pintura exterior",
+      "unidad": "m2",
+      "total": 62.4912,
+      "renglones": [
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso · capa: Pintura exterior",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 16.8053,
+          "globalid": "1QeFAG17T2hxKJYdSFc62c"
+        },
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso · capa: Pintura exterior",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 13.4953,
+          "globalid": "0JR103C2XBdg_cu86F7bZ8"
+        },
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso · capa: Pintura exterior",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 18.6953,
+          "globalid": "1QyJsW31PA3QHMH8BfNlIA"
+        },
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso · capa: Pintura exterior",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 13.4953,
+          "globalid": "11UkeVkkzFKh7CxV5luUyu"
+        }
+      ]
+    },
+    {
+      "clave": "",
+      "nombre": "Aplanado fino exterior",
+      "unidad": "m2",
+      "total": 62.434,
+      "renglones": [
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso · capa: Aplanado fino exterior",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 16.791,
+          "globalid": "1QeFAG17T2hxKJYdSFc62c"
+        },
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso · capa: Aplanado fino exterior",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 13.481,
+          "globalid": "0JR103C2XBdg_cu86F7bZ8"
+        },
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso · capa: Aplanado fino exterior",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 18.681,
+          "globalid": "1QyJsW31PA3QHMH8BfNlIA"
+        },
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso · capa: Aplanado fino exterior",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 13.481,
+          "globalid": "11UkeVkkzFKh7CxV5luUyu"
+        }
+      ]
+    },
+    {
+      "clave": "APL-EXT",
+      "nombre": "Aplanado exterior",
+      "unidad": "m2",
+      "total": 62.226,
+      "renglones": [
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso · capa: Aplanado exterior",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 16.739,
+          "globalid": "1QeFAG17T2hxKJYdSFc62c"
+        },
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso · capa: Aplanado exterior",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 13.429,
+          "globalid": "0JR103C2XBdg_cu86F7bZ8"
+        },
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso · capa: Aplanado exterior",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 18.629,
+          "globalid": "1QyJsW31PA3QHMH8BfNlIA"
+        },
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso · capa: Aplanado exterior",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 13.429,
+          "globalid": "11UkeVkkzFKh7CxV5luUyu"
+        }
+      ]
+    },
+    {
+      "clave": "YESO-INT",
+      "nombre": "Yeso interior",
+      "unidad": "m2",
+      "total": 58.846,
+      "renglones": [
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso · capa: Yeso interior",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 15.894,
+          "globalid": "1QeFAG17T2hxKJYdSFc62c"
+        },
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso · capa: Yeso interior",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 12.584,
+          "globalid": "0JR103C2XBdg_cu86F7bZ8"
+        },
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso · capa: Yeso interior",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 17.784,
+          "globalid": "1QyJsW31PA3QHMH8BfNlIA"
+        },
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso · capa: Yeso interior",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 12.584,
+          "globalid": "11UkeVkkzFKh7CxV5luUyu"
+        }
+      ]
+    },
+    {
+      "clave": "",
+      "nombre": "Pintura interior",
+      "unidad": "m2",
+      "total": 58.7368,
+      "renglones": [
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso · capa: Pintura interior",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 15.8667,
+          "globalid": "1QeFAG17T2hxKJYdSFc62c"
+        },
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso · capa: Pintura interior",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 12.5567,
+          "globalid": "0JR103C2XBdg_cu86F7bZ8"
+        },
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso · capa: Pintura interior",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 17.7567,
+          "globalid": "1QyJsW31PA3QHMH8BfNlIA"
+        },
+        {
+          "eje": "",
+          "tramo": "Nivel 0",
+          "descripcion": "Block 15 aplanado-yeso · Muro Block 15 aplanado-yeso · capa: Pintura interior",
+          "piezas": null,
+          "largo": null,
+          "ancho": null,
+          "alto": null,
+          "resultado": 12.5567,
+          "globalid": "11UkeVkkzFKh7CxV5luUyu"
+        }
+      ]
+    }
+  ]
+}
