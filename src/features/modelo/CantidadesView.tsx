@@ -1,6 +1,6 @@
 // OPEN-RVT O009: vista Cantidades. Agrupa las partidas de medición de los tipos,
 // despliega sus renglones generadores y exporta el contrato de PresupuestosPro.
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, Download } from "lucide-react";
 import { llamarConBitacora } from "@/lib/bitacora";
 import { elegirDestinoMedicion } from "@/lib/dialogos";
@@ -56,25 +56,32 @@ export function CantidadesView() {
   const [error, setError] = useState<string | null>(null);
   const [exportando, setExportando] = useState(false);
 
-  const cargar = useCallback(async () => {
-    setCargando(true);
-    try {
-      const datos = await llamarConBitacora<{ partidas: PartidaMedicionCalculada[] }>(
-        "medicion.calcular",
-        nivel ? { nivel } : {},
-      );
-      setPartidas(datos.partidas ?? []);
-      setError(null);
-    } catch (e) {
-      setError(textoDeError(e));
-    } finally {
-      setCargando(false);
-    }
-  }, [nivel]);
-
   useEffect(() => {
+    let vivo = true;
+    const cargar = async () => {
+      // Después del efecto: así la carga no encadena renders síncronos.
+      await Promise.resolve();
+      if (!vivo) return;
+      setCargando(true);
+      try {
+        const datos = await llamarConBitacora<{ partidas: PartidaMedicionCalculada[] }>(
+          "medicion.calcular",
+          nivel ? { nivel } : {},
+        );
+        if (!vivo) return;
+        setPartidas(datos.partidas ?? []);
+        setError(null);
+      } catch (e) {
+        if (vivo) setError(textoDeError(e));
+      } finally {
+        if (vivo) setCargando(false);
+      }
+    };
     void cargar();
-  }, [cargar, conCambios]);
+    return () => {
+      vivo = false;
+    };
+  }, [nivel, conCambios]);
 
   const totalGeneral = useMemo(
     () => partidas.reduce((suma, partida) => suma + partida.total, 0),
