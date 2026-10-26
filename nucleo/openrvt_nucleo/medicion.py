@@ -712,8 +712,9 @@ class MedicionMixin:
                 )
         partidas = list(grupos.values())
         for partida in partidas:
-            partida["total"] = round(
-                sum(float(r["resultado"]) for r in partida["renglones"]), 4
+            # El contrato exige que el total sea exactamente la suma de los resultados.
+            partida["total"] = sum(
+                float(r["resultado"]) for r in partida["renglones"]
             )
         return {"partidas": partidas}
 

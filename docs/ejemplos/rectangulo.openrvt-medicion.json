@@ -3,7 +3,7 @@
   "version": 1,
   "proyecto": "Modelo sin título",
   "archivo_ifc": "",
-  "fecha": "2026-10-25T19:11:57",
+  "fecha": "2026-10-25T19:16:16",
   "partidas": [
     {
       "clave": "",
@@ -20,7 +20,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 1.0,
-          "globalid": "3TNAR00Bv3f9ViNwGVTWE7"
+          "globalid": "0zl0fFk8H5yAJWqKQhLDfk"
         }
       ]
     },
@@ -39,7 +39,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 16.31,
-          "globalid": "1QeFAG17T2hxKJYdSFc62c"
+          "globalid": "0v8GUO2Yf7aBNGSAlVmZuI"
         },
         {
           "eje": "",
@@ -50,7 +50,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 13.0,
-          "globalid": "0JR103C2XBdg_cu86F7bZ8"
+          "globalid": "12AonLbovDEOKvR0o0LDND"
         },
         {
           "eje": "",
@@ -61,7 +61,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 18.2,
-          "globalid": "1QyJsW31PA3QHMH8BfNlIA"
+          "globalid": "0argFf1H9BMhx96JhsWUyF"
         },
         {
           "eje": "",
@@ -72,7 +72,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 13.0,
-          "globalid": "11UkeVkkzFKh7CxV5luUyu"
+          "globalid": "2mv7kdodTDaeS7WXQRu1BM"
         }
       ]
     },
@@ -91,7 +91,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 16.8053,
-          "globalid": "1QeFAG17T2hxKJYdSFc62c"
+          "globalid": "0v8GUO2Yf7aBNGSAlVmZuI"
         },
         {
           "eje": "",
@@ -102,7 +102,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 13.4953,
-          "globalid": "0JR103C2XBdg_cu86F7bZ8"
+          "globalid": "12AonLbovDEOKvR0o0LDND"
         },
         {
           "eje": "",
@@ -113,7 +113,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 18.6953,
-          "globalid": "1QyJsW31PA3QHMH8BfNlIA"
+          "globalid": "0argFf1H9BMhx96JhsWUyF"
         },
         {
           "eje": "",
@@ -124,7 +124,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 13.4953,
-          "globalid": "11UkeVkkzFKh7CxV5luUyu"
+          "globalid": "2mv7kdodTDaeS7WXQRu1BM"
         }
       ]
     },
@@ -143,7 +143,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 16.791,
-          "globalid": "1QeFAG17T2hxKJYdSFc62c"
+          "globalid": "0v8GUO2Yf7aBNGSAlVmZuI"
         },
         {
           "eje": "",
@@ -154,7 +154,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 13.481,
-          "globalid": "0JR103C2XBdg_cu86F7bZ8"
+          "globalid": "12AonLbovDEOKvR0o0LDND"
         },
         {
           "eje": "",
@@ -165,7 +165,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 18.681,
-          "globalid": "1QyJsW31PA3QHMH8BfNlIA"
+          "globalid": "0argFf1H9BMhx96JhsWUyF"
         },
         {
           "eje": "",
@@ -176,7 +176,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 13.481,
-          "globalid": "11UkeVkkzFKh7CxV5luUyu"
+          "globalid": "2mv7kdodTDaeS7WXQRu1BM"
         }
       ]
     },
@@ -195,7 +195,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 16.739,
-          "globalid": "1QeFAG17T2hxKJYdSFc62c"
+          "globalid": "0v8GUO2Yf7aBNGSAlVmZuI"
         },
         {
           "eje": "",
@@ -206,7 +206,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 13.429,
-          "globalid": "0JR103C2XBdg_cu86F7bZ8"
+          "globalid": "12AonLbovDEOKvR0o0LDND"
         },
         {
           "eje": "",
@@ -217,7 +217,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 18.629,
-          "globalid": "1QyJsW31PA3QHMH8BfNlIA"
+          "globalid": "0argFf1H9BMhx96JhsWUyF"
         },
         {
           "eje": "",
@@ -228,7 +228,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 13.429,
-          "globalid": "11UkeVkkzFKh7CxV5luUyu"
+          "globalid": "2mv7kdodTDaeS7WXQRu1BM"
         }
       ]
     },
@@ -247,7 +247,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 15.894,
-          "globalid": "1QeFAG17T2hxKJYdSFc62c"
+          "globalid": "0v8GUO2Yf7aBNGSAlVmZuI"
         },
         {
           "eje": "",
@@ -258,7 +258,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 12.584,
-          "globalid": "0JR103C2XBdg_cu86F7bZ8"
+          "globalid": "12AonLbovDEOKvR0o0LDND"
         },
         {
           "eje": "",
@@ -269,7 +269,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 17.784,
-          "globalid": "1QyJsW31PA3QHMH8BfNlIA"
+          "globalid": "0argFf1H9BMhx96JhsWUyF"
         },
         {
           "eje": "",
@@ -280,7 +280,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 12.584,
-          "globalid": "11UkeVkkzFKh7CxV5luUyu"
+          "globalid": "2mv7kdodTDaeS7WXQRu1BM"
         }
       ]
     },
@@ -288,7 +288,7 @@
       "clave": "",
       "nombre": "Pintura interior",
       "unidad": "m2",
-      "total": 58.7368,
+      "total": 58.736799999999995,
       "renglones": [
         {
           "eje": "",
@@ -299,7 +299,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 15.8667,
-          "globalid": "1QeFAG17T2hxKJYdSFc62c"
+          "globalid": "0v8GUO2Yf7aBNGSAlVmZuI"
         },
         {
           "eje": "",
@@ -310,7 +310,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 12.5567,
-          "globalid": "0JR103C2XBdg_cu86F7bZ8"
+          "globalid": "12AonLbovDEOKvR0o0LDND"
         },
         {
           "eje": "",
@@ -321,7 +321,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 17.7567,
-          "globalid": "1QyJsW31PA3QHMH8BfNlIA"
+          "globalid": "0argFf1H9BMhx96JhsWUyF"
         },
         {
           "eje": "",
@@ -332,7 +332,7 @@
           "ancho": null,
           "alto": null,
           "resultado": 12.5567,
-          "globalid": "11UkeVkkzFKh7CxV5luUyu"
+          "globalid": "2mv7kdodTDaeS7WXQRu1BM"
         }
       ]
     }
