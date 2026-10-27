@@ -36,7 +36,7 @@ test("O002: la ventana muestra título, ribbon, 5 módulos y el área de trabajo
     const tabs = await ses.driver.findElements(By.css('[role="tab"]'));
     const textos = [];
     for (const t of tabs) textos.push(await t.getText());
-    assert.deepEqual(textos, ["Inicio", "Vista"]);
+    assert.deepEqual(textos, ["Inicio", "Modelar", "Vista"]);
 
     for (const id of ["nuevo", "abrir", "guardar"]) {
       const b = await ses.porTestid(`cmd-${id}`);
