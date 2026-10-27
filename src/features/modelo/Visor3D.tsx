@@ -68,7 +68,12 @@ import {
   direccionAlzado,
   vectorIso,
 } from "./vistas";
-import { mallaConNormalesPlanas } from "./geometria";
+import {
+  aristasInternasUniones,
+  aristasParaElemento,
+  mallaConNormalesPlanas,
+} from "./geometria";
+import { crearMallasCapas } from "./capas3d";
 
 interface Props {
   vista: Vista;
@@ -1058,6 +1063,39 @@ export function Visor3D({
       return true;
     });
 
+    // O012: en 3D no se dibujan las aristas que caen sobre la cara de otro
+    // elemento unido del mismo material (extremos de viga contra columnas).
+    const internasAristas =
+      vista.tipo === "iso" || vista.tipo === "perspectiva"
+        ? aristasInternasUniones(
+            visibles
+              .filter((elemento) =>
+                ["vigas", "columnas", "muros", "otros"].includes(elemento.categoria),
+              )
+              .map((elemento) => ({
+                globalid: elemento.globalid,
+                categoria: elemento.categoria,
+                vertices: elemento.vertices,
+                indices: elemento.indices,
+              })),
+          )
+        : new Set<string>();
+
+    // O012: en 3D las capas de acabado se dibujan como franjas con el mismo
+    // contorno ingleteado/recortado que la planta.
+    const murosCapas: MuroPlanta[] =
+      vista.tipo === "iso" || vista.tipo === "perspectiva"
+        ? visibles
+            .filter(
+              (elemento) => elemento.categoria === "muros" && elemento.eje,
+            )
+            .map((elemento) => ({
+              globalid: elemento.globalid,
+              eje: elemento.eje as [number, number, number, number],
+              capas: elemento.capas,
+            }))
+        : [];
+
     // Grosor en píxeles: mm de papel de la tabla × escala de la vista × zoom actual.
     const camaraActual = camara.current;
     let mundoPorPx = Math.max(tamano / 900, 1e-4);
@@ -1106,6 +1144,7 @@ export function Visor3D({
 
     let polilineasSeccion = 0;
     let lineasCapasPlanta = 0;
+    let mallasCapas3D = 0;
 
     /** Coloca un polígono de relleno en el plano de sección. */
     const agregarRelleno = (
@@ -1220,7 +1259,27 @@ export function Visor3D({
             });
       // Lo que queda por encima del corte no se dibuja como cara: solo su silueta
       // discontinua, para que no tape la planta.
-      if (!encimaDelCorte) {
+      const capas3d =
+        !encimaDelCorte && murosCapas.length > 0
+          ? crearMallasCapas(elemento, murosCapas, minZ, maxZ, {
+              seleccionado,
+              planos,
+              opacidad: elemento.opacidad,
+              aberturas,
+            })
+          : [];
+      if (capas3d.length > 0) {
+        // Las franjas cubren toda la sección: se sustituye el cuerpo de un solo
+        // color para que no haya caras coplanares en competencia.
+        for (const malla of capas3d) {
+          malla.renderOrder = 0;
+          grupoLocal.add(malla);
+          meshes.current.push(malla);
+          mallasCapas3D += 1;
+        }
+        material.dispose();
+        geometriaSolido.dispose();
+      } else if (!encimaDelCorte) {
         const malla = new THREE.Mesh(geometriaSolido, material);
         malla.userData.globalid = elemento.globalid;
         malla.renderOrder = 0;
@@ -1293,16 +1352,28 @@ export function Visor3D({
         !encimaDelCorte &&
         !(vista.tipo === "planta" && categoriaEstilo === "muros")
       ) {
-        const aristas = new THREE.LineSegments(
-          new THREE.EdgesGeometry(geometria, 30),
-          new THREE.LineBasicMaterial({
-            color: seleccionado ? new THREE.Color(0xff8a00) : colorArista,
-            clippingPlanes: planos,
-          }),
+        const segmentos = aristasParaElemento(
+          elemento.vertices,
+          elemento.indices,
+          internasAristas,
         );
-        aristas.userData.globalid = elemento.globalid;
-        aristas.renderOrder = 0.5;
-        grupoLocal.add(aristas);
+        if (segmentos.length > 0) {
+          const geometriaAristas = new THREE.BufferGeometry();
+          geometriaAristas.setAttribute(
+            "position",
+            new THREE.BufferAttribute(segmentos, 3),
+          );
+          const aristas = new THREE.LineSegments(
+            geometriaAristas,
+            new THREE.LineBasicMaterial({
+              color: seleccionado ? new THREE.Color(0xff8a00) : colorArista,
+              clippingPlanes: planos,
+            }),
+          );
+          aristas.userData.globalid = elemento.globalid;
+          aristas.renderOrder = 0.5;
+          grupoLocal.add(aristas);
+        }
       }
 
       // Sección real del plano de corte con esta malla (solo si lo atraviesa).
@@ -2341,6 +2412,7 @@ export function Visor3D({
       nodoVisor.dataset.mallasDibujadas = String(visibles.length);
       nodoVisor.dataset.seccionPolilineas = String(polilineasSeccion);
       nodoVisor.dataset.capasPlanta = String(lineasCapasPlanta);
+      nodoVisor.dataset.capas3d = String(mallasCapas3D);
       nodoVisor.dataset.estiloMurosCorte = String(
         grosorMm(estilos, vista, "muros", "corte") ?? "",
       );
@@ -3376,6 +3448,32 @@ export function Visor3D({
         x: rect.left + ((punto.x + 1) / 2) * rect.width,
         y: rect.top + ((1 - punto.y) / 2) * rect.height,
       };
+    };
+    // O012: cuenta las aristas dibujadas dentro de una caja del modelo (E2E de uniones).
+    (nodo as unknown as Record<string, unknown>).__openrvtAristasEnCaja = (
+      minimo: [number, number, number],
+      maximo: [number, number, number],
+    ) => {
+      const grupoActual = grupo.current;
+      if (!grupoActual) return 0;
+      let total = 0;
+      grupoActual.traverse((objeto) => {
+        const lineas = objeto as THREE.LineSegments;
+        if (!lineas.isLineSegments || !lineas.userData.globalid) return;
+        const posiciones = lineas.geometry?.getAttribute("position");
+        if (!posiciones) return;
+        for (let i = 0; i + 1 < posiciones.count; i += 2) {
+          const x = (posiciones.getX(i) + posiciones.getX(i + 1)) / 2;
+          const y = (posiciones.getY(i) + posiciones.getY(i + 1)) / 2;
+          const z = (posiciones.getZ(i) + posiciones.getZ(i + 1)) / 2;
+          const dentro =
+            x >= minimo[0] - 1e-6 && x <= maximo[0] + 1e-6 &&
+            y >= minimo[1] - 1e-6 && y <= maximo[1] + 1e-6 &&
+            z >= minimo[2] - 1e-6 && z <= maximo[2] + 1e-6;
+          if (dentro) total += 1;
+        }
+      });
+      return total;
     };
     // O006a: posición en pantalla de un texto de cota (para el doble clic de las E2E).
     (nodo as unknown as Record<string, unknown>).__openrvtCotaAPantalla = (

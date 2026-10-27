@@ -198,7 +198,7 @@ def _clasificar(
             distancia = math.hypot(pa[0] - pb[0], pa[1] - pb[1])
             if mejor is None or distancia < mejor[0]:
                 mejor = (distancia, ea, eb)
-    if mejor is not None and mejor[0] <= HUECO_UNION and not paralelas:
+    if mejor is not None and mejor[0] <= HUECO_UNION + TOLERANCIA and not paralelas:
         _d, ea, eb = mejor
         if la > lb + TOLERANCIA:
             return ("L", a, b, ea, eb)
@@ -285,8 +285,8 @@ def _aplicar_columnas(
             cubre_inicio
             or cubre_fin
             or (0.0 < ta < largo and 0.0 < tb < largo)
-            or (largo < ta <= largo + HUECO_UNION)
-            or (-HUECO_UNION <= tb < 0.0)
+            or (largo < ta <= largo + HUECO_UNION + TOLERANCIA)
+            or (-HUECO_UNION - TOLERANCIA <= tb < 0.0)
         )
         if not toca:
             continue
@@ -297,9 +297,9 @@ def _aplicar_columnas(
         if not cubre_inicio and not cubre_fin:
             if 0.0 < ta and tb < largo:
                 cortes.append((ta, tb))
-            elif largo < ta <= largo + HUECO_UNION:
+            elif largo < ta <= largo + HUECO_UNION + TOLERANCIA:
                 hi = max(hi, ta)
-            elif -HUECO_UNION <= tb < 0.0:
+            elif -HUECO_UNION - TOLERANCIA <= tb < 0.0:
                 lo = min(lo, tb)
         uniones.append({"maestro": columna.gid, "esclavo": viga.gid, "tipo": "columna"})
     return lo, hi
@@ -322,10 +322,10 @@ def _aplicar_l(
     if intervalo is not None:
         ta, tb = intervalo
         if extremo_ganadora == 0:
-            if ta <= HUECO_UNION and tb >= -HUECO_UNION:
+            if ta <= HUECO_UNION + TOLERANCIA and tb >= -HUECO_UNION - TOLERANCIA:
                 e_gan["lo"] = min(float(e_gan["lo"]), ta)
         else:
-            if tb >= lg - HUECO_UNION and ta <= lg + HUECO_UNION:
+            if tb >= lg - HUECO_UNION - TOLERANCIA and ta <= lg + HUECO_UNION + TOLERANCIA:
                 e_gan["hi"] = max(float(e_gan["hi"]), tb)
     vx, vy = perdedora.direccion
     lp = perdedora.largo
@@ -338,14 +338,14 @@ def _aplicar_l(
     if extremo_perdedora == 0:
         if ta <= 0.0 <= tb:
             e_per["lo"] = max(float(e_per["lo"]), tb)
-        elif tb < 0.0 and -tb <= HUECO_UNION:
+        elif tb < 0.0 and -tb <= HUECO_UNION + TOLERANCIA:
             e_per["lo"] = min(float(e_per["lo"]), tb)
     else:
         if ta <= lp <= tb:
             e_per["hi"] = min(float(e_per["hi"]), ta)
-        elif lp < ta <= lp + HUECO_UNION:
+        elif lp < ta <= lp + HUECO_UNION + TOLERANCIA:
             e_per["hi"] = max(float(e_per["hi"]), ta)
-        elif tb < lp and lp - tb <= HUECO_UNION:
+        elif tb < lp and lp - tb <= HUECO_UNION + TOLERANCIA:
             e_per["hi"] = min(float(e_per["hi"]), tb)
 
 
@@ -367,14 +367,14 @@ def _aplicar_t(
     if extremo == 0:
         if ta <= 0.0 <= tb:
             e_per["lo"] = max(float(e_per["lo"]), tb)
-        elif tb < 0.0 and -tb <= HUECO_UNION:
+        elif tb < 0.0 and -tb <= HUECO_UNION + TOLERANCIA:
             e_per["lo"] = min(float(e_per["lo"]), tb)
     else:
         if ta <= lp <= tb:
             e_per["hi"] = min(float(e_per["hi"]), ta)
-        elif lp < ta <= lp + HUECO_UNION:
+        elif lp < ta <= lp + HUECO_UNION + TOLERANCIA:
             e_per["hi"] = max(float(e_per["hi"]), ta)
-        elif tb < lp and lp - tb <= HUECO_UNION:
+        elif tb < lp and lp - tb <= HUECO_UNION + TOLERANCIA:
             e_per["hi"] = min(float(e_per["hi"]), tb)
 
 

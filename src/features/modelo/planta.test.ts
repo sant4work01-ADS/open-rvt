@@ -6,6 +6,7 @@ import {
   contarVertices,
   lineasCapas,
   nucleoMuro,
+  poligonosCapas,
   puntoDentroDeHuella,
   unirHuellas,
   type MuroPlanta,
@@ -315,4 +316,89 @@ function distanciaAlAnillo(
     minimo = Math.min(minimo, Math.hypot(punto[0] - (ax + t * dx), punto[1] - (ay + t * dy)));
   }
   return minimo;
+}
+
+
+describe("capas de muro con inglete (O012)", () => {
+  function area(anillo: Array<[number, number]>): number {
+    let suma = 0;
+    for (let i = 0; i < anillo.length; i += 1) {
+      const [x1, y1] = anillo[i];
+      const [x2, y2] = anillo[(i + 1) % anillo.length];
+      suma += x1 * y2 - x2 * y1;
+    }
+    return Math.abs(suma) / 2;
+  }
+
+  const tresCapas = (
+    total = 0.19,
+    nucleo = 0.15,
+    acabs = 0.02,
+  ): CapaMuro[] => [
+    { material: "Acabado exterior", funcion: "acabado", espesor: acabs, centro: -(total / 2 - acabs / 2) },
+    { material: "Block", funcion: "núcleo", espesor: nucleo, centro: 0 },
+    { material: "Acabado interior", funcion: "acabado", espesor: acabs, centro: total / 2 - acabs / 2 },
+  ];
+
+  test("L de 3 capas: la suma de áreas de capa es el área de la huella", () => {
+    const muros = [
+      muro("h", [0, 0, 4, 0], tresCapas()),
+      muro("v", [4, 0, 4, 3], tresCapas()),
+    ];
+    const bandas = muros.flatMap((m) => poligonosCapas(m, muros));
+    expect(bandas).toHaveLength(6);
+    const suma = bandas.reduce((total, b) => total + area(b.poligono), 0);
+    // Huella en L con ejes de 4 y 3 m y espesor 0.19: cada muro se alarga medio
+    // espesor del otro; el cuadro exterior queda contado una sola vez → 1.330 m².
+    expect(suma).toBeCloseTo((4 + 3) * 0.19, 9);
+    const huellas = unirHuellas(muros);
+    const areaHuella = huellas.reduce(
+      (total, p) => total + area(p.exterior) - p.huecos.reduce((r, h) => r + area(h), 0),
+      0,
+    );
+    expect(suma).toBeCloseTo(areaHuella, 9);
+  });
+
+  test("T de 3 capas: el muro que llega termina en la cara del pasante", () => {
+    const muros = [
+      muro("pasante", [0, 0, 8, 0], tresCapas()),
+      muro("llega", [4, 0, 4, 3], tresCapas()),
+    ];
+    const bandas = muros.flatMap((m) => poligonosCapas(m, muros));
+    const suma = bandas.reduce((total, b) => total + area(b.poligono), 0);
+    const huellas = unirHuellas(muros);
+    const areaHuella = huellas.reduce(
+      (total, p) => total + area(p.exterior) - p.huecos.reduce((r, h) => r + area(h), 0),
+      0,
+    );
+    expect(suma).toBeCloseTo(areaHuella, 9);
+    // Ninguna capa del muro que llega pasa al otro lado de la cara del pasante.
+    for (const banda of poligonosCapas(muros[1], muros)) {
+      for (const [, y] of anilloAbiertoTest(banda.poligono)) {
+        expect(y).toBeGreaterThanOrEqual(0.095 - 1e-9);
+      }
+    }
+  });
+
+  test("L con espesores distintos: no hay muescas ni traslapes", () => {
+    const muros = [
+      muro("h", [0, 0, 4, 0], tresCapas(0.19, 0.15, 0.02)),
+      muro("v", [4, 0, 4, 3], tresCapas(0.25, 0.15, 0.05)),
+    ];
+    const bandas = muros.flatMap((m) => poligonosCapas(m, muros));
+    const suma = bandas.reduce((total, b) => total + area(b.poligono), 0);
+    const huellas = unirHuellas(muros);
+    const areaHuella = huellas.reduce(
+      (total, p) => total + area(p.exterior) - p.huecos.reduce((r, h) => r + area(h), 0),
+      0,
+    );
+    expect(suma).toBeCloseTo(areaHuella, 9);
+  });
+});
+
+function anilloAbiertoTest(anillo: Array<[number, number]>): Array<[number, number]> {
+  if (anillo.length < 2) return anillo;
+  const [ax, ay] = anillo[0];
+  const [bx, by] = anillo[anillo.length - 1];
+  return Math.hypot(ax - bx, ay - by) < 1e-9 ? anillo.slice(0, -1) : anillo;
 }
