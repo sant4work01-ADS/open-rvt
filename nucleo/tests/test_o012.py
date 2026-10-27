@@ -281,3 +281,31 @@ def test_hueco_de_cinco_centimetros_es_el_limite() -> None:
             assert y0 == pytest.approx(0.10, abs=1e-9)
         else:
             assert y0 == pytest.approx(extremo, abs=1e-9)
+
+
+def test_mover_columna_recalcula_las_vigas_vecinas() -> None:
+    nucleo, nivel = _nuevo()
+    columna = nucleo.columna_crear(COL, nivel, 2, 0, altura=2.0)["creados"][0]
+    a = _viga(nucleo, nivel, 0, 0, 2, 0)
+    b = _viga(nucleo, nivel, 2, 0, 4, 0)
+    assert _volumen_malla(nucleo, a) == pytest.approx(AREA * 1.85, abs=1e-9)
+
+    nucleo.elementos_mover([columna], 1, 0, 0)
+    # La columna quedó en x = 3: la viga A ya no tiene columna y mide 2.00 m; la B
+    # pasa por la columna y se parte en dos tramos de 0.85 m.
+    assert _volumen_malla(nucleo, a) == pytest.approx(AREA * 2.00, abs=1e-9)
+    assert _volumen_malla(nucleo, b) == pytest.approx(AREA * 1.70, abs=1e-9)
+    entidad_b = _entidad(nucleo, b)
+    assert len(entidad_b.Representation.Representations[0].Items[0].Faces) == 12
+
+
+def test_copiar_conserva_pset_tramos_y_relaciones() -> None:
+    nucleo, nivel = _nuevo()
+    a = _viga(nucleo, nivel, 0, 0, 4, 0)
+    copia = nucleo.elementos_copiar([a], 0, 4, 0)["creados"][0]
+    entidad = _entidad(nucleo, copia)
+    datos = nucleo._leer_pset(entidad, "OPENRVT_Estructura")
+    assert (datos["X1"], datos["Y1"]) == pytest.approx((0.0, 4.0))
+    assert datos["Longitud"] == pytest.approx(4.0)
+    assert _volumen_malla(nucleo, copia) == pytest.approx(AREA * 4.0, abs=1e-9)
+    assert len(nucleo.modelo.by_type("IfcFooting")) == 2

@@ -3046,6 +3046,7 @@ class ModeladoMixin:
                     is_si=True,
                 )
                 self._desplazar_pset_estructura(copia, dx, dy, dz)
+                self._regenerar_estructura(copia)
                 for rel in getattr(original, "ContainedInStructure", ()) or ():
                     spatial_api.assign_container(
                         self.modelo,
