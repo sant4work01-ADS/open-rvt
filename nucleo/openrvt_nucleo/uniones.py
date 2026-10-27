@@ -149,10 +149,12 @@ def distancia_a_huella(
     return minimo
 
 
-def _se_traslapan_z(a: Barra, b: Barra) -> bool:
-    # Una contratrabe queda bajo el nivel y la columna arranca en él: se tocan en
-    # el plano superior y la unión también cuenta.
-    return min(a.z1, b.z1) - max(a.z0, b.z0) >= -TOLERANCIA
+def _se_traslapan_z(a: Barra, b: Barra, tocar: bool = False) -> bool:
+    # Entre vigas se exige traslape de volumen (mismo nivel). Con la columna, la
+    # contratrabe puede quedar bajo el nivel y tocar su base en un plano: la unión
+    # también cuenta y la columna manda.
+    solape = min(a.z1, b.z1) - max(a.z0, b.z0)
+    return solape >= -TOLERANCIA if tocar else solape > TOLERANCIA
 
 
 def _punto(barra: Barra, t: float) -> tuple[float, float]:
@@ -273,7 +275,7 @@ def _aplicar_columnas(
     ux, uy = viga.direccion
     largo = viga.largo
     for columna in columnas:
-        if not _se_traslapan_z(viga, columna):
+        if not _se_traslapan_z(viga, columna, tocar=True):
             continue
         intervalo = intervalo_en_huella((viga.x1, viga.y1), (ux, uy), huella(columna))
         if intervalo is None:
