@@ -8,7 +8,8 @@ import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
 import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
-import type { Abertura, Caja, ElementoMalla, Nivel, Vista } from "./tipos";
+import { Text, configureTextBuilder } from "troika-three-text";
+import type { Abertura, AjusteEjeVista, Caja, ElementoMalla, Nivel, Vista } from "./tipos";
 import { categoriaVisible, dibujaSiluetaSobreCorte } from "./vistas";
 import { useModelo } from "./estado";
 import { calcularPlantaMuros, type MuroPlanta } from "./planta";
@@ -69,6 +70,17 @@ import {
   vectorIso,
 } from "./vistas";
 import { mallaConNormalesPlanas } from "./geometria";
+import {
+  MAXIMO_CODOS,
+  agregarCodoEje,
+  extremoEje,
+  fijarExtremoEje,
+  geometriaEje,
+  mmPapelAMetros,
+  normalizarAjusteEje,
+  quitarCodoEje,
+  type LadoEje,
+} from "./ejesVista";
 
 interface Props {
   vista: Vista;
@@ -390,36 +402,98 @@ function rayadoRectangulo(
 // Las texturas se reutilizan entre elementos y vistas.
 const CACHE_TEXTURAS = new Map<string, THREE.Texture>();
 
-/** O005c: burbuja de eje con su etiqueta, dibujada como sprite para que siempre se lea. */
-function burbujaEje(texto: string, color: string, fondo: string): THREE.Sprite | null {
+// O011: la anotación se dibuja con vectores (anillo y texto SDF), no con sprites de
+// mapa de bits. Así el globo y los números siguen nítidos con cualquier zoom.
+// El tiposet se hace en el hilo principal: el WebView de Tauri no permite workers
+// creados desde un blob con la CSP de la aplicación.
+configureTextBuilder({ useWorker: false });
+const FUENTE_ANOTACION = "/fonts/DejaVuSans-Bold.ttf";
+
+function orientarAnotacion(grupo: THREE.Object3D, normal: [number, number, number]): void {
+  const n = new THREE.Vector3(normal[0], normal[1], normal[2]).normalize();
+  // Base derecha: el «arriba» del papel es +Y en planta y +Z en alzados. Así el
+  // texto no sale espejado al mirar desde el norte o el sur.
+  const arribaBase = Math.abs(n.z) > 0.9
+    ? new THREE.Vector3(0, 1, 0)
+    : new THREE.Vector3(0, 0, 1);
+  const derecha = new THREE.Vector3().crossVectors(arribaBase, n).normalize();
+  const arriba = new THREE.Vector3().crossVectors(n, derecha).normalize();
+  const matriz = new THREE.Matrix4().makeBasis(derecha, arriba, n);
+  grupo.quaternion.setFromRotationMatrix(matriz);
+}
+
+function crearTextoAnotacion(
+  texto: string,
+  color: string,
+  fondo: string,
+  altoMundo: number,
+): Text {
+  const texto3d = new Text();
+  texto3d.text = texto;
+  texto3d.font = FUENTE_ANOTACION;
+  texto3d.fontSize = altoMundo;
+  texto3d.color = color;
+  texto3d.anchorX = "center";
+  texto3d.anchorY = "middle";
+  const materialTexto = texto3d.material as THREE.Material;
+  materialTexto.depthTest = false;
+  materialTexto.depthWrite = false;
+  materialTexto.transparent = true;
+  // Halo del color del fondo para que se lea sobre una línea, sin rasterizar.
+  texto3d.outlineWidth = altoMundo * 0.08;
+  texto3d.outlineColor = fondo;
+  texto3d.frustumCulled = false;
+  texto3d.renderOrder = 22;
+  texto3d.sync();
+  return texto3d;
+}
+
+/** O011: ancho aproximado del texto para colocarlo entre marcas (sin medir píxeles). */
+function anchoTextoAprox(texto: string, altoMundo: number): number {
+  return Math.max(0.1, texto.length * altoMundo * 0.62);
+}
+
+/**
+ * O011: globo de eje vectorial: relleno circular, anillo de 64 segmentos y texto SDF.
+ * Se construye con diámetro 1 para que el llamador lo escale a 8 mm de papel.
+ */
+function burbujaEje(
+  texto: string,
+  color: string,
+  fondo: string,
+  normal: [number, number, number] = [0, 0, 1],
+): THREE.Group | null {
   if (typeof document === "undefined") return null;
-  const canvas = document.createElement("canvas");
-  canvas.width = 128;
-  canvas.height = 128;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  ctx.clearRect(0, 0, 128, 128);
-  ctx.beginPath();
-  ctx.arc(64, 64, 54, 0, Math.PI * 2);
-  ctx.fillStyle = fondo;
-  ctx.fill();
-  ctx.lineWidth = 4;
-  ctx.strokeStyle = color;
-  ctx.stroke();
-  ctx.fillStyle = color;
-  ctx.font = "bold 58px sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(texto, 64, 66);
-  const textura = new THREE.CanvasTexture(canvas);
-  textura.colorSpace = THREE.SRGBColorSpace;
-  const material = new THREE.SpriteMaterial({
-    map: textura,
-    transparent: true,
-    depthTest: false,
-    depthWrite: false,
-  });
-  return new THREE.Sprite(material);
+  const grupo = new THREE.Group();
+  const relleno = new THREE.Mesh(
+    new THREE.CircleGeometry(0.43, 64),
+    new THREE.MeshBasicMaterial({
+      color: new THREE.Color(fondo),
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    }),
+  );
+  relleno.renderOrder = 20;
+  grupo.add(relleno);
+  const anillo = new THREE.Mesh(
+    new THREE.RingGeometry(0.43, 0.5, 64),
+    new THREE.MeshBasicMaterial({
+      color: new THREE.Color(color),
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    }),
+  );
+  anillo.renderOrder = 21;
+  grupo.add(anillo);
+  const texto3d = crearTextoAnotacion(texto, color, fondo, 0.52);
+  texto3d.position.z = 0.01;
+  grupo.add(texto3d);
+  orientarAnotacion(grupo, normal);
+  return grupo;
 }
 
 /** O005c: cota temporal de la herramienta (p. ej. «4.50 m»). */
@@ -428,36 +502,14 @@ function etiquetaCota(
   color: string,
   fondo: string,
   altoMundo: number,
-): THREE.Sprite | null {
+  normal: [number, number, number] = [0, 0, 1],
+): THREE.Group | null {
   if (typeof document === "undefined") return null;
-  const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 64;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  ctx.fillStyle = fondo;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.rect(2, 8, 252, 48);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = color;
-  ctx.font = "bold 30px sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(texto, 128, 33);
-  const textura = new THREE.CanvasTexture(canvas);
-  textura.colorSpace = THREE.SRGBColorSpace;
-  const material = new THREE.SpriteMaterial({
-    map: textura,
-    transparent: true,
-    depthTest: false,
-    depthWrite: false,
-  });
-  const sprite = new THREE.Sprite(material);
-  sprite.scale.set(altoMundo * 4, altoMundo, 1);
-  return sprite;
+  const grupo = new THREE.Group();
+  const texto3d = crearTextoAnotacion(texto, color, fondo, altoMundo);
+  grupo.add(texto3d);
+  orientarAnotacion(grupo, normal);
+  return grupo;
 }
 
 /**
@@ -469,39 +521,13 @@ function textoCota(
   color: string,
   fondo: string,
   altoMundo: number,
-): THREE.Sprite | null {
+  normal: [number, number, number] = [0, 0, 1],
+): THREE.Group | null {
   if (typeof document === "undefined") return null;
-  const canvas = document.createElement("canvas");
-  const fuente = "bold 40px sans-serif";
-  const medicion = document.createElement("canvas").getContext("2d");
-  if (!medicion) return null;
-  medicion.font = fuente;
-  const anchoTexto = Math.ceil(medicion.measureText(texto).width);
-  canvas.width = Math.max(32, anchoTexto + 24);
-  canvas.height = 64;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  ctx.font = fuente;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.lineWidth = 8;
-  ctx.strokeStyle = fondo;
-  ctx.strokeText(texto, canvas.width / 2, 34);
-  ctx.fillStyle = color;
-  ctx.fillText(texto, canvas.width / 2, 34);
-  const textura = new THREE.CanvasTexture(canvas);
-  textura.colorSpace = THREE.SRGBColorSpace;
-  const material = new THREE.SpriteMaterial({
-    map: textura,
-    transparent: true,
-    depthTest: false,
-    depthWrite: false,
-  });
-  const sprite = new THREE.Sprite(material);
-  // La altura pedida es la del texto (mm de papel); el lienzo tiene aire arriba y abajo.
-  const altoSprite = altoMundo * (64 / 40);
-  sprite.scale.set((altoSprite * canvas.width) / canvas.height, altoSprite, 1);
-  return sprite;
+  const grupo = new THREE.Group();
+  grupo.add(crearTextoAnotacion(texto, color, fondo, altoMundo));
+  orientarAnotacion(grupo, normal);
+  return grupo;
 }
 
 /** Genera la textura de un patrón de relleno (un período de escala en mm de papel). */
@@ -726,11 +752,59 @@ export function Visor3D({
   const [textoCotaEditando, setTextoCotaEditando] = useState("");
   // O010: el error de una cota se muestra junto a la caja, no en la barra de estado.
   const [errorCota, setErrorCota] = useState<string | null>(null);
+  // O011: eje seleccionado, codos y extremos libres de la vista.
+  const [ejeSeleccionado, setEjeSeleccionado] = useState<string | null>(null);
+  const [candados, setCandados] = useState<{ inicio: boolean; fin: boolean }>({
+    inicio: false,
+    fin: false,
+  });
+  const [ajusteEnCurso, setAjusteEnCurso] = useState<Record<string, AjusteEjeVista> | null>(
+    null,
+  );
+  const [menuEje, setMenuEje] = useState<{
+    x: number;
+    y: number;
+    globalid: string;
+    lado: LadoEje;
+    indice: number | null;
+  } | null>(null);
+  const arrastreEje = useRef<{
+    globalid: string;
+    etiqueta: string;
+    lado: LadoEje;
+    indice: number | null;
+    candado: boolean;
+    familia: "vertical" | "horizontal" | "alzado";
+    inicio: Punto2;
+    originales: Record<string, AjusteEjeVista>;
+    movido: boolean;
+  } | null>(null);
+  const ejesInteraccion = useRef<
+    Array<{
+      globalid: string;
+      etiqueta: string;
+      lado: LadoEje;
+      tipo: "globo" | "codo" | "base";
+      indice: number | null;
+      punto: [number, number, number];
+    }>
+  >([]);
+  const lineasEje = useRef<Array<{ globalid: string; etiqueta: string; puntos: Array<[number, number, number]> }>>([]);
+  const ajusteEnCursoRef = useRef<Record<string, AjusteEjeVista> | null>(null);
+  const contextoEje = useRef<{
+    tipo: "planta" | "alzado" | "corte";
+    d: [number, number];
+    h: [number, number];
+    profundidad: number;
+    z: number;
+    bases: Record<string, { inicio: Punto2; fin: Punto2 }>;
+  } | null>(null);
   const moverSiguientes = useModelo((s) => s.cotasMoverSiguientes);
   const fijarMoverSiguientes = useModelo((s) => s.fijarCotasMoverSiguientes);
   const separarEjes = useModelo((s) => s.separarEjes);
   const editarRebase = useModelo((s) => s.editarRebase);
   const separarNiveles = useModelo((s) => s.separarNiveles);
+  const fijarAjustesEjes = useModelo((s) => s.fijarAjustesEjes);
   const editarNivel = useModelo((s) => s.editarNivel);
   const fijarAviso = useModelo((s) => s.fijarAviso);
   const preferenciaRueda = useRueda((s) => s.preferencia);
@@ -745,6 +819,129 @@ export function Visor3D({
     for (const nivel of niveles) mapa.set(nivel.nombre, nivel.globalid);
     return mapa;
   }, [niveles]);
+
+  // O011: helpers de anotación de ejes. Las coordenadas de la vista son (x, y) en
+  // planta y (s, z) en alzados y cortes; las asas se buscan en pantalla.
+  const ajusteActualEje = (globalid: string): AjusteEjeVista | undefined =>
+    ajusteEnCurso?.[globalid] ?? vista.ejes?.[globalid];
+
+  const pantallaDePunto = (
+    punto: [number, number, number],
+  ): { x: number; y: number } | null => {
+    const nodo = contenedor.current;
+    const camera = camara.current;
+    if (!nodo || !camera) return null;
+    camera.updateMatrixWorld();
+    const p = new THREE.Vector3(...punto).project(camera);
+    const rect = nodo.getBoundingClientRect();
+    return {
+      x: rect.left + ((p.x + 1) / 2) * rect.width,
+      y: rect.top + ((1 - p.y) / 2) * rect.height,
+    };
+  };
+
+  const asaEjeEn = (clientX: number, clientY: number) => {
+    let mejor: (typeof ejesInteraccion.current)[number] | null = null;
+    let distancia = 16;
+    for (const asa of ejesInteraccion.current) {
+      const p = pantallaDePunto(asa.punto);
+      if (!p) continue;
+      const d = Math.hypot(p.x - clientX, p.y - clientY);
+      if (d < distancia) {
+        distancia = d;
+        mejor = asa;
+      }
+    }
+    return mejor;
+  };
+
+  const lineaEjeEn = (clientX: number, clientY: number) => {
+    let mejor: string | null = null;
+    let distancia = 8;
+    for (const linea of lineasEje.current) {
+      for (let i = 0; i + 1 < linea.puntos.length; i += 1) {
+        const a = pantallaDePunto(linea.puntos[i]);
+        const b = pantallaDePunto(linea.puntos[i + 1]);
+        if (!a || !b) continue;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const largo = Math.hypot(dx, dy);
+        const t = largo > 1e-9
+          ? Math.max(0, Math.min(1, ((clientX - a.x) * dx + (clientY - a.y) * dy) / (largo * largo)))
+          : 0;
+        const d = Math.hypot(clientX - (a.x + dx * t), clientY - (a.y + dy * t));
+        if (d < distancia) {
+          distancia = d;
+          mejor = linea.globalid;
+        }
+      }
+    }
+    return mejor;
+  };
+
+  /** Punto de la vista bajo el cursor; `null` fuera del plano de dibujo. */
+  const puntoVistaDesdeEvento = (clientX: number, clientY: number): Punto2 | null => {
+    const nodo = contenedor.current;
+    const camera = camara.current;
+    const ctx = contextoEje.current;
+    if (!nodo || !camera || !ctx) return null;
+    const rect = nodo.getBoundingClientRect();
+    const raton = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    const rayo = new THREE.Raycaster();
+    rayo.setFromCamera(raton, camera);
+    const punto = new THREE.Vector3();
+    if (ctx.tipo === "planta") {
+      const plano = new THREE.Plane(new THREE.Vector3(0, 0, 1), -ctx.z);
+      if (!rayo.ray.intersectPlane(plano, punto)) return null;
+      return [punto.x, punto.y];
+    }
+    const normal = new THREE.Vector3(ctx.d[0], ctx.d[1], 0);
+    const plano = new THREE.Plane(normal, -ctx.profundidad);
+    if (!rayo.ray.intersectPlane(plano, punto)) return null;
+    return [punto.x * ctx.h[0] + punto.y * ctx.h[1], punto.z];
+  };
+
+  const persistirAjusteEje = (globalid: string, ajuste: AjusteEjeVista | undefined) => {
+    void fijarAjustesEjes(vista.id, { [globalid]: normalizarAjusteEje(ajuste) ?? null });
+  };
+
+  const ejesVisiblesDeVista = () =>
+    referencias.ejes.filter((eje) => eje.globalid && eje.etiqueta);
+
+  const agregarCodoVista = (globalid: string, lado: LadoEje) => {
+    const eje = ejesVisiblesDeVista().find((e) => e.globalid === globalid);
+    const bases = contextoEje.current?.bases[globalid];
+    if (!eje || !bases) return;
+    const ajuste = ajusteActualEje(globalid);
+    const globo = extremoEje(ajuste, lado, bases.inicio, bases.fin);
+    const codos = lado === "inicio" ? ajuste?.codosInicio : ajuste?.codosFin;
+    const interior = (codos && codos.length > 0 ? codos[codos.length - 1] : undefined) ??
+      (lado === "inicio" ? bases.fin : bases.inicio);
+    const nuevo = agregarCodoEje(
+      ajuste,
+      lado,
+      globo,
+      interior,
+      mmPapelAMetros(5, vista.escala),
+    );
+    persistirAjusteEje(globalid, nuevo);
+  };
+
+  const alternarCandadoVista = (globalid: string, lado: LadoEje) => {
+    const abierto = candados[lado];
+    if (abierto) {
+      const ajuste = fijarExtremoEje(ajusteActualEje(globalid), lado, null);
+      persistirAjusteEje(globalid, ajuste);
+    }
+    setCandados((c) => ({ ...c, [lado]: !abierto }));
+  };
+
+  const quitarCodoVista = (globalid: string, lado: LadoEje, indice: number) => {
+    persistirAjusteEje(globalid, quitarCodoEje(ajusteActualEje(globalid), lado, indice));
+  };
 
   // O006d: distancia al eje paralelo más cercano mientras se dibuja un eje.
   const restriccionPrevia = useMemo(
@@ -1023,6 +1220,8 @@ export function Visor3D({
     const inicioEfecto = performance.now();
     const grupoLocal = grupo.current;
     if (!grupoLocal) return;
+    ejesInteraccion.current = [];
+    lineasEje.current = [];
     while (grupoLocal.children.length) {
       const hijo = grupoLocal.children.pop()!;
       hijo.traverse((objeto) => {
@@ -1795,36 +1994,88 @@ export function Visor3D({
           registro,
           mundoPorPx,
         });
-        const altoBurbuja = Math.max(tamano * 0.035, 0.35);
+        // O011: el globo mide 8 mm de papel (0.8 m a 1:100), como en Revit.
+        const altoBurbuja = mmAMundo(8, vista.escala);
+        contextoEje.current = {
+          tipo: "planta",
+          d: [0, 0],
+          h: [1, 0],
+          profundidad: 0,
+          z: zEje,
+          bases: Object.fromEntries(
+            referencias.ejes.map((eje) => [
+              eje.globalid,
+              { inicio: [eje.x1, eje.y1] as Punto2, fin: [eje.x2, eje.y2] as Punto2 },
+            ]),
+          ),
+        };
         for (const eje of referencias.ejes) {
           const dx = eje.x2 - eje.x1;
           const dy = eje.y2 - eje.y1;
           const largo = Math.hypot(dx, dy);
           if (largo < 1e-6) continue;
-          const ux = dx / largo;
-          const uy = dy / largo;
-          const radio = altoBurbuja / 2;
-          const fin: [number, number, number] = [
-            eje.x2 - ux * Math.min(radio, largo * 0.45),
-            eje.y2 - uy * Math.min(radio, largo * 0.45),
-            zEje,
+          const ajuste = ajusteEnCurso?.[eje.globalid] ?? vista.ejes?.[eje.globalid];
+          const tocaInicio = !!ajuste && (!!ajuste.extremoInicio || !!ajuste.codosInicio?.length);
+          const g = geometriaEje(ajuste, [eje.x1, eje.y1], [eje.x2, eje.y2], {
+            globoInicio: tocaInicio,
+          });
+          const puntos = g.puntos.map(([x, y]) => [x, y, zEje] as [number, number, number]);
+          lineaCerrada(puntos, materialEje, 1.6, grupoLocal);
+          lineasEje.current.push({ globalid: eje.globalid, etiqueta: eje.etiqueta, puntos });
+          const globos: Array<{ punto: Punto2; lado: LadoEje }> = [
+            { punto: g.globoFin, lado: "fin" },
           ];
-          lineaCerrada(
-            [[eje.x1, eje.y1, zEje], fin],
-            materialEje,
-            1.6,
-            grupoLocal,
-          );
-          const burbuja = burbujaEje(
-            eje.etiqueta,
-            colorEje,
-            oscuro ? "#1f2328" : "#ffffff",
-          );
-          if (burbuja) {
-            burbuja.position.set(eje.x2, eje.y2, zEje + 0.01);
-            burbuja.scale.set(altoBurbuja, altoBurbuja, 1);
-            burbuja.renderOrder = 20;
-            grupoLocal.add(burbuja);
+          if (g.globoInicio) globos.push({ punto: g.globoInicio, lado: "inicio" });
+          for (const { punto, lado } of globos) {
+            const burbuja = burbujaEje(
+              eje.etiqueta,
+              colorEje,
+              oscuro ? "#1f2328" : "#ffffff",
+            );
+            if (burbuja) {
+              burbuja.position.set(punto[0], punto[1], zEje + 0.01);
+              burbuja.scale.set(altoBurbuja, altoBurbuja, 1);
+              burbuja.renderOrder = 20;
+              grupoLocal.add(burbuja);
+            }
+            ejesInteraccion.current.push({
+              globalid: eje.globalid,
+              etiqueta: eje.etiqueta,
+              lado,
+              tipo: "globo",
+              indice: null,
+              punto: [punto[0], punto[1], zEje],
+            });
+          }
+          // Asas de los codos (se dibujan como cuadraditos para poder arrastrarlas).
+          for (const [lado, clave] of [
+            ["inicio", "codosInicio"],
+            ["fin", "codosFin"],
+          ] as const) {
+            const codos = ajuste?.[clave] ?? [];
+            codos.forEach((codo, indice) => {
+              const ladoMundo = Math.max(altoBurbuja * 0.09, 0.04);
+              lineaCerrada(
+                [
+                  [codo[0] - ladoMundo, codo[1] - ladoMundo, zEje],
+                  [codo[0] + ladoMundo, codo[1] - ladoMundo, zEje],
+                  [codo[0] + ladoMundo, codo[1] + ladoMundo, zEje],
+                  [codo[0] - ladoMundo, codo[1] + ladoMundo, zEje],
+                  [codo[0] - ladoMundo, codo[1] - ladoMundo, zEje],
+                ],
+                materialEje,
+                1.6,
+                grupoLocal,
+              );
+              ejesInteraccion.current.push({
+                globalid: eje.globalid,
+                etiqueta: eje.etiqueta,
+                lado,
+                tipo: "codo",
+                indice,
+                punto: [codo[0], codo[1], zEje],
+              });
+            });
           }
         }
       }
@@ -1992,7 +2243,7 @@ export function Visor3D({
             const { centro: s, fuera } = posicionTextoEntreMarcas(
               desde,
               hasta,
-              sprite.scale.x,
+              anchoTextoAprox(etiqueta, altoTexto),
               marca,
             );
             if (fuera) {
@@ -2118,11 +2369,54 @@ export function Visor3D({
         const proyecciones = esquinasXY.map(([x, y]) => proyectarT(x, y));
         const tMin = Math.min(...proyecciones) - 1;
         const tMax = Math.max(...proyecciones) + 1;
-        const zMin = Math.min(caja.min[2], ...niveles.map((n) => n.elevacion));
-        const zMax = Math.max(caja.max[2], ...niveles.map((n) => n.elevacion));
         const ordenados = [...niveles].sort((a, b) => a.elevacion - b.elevacion);
+        // O011: los ejes visibles se calculan antes de las líneas de nivel, porque
+        // estas deben cubrirlos de lado a lado (y no quedarse en la caja del modelo).
+        const cruces: Array<{ eje: (typeof referencias.ejes)[number]; s: number }> = [];
+        for (const eje of referencias.ejes) {
+          const ax = eje.x1 - planoPunto.x;
+          const ay = eje.y1 - planoPunto.y;
+          const bx = eje.x2 - planoPunto.x;
+          const by = eje.y2 - planoPunto.y;
+          const da = ax * d[0] + ay * d[1];
+          const db = bx * d[0] + by * d[1];
+          if (Math.abs(da - db) < 1e-9) continue;
+          const t = da / (da - db);
+          if (t < -1e-6 || t > 1 + 1e-6) continue;
+          const x = eje.x1 + t * (eje.x2 - eje.x1);
+          const y = eje.y1 + t * (eje.y2 - eje.y1);
+          cruces.push({ eje, s: proyectarT(x, y) });
+        }
+        cruces.sort((a, b) => a.s - b.s);
+        const margenEtiqueta = mmAMundo(3, vista.escala);
+        const sMin = cruces.length > 0 ? cruces[0].s : tMin;
+        const sMax = cruces.length > 0 ? cruces[cruces.length - 1].s : tMax;
+        const tParcial = tMax + 1.5;
+        const tTotal = tParcial + Math.max(1, mmAMundoConMinimoPx(2.5, vista.escala, mundoPorPx, 11) * 1.5);
+        const tInicioNivel = Math.min(tMin, sMin - margenEtiqueta);
+        const tFinNivel = Math.max(tMax, sMax + margenEtiqueta, ordenados.length >= 2 ? tTotal + 0.15 : -Infinity);
+        const nivelMin = ordenados[0]?.elevacion ?? caja.min[2];
+        const nivelMax = ordenados[ordenados.length - 1]?.elevacion ?? caja.max[2];
+        const zInferiorEje = nivelMin - Math.max(margenEtiqueta, 0.3);
+        const zGlobo = nivelMax + margenEtiqueta + mmAMundo(8, vista.escala) / 2;
         const marca = mmAMundoConMinimoPx(2, vista.escala, mundoPorPx, 6);
         const altoTexto = mmAMundoConMinimoPx(2.5, vista.escala, mundoPorPx, 11);
+        contextoEje.current = {
+          tipo: vista.tipo,
+          d,
+          h,
+          profundidad,
+          z: 0,
+          bases: Object.fromEntries(
+            cruces.map(({ eje, s }) => [
+              eje.globalid,
+              {
+                inicio: [s, zInferiorEje] as Punto2,
+                fin: [s, zGlobo] as Punto2,
+              },
+            ]),
+          ),
+        };
         const fondo = oscuro ? "#1f2328" : "#ffffff";
         const firmado = (z: number) => `${z >= 0 ? "+" : ""}${z.toFixed(2)}`;
         const marcarHZ = (t: number, z: number) => {
@@ -2145,7 +2439,7 @@ export function Visor3D({
         for (const nivel of ordenados) {
           const z = nivel.elevacion;
           lineaCerrada(
-            [puntoHZ(tMin, z), puntoHZ(tMax, z)],
+            [puntoHZ(tInicioNivel, z), puntoHZ(tFinNivel, z)],
             materialNivel,
             3,
             grupoLocal,
@@ -2153,10 +2447,10 @@ export function Visor3D({
           // Cabeza de nivel: triángulo en el extremo.
           lineaCerrada(
             [
-              puntoHZ(tMax, z - 0.15),
-              puntoHZ(tMax, z + 0.15),
-              puntoHZ(tMax - 0.3, z),
-              puntoHZ(tMax, z - 0.15),
+              puntoHZ(tFinNivel, z - 0.15),
+              puntoHZ(tFinNivel, z + 0.15),
+              puntoHZ(tFinNivel - 0.3, z),
+              puntoHZ(tFinNivel, z - 0.15),
             ],
             materialNivel,
             3,
@@ -2164,7 +2458,7 @@ export function Visor3D({
           );
           const texto = `${nivel.nombre}  ${firmado(z)}`;
           cabezas.push(texto);
-          const sprite = textoCota(texto, colorNivel, fondo, altoTexto);
+          const sprite = textoCota(texto, colorNivel, fondo, altoTexto, [d[0], d[1], 0]);
           if (sprite) {
             const pos = puntoHZ(tMax + 0.35, z + altoTexto * 0.95);
             sprite.position.set(pos[0], pos[1], pos[2]);
@@ -2189,7 +2483,6 @@ export function Visor3D({
           total: null as string | null,
         };
         if (ordenados.length >= 2) {
-          const tParcial = tMax + 1.5;
           for (const nivel of ordenados) {
             lineaCerrada(
               [puntoHZ(tMax - 0.1, nivel.elevacion), puntoHZ(tParcial + 0.15, nivel.elevacion)],
@@ -2210,7 +2503,7 @@ export function Visor3D({
               grupoLocal,
             );
             const etiqueta = formatearCota(valor);
-            const sprite = textoCota(etiqueta, colorNivel, fondo, altoTexto);
+            const sprite = textoCota(etiqueta, colorNivel, fondo, altoTexto, [d[0], d[1], 0]);
             if (sprite) {
               const pos = puntoHZ(tParcial + 0.35, (inferior.elevacion + superior.elevacion) / 2);
               sprite.position.set(pos[0], pos[1], pos[2]);
@@ -2230,8 +2523,6 @@ export function Visor3D({
           // O006b: la total solo con dos o más entrepisos; con uno repetiría la
           // misma medida de la parcial.
           if (ordenados.length >= 3) {
-            // La total se separa de la cadena al menos 1,5 veces la altura del texto.
-            const tTotal = tParcial + Math.max(1, altoTexto * 1.5);
             for (const nivel of ordenados) {
               lineaCerrada(
                 [puntoHZ(tParcial + 0.15, nivel.elevacion), puntoHZ(tTotal + 0.15, nivel.elevacion)],
@@ -2252,7 +2543,7 @@ export function Visor3D({
             );
             // O010: la cota total lleva su rótulo para no confundirse con una parcial.
             const etiquetaTotal = `Total ${formatearCota(total)}`;
-            const spriteTotal = textoCota(etiquetaTotal, colorNivel, fondo, altoTexto);
+            const spriteTotal = textoCota(etiquetaTotal, colorNivel, fondo, altoTexto, [d[0], d[1], 0]);
             if (spriteTotal) {
               const pos = puntoHZ(tTotal + 0.35, (primero.elevacion + ultimo.elevacion) / 2);
               spriteTotal.position.set(pos[0], pos[1], pos[2]);
@@ -2270,50 +2561,87 @@ export function Visor3D({
         }
         datosNiveles.push(textos);
 
-        // Ejes que cruzan el plano de la vista: línea vertical y burbuja abajo.
-        // O010: se ordenan de izquierda a derecha tal como se ven en esta vista
-        // (la coordenada `s` es la horizontal de la pantalla para alzados y cortes).
-        const altoBurbuja = Math.max(tamano * 0.035, 0.35);
-        const cruces: Array<{ eje: (typeof referencias.ejes)[number]; s: number }> = [];
-        for (const eje of referencias.ejes) {
-          const ax = eje.x1 - planoPunto.x;
-          const ay = eje.y1 - planoPunto.y;
-          const bx = eje.x2 - planoPunto.x;
-          const by = eje.y2 - planoPunto.y;
-          const da = ax * d[0] + ay * d[1];
-          const db = bx * d[0] + by * d[1];
-          if (Math.abs(da - db) < 1e-9) continue;
-          const t = da / (da - db);
-          if (t < -1e-6 || t > 1 + 1e-6) continue;
-          const x = eje.x1 + t * (eje.x2 - eje.x1);
-          const y = eje.y1 + t * (eje.y2 - eje.y1);
-          cruces.push({ eje, s: proyectarT(x, y) });
-        }
-        cruces.sort((a, b) => a.s - b.s);
+        // O011: en alzados y cortes el globo va arriba, sobre el nivel más alto más
+        // 3 mm de papel; la línea del eje baja hasta debajo del nivel más bajo.
+        const altoBurbuja = mmAMundo(8, vista.escala);
         for (const { eje, s } of cruces) {
-          lineaCerrada(
-            [puntoHZ(s, zMin - 0.3), puntoHZ(s, zMax + 0.3)],
-            materialEjeNivel,
-            2.9,
-            grupoLocal,
-          );
+          const ajuste = ajusteEnCurso?.[eje.globalid] ?? vista.ejes?.[eje.globalid];
+          const g = geometriaEje(ajuste, [s, zInferiorEje], [s, zGlobo]);
+          const puntos = g.puntos.map(([ts, z]) => puntoHZ(ts, z));
+          lineaCerrada(puntos, materialEjeNivel, 2.9, grupoLocal);
+          lineasEje.current.push({ globalid: eje.globalid, etiqueta: eje.etiqueta, puntos });
           const burbuja = burbujaEje(
             eje.etiqueta,
             colorEje,
             oscuro ? "#1f2328" : "#ffffff",
+            [d[0], d[1], 0],
           );
           if (burbuja) {
-            const pos = puntoHZ(s, zMin - 0.65);
+            const pos = puntoHZ(g.globoFin[0], g.globoFin[1]);
             burbuja.position.set(pos[0], pos[1], pos[2]);
             burbuja.scale.set(altoBurbuja, altoBurbuja, 1);
             burbuja.renderOrder = 20;
             grupoLocal.add(burbuja);
+          }
+          ejesInteraccion.current.push({
+            globalid: eje.globalid,
+            etiqueta: eje.etiqueta,
+            lado: "fin",
+            tipo: "globo",
+            indice: null,
+            punto: puntoHZ(g.globoFin[0], g.globoFin[1]),
+          });
+          // El extremo de abajo no lleva globo, pero sí candado y asa.
+          ejesInteraccion.current.push({
+            globalid: eje.globalid,
+            etiqueta: eje.etiqueta,
+            lado: "inicio",
+            tipo: "base",
+            indice: null,
+            punto: puntoHZ(ajuste?.extremoInicio?.[0] ?? s, ajuste?.extremoInicio?.[1] ?? zInferiorEje),
+          });
+          for (const [lado, clave] of [
+            ["inicio", "codosInicio"],
+            ["fin", "codosFin"],
+          ] as const) {
+            const codos = ajuste?.[clave] ?? [];
+            codos.forEach((codo, indice) => {
+              const ladoMundo = Math.max(altoBurbuja * 0.09, 0.04);
+              lineaCerrada(
+                [
+                  puntoHZ(codo[0] - ladoMundo, codo[1] - ladoMundo),
+                  puntoHZ(codo[0] + ladoMundo, codo[1] - ladoMundo),
+                  puntoHZ(codo[0] + ladoMundo, codo[1] + ladoMundo),
+                  puntoHZ(codo[0] - ladoMundo, codo[1] + ladoMundo),
+                  puntoHZ(codo[0] - ladoMundo, codo[1] - ladoMundo),
+                ],
+                materialEjeNivel,
+                2.9,
+                grupoLocal,
+              );
+              ejesInteraccion.current.push({
+                globalid: eje.globalid,
+                etiqueta: eje.etiqueta,
+                lado,
+                tipo: "codo",
+                indice,
+                punto: puntoHZ(codo[0], codo[1]),
+              });
+            });
           }
         }
         if (contenedor.current) {
           contenedor.current.dataset.ejesAlzadoOrden = cruces
             .map(({ eje }) => eje.etiqueta)
             .join(",");
+          contenedor.current.dataset.ejesNivelMin = String(nivelMin);
+          contenedor.current.dataset.ejesNivelMax = String(nivelMax);
+          contenedor.current.dataset.ejesGloboZ = String(zGlobo);
+          contenedor.current.dataset.nivelesX = JSON.stringify({
+            desde: tInicioNivel,
+            hasta: tFinNivel,
+            ejes: cruces.map(({ s }) => s),
+          });
         }
       }
     }
@@ -2440,6 +2768,7 @@ export function Visor3D({
     cajaVista,
     dimensiones.alto,
     niveles,
+    ajusteEnCurso,
   ]);
 
   // O003b: marcadores de la herramienta de dibujo (puntos, snap y vista previa).
@@ -2995,11 +3324,37 @@ export function Visor3D({
         }
         return;
       }
+      // O011: primero las asas y las líneas de eje; después las mallas.
+      const asa = asaEjeEn(clientX, clientY);
+      if (asa) {
+        setEjeSeleccionado(asa.globalid);
+        setCandados({ inicio: false, fin: false });
+        setMenuEje(null);
+        onSeleccionar(null, agregar);
+        return;
+      }
+      const linea = lineaEjeEn(clientX, clientY);
+      if (linea) {
+        setEjeSeleccionado(linea);
+        setCandados({ inicio: false, fin: false });
+        setMenuEje(null);
+        onSeleccionar(null, agregar);
+        return;
+      }
+      setEjeSeleccionado(null);
       const impacto = rayo.intersectObjects(meshes.current, false)[0];
       onSeleccionar(impacto?.object.userData.globalid ?? null, agregar);
     };
 
     const alBajar = (evento: PointerEvent) => {
+      // O011: los botones y menús flotantes sobre el visor no deben iniciar
+      // selección ni desmontarse al soltar (el evento burbujea hasta el contenedor).
+      if (
+        evento.target instanceof Element &&
+        evento.target.closest("button, [role='menu'], input, select, textarea")
+      ) {
+        return;
+      }
       if (evento.pointerType === "touch") {
         evento.preventDefault();
         toques.set(evento.pointerId, { x: evento.clientX, y: evento.clientY });
@@ -3047,6 +3402,40 @@ export function Visor3D({
         evento.preventDefault();
         nodo.style.cursor = "grabbing";
       }
+      // O011: arrastrar un globo, un extremo libre o un codo de eje.
+      if (izquierdo && !paneable && !herramienta && !modoCorte) {
+        const asa = asaEjeEn(evento.clientX, evento.clientY);
+        const ctx = contextoEje.current;
+        if (asa && ctx) {
+          const eje = referencias.ejes.find((e) => e.globalid === asa.globalid);
+          const punto = puntoVistaDesdeEvento(evento.clientX, evento.clientY);
+          if (eje && punto) {
+            setEjeSeleccionado(asa.globalid);
+            setMenuEje(null);
+            arrastreEje.current = {
+              globalid: asa.globalid,
+              etiqueta: asa.etiqueta,
+              lado: asa.lado,
+              indice: asa.tipo === "codo" ? asa.indice : null,
+              candado: asa.tipo === "codo" || candados[asa.lado],
+              familia:
+                ctx.tipo === "planta"
+                  ? eje.vertical
+                    ? "vertical"
+                    : "horizontal"
+                  : "alzado",
+              inicio: punto,
+              originales: JSON.parse(JSON.stringify(vista.ejes ?? {})),
+              movido: false,
+            };
+            const inicial = JSON.parse(JSON.stringify(vista.ejes ?? {}));
+            ajusteEnCursoRef.current = inicial;
+            setAjusteEnCurso(inicial);
+          }
+          evento.preventDefault();
+          return;
+        }
+      }
       // El clic izquierdo también se registra: al soltar se selecciona o se toma el
       // punto del corte, pero solo se arrastra cuando toca (botón medio o espacio).
       arrastre.current = {
@@ -3065,6 +3454,57 @@ export function Visor3D({
       const nav = navegacion.current;
       const camera = camara.current;
       if (!nav || !camera) return;
+      // O011: movimiento de un extremo, candado o codo de eje.
+      const arrEje = arrastreEje.current;
+      if (arrEje) {
+        const punto = puntoVistaDesdeEvento(evento.clientX, evento.clientY);
+        const ctx = contextoEje.current;
+        if (!punto || !ctx) return;
+        arrEje.movido = true;
+        const cambios: Record<string, AjusteEjeVista> = {
+          ...(ajusteEnCursoRef.current ?? {}),
+        };
+        if (arrEje.indice !== null) {
+          const actual = normalizarAjusteEje(cambios[arrEje.globalid] ?? arrEje.originales[arrEje.globalid]) ?? {};
+          const clave = arrEje.lado === "inicio" ? "codosInicio" : "codosFin";
+          const codos = [...(actual[clave] ?? [])];
+          codos[arrEje.indice] = [punto[0], punto[1]];
+          cambios[arrEje.globalid] = { ...actual, [clave]: codos };
+        } else if (arrEje.candado) {
+          const actual = cambios[arrEje.globalid] ?? arrEje.originales[arrEje.globalid];
+          cambios[arrEje.globalid] = fijarExtremoEje(actual, arrEje.lado, punto) ?? {};
+        } else {
+          // Candado cerrado: el extremo sigue la alineación común y se mueven todos
+          // los ejes de la misma familia.
+          const delta: Punto2 = [
+            punto[0] - arrEje.inicio[0],
+            punto[1] - arrEje.inicio[1],
+          ];
+          for (const eje of referencias.ejes) {
+            const mismaFamilia =
+              arrEje.familia === "alzado" ||
+              (eje.vertical ? "vertical" : "horizontal") === arrEje.familia;
+            if (!mismaFamilia) continue;
+            const bases = ctx.bases[eje.globalid];
+            if (!bases) continue;
+            const original = arrEje.originales[eje.globalid];
+            const actual = extremoEje(original, arrEje.lado, bases.inicio, bases.fin);
+            const nuevo: Punto2 =
+              arrEje.familia === "horizontal"
+                ? [actual[0] + delta[0], actual[1]]
+                : [actual[0], actual[1] + delta[1]];
+            cambios[eje.globalid] = fijarExtremoEje(
+              cambios[eje.globalid] ?? original,
+              arrEje.lado,
+              nuevo,
+            ) ?? {};
+          }
+        }
+        ajusteEnCursoRef.current = cambios;
+        setAjusteEnCurso(cambios);
+        evento.preventDefault();
+        return;
+      }
       if (evento.pointerType === "touch" && toques.has(evento.pointerId)) {
         evento.preventDefault();
         const anterior = toques.get(evento.pointerId)!;
@@ -3178,6 +3618,18 @@ export function Visor3D({
         }
         return;
       }
+      const arrEje = arrastreEje.current;
+      if (arrEje) {
+        arrastreEje.current = null;
+        const cambios = ajusteEnCursoRef.current;
+        if (arrEje.movido && cambios) {
+          // Una sola escritura al soltar = una sola entrada de deshacer.
+          void fijarAjustesEjes(vista.id, cambios);
+        }
+        ajusteEnCursoRef.current = null;
+        setAjusteEnCurso(null);
+        return;
+      }
       const arr = arrastre.current;
       arrastre.current = null;
       const rectangulo = ventanaSeleccion;
@@ -3277,9 +3729,29 @@ export function Visor3D({
       evento.preventDefault();
       void dobleClicEnPlanta();
     };
+    const alMenuContextual = (evento: MouseEvent) => {
+      const asa = asaEjeEn(evento.clientX, evento.clientY);
+      if (!asa) return;
+      evento.preventDefault();
+      const rect = nodo.getBoundingClientRect();
+      setEjeSeleccionado(asa.globalid);
+      setMenuEje({
+        x: evento.clientX - rect.left,
+        y: evento.clientY - rect.top,
+        globalid: asa.globalid,
+        lado: asa.lado,
+        indice: asa.tipo === "codo" ? asa.indice : null,
+      });
+    };
     const alTecla = (evento: KeyboardEvent) => {
       const objetivo = evento.target as HTMLElement | null;
       if (objetivo && ["INPUT", "TEXTAREA", "SELECT"].includes(objetivo.tagName)) return;
+      if (evento.key === "Escape" && (menuEje || ejeSeleccionado)) {
+        setMenuEje(null);
+        setEjeSeleccionado(null);
+        evento.preventDefault();
+        return;
+      }
       if (evento.code === "Space") {
         espacio.current = true;
         evento.preventDefault();
@@ -3319,8 +3791,16 @@ export function Visor3D({
     const alSoltarTecla = (evento: KeyboardEvent) => {
       if (evento.code === "Space") espacio.current = false;
     };
+    (nodo as unknown as Record<string, unknown>).__openrvtZoomEn = (
+      factor: number,
+      clientX: number,
+      clientY: number,
+    ) => {
+      zoomEnPantalla(factor, clientX, clientY);
+    };
     nodo.addEventListener("pointerdown", alBajar);
     nodo.addEventListener("dblclick", alDobleClic);
+    nodo.addEventListener("contextmenu", alMenuContextual);
     window.addEventListener("pointermove", alMover);
     window.addEventListener("pointerup", alSoltar);
     window.addEventListener("keydown", alTecla);
@@ -3328,6 +3808,7 @@ export function Visor3D({
     return () => {
       nodo.removeEventListener("pointerdown", alBajar);
       nodo.removeEventListener("dblclick", alDobleClic);
+      nodo.removeEventListener("contextmenu", alMenuContextual);
       window.removeEventListener("pointermove", alMover);
       window.removeEventListener("pointerup", alSoltar);
       window.removeEventListener("keydown", alTecla);
@@ -3351,6 +3832,15 @@ export function Visor3D({
     ventanaSeleccion,
     fijarAviso,
     metrosPorPixelActual,
+    asaEjeEn,
+    lineaEjeEn,
+    puntoVistaDesdeEvento,
+    candados,
+    ejeSeleccionado,
+    menuEje,
+    fijarAjustesEjes,
+    referencias.ejes,
+    vista.ejes,
   ]);
 
   useEffect(() => {
@@ -3377,6 +3867,88 @@ export function Visor3D({
         y: rect.top + ((1 - punto.y) / 2) * rect.height,
       };
     };
+    // O011: posición en pantalla de un globo o extremo de eje (para las E2E).
+    (nodo as unknown as Record<string, unknown>).__openrvtEjeAPantalla = (
+      etiqueta: string,
+      lado: LadoEje = "fin",
+      indiceCodo?: number,
+    ) => {
+      const camera = camara.current;
+      if (!camera) return null;
+      const asa = ejesInteraccion.current.find((a) =>
+        indiceCodo === undefined
+          ? a.etiqueta === etiqueta && a.lado === lado && a.tipo !== "codo"
+          : a.etiqueta === etiqueta &&
+            a.lado === lado &&
+            a.tipo === "codo" &&
+            a.indice === indiceCodo,
+      );
+      if (!asa) return null;
+      camera.updateMatrixWorld();
+      const punto = new THREE.Vector3(...asa.punto).project(camera);
+      const rect = nodo.getBoundingClientRect();
+      return {
+        x: rect.left + ((punto.x + 1) / 2) * rect.width,
+        y: rect.top + ((1 - punto.y) / 2) * rect.height,
+      };
+    };
+    // O011: centro y radio en pantalla del globo, para medir la nitidez del borde.
+    (nodo as unknown as Record<string, unknown>).__openrvtEjeBurbujaPantalla = (
+      etiqueta: string,
+    ) => {
+      const camera = camara.current;
+      if (!camera) return null;
+      const asa = ejesInteraccion.current.find(
+        (a) => a.etiqueta === etiqueta && a.tipo === "globo",
+      );
+      if (!asa) return null;
+      camera.updateMatrixWorld();
+      const centro = new THREE.Vector3(...asa.punto);
+      const radioMundo = mmAMundo(8, vista.escala) / 2;
+      const derecha = new THREE.Vector3()
+        .setFromMatrixColumn(camera.matrixWorld, 0)
+        .normalize()
+        .multiplyScalar(radioMundo);
+      const borde = centro.clone().add(derecha);
+      const pc = centro.clone().project(camera);
+      const pb = borde.clone().project(camera);
+      const rect = nodo.getBoundingClientRect();
+      const x = rect.left + ((pc.x + 1) / 2) * rect.width;
+      const y = rect.top + ((1 - pc.y) / 2) * rect.height;
+      const xb = rect.left + ((pb.x + 1) / 2) * rect.width;
+      const yb = rect.top + ((1 - pb.y) / 2) * rect.height;
+      return {
+        x,
+        y,
+        radio: Math.hypot(xb - x, yb - y),
+        anchoVentana: window.innerWidth,
+        altoVentana: window.innerHeight,
+        dpr: window.devicePixelRatio || 1,
+        colorAnillo: oscuro ? "#e0b07a" : estilos.categorias.ejes.color,
+        colorFondo: oscuro ? "#1f2328" : "#ffffff",
+      };
+    };
+    // Utilidad de las E2E: acercar o alejar por un factor exacto (0.125 = ×8).
+    (nodo as unknown as Record<string, unknown>).__openrvtZoom = (factor: number) => {
+      zoomEnCentro(factor);
+    };
+    // Punto medio de la línea del eje (para seleccionarlo con un clic).
+    (nodo as unknown as Record<string, unknown>).__openrvtEjeLineaAPantalla = (
+      etiqueta: string,
+    ) => {
+      const camera = camara.current;
+      if (!camera) return null;
+      const linea = lineasEje.current.find((l) => l.etiqueta === etiqueta);
+      if (!linea || linea.puntos.length === 0) return null;
+      const medio = linea.puntos[Math.floor(linea.puntos.length / 2)];
+      camera.updateMatrixWorld();
+      const punto = new THREE.Vector3(...medio).project(camera);
+      const rect = nodo.getBoundingClientRect();
+      return {
+        x: rect.left + ((punto.x + 1) / 2) * rect.width,
+        y: rect.top + ((1 - punto.y) / 2) * rect.height,
+      };
+    };
     // O006a: posición en pantalla de un texto de cota (para el doble clic de las E2E).
     (nodo as unknown as Record<string, unknown>).__openrvtCotaAPantalla = (
       texto: string,
@@ -3397,6 +3969,14 @@ export function Visor3D({
     };
   });
 
+  const ejeSeleccionadoDatos = referencias.ejes.find((e) => e.globalid === ejeSeleccionado);
+  const ajusteSeleccionado = ejeSeleccionado ? ajusteActualEje(ejeSeleccionado) : undefined;
+  const codosInicioSel = ajusteSeleccionado?.codosInicio?.length ?? 0;
+  const codosFinSel = ajusteSeleccionado?.codosFin?.length ?? 0;
+  const puedeAnotarEje =
+    !!ejeSeleccionadoDatos &&
+    (vista.tipo === "planta" || vista.tipo === "alzado" || vista.tipo === "corte");
+
   return (
     <div
       ref={contenedor}
@@ -3407,6 +3987,8 @@ export function Visor3D({
       data-herramienta={herramienta ?? undefined}
       data-enganche={engancheHerramienta?.tipo}
       data-largo-tecleado={longitudTecleada || undefined}
+      data-eje-seleccionado={ejeSeleccionado ?? undefined}
+      data-ejes-ajustes={JSON.stringify(vista.ejes ?? {})}
       className="relative min-h-0 flex-1 overflow-hidden bg-background"
     >
       {ventanaSeleccion && (
@@ -3442,6 +4024,103 @@ export function Visor3D({
           </button>
         )}
       </div>
+      {puedeAnotarEje && (
+        <div
+          data-testid="eje-acciones"
+          className="absolute left-2 top-11 z-20 flex max-w-[min(640px,80vw)] flex-wrap items-center gap-1 rounded border bg-background/95 p-1.5 text-[11px] shadow-md"
+        >
+          <span className="px-1 font-semibold">Eje {ejeSeleccionadoDatos.etiqueta}</span>
+          <button
+            type="button"
+            data-testid="eje-candado-inicio"
+            aria-pressed={candados.inicio}
+            title="Candado del extremo de inicio: abierto se mueve solo"
+            onClick={() => alternarCandadoVista(ejeSeleccionadoDatos.globalid, "inicio")}
+            className={`rounded border px-1.5 py-0.5 ${
+              candados.inicio ? "bg-amber-200 text-amber-950" : "hover:bg-muted"
+            }`}
+          >
+            {candados.inicio ? "🔓" : "🔒"} Inicio
+          </button>
+          <button
+            type="button"
+            data-testid="eje-candado-fin"
+            aria-pressed={candados.fin}
+            title="Candado del extremo final: abierto se mueve solo"
+            onClick={() => alternarCandadoVista(ejeSeleccionadoDatos.globalid, "fin")}
+            className={`rounded border px-1.5 py-0.5 ${
+              candados.fin ? "bg-amber-200 text-amber-950" : "hover:bg-muted"
+            }`}
+          >
+            {candados.fin ? "🔓" : "🔒"} Fin
+          </button>
+          <button
+            type="button"
+            data-testid="eje-codo-inicio-agregar"
+            disabled={codosInicioSel >= MAXIMO_CODOS}
+            onClick={() => agregarCodoVista(ejeSeleccionadoDatos.globalid, "inicio")}
+            className="rounded border px-1.5 py-0.5 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Agregar codo (inicio) {codosInicioSel}/{MAXIMO_CODOS}
+          </button>
+          <button
+            type="button"
+            data-testid="eje-codo-fin-agregar"
+            disabled={codosFinSel >= MAXIMO_CODOS}
+            onClick={() => agregarCodoVista(ejeSeleccionadoDatos.globalid, "fin")}
+            className="rounded border px-1.5 py-0.5 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Agregar codo (fin) {codosFinSel}/{MAXIMO_CODOS}
+          </button>
+        </div>
+      )}
+      {menuEje && (
+        <div
+          data-testid="eje-menu"
+          role="menu"
+          className="absolute z-30 min-w-40 rounded border bg-background p-1 text-xs shadow-lg"
+          style={{ left: menuEje.x, top: menuEje.y }}
+        >
+          {menuEje.indice !== null ? (
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="eje-quitar-codo"
+              className="w-full rounded px-2 py-1 text-left hover:bg-muted"
+              onClick={() => {
+                quitarCodoVista(menuEje.globalid, menuEje.lado, menuEje.indice!);
+                setMenuEje(null);
+              }}
+            >
+              Quitar codo
+            </button>
+          ) : (
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="eje-menu-agregar-codo"
+              disabled={
+                (menuEje.lado === "inicio" ? codosInicioSel : codosFinSel) >= MAXIMO_CODOS
+              }
+              className="w-full rounded px-2 py-1 text-left hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={() => {
+                agregarCodoVista(menuEje.globalid, menuEje.lado);
+                setMenuEje(null);
+              }}
+            >
+              Agregar codo
+            </button>
+          )}
+          <button
+            type="button"
+            role="menuitem"
+            className="w-full rounded px-2 py-1 text-left hover:bg-muted"
+            onClick={() => setMenuEje(null)}
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
       {ayudaVisible && (
         <div
           data-testid="ayuda-navegacion"
