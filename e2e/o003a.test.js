@@ -76,6 +76,16 @@ async function elegirVista(ses, nombre) {
   await esperar(450);
 }
 
+async function abrirRangoAvanzado(ses) {
+  // O010: «Rango de vista (avanzado)» está plegado por omisión; la altura del
+  // plano de corte solo se ve al desplegarlo.
+  const detalles = await ses.porTestid("vista-rango-avanzado");
+  if ((await detalles.getAttribute("open")) === null) {
+    await (await detalles.findElement(By.css("summary"))).click();
+    await esperar(150);
+  }
+}
+
 async function vistasPorTipo(ses) {
   const datos = await ses.driver.executeScript(() =>
     Array.from(document.querySelectorAll('[data-testid="vista-item"]')).map((elemento) => ({
@@ -240,6 +250,7 @@ test("O003a: altura de corte, corte y vistas sobreviven a guardar y reabrir", as
 
     await cambiarPestana(ses, "Inicio");
     await elegirVista(ses, "Planta Erdgeschoss");
+    await abrirRangoAvanzado(ses);
     await fijarValor(ses, "vista-altura", "2.35");
     await ses.driver.wait(async () => {
       const el = await ses.porTestid("vista-altura");
@@ -271,6 +282,7 @@ test("O003a: altura de corte, corte y vistas sobreviven a guardar y reabrir", as
     assert.equal(cuenta.corte, 1);
     assert.ok(nombres.includes("Corte 1"));
     await elegirVista(ses, "Planta Erdgeschoss");
+    await abrirRangoAvanzado(ses);
     const altura = await ses.porTestid("vista-altura");
     assert.equal(await altura.getAttribute("value"), "2.35");
   } finally {

@@ -262,17 +262,21 @@ test("O012-1: cimentación con 6 zapatas, L, T y hueco de 3 cm", async () => {
       .filter((e) => e.alias === "contratrabe")
       .map((e) => e.volumen_neto_m3)
       .sort((a, b) => a - b);
-    // Cálculo a mano con CT-1 de 0.20 × 0.40 (0.08 m² por metro):
-    // 6.00 − 0.15 − 0.15 = 5.70 → 0.456; el dado de zapata de 0.40 × 0.40
-    //   se traslapa 0.05 × 0.20 × 0.25 en cada punta → 0.451 (dos veces).
-    // 8.00 − 0.15 − 0.10 = 7.75 → 0.620; dados en ambos extremos:
-    //   0.05 × 0.20 × 0.25 + 0.10 × 0.20 × 0.25 = 0.0075 → 0.6125 (tres veces).
-    // 12.00 + 0.10 + 0.10 = 12.20 pasante → 0.976; tres dados → 0.926.
-    // Hueco de 3 cm: 5.90 − 0.10 = 5.80 → 0.464 (sin zapata en y = 4).
-    const esperados = [0.451, 0.451, 0.464, 0.6125, 0.6125, 0.6125, 0.926];
+    // Cálculo a mano con CT-1 de 0.20 × 0.40 (0.08 m² por metro). O012b fijó la
+    // jerarquía «dado > contratrabe»: la contratrabe termina en la CARA del dado de
+    // 0.40 × 0.40 y no se traslapa con él. Los dos tramos de 6.00 m van de eje a eje
+    // (centro de dado a centro de dado): 6.00 − 0.20 − 0.20 = 5.60 → 0.448 (dos veces).
+    // Los tres de 8.00 m, también de eje a eje: 8.00 − 0.20 − 0.20 = 7.60 → 0.608
+    //   (tres veces).
+    // La pasante de 12.20 m (12.00 + 0.10 + 0.10 hasta la cara exterior de la
+    //   contratrabe de los extremos) con tres dados pierde 0.30 + 0.40 + 0.30 = 1.00
+    //   → 11.20 × 0.08 = 0.896.
+    // Hueco de 3 cm: nace en la cara del eje x = 0 (0.10) y llega a la cara exterior
+    //   del eje x = 6 (5.90): 5.90 − 0.10 = 5.80 → 0.464 (sin dado en y = 4).
+    const esperados = [0.448, 0.448, 0.464, 0.608, 0.608, 0.608, 0.896];
     volumenes.forEach((valor, i) => {
       assert.ok(
-        Math.abs(valor - esperados[i]) < 5e-3,
+        Math.abs(valor - esperados[i]) < 1e-3,
         `volumen ${i}: ${valor} != ${esperados[i]}`,
       );
     });

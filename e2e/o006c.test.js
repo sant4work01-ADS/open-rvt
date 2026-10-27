@@ -14,6 +14,11 @@ const { Sesion, esperar, By, until } = require("./arnes");
 
 const RAIZ = path.resolve(__dirname, "..");
 const CAPTURAS = path.join(RAIZ, "docs", "capturas");
+// La versión de la app vive en package.json; la prueba la lee para no volver a
+// quedarse clavada en una versión anterior.
+const VERSION = JSON.parse(
+  fs.readFileSync(path.join(RAIZ, "package.json"), "utf8"),
+).version;
 
 function dimensionesPng(ruta) {
   const cabecera = fs.readFileSync(ruta).subarray(0, 24);
@@ -242,7 +247,7 @@ test("O006c: bitácora con clics, acciones, errores con traza y exportación .zi
     assert.ok(fs.existsSync(path.join(extraido, "OPEN-RVT.log")), "falta OPEN-RVT.log");
     const sistema = JSON.parse(fs.readFileSync(path.join(extraido, "sistema.json"), "utf8"));
     assert.equal(sistema.tipo, "inicio");
-    assert.equal(sistema.version, "0.5.1");
+    assert.equal(sistema.version, VERSION);
     assert.ok(sistema.ifcopenshell && sistema.ifcopenshell !== "no disponible");
     assert.ok(sistema.python);
 
