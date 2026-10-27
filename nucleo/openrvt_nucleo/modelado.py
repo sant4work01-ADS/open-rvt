@@ -1210,6 +1210,7 @@ class ModeladoMixin:
         offset_z = base - datos["z"]
         alto = max(cima - base, 0.001)
         items = []
+        temporales = []
         for poligono in poligonos:
             rep = geometry_api.add_slab_representation(
                 self.modelo,
@@ -1219,6 +1220,7 @@ class ModeladoMixin:
                 offset=offset_z,
                 polyline=poligono,
             )
+            temporales.append(rep)
             items.extend(rep.Items)
         # La representación final es una sola con todos los tramos del muro.
         context = self._contexto()
@@ -1229,6 +1231,11 @@ class ModeladoMixin:
             "SweptSolid",
             items,
         )
+        for rep in temporales:
+            try:
+                self.modelo.remove(rep)
+            except Exception:
+                LOG.debug("no se pudo quitar una representación temporal", exc_info=True)
         vanos = []
         for rel in getattr(muro, "HasOpenings", ()) or ():
             vano = getattr(rel, "RelatedOpeningElement", None)

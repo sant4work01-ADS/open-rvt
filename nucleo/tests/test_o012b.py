@@ -219,6 +219,22 @@ def test_muro_entre_castillos_largo_area_y_volumen_de_la_tabla() -> None:
         assert _volumen_entre(nucleo, muro, castillo) == pytest.approx(0.0, abs=1e-9)
 
 
+def test_capas_del_muro_tambien_terminan_en_los_castillos() -> None:
+    nucleo, nivel = _nuevo()
+    muro = nucleo.muro_crear(
+        "Block 15 aplanado-yeso", nivel, 0, 0, 4, 0, altura=2.60
+    )["creados"][0]
+    nucleo.castillo_crear_en_muro(K, muro, 0.0)
+    nucleo.castillo_crear_en_muro(K, muro, 4.0)
+    entidad = _entidad(nucleo, muro)
+    tipo = nucleo._tipo_entidad(entidad)
+    capas = nucleo.capas_de_tipo(tipo)
+    assert len(capas) == 6
+    # Largo 3.85 y altura 2.60: cada capa mide 10.01 m², igual que el núcleo.
+    for indice, _capa in enumerate(capas):
+        assert nucleo._area_capa_muro(entidad, indice) == pytest.approx(10.01, abs=1e-9)
+
+
 def test_muro_apoya_en_dala_y_corona_en_cerramiento_sin_traslape() -> None:
     nucleo, nivel = _nuevo()
     muro = nucleo.muro_crear(MURO, nivel, 0, 0, 4, 0, altura=2.60)["creados"][0]

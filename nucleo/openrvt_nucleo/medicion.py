@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Any
 
 from .modelado import TOLERANCIA_CALCULO, _gid, _nombre, _poligono_area, _texto
+from . import uniones
 
 PSET = "OPENRVT_Medicion"
 PROPIEDAD = "Partidas"
@@ -518,6 +519,36 @@ class MedicionMixin:
     def _area_capa_muro(self, muro: Any, indice: int) -> float:
         datos = self._datos_muro(muro)
         largo = self._largo_cara_capa(muro, indice)
+        # O012b: las capas también terminan en las caras de castillos y columnas.
+        nucleo, _centro = self._capas_nucleo(muro)
+        x1, y1, x2, y2 = datos["x1"], datos["y1"], datos["x2"], datos["y2"]
+        if datos["longitud"] > TOLERANCIA_CALCULO:
+            ux = (x2 - x1) / datos["longitud"]
+            uy = (y2 - y1) / datos["longitud"]
+            z0, z1 = self._limites_verticales_muro(muro, datos)
+            perdida = 0.0
+            for columna in self.modelo.by_type("IfcColumn"):
+                barra = self._barra_de_elemento(columna)
+                if barra is None:
+                    continue
+                if min(z1, barra.z1) - max(z0, barra.z0) <= TOLERANCIA_CALCULO:
+                    continue
+                centro_t = (barra.x1 - x1) * ux + (barra.y1 - y1) * uy
+                px, py = x1 + ux * centro_t, y1 + uy * centro_t
+                if math.hypot(barra.x1 - px, barra.y1 - py) > max(
+                    nucleo, datos["espesor"]
+                ) / 2.0 + 0.1:
+                    continue
+                proyecciones = [
+                    (p[0] - x1) * ux + (p[1] - y1) * uy
+                    for p in uniones.huella(barra)
+                ]
+                desde = max(0.0, min(proyecciones))
+                hasta = min(datos["longitud"], max(proyecciones))
+                if hasta > desde:
+                    perdida += hasta - desde
+            largo = max(largo - perdida, 0.0)
+            return max(largo * (z1 - z0) - self._vano_area(muro), 0.0)
         return max(largo * datos["altura"] - self._vano_area(muro), 0.0)
 
     def _cimbra_estructura(self, elemento: Any, alias: str | None, pset: dict[str, Any]) -> float:
