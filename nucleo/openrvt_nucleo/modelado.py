@@ -24,6 +24,8 @@ import ifcopenshell.api.type as type_api
 import ifcopenshell.api.unit as unit_api
 import numpy as np
 
+from . import uniones
+
 LOG = logging.getLogger("openrvt_nucleo.modelado")
 
 # Tipos de muro que crea un proyecto nuevo. El nombre es el que ve el usuario.
@@ -1195,24 +1197,45 @@ class ModeladoMixin:
         return rep
 
     def _cuerpo_muro(self, muro: Any) -> Any:
-        """O010: cuerpo del muro con esquinas ingleteadas (L) y recortadas (T).
+        """O010/O012b: cuerpo del muro con esquinas ingleteadas y jerarquía.
 
-        Se construye un prisma vertical a partir de la huella local del muro. En una
-        unión en L los dos cuerpos se cortan por la misma línea de inglete (uniendo la
-        intersección de caras exteriores con la de caras interiores), de modo que no
-        hay solapes ni muescas aunque los espesores sean distintos. En T el muro que
-        llega se recorta contra la cara del núcleo pasante.
+        En planta el muro termina en las caras de castillos y columnas. En alzado
+        su base arranca en la cara superior de la contratrabe, la dala o la losa
+        que lo soporta, y su corona se recorta en la cara inferior del cerramiento
+        o de la losa que lo cubre.
         """
         datos = self._datos_muro(muro)
-        offset = self._desfase_de_muro(muro, datos["espesor"])
-        poligono = self._huella_local_muro(muro, datos, offset)
-        cuerpo = geometry_api.add_slab_representation(
-            self.modelo,
-            context=self._contexto(),
-            depth=max(datos["altura"], 0.001),
-            direction_sense="POSITIVE",
-            polyline=poligono,
+        poligonos = self._huellas_muro(muro, datos)
+        base, cima = self._limites_verticales_muro(muro, datos)
+        offset_z = base - datos["z"]
+        alto = max(cima - base, 0.001)
+        items = []
+        temporales = []
+        for poligono in poligonos:
+            rep = geometry_api.add_slab_representation(
+                self.modelo,
+                context=self._contexto(),
+                depth=alto,
+                direction_sense="POSITIVE",
+                offset=offset_z,
+                polyline=poligono,
+            )
+            temporales.append(rep)
+            items.extend(rep.Items)
+        # La representación final es una sola con todos los tramos del muro.
+        context = self._contexto()
+        cuerpo = self.modelo.create_entity(
+            "IfcShapeRepresentation",
+            context,
+            context.ContextIdentifier,
+            "SweptSolid",
+            items,
         )
+        for rep in temporales:
+            try:
+                self.modelo.remove(rep)
+            except Exception:
+                LOG.debug("no se pudo quitar una representación temporal", exc_info=True)
         vanos = []
         for rel in getattr(muro, "HasOpenings", ()) or ():
             vano = getattr(rel, "RelatedOpeningElement", None)
@@ -1228,20 +1251,125 @@ class ModeladoMixin:
                     datos["espesor"],
                     info["antepecho"],
                     info["distancia"],
-                    offset,
+                    self._desfase_de_muro(muro, datos["espesor"]),
                 )
             )
         cuerpo.RepresentationIdentifier = "Body"
         if vanos:
-            # add_boolean acepta el sólido del cuerpo como primer operando.
-            try:
-                item = cuerpo.Items[0]
-                geometry_api.add_boolean(
-                    self.modelo, first_item=item, second_items=vanos, operator="DIFFERENCE"
-                )
-            except Exception:
-                LOG.warning("no se pudo descontar los vanos del muro", exc_info=True)
+            for item in items:
+                try:
+                    geometry_api.add_boolean(
+                        self.modelo,
+                        first_item=item,
+                        second_items=vanos,
+                        operator="DIFFERENCE",
+                    )
+                except Exception:
+                    LOG.warning(
+                        "no se pudo descontar los vanos del muro", exc_info=True
+                    )
         return cuerpo
+
+    def _huellas_muro(
+        self, muro: Any, datos: dict[str, Any] | None = None
+    ) -> list[list[tuple[float, float]]]:
+        """Huellas locales del muro recortadas en las caras de columnas y castillos."""
+        from shapely.geometry import Polygon
+
+        datos = datos or self._datos_muro(muro)
+        offset = self._desfase_de_muro(muro, datos["espesor"])
+        poligono = self._huella_local_muro(muro, datos, offset)
+        if len(poligono) < 3:
+            return [poligono]
+        huella = Polygon([self._punto_local(datos, u, v) for u, v in poligono])
+        if not huella.is_valid:
+            huella = huella.buffer(0)
+        z0 = datos["z"]
+        z1 = z0 + datos["altura"]
+        for columna in self.modelo.by_type("IfcColumn"):
+            barra = self._barra_de_elemento(columna)
+            if barra is None:
+                continue
+            if min(z1, barra.z1) - max(z0, barra.z0) <= TOLERANCIA_CALCULO:
+                continue
+            recorte = Polygon(uniones.huella(barra))
+            if not recorte.is_valid:
+                recorte = recorte.buffer(0)
+            if not huella.intersects(recorte):
+                continue
+            huella = huella.difference(recorte)
+            if huella.is_empty:
+                break
+        if huella.is_empty:
+            return [poligono]
+        piezas = [huella] if huella.geom_type == "Polygon" else list(huella.geoms)
+        salida: list[list[tuple[float, float]]] = []
+        for pieza in piezas:
+            if pieza.is_empty or pieza.area <= TOLERANCIA_CALCULO:
+                continue
+            salida.append(
+                [
+                    self._punto_en_local(datos, x, y)
+                    for x, y in list(pieza.exterior.coords)[:-1]
+                ]
+            )
+        return salida or [poligono]
+
+    def _limites_verticales_muro(
+        self, muro: Any, datos: dict[str, Any] | None = None
+    ) -> tuple[float, float]:
+        """(base, cima) del muro después de apoyarse y cubrirse con otros elementos."""
+        from shapely.geometry import Polygon
+
+        datos = datos or self._datos_muro(muro)
+        base = float(datos["z"])
+        cima = base + float(datos["altura"])
+        offset = self._desfase_de_muro(muro, datos["espesor"])
+        poligono = self._huella_local_muro(muro, datos, offset)
+        huella = Polygon([self._punto_local(datos, u, v) for u, v in poligono])
+        if not huella.is_valid:
+            huella = huella.buffer(0)
+        for elemento in self.modelo.by_type("IfcElement"):
+            alias = self._estructura_de_tipo(self._tipo_entidad(elemento))
+            if elemento.is_a("IfcSlab"):
+                try:
+                    datos_losa = self._leer_pset(elemento, "OPENRVT_Losa")
+                    if not datos_losa:
+                        continue
+                    nivel = self._nivel_de_elemento(elemento)
+                    zeta1 = float(nivel.Elevation or 0.0) + float(
+                        datos_losa.get("Desfase") or 0.0
+                    )
+                    zeta0 = zeta1 - float(datos_losa.get("Espesor") or 0.12)
+                    recorte = self._geometria_losa(elemento)
+                except Exception:
+                    continue
+            elif alias in ("contratrabe", "dala", "cerramiento"):
+                barra = self._barra_de_elemento(elemento)
+                if barra is None:
+                    continue
+                zeta0, zeta1 = barra.z0, barra.z1
+                recorte = Polygon(uniones.huella(barra))
+            else:
+                continue
+            try:
+                if not recorte.is_valid:
+                    recorte = recorte.buffer(0)
+                if huella.intersection(recorte).area <= TOLERANCIA_CALCULO:
+                    continue
+            except Exception:
+                continue
+            if alias in ("contratrabe", "dala") or elemento.is_a("IfcSlab"):
+                # Elemento que soporta: la base sube a su cara superior.
+                if base + TOLERANCIA_CALCULO < zeta1 < cima - TOLERANCIA_CALCULO:
+                    base = max(base, zeta1)
+            if alias == "cerramiento" or elemento.is_a("IfcSlab"):
+                # Elemento que cubre: la corona baja a su cara inferior.
+                if base + TOLERANCIA_CALCULO < zeta0 < cima - TOLERANCIA_CALCULO:
+                    cima = min(cima, zeta0)
+        if cima - base <= TOLERANCIA_CALCULO:
+            return (float(datos["z"]), float(datos["z"]) + float(datos["altura"]))
+        return (base, cima)
 
     # ------------------------------------------------ esquinas de muros (O010)
     @staticmethod
@@ -1724,6 +1852,21 @@ class ModeladoMixin:
         caja = self._caja_entre(-b / 2.0, b / 2.0, -h / 2.0, h / 2.0, 0.0, largo)
         return self._malla_de_cajas([caja])
 
+    def _cuerpo_viga_tramos(
+        self, seccion: dict[str, Any], tramos: list[tuple[float, float]]
+    ) -> Any:
+        """O012: uno o varios prismas en el eje local, ya recortados en las uniones."""
+        b = float(seccion.get("B") or 0.20)
+        h = float(seccion.get("H") or 0.40)
+        cajas = [
+            self._caja_entre(-b / 2.0, b / 2.0, -h / 2.0, h / 2.0, a, c)
+            for a, c in tramos
+            if c - a > TOLERANCIA_CALCULO
+        ]
+        if not cajas:
+            cajas = [self._caja_entre(-b / 2.0, b / 2.0, -h / 2.0, h / 2.0, 0.0, 0.001)]
+        return self._malla_de_cajas(cajas)
+
     def _cuerpo_zapata(self, seccion: dict[str, Any]) -> Any:
         largo = float(seccion.get("Largo") or 1.2)
         ancho = float(seccion.get("Ancho") or 1.2)
@@ -1811,6 +1954,186 @@ class ModeladoMixin:
             raise self._error("La altura de la columna debe ser positiva.", -32602)
         return resultado
 
+    def _es_viga_estructural(self, elemento: Any) -> bool:
+        if elemento.is_a("IfcBeam"):
+            return True
+        return elemento.is_a("IfcFooting") and _texto(
+            getattr(elemento, "PredefinedType", "")
+        ) == "FOOTING_BEAM"
+
+    def _barra_de_elemento(self, elemento: Any) -> uniones.Barra | None:
+        """Convierte una columna o viga del modelo en la barra pura de uniones."""
+        datos = self._leer_pset(elemento, "OPENRVT_Estructura")
+        if not datos:
+            return None
+        tipo = self._tipo_entidad(elemento)
+        alias, seccion, _ = self._seccion_y_armado(tipo)
+        if alias is None:
+            return None
+        if elemento.is_a("IfcColumn"):
+            base = float(datos.get("Base") or 0.0)
+            alto = float(datos.get("Altura") or 2.60)
+            return uniones.Barra(
+                gid=_gid(elemento),
+                tipo="columna",
+                x1=float(datos.get("X") or 0.0),
+                y1=float(datos.get("Y") or 0.0),
+                x2=float(datos.get("X") or 0.0),
+                y2=float(datos.get("Y") or 0.0),
+                ancho=float(
+                    datos.get("B") or seccion.get("B") or seccion.get("D") or 0.30
+                ),
+                fondo=float(
+                    datos.get("H") or seccion.get("H") or seccion.get("D") or 0.30
+                ),
+                z0=base,
+                z1=base + alto,
+                rotacion=float(datos.get("Rotacion") or 0.0),
+            )
+        if self._es_viga_estructural(elemento):
+            x1 = float(datos.get("X1") or 0.0)
+            y1 = float(datos.get("Y1") or 0.0)
+            x2 = float(datos.get("X2") or 0.0)
+            y2 = float(datos.get("Y2") or 0.0)
+            alto = float(datos.get("H") or seccion.get("H") or 0.40)
+            centro = float(datos.get("Z") or 0.0)
+            return uniones.Barra(
+                gid=_gid(elemento),
+                tipo="viga",
+                x1=x1,
+                y1=y1,
+                x2=x2,
+                y2=y2,
+                ancho=float(datos.get("B") or seccion.get("B") or 0.20),
+                z0=centro - alto / 2.0,
+                z1=centro + alto / 2.0,
+            )
+        return None
+
+    def _barras_de_dado(self, elemento: Any) -> list[uniones.Barra]:
+        """O012b: el dado de la zapata cuenta como columna para recortar vigas.
+
+        El dado forma parte del cuerpo de la zapata (no es un IFC aparte), así que
+        su barra lleva el GlobalId de la zapata para que la relación IFC de la
+        unión apunte al elemento real.
+        """
+        if not elemento.is_a("IfcFooting") or _texto(
+            getattr(elemento, "PredefinedType", "")
+        ) == "STRIP_FOOTING":
+            return []
+        tipo = self._tipo_entidad(elemento)
+        alias, seccion, _ = self._seccion_y_armado(tipo)
+        if alias != "zapata":
+            return []
+        datos = self._leer_pset(elemento, "OPENRVT_Estructura")
+        if not datos:
+            return []
+        dado_b = float(seccion.get("DadoB") or 0.0)
+        dado_h = float(seccion.get("DadoH") or 0.0)
+        dado_alto = float(seccion.get("DadoAlto") or 0.0)
+        peralte = float(seccion.get("Peralte") or 0.25)
+        if dado_b <= 0 or dado_h <= 0 or dado_alto <= 0:
+            return []
+        z = float(datos.get("Z") or 0.0)
+        return [
+            uniones.Barra(
+                gid=_gid(elemento),
+                tipo="columna",
+                x1=float(datos.get("X") or 0.0),
+                y1=float(datos.get("Y") or 0.0),
+                x2=float(datos.get("X") or 0.0),
+                y2=float(datos.get("Y") or 0.0),
+                ancho=dado_b,
+                fondo=dado_h,
+                z0=z + peralte,
+                z1=z + peralte + dado_alto,
+                rotacion=float(datos.get("Rotacion") or 0.0),
+            )
+        ]
+
+    def _barras_estructura(self) -> tuple[list[uniones.Barra], list[uniones.Barra]]:
+        vigas: list[uniones.Barra] = []
+        columnas: list[uniones.Barra] = []
+        for elemento in self.modelo.by_type("IfcElement"):
+            if not (
+                elemento.is_a("IfcColumn")
+                or elemento.is_a("IfcFooting")
+                or self._es_viga_estructural(elemento)
+            ):
+                continue
+            barra = self._barra_de_elemento(elemento)
+            if barra is not None:
+                if barra.tipo == "columna":
+                    columnas.append(barra)
+                else:
+                    vigas.append(barra)
+            columnas.extend(self._barras_de_dado(elemento))
+        return vigas, columnas
+
+    def _tramos_de_viga(self, elemento: Any) -> list[tuple[float, float]]:
+        """Tramos recortados de una viga, en metros sobre su eje original."""
+        barra = self._barra_de_elemento(elemento)
+        if barra is None or barra.tipo != "viga":
+            return [(0.0, 1.0)]
+        vigas, columnas = self._barras_estructura()
+        tramos, _uniones_aplicadas = uniones.calcular(vigas, columnas)
+        return tramos.get(barra.gid) or [(0.0, barra.largo)]
+
+    def _recrear_relaciones_uniones(self) -> None:
+        """Una relación IFC estándar por unión, con el elemento que manda primero."""
+        for rel in list(self.modelo.by_type("IfcRelConnectsElements")):
+            if _texto(getattr(rel, "Name", "")) == "OPEN-RVT unión":
+                try:
+                    self.modelo.remove(rel)
+                except Exception:
+                    LOG.debug("no se pudo quitar una unión anterior", exc_info=True)
+        vigas, columnas = self._barras_estructura()
+        _tramos, aplicadas = uniones.calcular(vigas, columnas)
+        for union in aplicadas:
+            try:
+                maestro = self._entidad_por_gid(union["maestro"])
+                esclavo = self._entidad_por_gid(union["esclavo"])
+            except Exception:
+                continue
+            existente = False
+            for rel in self.modelo.by_type("IfcRelConnectsElements"):
+                if (
+                    getattr(rel, "RelatingElement", None) == maestro
+                    and getattr(rel, "RelatedElement", None) == esclavo
+                ):
+                    existente = True
+                    break
+            if existente:
+                continue
+            try:
+                self.modelo.create_entity(
+                    "IfcRelConnectsElements",
+                    GlobalId=ifcopenshell.guid.new(),
+                    OwnerHistory=None,
+                    Name="OPEN-RVT unión",
+                    Description=None,
+                    ConnectionGeometry=None,
+                    RelatingElement=maestro,
+                    RelatedElement=esclavo,
+                )
+            except Exception:
+                LOG.warning("no se pudo registrar la unión", exc_info=True)
+
+    def _recalcular_uniones_estructura(self) -> None:
+        """Vuelve a cortar todas las vigas: al mover, borrar o cambiar un vecino."""
+        for elemento in list(self.modelo.by_type("IfcElement")):
+            if elemento.is_a("IfcColumn") or self._es_viga_estructural(elemento):
+                if self._leer_pset(elemento, "OPENRVT_Estructura"):
+                    self._regenerar_estructura(elemento)
+        # O012b: losa y muro dependen de las vigas, columnas y castillos vecinos.
+        for losa in list(self.modelo.by_type("IfcSlab")):
+            if self._leer_pset(losa, "OPENRVT_Losa"):
+                self._regenerar_losa(losa)
+        for muro in list(self.modelo.by_type("IfcWall")):
+            if self._leer_pset(muro, "OPENRVT_Muro"):
+                self._regenerar_representacion_unida(muro)
+        self._recrear_relaciones_uniones()
+
     def _regenerar_estructura(self, elemento: Any) -> None:
         tipo = self._tipo_entidad(elemento)
         alias, seccion, _armado = self._seccion_y_armado(tipo)
@@ -1845,7 +2168,8 @@ class ModeladoMixin:
             largo = float(datos.get("Longitud") or math.hypot(x2 - x1, y2 - y1))
             if largo <= TOLERANCIA_CALCULO:
                 largo = 1.0
-            cuerpo = self._cuerpo_viga(seccion, largo)
+            tramos = self._tramos_de_viga(elemento)
+            cuerpo = self._cuerpo_viga_tramos(seccion, tramos)
             ux, uy = (x2 - x1) / largo, (y2 - y1) / largo
             matriz = self._matriz_viga(x1, y1, float(datos.get("Z") or 0.0), ux, uy)
         elif elemento.is_a("IfcFooting") and _texto(
@@ -1911,6 +2235,7 @@ class ModeladoMixin:
         spatial_api.assign_container(
             self.modelo, products=[columna], relating_structure=nivel_entidad
         )
+        self._recalcular_uniones_estructura()
         if eje_a or eje_b:
             self._guardar_liga(columna, {"EjeA": _texto(eje_a), "EjeB": _texto(eje_b)})
         self.con_cambios = True
@@ -1965,6 +2290,7 @@ class ModeladoMixin:
         spatial_api.assign_container(
             self.modelo, products=[viga], relating_structure=nivel_entidad
         )
+        self._recalcular_uniones_estructura()
         self.con_cambios = True
         return self._resultado([viga], mensaje=f"Viga creada ({largo:.2f} m).")
 
@@ -2234,6 +2560,115 @@ class ModeladoMixin:
         return unidos
 
     # ------------------------------------------------------------------ losas
+    def _geometria_losa(self, losa: Any):
+        """Huella recortada de la losa (o su contorno si todavía no se recortó)."""
+        from shapely import wkt
+        from shapely.geometry import Polygon
+
+        datos = self._leer_pset(losa, "OPENRVT_Losa")
+        texto = datos.get("Recorte")
+        if texto:
+            try:
+                return wkt.loads(str(texto))
+            except Exception:
+                LOG.debug("no se pudo leer el recorte de la losa", exc_info=True)
+        return Polygon(self._poligono_de_losa(losa))
+
+    def _prisma_de_huella(
+        self, geometria: Any, z0: float, z1: float
+    ) -> tuple[list[list[float]], list[list[int]]]:
+        """Prisma vertical de una huella arbitraria (con huecos o varias piezas)."""
+        from shapely.ops import triangulate
+
+        triangulos: list[list[tuple[float, float]]] = []
+        for triangulo in triangulate(geometria):
+            if not geometria.covers(triangulo.representative_point()):
+                continue
+            puntos = [(float(p[0]), float(p[1])) for p in triangulo.exterior.coords[:3]]
+            area2 = sum(
+                puntos[i][0] * puntos[(i + 1) % 3][1]
+                - puntos[(i + 1) % 3][0] * puntos[i][1]
+                for i in range(3)
+            )
+            if area2 < 0:
+                puntos.reverse()
+            triangulos.append(puntos)
+
+        vertices: list[list[float]] = []
+        caras: list[list[int]] = []
+        bordes: dict[tuple, dict[str, Any]] = {}
+
+        def _redondo(punto: tuple[float, float]) -> tuple[float, float]:
+            return (round(punto[0], 9), round(punto[1], 9))
+
+        for triangulo in triangulos:
+            base = len(vertices)
+            for x, y in triangulo:
+                vertices.append([x, y, z0])
+            for x, y in triangulo:
+                vertices.append([x, y, z1])
+            caras.append([base + 3, base + 4, base + 5])
+            caras.append([base + 2, base + 1, base])
+            for i in range(3):
+                j = (i + 1) % 3
+                a, b = triangulo[i], triangulo[j]
+                clave = tuple(sorted((_redondo(a), _redondo(b))))
+                registro = bordes.setdefault(clave, {"cuenta": 0, "a": a, "b": b})
+                registro["cuenta"] += 1
+
+        for registro in bordes.values():
+            if registro["cuenta"] != 1:
+                continue
+            a, b = registro["a"], registro["b"]
+            base = len(vertices)
+            vertices.extend(
+                [
+                    [a[0], a[1], z0], [b[0], b[1], z0],
+                    [b[0], b[1], z1], [a[0], a[1], z1],
+                ]
+            )
+            caras.append([base, base + 1, base + 2, base + 3])
+        return vertices, caras
+
+    def _regenerar_losa(self, losa: Any) -> None:
+        """O012b: recorta la losa en planta contra trabes y columnas."""
+        from shapely import wkt
+        from shapely.geometry import Polygon
+
+        datos = dict(self._leer_pset(losa, "OPENRVT_Losa"))
+        if not datos:
+            return
+        espesor = float(datos.get("Espesor") or 0.12)
+        if espesor <= 0:
+            return
+        original = datos.get("Contorno")
+        if original:
+            try:
+                huella = wkt.loads(str(original))
+            except Exception:
+                huella = Polygon(self._poligono_de_losa(losa))
+        else:
+            huella = Polygon(self._poligono_de_losa(losa))
+        vigas, columnas = self._barras_estructura()
+        recorte = uniones.recortar_losa(
+            list(huella.exterior.coords)[:-1], vigas, columnas, -espesor, 0.0
+        )
+        if recorte.is_empty:
+            # Nunca se deja una losa sin cuerpo: se conserva la huella original.
+            recorte = huella
+        vertices, caras = self._prisma_de_huella(recorte, -espesor, 0.0)
+        self._quitar_representaciones(losa, "Body")
+        rep = geometry_api.add_mesh_representation(
+            self.modelo, context=self._contexto(), vertices=[vertices], faces=[caras]
+        )
+        rep.RepresentationIdentifier = "Body"
+        geometry_api.assign_representation(self.modelo, product=losa, representation=rep)
+        datos["Contorno"] = huella.wkt
+        datos["Recorte"] = recorte.wkt
+        datos["Area"] = round(float(recorte.area), 9)
+        datos["Perimetro"] = round(float(recorte.length), 9)
+        self._guardar_pset(losa, "OPENRVT_Losa", datos)
+
     def losa_crear(
         self,
         nivel: str,
@@ -2256,29 +2691,18 @@ class ModeladoMixin:
         if espesor <= 0:
             raise self._error("El espesor de la losa debe ser positivo.", -32602)
 
+        from shapely.geometry import Polygon
+
         self._instantanea()
         losa = root.create_entity(self.modelo, ifc_class="IfcSlab")
         losa.Name = "Losa"
         losa.PredefinedType = "FLOOR"
         elevacion = float(nivel_entidad.Elevation or 0.0) + desfase
-        # El contorno se guarda local y la losa se coloca en la elevación del nivel.
-        rep = geometry_api.add_slab_representation(
-            self.modelo,
-            context=self._contexto(),
-            depth=espesor,
-            direction_sense="NEGATIVE",
-            polyline=poligono,
-        )
-        rep.RepresentationIdentifier = "Body"
-        geometry_api.assign_representation(self.modelo, product=losa, representation=rep)
         matriz = np.identity(4)
         matriz[0][3] = 0.0
         matriz[1][3] = 0.0
         matriz[2][3] = elevacion
         geometry_api.edit_object_placement(self.modelo, product=losa, matrix=matriz)
-        spatial_api.assign_container(
-            self.modelo, products=[losa], relating_structure=nivel_entidad
-        )
         self._guardar_pset(
             losa,
             "OPENRVT_Losa",
@@ -2286,10 +2710,19 @@ class ModeladoMixin:
                 "Espesor": espesor,
                 "Desfase": desfase,
                 "Puntos": len(poligono),
+                "Contorno": Polygon(poligono).wkt,
             },
         )
+        self._regenerar_losa(losa)
+        spatial_api.assign_container(
+            self.modelo, products=[losa], relating_structure=nivel_entidad
+        )
+        # O012b: la losa puede cubrir o soportar muros ya creados.
+        self._recalcular_uniones_estructura()
         self.con_cambios = True
-        return self._resultado([losa], mensaje=f"Losa creada ({abs(_poligono_area(poligono)):.2f} m²).")
+        return self._resultado(
+            [losa], mensaje=f"Losa creada ({abs(_poligono_area(poligono)):.2f} m²)."
+        )
 
     def _circuito_muros(self, globalids: list[str]) -> list[Any]:
         muros = []
@@ -2708,6 +3141,7 @@ class ModeladoMixin:
                 self._unir_muros(producto)
                 # O007c: castillos, cerramientos y dalas siguen al muro.
                 self._actualizar_dependientes_muro(producto)
+        self._recalcular_uniones_estructura()
         self.con_cambios = True
         return self._resultado(
             modificados=[g for g in afectados if not g.is_a("IfcOpeningElement")],
@@ -2802,6 +3236,7 @@ class ModeladoMixin:
                     borrados.append(_gid(producto))
                 except Exception:
                     LOG.warning("no se pudo borrar %s", _gid(producto), exc_info=True)
+        self._recalcular_uniones_estructura()
         self.con_cambios = True
         return self._resultado(borrados=borrados, mensaje=f"{len(borrados)} elemento(s) borrado(s).")
 
@@ -2863,6 +3298,11 @@ class ModeladoMixin:
                 creados.append(copia)
             elif original.is_a("IfcSlab"):
                 copia = self._copiar_entidad(original)
+                datos_losa = dict(self._leer_pset(original, "OPENRVT_Losa"))
+                if datos_losa:
+                    # El contorno vive en coordenadas locales; el traslado va en la
+                    # colocación, así que se conserva el pset tal cual.
+                    self._guardar_pset(copia, "OPENRVT_Losa", datos_losa)
                 geometry_api.edit_object_placement(
                     self.modelo,
                     product=copia,
@@ -2897,6 +3337,7 @@ class ModeladoMixin:
                     is_si=True,
                 )
                 self._desplazar_pset_estructura(copia, dx, dy, dz)
+                self._regenerar_estructura(copia)
                 for rel in getattr(original, "ContainedInStructure", ()) or ():
                     spatial_api.assign_container(
                         self.modelo,
@@ -2913,6 +3354,7 @@ class ModeladoMixin:
                     is_si=True,
                 )
                 creados.append(copia)
+        self._recalcular_uniones_estructura()
         self.con_cambios = True
         return self._resultado(creados=creados, mensaje=f"{len(creados)} elemento(s) copiado(s).")
 
@@ -3126,6 +3568,7 @@ class ModeladoMixin:
                     )
         else:
             raise self._error("Este elemento no tiene propiedades editables.", -32025)
+        self._recalcular_uniones_estructura()
         self.con_cambios = True
         return self._resultado(modificados=modificados, mensaje="Elemento actualizado.")
 
@@ -3183,6 +3626,17 @@ class ModeladoMixin:
     def _poligono_de_losa(self, losa: Any) -> list[tuple[float, float]]:
         from ifcopenshell.util.placement import get_local_placement
 
+        datos = self._leer_pset(losa, "OPENRVT_Losa")
+        if datos.get("Contorno"):
+            try:
+                from shapely import wkt
+
+                return [
+                    (float(p[0]), float(p[1]))
+                    for p in wkt.loads(str(datos["Contorno"])).exterior.coords[:-1]
+                ]
+            except Exception:
+                pass
         try:
             item = losa.Representation.Representations[0].Items[0]
             perfil = item.SweptArea

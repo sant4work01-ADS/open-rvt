@@ -232,6 +232,307 @@ function comoPoligono(anillo: Anillo): PoligonoCru {
   return [anillo];
 }
 
+// ---------------------------------------------------------------- capas en L/T
+// O012: las capas de acabado se cortan con la misma línea de inglete que el cuerpo
+// del muro. Así el 3D y la planta muestran el mismo contorno y la suma de áreas de
+// capa es exactamente el área de la huella (sin muescas ni traslapes).
+
+interface BandaCapa {
+  poligono: Anillo;
+  material: string;
+  funcion: string;
+}
+
+function anilloAbierto(anillo: Anillo): Anillo {
+  if (anillo.length > 1) {
+    const [ax, ay] = anillo[0];
+    const [bx, by] = anillo[anillo.length - 1];
+    if (Math.hypot(ax - bx, ay - by) < 1e-9) return anillo.slice(0, -1);
+  }
+  return anillo;
+}
+
+function cerrarAnillo(anillo: Anillo): Anillo {
+  if (anillo.length === 0) return [];
+  const [ax, ay] = anillo[0];
+  const [bx, by] = anillo[anillo.length - 1];
+  return Math.hypot(ax - bx, ay - by) < 1e-9 ? anillo : [...anillo, anillo[0]];
+}
+
+/** Quita vértices repetidos y colineales que rompen polygon-clipping. */
+function limpiarAnillo(anillo: Anillo): Anillo {
+  const abierto = anilloAbierto(anillo);
+  const sinRepetidos: Anillo = [];
+  for (const p of abierto) {
+    const anterior = sinRepetidos[sinRepetidos.length - 1];
+    if (!anterior || Math.hypot(p[0] - anterior[0], p[1] - anterior[1]) > 1e-9) {
+      sinRepetidos.push(p);
+    }
+  }
+  if (sinRepetidos.length < 3) return [];
+  const salida: Anillo = [];
+  for (let i = 0; i < sinRepetidos.length; i += 1) {
+    const a = sinRepetidos[(i - 1 + sinRepetidos.length) % sinRepetidos.length];
+    const b = sinRepetidos[i];
+    const c = sinRepetidos[(i + 1) % sinRepetidos.length];
+    const cruz = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+    if (Math.abs(cruz) > 1e-12) salida.push(b);
+  }
+  return salida.length >= 3 ? cerrarAnillo(salida) : [];
+}
+
+/** Recorta un polígono contra la semirrecta que deja el punto de prueba dentro. */
+function recortarPorLinea(
+  poligono: Anillo,
+  a: Par,
+  b: Par,
+  puntoDentro: Par,
+): Anillo {
+  const abierto = anilloAbierto(poligono);
+  if (abierto.length < 3) return [];
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  if (Math.hypot(dx, dy) < 1e-12) return poligono;
+  const lado = (p: Par) => dx * (p[1] - a[1]) - dy * (p[0] - a[0]);
+  const signo = lado(puntoDentro) >= 0 ? 1 : -1;
+  const salida: Anillo = [];
+  for (let i = 0; i < abierto.length; i += 1) {
+    const actual = abierto[i];
+    const siguiente = abierto[(i + 1) % abierto.length];
+    const da = signo * lado(actual);
+    const db = signo * lado(siguiente);
+    if (da >= -1e-9) salida.push(actual);
+    if ((da > 1e-9 && db < -1e-9) || (da < -1e-9 && db > 1e-9)) {
+      const t = da / (da - db);
+      salida.push([
+        actual[0] + (siguiente[0] - actual[0]) * t,
+        actual[1] + (siguiente[1] - actual[1]) * t,
+      ]);
+    }
+  }
+  return salida.length >= 3 ? limpiarAnillo(salida) : [];
+}
+
+function puntoExtremo(muro: MuroPlanta, fin: "ATSTART" | "ATEND"): Par {
+  const [x1, y1, x2, y2] = muro.eje;
+  return fin === "ATSTART" ? [x1, y1] : [x2, y2];
+}
+
+/** Línea de inglete común a dos muros que comparten extremo (misma que el 3D). */
+function lineaInglete(
+  muro: MuroPlanta,
+  otro: MuroPlanta,
+  fin: "ATSTART" | "ATEND",
+  finOtro: "ATSTART" | "ATEND",
+): [Par, Par] | null {
+  const [x1, y1, x2, y2] = muro.eje;
+  const [ox1, oy1, ox2, oy2] = otro.eje;
+  const largo = Math.hypot(x2 - x1, y2 - y1) || 1e-9;
+  const olargo = Math.hypot(ox2 - ox1, oy2 - oy1) || 1e-9;
+  const dx = (x2 - x1) / largo;
+  const dy = (y2 - y1) / largo;
+  const odx = (ox2 - ox1) / olargo;
+  const ody = (oy2 - oy1) / olargo;
+  const n: Par = [-dy, dx];
+  const no: Par = [-ody, odx];
+  const esquina = puntoExtremo(muro, fin);
+  const alejadoOtro: Par =
+    finOtro === "ATEND" ? [-odx, -ody] : [odx, ody];
+  const otroIzquierda = alejadoOtro[0] * n[0] + alejadoOtro[1] * n[1] >= 0;
+  const dentro: Par = fin === "ATEND" ? [-dx, -dy] : [dx, dy];
+  const esteIzquierda = dentro[0] * no[0] + dentro[1] * no[1] >= 0;
+  const { min: bajo } = limites(muro);
+  const { min: bajoOtro } = limites(otro);
+  const alto = bajo + espesorDe(muro);
+  const altoOtro = bajoOtro + espesorDe(otro);
+  const vInner = otroIzquierda ? alto : bajo;
+  const vOuter = otroIzquierda ? bajo : alto;
+  const vOtroInner = esteIzquierda ? altoOtro : bajoOtro;
+  const vOtroOuter = esteIzquierda ? bajoOtro : altoOtro;
+  const linea = (origen: Par, normal: Par, v: number): [Par, Par] => [
+    [origen[0] + normal[0] * v, origen[1] + normal[1] * v],
+    normal,
+  ];
+  const corta = (
+    l1: [Par, Par],
+    l2: [Par, Par],
+  ): Par | null => {
+    const [p1, n1] = l1;
+    const [p2, n2] = l2;
+    const det = n1[0] * n2[1] - n1[1] * n2[0];
+    if (Math.abs(det) < 1e-9) return null;
+    const c1 = n1[0] * p1[0] + n1[1] * p1[1];
+    const c2 = n2[0] * p2[0] + n2[1] * p2[1];
+    return [
+      (c1 * n2[1] - c2 * n1[1]) / det,
+      (n1[0] * c2 - n2[0] * c1) / det,
+    ];
+  };
+  const pInner = corta(
+    linea([x1, y1], n, vInner),
+    linea([ox1, oy1], no, vOtroInner),
+  );
+  const pOuter = corta(
+    linea([x1, y1], n, vOuter),
+    linea([ox1, oy1], no, vOtroOuter),
+  );
+  if (pInner === null || pOuter === null) return null;
+  const limite = 3 * Math.max(espesorDe(muro), espesorDe(otro)) + 0.05;
+  if (
+    Math.hypot(pInner[0] - esquina[0], pInner[1] - esquina[1]) > limite ||
+    Math.hypot(pOuter[0] - esquina[0], pOuter[1] - esquina[1]) > limite
+  ) {
+    return null;
+  }
+  return [pInner, pOuter];
+}
+
+function murosEnT(
+  muro: MuroPlanta,
+  todos: MuroPlanta[],
+  fin: "ATSTART" | "ATEND",
+): Array<{ otro: MuroPlanta; esteIzquierda: boolean }> {
+  const [x1, y1, x2, y2] = muro.eje;
+  const [px, py] = fin === "ATSTART" ? [x1, y1] : [x2, y2];
+  const dentro: Par =
+    fin === "ATSTART"
+      ? [(x2 - x1), (y2 - y1)]
+      : [-(x2 - x1), -(y2 - y1)];
+  const salida: Array<{ otro: MuroPlanta; esteIzquierda: boolean }> = [];
+  for (const otro of todos) {
+    if (otro.globalid === muro.globalid) continue;
+    const [ox1, oy1, ox2, oy2] = otro.eje;
+    const dx = ox2 - ox1;
+    const dy = oy2 - oy1;
+    const largo2 = dx * dx + dy * dy;
+    if (largo2 <= 1e-12) continue;
+    const t = ((px - ox1) * dx + (py - oy1) * dy) / largo2;
+    if (t <= 0.02 || t >= 0.98) continue;
+    const qx = ox1 + t * dx;
+    const qy = oy1 + t * dy;
+    if (Math.hypot(px - qx, py - qy) > espesorDe(otro) / 2 + 0.01) continue;
+    const olargo = Math.sqrt(largo2);
+    const no: Par = [-dy / olargo, dx / olargo];
+    const esteIzquierda = dentro[0] * no[0] + dentro[1] * no[1] >= 0;
+    salida.push({ otro, esteIzquierda });
+  }
+  return salida;
+}
+
+function extensionesCapas(
+  muro: MuroPlanta,
+  todos: MuroPlanta[],
+): { inicio: number; fin: number } {
+  const [x1, y1, x2, y2] = muro.eje;
+  let inicio = 0;
+  let fin = 0;
+  const propio = espesorDe(muro);
+  for (const otro of todos) {
+    if (otro.globalid === muro.globalid) continue;
+    const [ox1, oy1, ox2, oy2] = otro.eje;
+    const alcance = Math.max(propio, espesorDe(otro));
+    if (
+      Math.hypot(ox1 - x1, oy1 - y1) <= 0.01 ||
+      Math.hypot(ox2 - x1, oy2 - y1) <= 0.01
+    ) {
+      inicio = Math.max(inicio, alcance);
+    }
+    if (
+      Math.hypot(ox1 - x2, oy1 - y2) <= 0.01 ||
+      Math.hypot(ox2 - x2, oy2 - y2) <= 0.01
+    ) {
+      fin = Math.max(fin, alcance);
+    }
+  }
+  return { inicio, fin };
+}
+
+/** Polígonos de cada capa (misma regla para la planta y el 3D). */
+export function poligonosCapas(
+  muro: MuroPlanta,
+  todos: MuroPlanta[] = [],
+): BandaCapa[] {
+  const centros = muro.capas.filter((c) => c.centro !== undefined);
+  if (centros.length === 0) {
+    return [
+      {
+        poligono: huellaMuro(muro, todos),
+        material: muro.capas[0]?.material ?? "Muro",
+        funcion: muro.capas[0]?.funcion ?? "núcleo",
+      },
+    ];
+  }
+  const extensiones = extensionesCapas(muro, todos);
+  const [x1, y1, x2, y2] = muro.eje;
+  const largo = Math.hypot(x2 - x1, y2 - y1) || 1e-9;
+  const dx = (x2 - x1) / largo;
+  const dy = (y2 - y1) / largo;
+  const salida: BandaCapa[] = [];
+  for (const capa of centros) {
+    let poligono = rectangulo(
+      muro,
+      (capa.centro ?? 0) - capa.espesor / 2,
+      (capa.centro ?? 0) + capa.espesor / 2,
+      extensiones.inicio,
+      extensiones.fin,
+    );
+    for (const fin of ["ATSTART", "ATEND"] as const) {
+      const [px, py] = fin === "ATSTART" ? [x1, y1] : [x2, y2];
+      const dentro: Par = fin === "ATSTART" ? [dx, dy] : [-dx, -dy];
+      const prueba: Par = [px + dentro[0] * 0.01, py + dentro[1] * 0.01];
+      for (const otro of todos) {
+        if (otro.globalid === muro.globalid) continue;
+        const [qx1, qy1, qx2, qy2] = otro.eje;
+        const comparten: Array<"ATSTART" | "ATEND"> = [];
+        if (
+          Math.hypot(qx1 - px, qy1 - py) <= 0.01 ||
+          Math.hypot(qx2 - px, qy2 - py) <= 0.01
+        ) {
+          if (Math.hypot(qx1 - px, qy1 - py) <= 0.01) comparten.push("ATSTART");
+          if (Math.hypot(qx2 - px, qy2 - py) <= 0.01) comparten.push("ATEND");
+        }
+        for (const finOtro of comparten) {
+          const linea = lineaInglete(muro, otro, fin, finOtro);
+          if (linea !== null) poligono = recortarPorLinea(poligono, linea[0], linea[1], prueba);
+        }
+      }
+      for (const { otro, esteIzquierda } of murosEnT(muro, todos, fin)) {
+        const [rx1, ry1, rx2, ry2] = otro.eje;
+        const olargo = Math.hypot(rx2 - rx1, ry2 - ry1) || 1e-9;
+        const no: Par = [-(ry2 - ry1) / olargo, (rx2 - rx1) / olargo];
+        const { min: bajoOtro } = limites(otro);
+        const cara =
+          bajoOtro + (esteIzquierda ? espesorDe(otro) : 0);
+        const direccion: Par = [(rx2 - rx1) / olargo, (ry2 - ry1) / olargo];
+        // El punto de prueba va hacia el cuerpo del muro que llega, ya pasado el
+        // espesor del pasante (el eje del pasante queda dentro de su sección).
+        const alcance = espesorDe(otro) / 2 + 0.01;
+        const puntoPrueba: Par = [
+          px + dentro[0] * alcance,
+          py + dentro[1] * alcance,
+        ];
+        const base: Par = [rx1 + no[0] * cara, ry1 + no[1] * cara];
+        poligono = recortarPorLinea(
+          poligono,
+          base,
+          [base[0] + direccion[0], base[1] + direccion[1]],
+          puntoPrueba,
+        );
+      }
+    }
+    poligono = limpiarAnillo(poligono);
+    if (poligono.length >= 3) {
+      salida.push({
+        poligono,
+        material: capa.material,
+        funcion: capa.funcion,
+      });
+    }
+  }
+  return salida;
+}
+
+
 export function unirHuellas(
   muros: MuroPlanta[],
   secciones: SeccionPlanta[] = [],

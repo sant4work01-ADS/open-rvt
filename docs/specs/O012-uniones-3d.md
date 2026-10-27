@@ -104,3 +104,9 @@ Contratrabe CT-1 de 0.20 × 0.40 y columnas de 0.30 × 0.30.
 - pytest, vitest, tsc, eslint y los E2E nuevos, todo en verde.
 - `docs/progreso/O012.md` con una tabla regla → hecho → prueba y las «Notas de la versión».
 - Commits en español, sin push y sin cambiar la versión.
+
+## Anexo (usuario, 2026-10-27): trabe contra columna
+`docs/notas-usuario/capturas/2026-10-27-trabe-contra-columna.jpg`. Arriba se ve cómo **debe**
+verse: la trabe termina en la cara de la columna y la columna queda entera. Abajo, cómo se ve hoy:
+la trabe entra hasta el centro de la columna. Confirma la regla 1. Pide una captura de la planta y
+del alzado de este caso en `resultados/O012/`.

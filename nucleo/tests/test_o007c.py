@@ -231,7 +231,11 @@ def test_guardar_y_reabrir_conserva_ligas_y_relaciones(tmp_path: Path) -> None:
     assert liga["Distancia"] == pytest.approx(2.0)
     assert otro._leer_liga(otro._entidad_por_gid(castillo))["Muro"] == muro
     relaciones = otro.modelo.by_type("IfcRelConnectsElements")
-    assert len(relaciones) == 4  # castillo, cerramiento, dala y zapata
+    # Las ligas de muro (castillo, cerramiento, dala y zapata) se conservan; las
+    # uniones de estructura de O012 son relaciones aparte.
+    ligas = [r for r in relaciones if r.Name == "OPEN-RVT liga"]
+    assert len(ligas) == 4
+    assert all(r.Name in ("OPEN-RVT liga", "OPEN-RVT unión") for r in relaciones)
     assert otro.validar() == []
 
 
