@@ -2,7 +2,6 @@
 // aserciones están calculadas a mano en el comentario, no copiadas del resultado.
 import { describe, expect, it } from "vitest";
 import {
-  MAXIMO_CODOS,
   agregarCodoEje,
   extremoEje,
   fijarExtremoEje,
@@ -14,6 +13,12 @@ import {
 
 const INICIO: [number, number] = [0, 0];
 const FIN: [number, number] = [0, 10];
+
+/** Compara coordenadas calculadas a mano sin exigir el último bit del flotante. */
+function esperarPunto(real: [number, number], esperado: [number, number]) {
+  expect(real[0]).toBeCloseTo(esperado[0], 9);
+  expect(real[1]).toBeCloseTo(esperado[1], 9);
+}
 
 describe("O011: polilínea del eje", () => {
   it("sin ajustes dibuja la línea recta de siempre y un solo globo al final", () => {
@@ -30,28 +35,55 @@ describe("O011: polilínea del eje", () => {
     });
   });
 
-  it("con un codo el tramo base → codo → globo tiene tres puntos", () => {
-    // Codo en (0.5, 9.5): sale del final de la línea (0,10), pasa por el codo y
-    // vuelve al globo (0,10). El globo no se mueve.
-    const g = geometriaEje({ codosFin: [[0.5, 9.5]] }, INICIO, FIN);
+  it("con un codo el tramo base → codo → globo termina en el globo desplazado", () => {
+    // Eje de (0,0) a (0,10); primer codo por omisión: avance 0.3 y lateral 0.8.
+    // Vértice (0, 10.3) y globo en (0.8, 10.6); el globo ya no vuelve a (0,10).
+    const g = geometriaEje(
+      { codosFin: [[0, 10.3]], extremoFin: [0.8, 10.6] },
+      INICIO,
+      FIN,
+    );
     expect(g.puntos).toEqual([
       [0, 0],
       [0, 10],
-      [0.5, 9.5],
-      [0, 10],
+      [0, 10.3],
+      [0.8, 10.6],
     ]);
-    expect(g.globoFin).toEqual([0, 10]);
+    expect(g.globoFin).toEqual([0.8, 10.6]);
   });
 
-  it("con dos codos conserva el orden y el globo final", () => {
-    // Codos a los dos lados del globo: (0.5,9.5) y (-0.5,9.5).
-    const g = geometriaEje({ codosFin: [[0.5, 9.5], [-0.5, 9.5]] }, INICIO, FIN);
+  it("con dos codos conserva el orden y el globo al final del tramo", () => {
+    // Avance 0.3 y lateral 0.8: (0,10) → (0,10.3) → (0.8,10.6) → (0.8,10.9).
+    const g = geometriaEje(
+      {
+        codosFin: [
+          [0, 10.3],
+          [0.8, 10.6],
+        ],
+        extremoFin: [0.8, 10.9],
+      },
+      INICIO,
+      FIN,
+    );
     expect(g.puntos).toEqual([
       [0, 0],
       [0, 10],
-      [0.5, 9.5],
-      [-0.5, 9.5],
+      [0, 10.3],
+      [0.8, 10.6],
+      [0.8, 10.9],
+    ]);
+    expect(g.globoFin).toEqual([0.8, 10.9]);
+  });
+
+  it("sin extremo guardado el globo se apoya en el último codo", () => {
+    // Al cerrar el candado se borra el extremo libre; el globo sigue en el codo.
+    const g = geometriaEje({ codosFin: [[0, 10.3], [0.8, 10.6]] }, INICIO, FIN);
+    expect(g.globoFin).toEqual([0.8, 10.6]);
+    expect(g.puntos).toEqual([
+      [0, 0],
       [0, 10],
+      [0, 10.3],
+      [0.8, 10.6],
     ]);
   });
 
@@ -85,36 +117,68 @@ describe("O011: polilínea del eje", () => {
   });
 });
 
-describe("O011: agregar y quitar codos", () => {
-  it("el primero va a 5 mm del globo y 5 mm de lado; el segundo al otro lado", () => {
-    // Escala 1:100: 5 mm de papel = 0.5 m y el globo de 8 mm = 0.8 m (como Revit).
-    expect(mmPapelAMetros(5, 100)).toBe(0.5);
+describe("O011b: el globo sigue a los codos", () => {
+  it("0, 1 y 2 codos mueven el centro del globo con coordenadas a mano", () => {
+    // Escala 1:100: avance 3 mm = 0.3 m; globo de 8 mm = 0.8 m de diámetro.
+    expect(mmPapelAMetros(3, 100)).toBe(0.3);
     expect(mmPapelAMetros(8, 100)).toBe(0.8);
     expect(mmPapelAMetros(8, 50)).toBe(0.4);
-    const uno = agregarCodoEje(undefined, "fin", [0, 10], [0, 0], 0.5);
-    expect(uno.codosFin).toEqual([[0.5, 9.5]]);
-    // El segundo va al lado contrario: (-0.5, 9.5).
-    const dos = agregarCodoEje(uno, "fin", [0, 10], [0, 0], 0.5);
-    expect(dos.codosFin).toEqual([
-      [0.5, 9.5],
-      [-0.5, 9.5],
-    ]);
+    const globo0 = geometriaEje(undefined, INICIO, FIN).globoFin;
+    expect(globo0).toEqual([0, 10]);
+
+    // Primer codo: (0,10) → (0,10.3) y globo desplazado +X: (0.8,10.6).
+    const uno = agregarCodoEje(undefined, "fin", [0, 10], [0, 1], 0.3, 0.8);
+    expect(uno.codosFin).toHaveLength(1);
+    esperarPunto(uno.codosFin![0], [0, 10.3]);
+    esperarPunto(uno.extremoFin!, [0.8, 10.6]);
+    esperarPunto(geometriaEje(uno, INICIO, FIN).globoFin, [0.8, 10.6]);
+
+    // Segundo codo: el globo anterior es vértice y hay 3 mm hasta el borde del
+    // globo, más su radio (0.4): (0.8,10.6) → (0.8,11.3).
+    const dos = agregarCodoEje(uno, "fin", [0.8, 10.6], [0, 1], 0.3, 0.8);
+    expect(dos.codosFin).toHaveLength(2);
+    esperarPunto(dos.codosFin![0], [0, 10.3]);
+    esperarPunto(dos.codosFin![1], [0.8, 10.6]);
+    esperarPunto(dos.extremoFin!, [0.8, 11.3]);
+    esperarPunto(geometriaEje(dos, INICIO, FIN).globoFin, [0.8, 11.3]);
     // Al llegar a dos, la regla no permite un tercero.
-    expect(agregarCodoEje(dos, "fin", [0, 10], [0, 0], 0.5).codosFin).toHaveLength(MAXIMO_CODOS);
+    expect(agregarCodoEje(dos, "fin", [0.8, 11.3], [0, 1], 0.3, 0.8)).toEqual(dos);
   });
 
-  it("los codos del inicio se guardan por separado", () => {
-    // Globo de inicio (0,0), interior (0,10): dirección (0,1); lado -X: (-0.5,0.5).
-    const g = agregarCodoEje(undefined, "inicio", [0, 0], [0, 10], 0.5);
-    expect(g.codosInicio).toEqual([[-0.5, 0.5]]);
+  it("los codos del inicio se guardan por separado y desplazan su globo", () => {
+    // Extremo de inicio (0,0), hacia afuera (0,-1): vértice (0,-0.3) y globo
+    // desplazado en X: (-0.8,-0.6), porque la perpendicular es (-1,0).
+    const g = agregarCodoEje(undefined, "inicio", [0, 0], [0, -1], 0.3, 0.8);
+    expect(g.codosInicio).toEqual([[0, -0.3]]);
+    expect(g.extremoInicio).toEqual([-0.8, -0.6]);
     expect(g.codosFin).toBeUndefined();
+    expect(g.extremoFin).toBeUndefined();
   });
 
-  it("quitar un codo deja los demás y elimina la clave vacía", () => {
-    const dos = { codosFin: [[0.5, 9.5], [-0.5, 9.5]] as [number, number][] };
-    expect(quitarCodoEje(dos, "fin", 0)).toEqual({ codosFin: [[-0.5, 9.5]] });
-    expect(quitarCodoEje(dos, "fin", 1)).toEqual({ codosFin: [[0.5, 9.5]] });
-    expect(quitarCodoEje({ codosFin: [[0.5, 9.5]] }, "fin", 0)).toBeUndefined();
+  it("quitar un codo deja los demás y al quitar el último vuelve al extremo", () => {
+    const dos = {
+      codosFin: [
+        [0, 10.3],
+        [0.8, 10.6],
+      ] as [number, number][],
+      extremoFin: [0.8, 10.9] as [number, number],
+    };
+    expect(quitarCodoEje(dos, "fin", 0)).toEqual({
+      codosFin: [[0.8, 10.6]],
+      extremoFin: [0.8, 10.9],
+    });
+    expect(quitarCodoEje(dos, "fin", 1)).toEqual({
+      codosFin: [[0, 10.3]],
+      extremoFin: [0.8, 10.9],
+    });
+    // Quitar el único codo también borra el desplazamiento del globo.
+    expect(
+      quitarCodoEje(
+        { codosFin: [[0, 10.3]], extremoFin: [0.8, 10.6] },
+        "fin",
+        0,
+      ),
+    ).toBeUndefined();
     // Índice fuera de rango no rompe ni inventa codos.
     expect(quitarCodoEje(dos, "fin", 9)).toEqual(dos);
   });

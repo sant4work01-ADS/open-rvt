@@ -194,6 +194,17 @@ interface CotaInteractiva {
   nombre?: string;
 }
 
+/** O011b: rectángulo de una etiqueta de nivel o cota, en mundo, para las E2E. */
+interface AnotacionAlzado {
+  tipo: "nivel" | "parcial" | "total";
+  texto: string;
+  centro: [number, number, number];
+  ancho: number;
+  alto: number;
+  /** Dirección horizontal del plano de la anotación. */
+  h: [number, number, number];
+}
+
 interface CotaEnEdicion {
   tipo: CotaInteractiva["tipo"];
   referencia?: string;
@@ -748,6 +759,8 @@ export function Visor3D({
   );
   const [dimensiones, setDimensiones] = useState({ ancho: 1, alto: 1 });  // O006a: textos de cota dibujados y edición en el sitio.
   const cotasInteraccion = useRef<CotaInteractiva[]>([]);
+  // O011b: etiquetas de nivel y cotas del alzado, con su rectángulo, para las E2E.
+  const anotacionesAlzado = useRef<AnotacionAlzado[]>([]);
   const [cotaEditando, setCotaEditando] = useState<CotaEnEdicion | null>(null);
   const [textoCotaEditando, setTextoCotaEditando] = useState("");
   // O010: el error de una cota se muestra junto a la caja, no en la barra de estado.
@@ -916,16 +929,24 @@ export function Visor3D({
     const bases = contextoEje.current?.bases[globalid];
     if (!eje || !bases) return;
     const ajuste = ajusteActualEje(globalid);
-    const globo = extremoEje(ajuste, lado, bases.inicio, bases.fin);
-    const codos = lado === "inicio" ? ajuste?.codosInicio : ajuste?.codosFin;
-    const interior = (codos && codos.length > 0 ? codos[codos.length - 1] : undefined) ??
-      (lado === "inicio" ? bases.fin : bases.inicio);
+    // O011b: el globo vigente sale de la geometría (último codo si no hay extremo).
+    const g = geometriaEje(ajuste, bases.inicio, bases.fin, { globoInicio: true });
+    const globo = lado === "inicio" ? (g.globoInicio ?? bases.inicio) : g.globoFin;
+    const dx = bases.fin[0] - bases.inicio[0];
+    const dy = bases.fin[1] - bases.inicio[1];
+    const largo = Math.hypot(dx, dy);
+    if (largo < 1e-9) return;
+    // Sentido hacia afuera del eje: del interior al extremo que se anota.
+    const direccion: Punto2 =
+      lado === "inicio" ? [-dx / largo, -dy / largo] : [dx / largo, dy / largo];
+    // O011b: 3 mm de avance y un diámetro de globo (8 mm) de desplazamiento.
     const nuevo = agregarCodoEje(
       ajuste,
       lado,
       globo,
-      interior,
-      mmPapelAMetros(5, vista.escala),
+      direccion,
+      mmPapelAMetros(3, vista.escala),
+      mmPapelAMetros(8, vista.escala),
     );
     persistirAjusteEje(globalid, nuevo);
   };
@@ -973,12 +994,34 @@ export function Visor3D({
     let base = cajaConEjes(caja, referencias.ejes);
     if (vista.tipo === "alzado" || vista.tipo === "corte") {
       // O006a: la cámara debe dejar ver las cabezas de nivel y las cotas de afuera.
+      // O011b: las etiquetas van fuera del último eje y las cotas más afuera, así
+      // que se amplía el encuadre en el sentido horizontal de la vista.
       const elevaciones = niveles.map((n) => n.elevacion);
       const minZ = Math.min(base.min[2], ...elevaciones);
       const maxZ = Math.max(base.max[2], ...elevaciones);
+      const d =
+        vista.tipo === "alzado"
+          ? direccionAlzado(vista.orientacion ?? "sur")
+          : normalCorte(vista);
+      let h: [number, number] = [-d[1], d[0]];
+      if (vista.tipo === "corte" && vista.puntoA && vista.puntoB) {
+        const dx = vista.puntoB[0] - vista.puntoA[0];
+        const dy = vista.puntoB[1] - vista.puntoA[1];
+        const largo = Math.hypot(dx, dy);
+        if (largo > 1e-9) h = [dx / largo, dy / largo];
+      }
+      const margenAnotacion = 8;
       base = {
-        min: [base.min[0] - 4.0, base.min[1] - 4.0, minZ - 0.6],
-        max: [base.max[0] + 4.0, base.max[1] + 4.0, maxZ + 0.6],
+        min: [
+          base.min[0] - 1 - (h[0] < 0 ? margenAnotacion : 0),
+          base.min[1] - 1 - (h[1] < 0 ? margenAnotacion : 0),
+          minZ - 0.6,
+        ],
+        max: [
+          base.max[0] + 1 + (h[0] > 0 ? margenAnotacion : 0),
+          base.max[1] + 1 + (h[1] > 0 ? margenAnotacion : 0),
+          maxZ + 0.6,
+        ],
       };
     } else if (vista.tipo === "planta" && vista.cotasEjes !== false) {
       // Las cotas quedan afuera de las burbujas; el margen extra evita recortarlas.
@@ -989,7 +1032,7 @@ export function Visor3D({
       };
     }
     return base;
-  }, [caja, referencias, niveles, vista.tipo, vista.cotasEjes]);
+  }, [caja, referencias, niveles, vista]);
 
   useEffect(() => {
     const observador = new MutationObserver(() =>
@@ -2389,18 +2432,52 @@ export function Visor3D({
         }
         cruces.sort((a, b) => a.s - b.s);
         const margenEtiqueta = mmAMundo(3, vista.escala);
+        const separacionTexto = mmAMundo(1.5, vista.escala);
         const sMin = cruces.length > 0 ? cruces[0].s : tMin;
         const sMax = cruces.length > 0 ? cruces[cruces.length - 1].s : tMax;
-        const tParcial = tMax + 1.5;
-        const tTotal = tParcial + Math.max(1, mmAMundoConMinimoPx(2.5, vista.escala, mundoPorPx, 11) * 1.5);
+        // O011b: la línea de nivel pasa el último eje 3 mm y ahí empieza la etiqueta.
         const tInicioNivel = Math.min(tMin, sMin - margenEtiqueta);
-        const tFinNivel = Math.max(tMax, sMax + margenEtiqueta, ordenados.length >= 2 ? tTotal + 0.15 : -Infinity);
+        const tFinNivel = cruces.length > 0 ? sMax + margenEtiqueta : tMax;
         const nivelMin = ordenados[0]?.elevacion ?? caja.min[2];
         const nivelMax = ordenados[ordenados.length - 1]?.elevacion ?? caja.max[2];
         const zInferiorEje = nivelMin - Math.max(margenEtiqueta, 0.3);
+        // Borde inferior del globo 3 mm arriba de la línea del nivel más alto.
         const zGlobo = nivelMax + margenEtiqueta + mmAMundo(8, vista.escala) / 2;
         const marca = mmAMundoConMinimoPx(2, vista.escala, mundoPorPx, 6);
         const altoTexto = mmAMundoConMinimoPx(2.5, vista.escala, mundoPorPx, 11);
+        // O011b: etiqueta de nivel fuera del último eje; las cotas van más afuera.
+        const textoNivel = (nivel: Nivel) =>
+          `${nivel.nombre}  ${nivel.elevacion >= 0 ? "+" : ""}${nivel.elevacion.toFixed(2)}`;
+        const anchoNivel = Math.max(
+          ...ordenados.map((nivel) => anchoTextoAprox(textoNivel(nivel), altoTexto)),
+          mmAMundo(4, vista.escala),
+        );
+        const xEtiquetaNivel = tFinNivel + separacionTexto + anchoNivel / 2;
+        const tParcial =
+          tFinNivel + separacionTexto + anchoNivel + separacionTexto;
+        const anchoParcial = Math.max(
+          ...ordenados.slice(0, -1).map((nivel, i) =>
+            anchoTextoAprox(
+              formatearCota(ordenados[i + 1].elevacion - nivel.elevacion),
+              altoTexto,
+            ),
+          ),
+          mmAMundo(4, vista.escala),
+        );
+        const xEtiquetaParcial = tParcial + separacionTexto + anchoParcial / 2;
+        const tTotal =
+          tParcial + separacionTexto + anchoParcial + separacionTexto;
+        const anchoTotal =
+          ordenados.length >= 3
+            ? anchoTextoAprox(
+                `Total ${formatearCota(
+                  ordenados[ordenados.length - 1].elevacion - ordenados[0].elevacion,
+                )}`,
+                altoTexto,
+              )
+            : mmAMundo(4, vista.escala);
+        const xEtiquetaTotal = tTotal + separacionTexto + anchoTotal / 2;
+        anotacionesAlzado.current = [];
         contextoEje.current = {
           tipo: vista.tipo,
           d,
@@ -2418,7 +2495,6 @@ export function Visor3D({
           ),
         };
         const fondo = oscuro ? "#1f2328" : "#ffffff";
-        const firmado = (z: number) => `${z >= 0 ? "+" : ""}${z.toFixed(2)}`;
         const marcarHZ = (t: number, z: number) => {
           const base = puntoHZ(t, z);
           const dx = h[0] / Math.SQRT2;
@@ -2456,11 +2532,11 @@ export function Visor3D({
             3,
             grupoLocal,
           );
-          const texto = `${nivel.nombre}  ${firmado(z)}`;
+          const texto = textoNivel(nivel);
           cabezas.push(texto);
           const sprite = textoCota(texto, colorNivel, fondo, altoTexto, [d[0], d[1], 0]);
           if (sprite) {
-            const pos = puntoHZ(tMax + 0.35, z + altoTexto * 0.95);
+            const pos = puntoHZ(xEtiquetaNivel, z + altoTexto * 0.95);
             sprite.position.set(pos[0], pos[1], pos[2]);
             sprite.renderOrder = 20;
             grupoLocal.add(sprite);
@@ -2471,6 +2547,14 @@ export function Visor3D({
               punto: pos,
               nivel: nivel.globalid,
               nombre: nivel.nombre,
+            });
+            anotacionesAlzado.current.push({
+              tipo: "nivel",
+              texto,
+              centro: pos,
+              ancho: anchoTextoAprox(texto, altoTexto),
+              alto: altoTexto,
+              h: [h[0], h[1], 0],
             });
           }
         }
@@ -2485,7 +2569,7 @@ export function Visor3D({
         if (ordenados.length >= 2) {
           for (const nivel of ordenados) {
             lineaCerrada(
-              [puntoHZ(tMax - 0.1, nivel.elevacion), puntoHZ(tParcial + 0.15, nivel.elevacion)],
+              [puntoHZ(tFinNivel, nivel.elevacion), puntoHZ(tParcial + 0.15, nivel.elevacion)],
               materialNivel,
               3,
               grupoLocal,
@@ -2505,7 +2589,10 @@ export function Visor3D({
             const etiqueta = formatearCota(valor);
             const sprite = textoCota(etiqueta, colorNivel, fondo, altoTexto, [d[0], d[1], 0]);
             if (sprite) {
-              const pos = puntoHZ(tParcial + 0.35, (inferior.elevacion + superior.elevacion) / 2);
+              const pos = puntoHZ(
+                xEtiquetaParcial,
+                (inferior.elevacion + superior.elevacion) / 2,
+              );
               sprite.position.set(pos[0], pos[1], pos[2]);
               sprite.renderOrder = 20;
               grupoLocal.add(sprite);
@@ -2516,6 +2603,14 @@ export function Visor3D({
                 punto: pos,
                 referencia: inferior.globalid,
                 mover: superior.globalid,
+              });
+              anotacionesAlzado.current.push({
+                tipo: "parcial",
+                texto: etiqueta,
+                centro: pos,
+                ancho: anchoTextoAprox(etiqueta, altoTexto),
+                alto: altoTexto,
+                h: [h[0], h[1], 0],
               });
             }
             textos.parciales.push(etiqueta);
@@ -2545,7 +2640,10 @@ export function Visor3D({
             const etiquetaTotal = `Total ${formatearCota(total)}`;
             const spriteTotal = textoCota(etiquetaTotal, colorNivel, fondo, altoTexto, [d[0], d[1], 0]);
             if (spriteTotal) {
-              const pos = puntoHZ(tTotal + 0.35, (primero.elevacion + ultimo.elevacion) / 2);
+              const pos = puntoHZ(
+                xEtiquetaTotal,
+                (primero.elevacion + ultimo.elevacion) / 2,
+              );
               spriteTotal.position.set(pos[0], pos[1], pos[2]);
               spriteTotal.renderOrder = 20;
               grupoLocal.add(spriteTotal);
@@ -2554,6 +2652,14 @@ export function Visor3D({
                 texto: etiquetaTotal,
                 valor: total,
                 punto: pos,
+              });
+              anotacionesAlzado.current.push({
+                tipo: "total",
+                texto: etiquetaTotal,
+                centro: pos,
+                ancho: anchoTextoAprox(etiquetaTotal, altoTexto),
+                alto: altoTexto,
+                h: [h[0], h[1], 0],
               });
             }
             textos.total = etiquetaTotal;
@@ -2641,7 +2747,13 @@ export function Visor3D({
             desde: tInicioNivel,
             hasta: tFinNivel,
             ejes: cruces.map(({ s }) => s),
+            etiquetaX: xEtiquetaNivel - anchoNivel / 2,
+            parcialX: tParcial,
+            totalX: tTotal,
           });
+          contenedor.current.dataset.nivelesZ = JSON.stringify(
+            ordenados.map((nivel) => nivel.elevacion),
+          );
         }
       }
     }
@@ -3467,9 +3579,25 @@ export function Visor3D({
         if (arrEje.indice !== null) {
           const actual = normalizarAjusteEje(cambios[arrEje.globalid] ?? arrEje.originales[arrEje.globalid]) ?? {};
           const clave = arrEje.lado === "inicio" ? "codosInicio" : "codosFin";
+          const claveExtremo = arrEje.lado === "inicio" ? "extremoInicio" : "extremoFin";
           const codos = [...(actual[clave] ?? [])];
+          const anterior = codos[arrEje.indice];
+          const delta: Punto2 = anterior
+            ? [punto[0] - anterior[0], punto[1] - anterior[1]]
+            : [0, 0];
           codos[arrEje.indice] = [punto[0], punto[1]];
-          cambios[arrEje.globalid] = { ...actual, [clave]: codos };
+          // O011b: al arrastrar un codo, el resto del tramo y el globo lo siguen.
+          for (let i = arrEje.indice + 1; i < codos.length; i += 1) {
+            codos[i] = [codos[i][0] + delta[0], codos[i][1] + delta[1]];
+          }
+          const siguiente: AjusteEjeVista = { ...actual, [clave]: codos };
+          if (actual[claveExtremo]) {
+            siguiente[claveExtremo] = [
+              actual[claveExtremo]![0] + delta[0],
+              actual[claveExtremo]![1] + delta[1],
+            ];
+          }
+          cambios[arrEje.globalid] = siguiente;
         } else if (arrEje.candado) {
           const actual = cambios[arrEje.globalid] ?? arrEje.originales[arrEje.globalid];
           cambios[arrEje.globalid] = fijarExtremoEje(actual, arrEje.lado, punto) ?? {};
@@ -3927,6 +4055,67 @@ export function Visor3D({
         colorAnillo: oscuro ? "#e0b07a" : estilos.categorias.ejes.color,
         colorFondo: oscuro ? "#1f2328" : "#ffffff",
       };
+    };
+    // O011b: rectángulos de etiquetas, globos y líneas de eje en pantalla, para
+    // comprobar que nada se encima en el alzado.
+    (nodo as unknown as Record<string, unknown>).__openrvtAlzadoAnotacionesPantalla = () => {
+      const camera = camara.current;
+      if (!camera) return null;
+      camera.updateMatrixWorld();
+      const rect = nodo.getBoundingClientRect();
+      const proyectar = (x: number, y: number, z: number) => {
+        const punto = new THREE.Vector3(x, y, z).project(camera);
+        return {
+          x: rect.left + ((punto.x + 1) / 2) * rect.width,
+          y: rect.top + ((1 - punto.y) / 2) * rect.height,
+        };
+      };
+      const etiquetas = anotacionesAlzado.current.map((anotacion) => {
+        const [x, y, z] = anotacion.centro;
+        const hw = anotacion.ancho / 2;
+        const hh = anotacion.alto / 2;
+        const esquinas = [
+          proyectar(x - anotacion.h[0] * hw, y - anotacion.h[1] * hw, z + hh),
+          proyectar(x + anotacion.h[0] * hw, y + anotacion.h[1] * hw, z + hh),
+          proyectar(x + anotacion.h[0] * hw, y + anotacion.h[1] * hw, z - hh),
+          proyectar(x - anotacion.h[0] * hw, y - anotacion.h[1] * hw, z - hh),
+        ];
+        return {
+          tipo: anotacion.tipo,
+          texto: anotacion.texto,
+          x0: Math.min(...esquinas.map((p) => p.x)),
+          y0: Math.min(...esquinas.map((p) => p.y)),
+          x1: Math.max(...esquinas.map((p) => p.x)),
+          y1: Math.max(...esquinas.map((p) => p.y)),
+        };
+      });
+      const globos = ejesInteraccion.current
+        .filter((asa) => asa.tipo === "globo")
+        .map((asa) => {
+          const centro = new THREE.Vector3(...asa.punto);
+          const radioMundo = mmAMundo(8, vista.escala) / 2;
+          const derecha = new THREE.Vector3()
+            .setFromMatrixColumn(camera.matrixWorld, 0)
+            .normalize()
+            .multiplyScalar(radioMundo);
+          const borde = centro.clone().add(derecha);
+          const pc = centro.clone().project(camera);
+          const pb = borde.clone().project(camera);
+          return {
+            etiqueta: asa.etiqueta,
+            x: rect.left + ((pc.x + 1) / 2) * rect.width,
+            y: rect.top + ((1 - pc.y) / 2) * rect.height,
+            radio: Math.hypot(
+              ((pb.x - pc.x) / 2) * rect.width,
+              ((pc.y - pb.y) / 2) * rect.height,
+            ),
+          };
+        });
+      const lineas = lineasEje.current.map((linea) => ({
+        etiqueta: linea.etiqueta,
+        puntos: linea.puntos.map(([x, y, z]) => proyectar(x, y, z)),
+      }));
+      return { etiquetas, globos, lineas };
     };
     // Utilidad de las E2E: acercar o alejar por un factor exacto (0.125 = ×8).
     (nodo as unknown as Record<string, unknown>).__openrvtZoom = (factor: number) => {

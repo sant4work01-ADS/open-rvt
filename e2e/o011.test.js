@@ -14,6 +14,41 @@ const RAIZ = path.resolve(__dirname, "..");
 const RESULTADOS = path.join(RAIZ, "resultados", "O011");
 fs.mkdirSync(RESULTADOS, { recursive: true });
 
+// O011b: geometría de las comprobaciones de solape en pantalla.
+function segmentoIntersecaRect(a, b, r) {
+  let t0 = 0;
+  let t1 = 1;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const pruebas = [
+    [-dx, a.x - r.x0],
+    [dx, r.x1 - a.x],
+    [-dy, a.y - r.y0],
+    [dy, r.y1 - a.y],
+  ];
+  for (const [p, q] of pruebas) {
+    if (Math.abs(p) < 1e-9) {
+      if (q < 0) return false;
+      continue;
+    }
+    const t = q / p;
+    if (p < 0) {
+      if (t > t1) return false;
+      if (t > t0) t0 = t;
+    } else {
+      if (t < t0) return false;
+      if (t < t1) t1 = t;
+    }
+  }
+  return true;
+}
+
+function rectIntersecaCirculo(r, c) {
+  const x = Math.max(r.x0, Math.min(c.x, r.x1));
+  const y = Math.max(r.y0, Math.min(c.y, r.y1));
+  return Math.hypot(c.x - x, c.y - y) <= c.radio;
+}
+
 async function textoDom(ses, selector) {
   return ses.driver.executeScript(
     (selector) => document.querySelector(selector)?.textContent?.trim() ?? null,
@@ -357,28 +392,53 @@ test("O011-2: dos codos, tercero deshabilitado, candado, guardar/reabrir y desha
     await activar(ses, "eje-codo-fin-agregar");
     let a = await ajustes(ses);
     assert.equal(a[eje1.globalid].codosFin.length, 1);
-    // 5 mm de papel a 1:100 = 0.5 m; el primer codo va 0.5 m hacia la línea y
-    // 0.5 m de lado. La dirección es del globo al interior y el lado, +X.
+    // O011b: primer codo con avance 3 mm = 0.3 m y desplazamiento lateral de un
+    // globo (8 mm = 0.8 m). La línea termina en `fin`; el globo va al final:
+    //   codo = fin + dir*0.3
+    //   globo = codo + perp*0.8 + dir*0.3  (perp = [dir.y, -dir.x])
     const fin = [eje1.x2, eje1.y2];
     const interior = [eje1.x1, eje1.y1];
-    const largo = Math.hypot(interior[0] - fin[0], interior[1] - fin[1]);
-    const dir = [(interior[0] - fin[0]) / largo, (interior[1] - fin[1]) / largo];
-    const esperado1 = [fin[0] + dir[0] * 0.5 - dir[1] * 0.5, fin[1] + dir[1] * 0.5 + dir[0] * 0.5];
+    const largo = Math.hypot(fin[0] - interior[0], fin[1] - interior[1]);
+    const dir = [(fin[0] - interior[0]) / largo, (fin[1] - interior[1]) / largo];
+    const perp = [dir[1], -dir[0]];
+    const esperado1 = [fin[0] + dir[0] * 0.3, fin[1] + dir[1] * 0.3];
+    const globo1 = [
+      esperado1[0] + perp[0] * 0.8 + dir[0] * 0.3,
+      esperado1[1] + perp[1] * 0.8 + dir[1] * 0.3,
+    ];
+    const cerca = (p, q) => Math.abs(p[0] - q[0]) < 1e-6 && Math.abs(p[1] - q[1]) < 1e-6;
     assert.ok(
-      Math.abs(a[eje1.globalid].codosFin[0][0] - esperado1[0]) < 1e-6 &&
-        Math.abs(a[eje1.globalid].codosFin[0][1] - esperado1[1]) < 1e-6,
-      `el codo no está a 5 mm: ${JSON.stringify(a[eje1.globalid].codosFin[0])} vs ${esperado1}`,
+      cerca(a[eje1.globalid].codosFin[0], esperado1),
+      `el primer codo no está a 3 mm: ${JSON.stringify(a[eje1.globalid].codosFin[0])} vs ${esperado1}`,
     );
+    assert.ok(
+      a[eje1.globalid].extremoFin && cerca(a[eje1.globalid].extremoFin, globo1),
+      `el globo no se desplazó un diámetro: ${JSON.stringify(a[eje1.globalid].extremoFin)} vs ${globo1}`,
+    );
+
     await activar(ses, "eje-codo-fin-agregar");
     a = await ajustes(ses);
     assert.equal(a[eje1.globalid].codosFin.length, 2);
+    // El segundo codo es el globo anterior; hay 3 mm hasta el borde del globo y
+    // 4 mm más hasta su centro (radio): el globo sube 0.7 m.
+    assert.ok(cerca(a[eje1.globalid].codosFin[1], globo1), "el segundo codo no continúa el tramo");
+    const globo2 = [globo1[0] + dir[0] * 0.7, globo1[1] + dir[1] * 0.7];
+    assert.ok(cerca(a[eje1.globalid].extremoFin, globo2), "el globo no siguió al segundo codo");
     const boton = await ses.porTestid("eje-codo-fin-agregar");
     assert.equal(await boton.getAttribute("disabled"), "true", "el tercer codo debe estar deshabilitado");
-    await ses.captura(path.join(RESULTADOS, "eje-2-codos.png"));
+    await activar(ses, "visor-ajustar");
+    // Un poco más de aire para que los codos y el globo desplazado no queden bajo
+    // la barra flotante del eje seleccionado.
+    await ses.driver.executeScript(() =>
+      document.querySelector('[data-testid="visor"]').__openrvtZoom(1.5),
+    );
+    await esperar(600);
+    await ses.captura(path.join(RESULTADOS, "planta-codos.png"));
 
     // Abrir el candado del fin y arrastrarlo 1 m: solo ese eje cambia.
     await activar(ses, "eje-candado-fin");
     assert.equal(await (await ses.porTestid("eje-candado-fin")).getAttribute("aria-pressed"), "true");
+    const antesArrastre = a[eje1.globalid].extremoFin;
     await arrastrarExtremo(ses, "1", "fin", [fin[0], fin[1] + 1]);
     a = await ajustes(ses);
     assert.deepEqual(Object.keys(a), [eje1.globalid], "el arrastre con candado abierto tocó otros ejes");
@@ -388,10 +448,13 @@ test("O011-2: dos codos, tercero deshabilitado, candado, guardar/reabrir y desha
       `el extremo no se movió 1 m: ${a[eje1.globalid].extremoFin}`,
     );
 
-    // Ctrl+Z: una entrada por arrastre.
+    // Ctrl+Z: una entrada por arrastre y vuelve al globo de los codos.
     await tecla(ses, "z", "KeyZ", { ctrlKey: true });
     a = await ajustes(ses);
-    assert.equal(a[eje1.globalid]?.extremoFin, undefined, "Ctrl+Z no deshizo el arrastre");
+    assert.ok(
+      a[eje1.globalid]?.extremoFin && cerca(a[eje1.globalid].extremoFin, antesArrastre),
+      "Ctrl+Z no devolvió el globo al extremo de los codos",
+    );
 
     // Cerrar el candado devuelve el extremo a la alineación.
     await activar(ses, "eje-candado-fin");
@@ -466,21 +529,40 @@ test("O011-3: cotas .15 por la pantalla y niveles/globos del alzado", async () =
       x.desde <= Math.min(...x.ejes) && x.hasta >= Math.max(...x.ejes),
       `las líneas de nivel no cubren todos los ejes: ${JSON.stringify(x)}`,
     );
+    assert.ok(
+      x.hasta >= Math.max(...x.ejes) + 0.3,
+      `la línea de nivel no pasa el último eje 3 mm: ${JSON.stringify(x)}`,
+    );
 
-    // Ningún globo queda por debajo del Nivel 4 (comparación en pantalla).
-    const yNivel4 = await ses.driver.executeScript(async () => {
-      const visor = document.querySelector('[data-testid="visor"]');
-      const texto = JSON.parse(visor.getAttribute("data-niveles-cotas"));
-      const cabecera = texto.flatMap((n) => n.cabezas).find((c) => c.startsWith("Nivel 4"));
-      return visor.__openrvtCotaAPantalla(cabecera, 0).y;
-    });
+    // O011b: el borde inferior de cada globo queda arriba de la línea del Nivel 4.
+    const nivelesZ = JSON.parse(await atributoVisor(ses, "niveles-z"));
+    const zNivel4 = Math.max(...nivelesZ);
+    const yNivel4 = await ses.driver.executeScript(
+      (z) => document.querySelector('[data-testid="visor"]').__openrvtMundoAPantalla(0, 0, z).y,
+      zNivel4,
+    );
+    const margen3mm = await ses.driver.executeScript(
+      (z) => {
+        const visor = document.querySelector('[data-testid="visor"]');
+        return (
+          visor.__openrvtMundoAPantalla(0, 0, z).y -
+          visor.__openrvtMundoAPantalla(0, 0, z + 0.3).y
+        );
+      },
+      zNivel4,
+    );
     for (const etiqueta of orden) {
       const globo = await ses.driver.executeScript(
         (etiqueta) =>
-          document.querySelector('[data-testid="visor"]').__openrvtEjeAPantalla(etiqueta, "fin"),
+          document.querySelector('[data-testid="visor"]').__openrvtEjeBurbujaPantalla(etiqueta),
         etiqueta,
       );
-      assert.ok(globo.y < yNivel4, `el globo del eje ${etiqueta} no está arriba del Nivel 4`);
+      assert.ok(globo, `no se encontró el globo del eje ${etiqueta}`);
+      assert.ok(
+        globo.y + globo.radio < yNivel4 - margen3mm + 1,
+        `el borde inferior del globo ${etiqueta} no deja 3 mm sobre el Nivel 4: ` +
+          `${globo.y + globo.radio} vs ${yNivel4}`,
+      );
     }
     // Los codos y su menú contextual también funcionan en el alzado.
     await seleccionarEje(ses, "3");
@@ -521,6 +603,90 @@ test("O011-3: cotas .15 por la pantalla y niveles/globos del alzado", async () =
     );
 
     await ses.captura(path.join(RESULTADOS, "alzado-norte.png"));
+
+    // O011b: etiquetas y cotas fuera de los ejes; nada se encima con un globo.
+    const anotaciones = await ses.driver.executeScript(() =>
+      document.querySelector('[data-testid="visor"]').__openrvtAlzadoAnotacionesPantalla(),
+    );
+    assert.ok(anotaciones, "no se pudieron leer las anotaciones del alzado");
+    const globos = anotaciones.globos;
+    assert.equal(globos.length, 7, "faltan globos en el alzado");
+    const segmentos = anotaciones.lineas.flatMap((linea) =>
+      linea.puntos.slice(1).map((p, i) => [linea.puntos[i], p]),
+    );
+    const maxXeje = Math.max(...segmentos.flatMap(([a, b]) => [a.x, b.x]));
+    for (const etiqueta of anotaciones.etiquetas) {
+      if (etiqueta.tipo === "nivel") {
+        assert.ok(
+          etiqueta.x0 > maxXeje,
+          `la etiqueta «${etiqueta.texto}» está dentro de los ejes: ${etiqueta.x0} <= ${maxXeje}`,
+        );
+      }
+      for (const [a, b] of segmentos) {
+        assert.ok(
+          !segmentoIntersecaRect(a, b, etiqueta),
+          `«${etiqueta.texto}» se cruza con una línea de eje`,
+        );
+      }
+      for (const globo of globos) {
+        assert.ok(
+          !rectIntersecaCirculo(etiqueta, globo),
+          `«${etiqueta.texto}» se cruza con el globo ${globo.etiqueta}`,
+        );
+      }
+    }
+    const x1Etiquetas = Math.max(
+      ...anotaciones.etiquetas.filter((e) => e.tipo === "nivel").map((e) => e.x1),
+    );
+    for (const cota of anotaciones.etiquetas.filter((e) => e.tipo !== "nivel")) {
+      assert.ok(
+        cota.x0 > x1Etiquetas,
+        `la cota «${cota.texto}» no quedó más afuera que las etiquetas de nivel`,
+      );
+    }
+
+    // O011b: «Agregar codo» desplaza el globo del eje 4 al menos un diámetro en X.
+    await seleccionarEje(ses, "4");
+    const globoAntes = await ses.driver.executeScript(() =>
+      document.querySelector('[data-testid="visor"]').__openrvtEjeBurbujaPantalla("4"),
+    );
+    await activar(ses, "eje-codo-fin-agregar");
+    const globoDespues = await ses.driver.executeScript(() =>
+      document.querySelector('[data-testid="visor"]').__openrvtEjeBurbujaPantalla("4"),
+    );
+    const diametro = 2 * globoAntes.radio;
+    assert.ok(
+      Math.abs(globoDespues.x - globoAntes.x) >= diametro - 1,
+      `el globo del eje 4 no se movió un diámetro: ${globoAntes.x} → ${globoDespues.x}`,
+    );
+    // Se quita el codo para que la captura de entrega siga limpia.
+    const codo4 = await ses.driver.executeScript(() =>
+      document.querySelector('[data-testid="visor"]').__openrvtEjeAPantalla("4", "fin", 0),
+    );
+    await ses.driver.executeScript(
+      (punto) => {
+        const canvas = document.querySelector('[data-testid="visor"] canvas');
+        canvas.dispatchEvent(
+          new MouseEvent("contextmenu", {
+            bubbles: true,
+            cancelable: true,
+            button: 2,
+            clientX: punto.x,
+            clientY: punto.y,
+          }),
+        );
+      },
+      codo4,
+    );
+    await esperar(300);
+    await activar(ses, "eje-quitar-codo");
+    const globoRestaurado = await ses.driver.executeScript(() =>
+      document.querySelector('[data-testid="visor"]').__openrvtEjeBurbujaPantalla("4"),
+    );
+    assert.ok(
+      Math.abs(globoRestaurado.x - globoAntes.x) < 1,
+      "quitar el codo no devolvió el globo a su lugar",
+    );
 
     // Nitidez: globo de 8 mm de papel a ×1 y ×8, con el borde escalado. Se elige
     // el globo más cercano al centro para que el zoom ×8 no lo saque de pantalla.

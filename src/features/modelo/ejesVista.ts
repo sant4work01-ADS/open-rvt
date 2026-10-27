@@ -46,10 +46,6 @@ export function mmPapelAMetros(mm: number, escala: number): number {
   return (mm * escala) / 1000;
 }
 
-function restar(a: Punto2, b: Punto2): Punto2 {
-  return [a[0] - b[0], a[1] - b[1]];
-}
-
 function normalizar(v: Punto2): Punto2 {
   const largo = Math.hypot(v[0], v[1]);
   if (largo < 1e-12) return [1, 0];
@@ -90,10 +86,15 @@ export function geometriaEje(
   opciones: { globoInicio?: boolean } = {},
 ): GeometriaEje {
   const limpio = normalizarAjusteEje(ajuste);
-  const globoInicio = limpio?.extremoInicio ?? inicio;
-  const globoFin = limpio?.extremoFin ?? fin;
-  const tramoInicio = [inicio, ...(limpio?.codosInicio ?? []), globoInicio];
-  const tramoFin = [fin, ...(limpio?.codosFin ?? []), globoFin];
+  // O011b: sin extremo libre el globo vive en el último codo; así el globo sigue
+  // a los vértices al arrastrarlos y vuelve al codo cuando se cierra el candado.
+  const codosInicio = limpio?.codosInicio ?? [];
+  const codosFin = limpio?.codosFin ?? [];
+  const globoInicio =
+    limpio?.extremoInicio ?? codosInicio[codosInicio.length - 1] ?? inicio;
+  const globoFin = limpio?.extremoFin ?? codosFin[codosFin.length - 1] ?? fin;
+  const tramoInicio = [inicio, ...codosInicio, globoInicio];
+  const tramoFin = [fin, ...codosFin, globoFin];
   const puntos = deduplicar([
     ...tramoInicio.slice().reverse(),
     ...tramoFin,
@@ -108,30 +109,55 @@ export function geometriaEje(
 }
 
 /**
- * Agrega un codo al extremo. Queda a la distancia indicada del globo (5 mm de papel)
- * y desplazado 5 mm de lado; el segundo va al otro lado para poder distinguirlos.
- * `interior` es un punto del tramo hacia el que entra la línea.
+ * O011b: agrega un codo al extremo como el «Add elbow» de Revit.
+ *
+ * - El primer codo avanza `avance` (3 mm de papel) por la línea y desplaza el
+ *   globo `lateral` (un diámetro de globo) hacia un lado. El tramo queda:
+ *   avance, diagonal hasta el desplazamiento y globo.
+ * - El segundo codo añade el tramo recto final: avance, diagonal, avance y globo.
+ * - La línea base sigue terminando en el extremo original; el globo ya no vuelve
+ *   a él, sino que se dibuja al final de los codos.
+ *
+ * `direccion` es el sentido hacia afuera del eje (del interior al extremo).
  */
 export function agregarCodoEje(
   ajuste: AjusteEjeVista | undefined,
   lado: LadoEje,
   globo: Punto2,
-  interior: Punto2,
-  distancia: number,
+  direccion: Punto2,
+  avance: number,
+  lateral: number,
 ): AjusteEjeVista {
   const base = normalizarAjusteEje(ajuste) ?? {};
-  const clave = lado === "inicio" ? "codosInicio" : "codosFin";
-  const codos = [...(base[clave] ?? [])];
+  const claveCodos = lado === "inicio" ? "codosInicio" : "codosFin";
+  const claveExtremo = lado === "inicio" ? "extremoInicio" : "extremoFin";
+  const codos = [...(base[claveCodos] ?? [])];
   if (codos.length >= MAXIMO_CODOS) return base;
-  const direccion = normalizar(restar(interior, globo));
-  const ladoPerpendicular: Punto2 =
-    codos.length === 0 ? [-direccion[1], direccion[0]] : [direccion[1], -direccion[0]];
-  const nuevo: Punto2 = [
-    globo[0] + direccion[0] * distancia + ladoPerpendicular[0] * distancia,
-    globo[1] + direccion[1] * distancia + ladoPerpendicular[1] * distancia,
+  const afuera = normalizar(direccion);
+  const ladoPerpendicular: Punto2 = [afuera[1], -afuera[0]];
+  if (codos.length === 0) {
+    // Primer codo: recto 3 mm y la diagonal que desplaza el globo un diámetro.
+    const primero: Punto2 = [
+      globo[0] + afuera[0] * avance,
+      globo[1] + afuera[1] * avance,
+    ];
+    const nuevoGlobo: Punto2 = [
+      primero[0] + ladoPerpendicular[0] * lateral + afuera[0] * avance,
+      primero[1] + ladoPerpendicular[1] * lateral + afuera[1] * avance,
+    ];
+    return { ...base, [claveCodos]: [primero], [claveExtremo]: nuevoGlobo };
+  }
+  // Segundo codo: el globo desplazado pasa a ser vértice y se añade el tramo
+  // recto final de 3 mm hasta el borde del globo. El centro queda 3 mm más el
+  // radio (medio diámetro), para que el asa del codo no quede dentro del círculo.
+  const segundo: Punto2 = [globo[0], globo[1]];
+  const hastaElCentro = avance + lateral / 2;
+  const nuevoGlobo: Punto2 = [
+    segundo[0] + afuera[0] * hastaElCentro,
+    segundo[1] + afuera[1] * hastaElCentro,
   ];
-  codos.push(nuevo);
-  return { ...base, [clave]: codos };
+  codos.push(segundo);
+  return { ...base, [claveCodos]: codos, [claveExtremo]: nuevoGlobo };
 }
 
 /** Quita un codo por su índice; conserva el resto del ajuste. */
@@ -148,7 +174,11 @@ export function quitarCodoEje(
   codos.splice(indice, 1);
   const salida: AjusteEjeVista = { ...base };
   if (codos.length > 0) salida[clave] = codos;
-  else delete salida[clave];
+  else {
+    // O011b: sin codos el extremo vuelve a la línea, como antes de agregarlos.
+    delete salida[clave];
+    delete salida[lado === "inicio" ? "extremoInicio" : "extremoFin"];
+  }
   return normalizarAjusteEje(salida);
 }
 
