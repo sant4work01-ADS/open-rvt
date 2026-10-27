@@ -1930,7 +1930,8 @@ export function Visor3D({
               );
             }
             const etiqueta = formatearCota(familia.rebase.valor);
-            const sprite = textoCota(etiqueta, colorRebase, fondo, altoTextoRebase);
+            // O010: el valor del rebase se rotula para que no parezca una cota suelta.
+            const sprite = textoCota(`Rebase ${etiqueta}`, colorRebase, fondo, altoTextoRebase);
             if (sprite) {
               const pos = punto(sRebase - altoTexto * 0.9, (desde + hasta) / 2);
               sprite.position.set(pos[0], pos[1], zCota + 0.01);
@@ -3546,7 +3547,14 @@ export function Visor3D({
             </span>
           )}
           {cotaEditando.tipo !== "elevacion" && cotaEditando.tipo !== "rebase" && (
-            <label className="flex items-center gap-1 whitespace-nowrap text-muted-foreground">
+            <label
+              className="flex items-center gap-1 whitespace-nowrap text-muted-foreground"
+              title={
+                cotaEditando.tipo === "nivel"
+                  ? "También desplaza los niveles superiores la misma distancia."
+                  : "También desplaza los ejes siguientes la misma distancia."
+              }
+            >
               <input
                 type="checkbox"
                 data-testid="cota-mover-siguientes"

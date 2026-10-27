@@ -187,6 +187,22 @@ sin clave muestran el aviso amarillo «Sin clave de PP: ponla en el tipo».
 contrato de intercambio: formato, versión, proyecto, archivo IFC, fecha y partidas con
 su total y renglones. El total de cada partida es exactamente la suma de sus resultados.
 
+## Novedades de la versión 0.5.7
+
+- **La cámara ya no se mueve sola:** el zoom y el encuadre se conservan por vista
+  (planta, alzado, corte, 3D iso y perspectiva) al crear o editar elementos. Solo
+  cambian con «Ajustar» o cuando el usuario navega.
+- **3D en perspectiva corregido:** mismas aristas que el isométrico y sombreado plano,
+  con una normal por cara, sin degradados ni manchas.
+- **Esquinas de muro limpias** en L, T y cruz, también con espesores distintos: inglete
+  exacto en 3D y en la huella de planta.
+- **Niveles:** cotas como `.1`, `0,1`, `10cm`, `100mm` y negativas; el error se muestra
+  junto a la caja; la cota total se rotula «Total»; los ejes del alzado se ordenan de
+  izquierda a derecha.
+- **Paneles «Vistas» y «Propiedades» redimensionables**, con ancho recordado.
+- **Rango de vista** (altura del plano de corte, profundidad y sobre el corte) en un
+  grupo plegado «Rango de vista (avanzado)», con explicación en cada campo.
+
 ## Novedades de la versión 0.5.6
 
 - **Partidas de medición por tipo** en el pset `OPENRVT_Medicion`, con criterios de

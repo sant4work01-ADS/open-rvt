@@ -349,8 +349,8 @@ export function textoDeDetalle(evento?: EventoBitacora): string {
 
 async function datosDelSistema(): Promise<Record<string, unknown>> {
   let version = "";
-  let python = "";
-  let ifcopenshell = "";
+  let python: string;
+  let ifcopenshell: string;
   try {
     const respuesta = await commands.versionApp();
     if (respuesta.status === "ok") version = String(respuesta.data);

@@ -188,6 +188,22 @@ key: add it to the type".
 the interchange contract: format, version, project, IFC file, date and items with their
 total and rows. Each item total is exactly the sum of its results.
 
+## What's new in version 0.5.7
+
+- **The camera no longer moves on its own:** zoom and framing are kept per view
+  (plan, elevation, section, 3D iso and perspective) while elements are created or
+  edited. Only "Fit" or user navigation changes them.
+- **Perspective 3D fixed:** same edges as isometric and flat shading, one normal per
+  face, with no gradients or blotches.
+- **Clean wall corners** in L, T and cross joins, including unequal thicknesses: exact
+  mitre in 3D and in the plan footprint.
+- **Levels:** values such as `.1`, `0,1`, `10cm`, `100mm` and negatives are accepted;
+  errors show next to the box; the total dimension is labelled "Total"; elevation axes
+  are ordered left to right.
+- **Resizable "Views" and "Properties" panels**, with the width remembered.
+- **View range** (cut plane height, depth and above-cut height) in a collapsed
+  "View range (advanced)" group, with a short explanation on each field.
+
 ## What's new in version 0.5.6
 
 - **Measurement items per type** in the `OPENRVT_Medicion` property set, with core,

@@ -1,7 +1,7 @@
 // OPEN-RVT (O010): paneles laterales redimensionables. El ancho se guarda en
 // localStorage (preferencia de la aplicación) y se puede cambiar arrastrando el borde
 // o con las flechas del teclado.
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 
 export interface LimitesPanel {
   minimo: number;
@@ -62,16 +62,11 @@ export function PanelRedimensionable({
   const [arrastrando, setArrastrando] = useState(false);
   const inicio = useRef<{ x: number; ancho: number } | null>(null);
   const anchoRef = useRef(ancho);
-  anchoRef.current = ancho;
-
-  // Si cambian los límites (por ejemplo al montar otra escala), se recorta.
-  useEffect(() => {
-    setAncho((actual) => limitarAnchoPanel(actual, limites));
-  }, [limites]);
 
   const fijar = useCallback(
     (valor: number, persistir: boolean) => {
       const nuevo = limitarAnchoPanel(valor, limites);
+      anchoRef.current = nuevo;
       setAncho(nuevo);
       if (persistir) guardarAncho(id, nuevo);
     },
