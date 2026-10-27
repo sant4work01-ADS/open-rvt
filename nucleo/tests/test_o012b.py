@@ -196,3 +196,192 @@ def test_columna_en_esquina_de_losa_no_traslapa_volumen() -> None:
     _cx0, _cx1, _cy0, _cy1, cz0, cz1 = _caja(nucleo, columna)
     assert cz0 < z0 and cz1 > z1
     assert _volumen_entre(nucleo, losa, columna) == pytest.approx(0.0, abs=1e-9)
+
+
+def test_muro_entre_castillos_largo_area_y_volumen_de_la_tabla() -> None:
+    nucleo, nivel = _nuevo()
+    muro = nucleo.muro_crear(MURO, nivel, 0, 0, 4, 0, altura=2.60)["creados"][0]
+    c1 = nucleo.castillo_crear_en_muro(K, muro, 0.0)["creados"][0]
+    c2 = nucleo.castillo_crear_en_muro(K, muro, 4.0)["creados"][0]
+
+    x0, x1, _y0, _y1, z0, z1 = _caja(nucleo, muro)
+    assert x1 - x0 == pytest.approx(3.85, abs=1e-9)
+    assert (z0, z1) == pytest.approx((0.0, 2.60), abs=1e-9)
+    assert _volumen_malla(nucleo, muro) == pytest.approx(3.85 * 2.60 * 0.15, abs=1e-9)
+
+    info = next(
+        e for e in nucleo.cantidades_estructura()["elementos"]
+        if e["globalid"] == muro
+    )
+    assert info["detalle"]["area_neta_m2"] == pytest.approx(10.01, abs=1e-9)
+    for castillo in (c1, c2):
+        assert _volumen_malla(nucleo, castillo) == pytest.approx(0.15 * 0.15 * 2.60, abs=1e-9)
+        assert _volumen_entre(nucleo, muro, castillo) == pytest.approx(0.0, abs=1e-9)
+
+
+def test_muro_apoya_en_dala_y_corona_en_cerramiento_sin_traslape() -> None:
+    nucleo, nivel = _nuevo()
+    muro = nucleo.muro_crear(MURO, nivel, 0, 0, 4, 0, altura=2.60)["creados"][0]
+    dala = nucleo.dala_crear_en_muro("DD-1 Dala de desplante 15×20", muro)["creados"][0]
+    cerramiento = nucleo.cerramiento_crear_en_muro(
+        "CE-1 Cerramiento 15×20", muro
+    )["creados"][0]
+    nucleo.castillo_crear_en_muro(K, muro, 0.0)
+    nucleo.castillo_crear_en_muro(K, muro, 4.0)
+
+    _x0, _x1, _y0, _y1, z0, z1 = _caja(nucleo, muro)
+    # Dala 0.20 en la base; cerramiento 0.20 en la corona.
+    assert (z0, z1) == pytest.approx((0.20, 2.40), abs=1e-9)
+    assert _volumen_malla(nucleo, muro) == pytest.approx(3.85 * 0.15 * 2.20, abs=1e-9)
+    assert _volumen_entre(nucleo, muro, dala) == pytest.approx(0.0, abs=1e-9)
+    assert _volumen_entre(nucleo, muro, cerramiento) == pytest.approx(0.0, abs=1e-9)
+
+    info = next(
+        e for e in nucleo.cantidades_estructura()["elementos"]
+        if e["globalid"] == muro
+    )
+    assert info["detalle"]["area_neta_m2"] == pytest.approx(3.85 * 2.20, abs=1e-9)
+    assert info["detalle"]["base_m"] == pytest.approx(0.20, abs=1e-9)
+    assert info["detalle"]["cima_m"] == pytest.approx(2.40, abs=1e-9)
+
+
+def test_muro_sobre_contratrabe_no_traslapa_y_conserva_su_largo() -> None:
+    nucleo, nivel = _nuevo()
+    muro = nucleo.muro_crear(MURO, nivel, 0, 0, 4, 0, altura=2.60)["creados"][0]
+    nucleo.castillo_crear_en_muro(K, muro, 0.0)
+    nucleo.castillo_crear_en_muro(K, muro, 4.0)
+    ct = nucleo.viga_crear(CT, nivel, 0, 0, 4, 0, desfase=0.20)["creados"][0]
+
+    _x0, _x1, _y0, _y1, z0, _z1 = _caja(nucleo, muro)
+    assert z0 == pytest.approx(0.20, abs=1e-9)
+    assert _volumen_entre(nucleo, muro, ct) == pytest.approx(0.0, abs=1e-9)
+    # La contratrabe también termina en las caras de los castillos: 3.85 m.
+    assert _volumen_malla(nucleo, ct) == pytest.approx(3.85 * 0.20 * 0.40, abs=1e-9)
+
+
+def test_muro_bajo_losa_se_recorta_en_la_cara_inferior() -> None:
+    nucleo, nivel = _nuevo()
+    muro = nucleo.muro_crear(MURO, nivel, 0, 0, 4, 0, altura=2.60)["creados"][0]
+    nucleo.castillo_crear_en_muro(K, muro, 0.0)
+    nucleo.castillo_crear_en_muro(K, muro, 4.0)
+    losa = nucleo.losa_crear(
+        nivel, [(-1, -1), (5, -1), (5, 1), (-1, 1)], espesor=0.10, desfase=2.60
+    )["creados"][0]
+    _x0, _x1, _y0, _y1, z0, z1 = _caja(nucleo, muro)
+    assert (z0, z1) == pytest.approx((0.0, 2.50), abs=1e-9)
+    assert _volumen_entre(nucleo, muro, losa) == pytest.approx(0.0, abs=1e-9)
+
+
+def _modelo_con_todos_los_elementos() -> ModeloNucleo:
+    """Cimentación, losa con trabes y muro con castillos, dala y cerramiento."""
+    nucleo, nivel = _nuevo()
+    # 1. Zapata + dado + columna, y contratrabe entre dos dados.
+    for x, y in ((0, 0), (4, 0)):
+        columna = nucleo.columna_crear(COL, nivel, x, y, altura=2.0)["creados"][0]
+        nucleo.zapata_bajo_columna(ZAP, columna)
+    nucleo.viga_crear(CT, nivel, 0, 0, 4, 0, desfase=-0.15)
+    # 2. Losa entre cuatro trabes de 0.25 y columnas en las esquinas.
+    nucleo.tipos_crear(
+        "trabe", "T-25", {"seccion": {"Forma": "rectangular", "B": 0.25, "H": 0.40}}
+    )
+    for x, y in ((20, 0), (25, 0), (25, 4), (20, 4)):
+        columna = nucleo.columna_crear(COL, nivel, x, y, altura=2.0)["creados"][0]
+        nucleo.zapata_bajo_columna(ZAP, columna)
+    for x1, y1, x2, y2 in (
+        (20, 0, 25, 0), (25, 0, 25, 4), (25, 4, 20, 4), (20, 4, 20, 0)
+    ):
+        nucleo.viga_crear("T-25", nivel, x1, y1, x2, y2)
+    nucleo.losa_crear(nivel, [(20, 0), (25, 0), (25, 4), (20, 4)], espesor=0.10)
+    # 3. Muro con castillos, dala y cerramiento.
+    muro = nucleo.muro_crear(MURO, nivel, 20, 10, 24, 10, altura=2.60)["creados"][0]
+    nucleo.castillo_crear_en_muro(K, muro, 0.0)
+    nucleo.castillo_crear_en_muro(K, muro, 4.0)
+    nucleo.dala_crear_en_muro("DD-1 Dala de desplante 15×20", muro)
+    nucleo.cerramiento_crear_en_muro("CE-1 Cerramiento 15×20", muro)
+    return nucleo
+
+
+def test_invariante_global_sin_traslapes_en_un_modelo_con_todos_los_elementos() -> None:
+    nucleo = _modelo_con_todos_los_elementos()
+    elementos = nucleo.cantidades_estructura()["elementos"]
+    assert {e["alias"] for e in elementos} >= {
+        "zapata", "contratrabe", "columna", "trabe", "losa", "muro",
+        "castillo", "dala", "cerramiento",
+    }
+    ids = [e["globalid"] for e in elementos]
+    for i, a in enumerate(ids):
+        for b in ids[i + 1:]:
+            assert _volumen_entre(nucleo, a, b) <= 1e-6, f"{a} y {b} se traslapan"
+    cantidades = nucleo.cantidades_estructura()
+    assert cantidades["total"]["volumen_neto_m3"] == pytest.approx(
+        cantidades["union_m3"], abs=1e-6
+    )
+    assert sum(e["volumen_neto_m3"] for e in elementos) == pytest.approx(
+        cantidades["union_m3"], abs=1e-6
+    )
+
+
+def test_flujo_comando_guardar_reabrir_y_medicion_del_muro() -> None:
+    from openrvt_nucleo.servidor import Servidor
+
+    servidor = Servidor()
+    servidor.despachar("proyecto.nuevo", {"nombre": "O012b flujo"})
+    nivel = servidor.despachar("modelo.niveles", {})[0]["globalid"]
+    muro = servidor.despachar(
+        "muros.crear",
+        {"tipo": MURO, "nivel": nivel, "x1": 0, "y1": 0, "x2": 4, "y2": 0, "altura": 2.6},
+    )["creados"][0]
+    for distancia in (0.0, 4.0):
+        servidor.despachar(
+            "castillos.crear_en_muro",
+            {"tipo": K, "muro": muro, "distancia": distancia},
+        )
+    ruta = "/tmp/opencode/o012b-flujo.ifc"
+    servidor.despachar("proyecto.guardar", {"ruta": ruta})
+
+    otro = Servidor()
+    otro.despachar("proyecto.abrir", {"ruta": ruta})
+    cantidades = otro.despachar("cantidades.estructura", {})
+    info = next(e for e in cantidades["elementos"] if e["globalid"] == muro)
+    assert info["volumen_neto_m3"] == pytest.approx(3.85 * 0.15 * 2.60, abs=1e-9)
+    assert info["detalle"]["area_neta_m2"] == pytest.approx(10.01, abs=1e-9)
+    medicion = otro.despachar("medicion.calcular", {})
+    area = next(
+        p for p in medicion["partidas"]
+        if any(r["globalid"] == muro for r in p["renglones"])
+        and p["unidad"] == "m2"
+    )
+    renglon = next(r for r in area["renglones"] if r["globalid"] == muro)
+    assert renglon["resultado"] == pytest.approx(10.01, abs=1e-4)
+
+
+def test_copiar_losa_conserva_recorte_y_pset() -> None:
+    nucleo, nivel = _nuevo()
+    losa = _losa_entre_cuatro_trabes(nucleo, nivel)
+    copia = nucleo.elementos_copiar([losa], 0, 0, 0)["creados"][0]
+    datos = nucleo._leer_pset(_entidad(nucleo, copia), "OPENRVT_Losa")
+    assert datos.get("Contorno")
+    assert datos.get("Area") == pytest.approx(17.8125, abs=1e-9)
+    assert datos.get("Espesor") == pytest.approx(0.10, abs=1e-9)
+    assert _volumen_malla(nucleo, copia) == pytest.approx(1.78125, abs=1e-9)
+
+
+def test_zapata_sin_dado_no_inventa_una_columna_falsa() -> None:
+    nucleo, nivel = _nuevo()
+    nucleo.tipos_crear(
+        "zapata",
+        "Z-0 Sin dado",
+        {"seccion": {"Largo": 1.2, "Ancho": 1.2, "Peralte": 0.25,
+                     "DadoB": 0.0, "DadoH": 0.0, "DadoAlto": 0.0,
+                     "Plantilla": 0.05}},
+    )
+    columna = nucleo.columna_crear(COL, nivel, 0, 0, altura=2.0)["creados"][0]
+    zapata = nucleo.zapata_bajo_columna("Z-0 Sin dado", columna)["creados"][0]
+    entidad = _entidad(nucleo, zapata)
+    assert nucleo._barras_de_dado(entidad) == []
+    # La columna baja hasta la cara superior de la zapata: 1.20²·0.25 + plantilla.
+    info = next(
+        e for e in nucleo.cantidades_estructura()["elementos"]
+        if e["globalid"] == zapata
+    )
+    assert info["volumen_neto_m3"] == pytest.approx(1.2 * 1.2 * 0.25 + 1.2 * 1.2 * 0.05, abs=1e-9)

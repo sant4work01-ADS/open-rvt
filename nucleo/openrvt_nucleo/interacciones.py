@@ -16,6 +16,7 @@ import ifcopenshell.api.spatial as spatial_api
 import ifcopenshell.api.type as type_api
 
 from .modelado import TOLERANCIA, TOLERANCIA_CALCULO, _gid, _nombre, _texto
+from . import uniones
 
 LIGA = "OPENRVT_Liga"
 PRIORIDAD = {
@@ -1172,8 +1173,7 @@ class InteraccionesMixin:
             rot = math.atan2(uy, ux)
             nx, ny = -uy * centro, ux * centro
             cx, cy = (x1 + x2) / 2.0 + nx, (y1 + y2) / 2.0 + ny
-            z0 = datos["z"]
-            z1 = z0 + datos["altura"]
+            z0, z1 = self._limites_verticales_muro(elemento, datos)
             from shapely.geometry import Polygon as _Polygon
 
             coseno, seno = math.cos(rot), math.sin(rot)
@@ -1182,6 +1182,23 @@ class InteraccionesMixin:
                 lx, ly = sx * largo / 2.0, sy * nucleo / 2.0
                 puntos.append((cx + lx * coseno - ly * seno, cy + lx * seno + ly * coseno))
             base = _Polygon(puntos)
+            # O012b: el muro (y sus capas) termina en las caras de castillos y columnas.
+            for columna in self.modelo.by_type("IfcColumn"):
+                barra = self._barra_de_elemento(columna)
+                if barra is None:
+                    continue
+                if min(z1, barra.z1) - max(z0, barra.z0) <= TOLERANCIA_CALCULO:
+                    continue
+                recorte = _Polygon(uniones.huella(barra))
+                if not recorte.is_valid:
+                    recorte = recorte.buffer(0)
+                if not base.intersects(recorte):
+                    continue
+                base = base.difference(recorte)
+                if base.is_empty:
+                    break
+            if base.is_empty:
+                base = _Polygon(puntos)
             vanos = self._aberturas_del_muro(elemento)
             bruto = base.area * (z1 - z0)
             # Los vanos se descuentan del cuerpo y también del volumen bruto.
@@ -1191,8 +1208,7 @@ class InteraccionesMixin:
                 vz1 = vz0 + info["alto"]
                 vx = x1 + ux * (info["distancia"] + info["ancho"] / 2.0)
                 vy = y1 + uy * (info["distancia"] + info["ancho"] / 2.0)
-                vrot = rot
-                vcos, vsen = math.cos(vrot), math.sin(vrot)
+                vcos, vsen = math.cos(rot), math.sin(rot)
                 vp = []
                 for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
                     lx, ly = sx * info["ancho"] / 2.0, sy * (nucleo + 0.02) / 2.0
@@ -1230,40 +1246,15 @@ class InteraccionesMixin:
                         "volumen": None,
                     }
                 )
-            # Área neta del núcleo según la regla de cuantificación.
-            area_neta = largo * datos["altura"]
+            # Área neta del núcleo: largo efectivo del sólido recortado por la altura
+            # también recortada, menos los vanos.
+            largo_neto = base.area / nucleo if nucleo > TOLERANCIA_CALCULO else largo
+            area_neta = largo_neto * (z1 - z0)
             for _vano, info in vanos:
                 area_neta -= info["ancho"] * info["alto"]
-            for dependiente in self._dependientes_de(elemento):
-                dalias = self._estructura_de_tipo(self._tipo_entidad(dependiente))
-                if dalias == "castillo":
-                    p = self._leer_pset(dependiente, "OPENRVT_Estructura")
-                    b = float(p.get("B") or 0.15)
-                    alto = float(p.get("Altura") or datos["altura"])
-                    area_neta -= b * alto
-                elif dalias in ("cerramiento", "dala"):
-                    p = self._leer_pset(dependiente, "OPENRVT_Estructura")
-                    _, seccion, _ = self._seccion_y_armado(self._tipo_entidad(dependiente))
-                    alto = float(p.get("H") or seccion.get("H") or 0.20)
-                    area_neta -= datos["longitud"] * alto
-            for columna in self.modelo.by_type("IfcColumn"):
-                if self._estructura_de_tipo(self._tipo_entidad(columna)) != "columna":
-                    continue
-                p = self._leer_pset(columna, "OPENRVT_Estructura")
-                dx = float(p.get("X") or 0.0) - (x1 + x2) / 2.0
-                dy = float(p.get("Y") or 0.0) - (y1 + y2) / 2.0
-                if abs(dx * ux + dy * uy) > largo / 2.0 + 0.5:
-                    continue
-                if abs(-dx * uy + dy * ux) > nucleo / 2.0 + 0.3:
-                    continue
-                _, seccion, _ = self._seccion_y_armado(self._tipo_entidad(columna))
-                cb = float(p.get("B") or seccion.get("B") or 0.30)
-                ch = float(p.get("H") or seccion.get("H") or 0.30)
-                rel = float(p.get("Rotacion") or 0.0) - rot
-                ancho = abs(cb * math.cos(rel)) + abs(ch * math.sin(rel))
-                alto = float(p.get("Altura") or datos["altura"])
-                area_neta -= ancho * alto
             detalle["area_neta_m2"] = round(max(area_neta, 0.0), 6)
+            detalle["base_m"] = round(z0, 6)
+            detalle["cima_m"] = round(z1, 6)
         elif alias == "losa":
             datos = self._leer_pset(elemento, "OPENRVT_Losa")
             espesor = float(datos.get("Espesor") or 0.12)
