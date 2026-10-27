@@ -1880,22 +1880,64 @@ class ModeladoMixin:
             )
         return None
 
+    def _barras_de_dado(self, elemento: Any) -> list[uniones.Barra]:
+        """O012b: el dado de la zapata cuenta como columna para recortar vigas.
+
+        El dado forma parte del cuerpo de la zapata (no es un IFC aparte), así que
+        su barra lleva el GlobalId de la zapata para que la relación IFC de la
+        unión apunte al elemento real.
+        """
+        if not elemento.is_a("IfcFooting") or _texto(
+            getattr(elemento, "PredefinedType", "")
+        ) == "STRIP_FOOTING":
+            return []
+        tipo = self._tipo_entidad(elemento)
+        alias, seccion, _ = self._seccion_y_armado(tipo)
+        if alias != "zapata":
+            return []
+        datos = self._leer_pset(elemento, "OPENRVT_Estructura")
+        if not datos:
+            return []
+        dado_b = float(seccion.get("DadoB") or 0.0)
+        dado_h = float(seccion.get("DadoH") or 0.0)
+        dado_alto = float(seccion.get("DadoAlto") or 0.0)
+        peralte = float(seccion.get("Peralte") or 0.25)
+        if dado_b <= 0 or dado_h <= 0 or dado_alto <= 0:
+            return []
+        z = float(datos.get("Z") or 0.0)
+        return [
+            uniones.Barra(
+                gid=_gid(elemento),
+                tipo="columna",
+                x1=float(datos.get("X") or 0.0),
+                y1=float(datos.get("Y") or 0.0),
+                x2=float(datos.get("X") or 0.0),
+                y2=float(datos.get("Y") or 0.0),
+                ancho=dado_b,
+                fondo=dado_h,
+                z0=z + peralte,
+                z1=z + peralte + dado_alto,
+                rotacion=float(datos.get("Rotacion") or 0.0),
+            )
+        ]
+
     def _barras_estructura(self) -> tuple[list[uniones.Barra], list[uniones.Barra]]:
         vigas: list[uniones.Barra] = []
         columnas: list[uniones.Barra] = []
         for elemento in self.modelo.by_type("IfcElement"):
             if not (
                 elemento.is_a("IfcColumn")
+                or elemento.is_a("IfcFooting")
                 or self._es_viga_estructural(elemento)
             ):
                 continue
             barra = self._barra_de_elemento(elemento)
-            if barra is None:
-                continue
-            if barra.tipo == "columna":
-                columnas.append(barra)
-            else:
-                vigas.append(barra)
+            if barra is not None:
+                if barra.tipo == "columna":
+                    columnas.append(barra)
+                else:
+                    vigas.append(barra)
+            columnas.extend(self._barras_de_dado(elemento))
         return vigas, columnas
 
     def _tramos_de_viga(self, elemento: Any) -> list[tuple[float, float]]:
