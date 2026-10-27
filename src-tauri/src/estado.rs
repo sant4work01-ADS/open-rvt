@@ -21,6 +21,9 @@ pub struct Config {
     pub barra_compacta: bool,
     pub lateral_expandido: bool,
     pub lateral_ancho_rem: Option<f64>,
+    /// O011: paneles laterales del área de trabajo plegados.
+    pub panel_izquierdo_plegado: bool,
+    pub panel_derecho_plegado: bool,
     pub color_tema: String,
     pub temas_personalizados: Vec<String>,
     /// Anchos de columna por vista (preferencia de la aplicación, no del modelo).
@@ -37,6 +40,8 @@ impl Default for Config {
             barra_compacta: false,
             lateral_expandido: false,
             lateral_ancho_rem: None,
+            panel_izquierdo_plegado: false,
+            panel_derecho_plegado: false,
             color_tema: "verde".into(),
             temas_personalizados: Vec::new(),
             anchos_columnas: HashMap::new(),

@@ -12,6 +12,9 @@ export interface Config {
   barra_compacta: boolean;
   lateral_expandido: boolean;
   lateral_ancho_rem: number | null;
+  /** O011: paneles laterales del área de trabajo plegados. */
+  panel_izquierdo_plegado: boolean;
+  panel_derecho_plegado: boolean;
   color_tema: string;
   temas_personalizados: string[];
   anchos_columnas: Record<string, Record<string, number>>;
@@ -89,6 +92,10 @@ export const commands = {
     envolver(invoke<void>("guardar_lateral_expandido", { expandido })),
   guardarLateralAncho: (ancho: number | null) =>
     envolver(invoke<void>("guardar_lateral_ancho", { ancho })),
+  guardarPanelIzquierdoPlegado: (plegado: boolean) =>
+    envolver(invoke<void>("guardar_panel_izquierdo_plegado", { plegado })),
+  guardarPanelDerechoPlegado: (plegado: boolean) =>
+    envolver(invoke<void>("guardar_panel_derecho_plegado", { plegado })),
   guardarAnchoColumna: (vista: string, columna: string, ancho: number) =>
     envolver(invoke<void>("guardar_ancho_columna", { vista, columna, ancho })),
   restablecerAnchos: (vista: string) =>

@@ -303,6 +303,14 @@ export function App() {
       abrirArchivo: () => void useModelo.getState().abrir(),
       guardarArchivo: () => void useModelo.getState().guardar(),
       guardarComo: () => void useModelo.getState().guardarComo(),
+      panelIzquierdo: () => {
+        const tema = useTema.getState();
+        tema.fijarPanelIzquierdoPlegado(!tema.panelIzquierdoPlegado);
+      },
+      panelDerecho: () => {
+        const tema = useTema.getState();
+        tema.fijarPanelDerechoPlegado(!tema.panelDerechoPlegado);
+      },
     },
   );
 

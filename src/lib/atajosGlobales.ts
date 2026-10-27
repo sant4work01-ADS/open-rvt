@@ -18,6 +18,9 @@ export interface AccionesGlobales {
   abrirArchivo: () => void;
   guardarArchivo: () => void;
   guardarComo: () => void;
+  /** O011: plegar o abrir los paneles laterales. */
+  panelIzquierdo: () => void;
+  panelDerecho: () => void;
 }
 
 const TIPOS_SIN_TEXTO = new Set([
@@ -72,6 +75,8 @@ export function useAtajosGlobales(acciones: AccionesGlobales) {
         abrirArchivo: a.abrirArchivo,
         guardarArchivo: a.guardarArchivo,
         guardarComo: a.guardarComo,
+        panelIzquierdo: a.panelIzquierdo,
+        panelDerecho: a.panelDerecho,
       };
       const ejecutar = f[atajo.accion];
       if (!ejecutar) return;

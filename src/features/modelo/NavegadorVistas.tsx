@@ -8,6 +8,8 @@ interface Props {
   /** O009: la vista Cantidades vive bajo 3D y no es una vista IFC guardada. */
   cantidadesActiva?: boolean;
   onCantidades?: () => void;
+  /** O011: pliega el panel y deja solo la barra de iconos de módulos. */
+  onPlegar?: () => void;
 }
 
 const GRUPOS: ReadonlyArray<{ titulo: string; tipos: Vista["tipo"][]; prueba: string }> = [
@@ -23,6 +25,7 @@ export function NavegadorVistas({
   onElegir,
   cantidadesActiva = false,
   onCantidades,
+  onPlegar,
 }: Props) {
   return (
     <aside
@@ -30,8 +33,22 @@ export function NavegadorVistas({
       aria-label="Navegador de vistas"
       className="flex min-h-0 w-full flex-col overflow-y-auto border-r bg-background"
     >
-      <div className="border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Vistas
+      <div className="flex items-center justify-between border-b px-3 py-1.5">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Vistas
+        </span>
+        {onPlegar && (
+          <button
+            type="button"
+            data-testid="panel-izquierdo-plegar"
+            aria-label="Plegar panel izquierdo"
+            title="Plegar el panel de Vistas (Ctrl+Alt+←)"
+            onClick={onPlegar}
+            className="rounded px-1 text-sm text-muted-foreground hover:bg-muted"
+          >
+            ‹
+          </button>
+        )}
       </div>
       <div className="flex flex-col gap-2 p-2">
         {GRUPOS.map((grupo) => {

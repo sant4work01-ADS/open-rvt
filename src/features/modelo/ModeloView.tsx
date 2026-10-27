@@ -1,7 +1,6 @@
 // OPEN-RVT: editor de la spec O003a. Navegador de vistas a la izquierda, visor three.js
 // al centro y propiedades de la vista o del elemento a la derecha. Sin modelo abierto se
 // conserva el hueco del esqueleto de O002.
-import { useState } from "react";
 import { PanelLeft, PanelRight } from "lucide-react";
 import { tr } from "@/i18n";
 import { useModelo } from "./estado";
@@ -15,6 +14,7 @@ import { DialogoCastillos } from "./DialogoCastillos";
 import { CantidadesView } from "./CantidadesView";
 import { EditorTipos } from "@/features/tipos/EditorTipos";
 import { PanelRedimensionable } from "@/app/PanelRedimensionable";
+import { useTema } from "@/lib/tema";
 
 export function ModeloView() {
   const ruta = useModelo((s) => s.ruta);
@@ -41,7 +41,11 @@ export function ModeloView() {
   const cerrarEditorTipos = useModelo((s) => s.cerrarEditorTipos);
   const seleccionar = useModelo((s) => s.seleccionar);
   const anadirPuntoCorte = useModelo((s) => s.anadirPuntoCorte);
-  const [panelAbierto, setPanelAbierto] = useState(true);
+  // O011: los paneles laterales se pliegan y su estado se recuerda entre sesiones.
+  const panelIzquierdoPlegado = useTema((s) => s.panelIzquierdoPlegado);
+  const panelDerechoPlegado = useTema((s) => s.panelDerechoPlegado);
+  const fijarPanelIzquierdoPlegado = useTema((s) => s.fijarPanelIzquierdoPlegado);
+  const fijarPanelDerechoPlegado = useTema((s) => s.fijarPanelDerechoPlegado);
 
   const esCantidades = vistaActivaId === "cantidades";
   const vista = esCantidades
@@ -72,17 +76,32 @@ export function ModeloView() {
 
   return (
     <div data-testid="modelo-editor" className="flex min-h-0 flex-1 overflow-hidden">
-      <PanelRedimensionable id="vistas" lado="izquierdo" etiqueta="el panel Vistas">
-        <NavegadorVistas
-          vistas={vistas}
-          activaId={vista?.id ?? null}
-          onElegir={fijarVista}
-          cantidadesActiva={esCantidades}
-          onCantidades={() => fijarVista("cantidades")}
-        />
-      </PanelRedimensionable>
+      {!panelIzquierdoPlegado && (
+        <PanelRedimensionable id="vistas" lado="izquierdo" etiqueta="el panel Vistas">
+          <NavegadorVistas
+            vistas={vistas}
+            activaId={vista?.id ?? null}
+            onElegir={fijarVista}
+            cantidadesActiva={esCantidades}
+            onCantidades={() => fijarVista("cantidades")}
+            onPlegar={() => fijarPanelIzquierdoPlegado(true)}
+          />
+        </PanelRedimensionable>
+      )}
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex h-8 shrink-0 items-center gap-2 border-b px-3 text-xs">
+          {panelIzquierdoPlegado && (
+            <button
+              type="button"
+              data-testid="panel-izquierdo-abrir"
+              aria-label="Abrir panel izquierdo"
+              title="Abrir el panel de Vistas (Ctrl+Alt+←)"
+              onClick={() => fijarPanelIzquierdoPlegado(false)}
+              className="rounded px-1 text-sm text-muted-foreground hover:bg-muted"
+            >
+              ›
+            </button>
+          )}
           <span className="font-medium" data-testid="vista-activa-nombre">
             {esCantidades ? "Cantidades" : (vista?.nombre ?? "Sin vista")}
           </span>
@@ -94,13 +113,25 @@ export function ModeloView() {
           <button
             type="button"
             data-testid="panel-propiedades-toggle"
-            onClick={() => setPanelAbierto((v) => !v)}
+            onClick={() => fijarPanelDerechoPlegado(!panelDerechoPlegado)}
             className="ml-auto flex items-center gap-1 rounded px-2 py-1 text-muted-foreground hover:bg-muted"
-            title={panelAbierto ? "Ocultar propiedades" : "Mostrar propiedades"}
+            title={panelDerechoPlegado ? "Mostrar propiedades" : "Ocultar propiedades"}
           >
-            {panelAbierto ? <PanelRight size={14} /> : <PanelLeft size={14} />}
+            {panelDerechoPlegado ? <PanelLeft size={14} /> : <PanelRight size={14} />}
             Propiedades
           </button>
+          {panelDerechoPlegado && (
+            <button
+              type="button"
+              data-testid="panel-derecho-abrir"
+              aria-label="Abrir panel derecho"
+              title="Abrir el panel de Propiedades (Ctrl+Alt+→)"
+              onClick={() => fijarPanelDerechoPlegado(false)}
+              className="rounded px-1 text-sm text-muted-foreground hover:bg-muted"
+            >
+              ‹
+            </button>
+          )}
         </div>
         <BarraHerramienta />
         <div className="relative flex min-h-0 flex-1">
@@ -151,9 +182,9 @@ export function ModeloView() {
           )}
         </div>
       </div>
-      {panelAbierto && (
+      {!panelDerechoPlegado && (
         <PanelRedimensionable id="propiedades" lado="derecho" etiqueta="el panel Propiedades">
-          <PanelPropiedades />
+          <PanelPropiedades onPlegar={() => fijarPanelDerechoPlegado(true)} />
         </PanelRedimensionable>
       )}
       {dialogoEstilos && <DialogoEstilos />}
