@@ -6,7 +6,7 @@ const { Sesion } = require("./arnes");
 
 const RAIZ = path.resolve(__dirname, "..");
 
-test("O002: la ventana muestra título, ribbon, 4 módulos y el área de trabajo vacía", async () => {
+test("O002: la ventana muestra título, ribbon, 5 módulos y el área de trabajo vacía", async () => {
   const ses = await Sesion.abrir({
     prueba: "o002-inicio",
     tamano: { ancho: 1600, alto: 900 },
@@ -25,7 +25,13 @@ test("O002: la ventana muestra título, ribbon, 4 módulos y el área de trabajo
     const modulos = await ses.driver.findElements(By.css("nav [data-modulo]"));
     const nombres = [];
     for (const m of modulos) nombres.push(await m.getAttribute("aria-label"));
-    assert.deepEqual(nombres, ["Modelo", "Niveles y ejes", "Configuración", "Ayuda"]);
+    assert.deepEqual(nombres, [
+      "Modelo",
+      "Tipos y materiales",
+      "Niveles y ejes",
+      "Configuración",
+      "Ayuda",
+    ]);
 
     const tabs = await ses.driver.findElements(By.css('[role="tab"]'));
     const textos = [];
@@ -37,7 +43,7 @@ test("O002: la ventana muestra título, ribbon, 4 módulos y el área de trabajo
       assert.equal(await b.isEnabled(), true);
     }
 
-    // La captura de la entrega: ribbon, sidebar con los 4 módulos y área vacía.
+    // La captura de la entrega: ribbon, sidebar con los 5 módulos y área vacía.
     await ses.captura(path.join(RAIZ, "docs", "capturas", "o002-inicio.png"));
   } finally {
     await ses.cerrar();
