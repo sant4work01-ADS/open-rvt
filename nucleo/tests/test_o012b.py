@@ -115,3 +115,84 @@ def test_la_zapata_y_el_dado_quedan_enteros_bajo_la_contratrabe() -> None:
     for zapata in zapatas:
         assert zapata["volumen_neto_m3"] == pytest.approx(0.528, abs=1e-9)
     assert _volumen_malla(nucleo, ct) == pytest.approx(0.288, abs=1e-9)
+
+
+def _losa_entre_cuatro_trabes(nucleo: ModeloNucleo, nivel: str) -> str:
+    nucleo.tipos_crear(
+        "trabe", "T-25", {"seccion": {"Forma": "rectangular", "B": 0.25, "H": 0.40}}
+    )
+    for x1, y1, x2, y2 in (
+        (0, 0, 5, 0), (5, 0, 5, 4), (5, 4, 0, 4), (0, 4, 0, 0)
+    ):
+        nucleo.viga_crear("T-25", nivel, x1, y1, x2, y2)
+    return nucleo.losa_crear(
+        nivel, [(0, 0), (5, 0), (5, 4), (0, 4)], espesor=0.10
+    )["creados"][0]
+
+
+def test_losa_entre_cuatro_trabes_area_y_volumen_de_la_tabla() -> None:
+    nucleo, nivel = _nuevo()
+    losa = _losa_entre_cuatro_trabes(nucleo, nivel)
+
+    x0, x1, y0, y1, z0, z1 = _caja(nucleo, losa)
+    # Las trabes de 0.25 centradas en los ejes dejan la losa de 4.75 × 3.75.
+    assert (x0, x1) == pytest.approx((0.125, 4.875), abs=1e-9)
+    assert (y0, y1) == pytest.approx((0.125, 3.875), abs=1e-9)
+    assert (z0, z1) == pytest.approx((-0.10, 0.0), abs=1e-9)
+    assert _volumen_malla(nucleo, losa) == pytest.approx(1.78125, abs=1e-9)
+
+    cantidades = nucleo.cantidades_estructura()
+    info = next(e for e in cantidades["elementos"] if e["globalid"] == losa)
+    assert info["volumen_neto_m3"] == pytest.approx(1.78125, abs=1e-9)
+
+    medicion = nucleo.medicion_calcular()["partidas"]
+    area = next(p for p in medicion if p["nombre"] == "Área de la losa")
+    assert area["total"] == pytest.approx(17.8125, abs=1e-4)
+    volumen = next(p for p in medicion if p["nombre"] == "Volumen de concreto")
+    renglon = next(r for r in volumen["renglones"] if r["globalid"] == losa)
+    assert renglon["resultado"] == pytest.approx(1.7812, abs=1e-4)
+
+
+def test_losa_recortada_en_la_cara_de_la_trabe_y_la_trabe_queda_entera() -> None:
+    nucleo, nivel = _nuevo()
+    losa = _losa_entre_cuatro_trabes(nucleo, nivel)
+    trabes = [
+        e for e in nucleo.cantidades_estructura()["elementos"] if e["alias"] == "trabe"
+    ]
+    assert len(trabes) == 4
+    # O012 entre vigas: la más larga (5.00) llega a la cara exterior de la corta
+    # y la corta (4.00) se recorta en la cara interior. La losa no les quita nada:
+    # 0.25·0.40·(5.00 + 0.125 + 0.125) = 0.525 y 0.25·0.40·(4.00 − 0.25) = 0.375.
+    volumenes = sorted(t["volumen_neto_m3"] for t in trabes)
+    assert volumenes == pytest.approx([0.375, 0.375, 0.525, 0.525], abs=1e-9)
+    # La losa ocupa solo su espesor y las trabes siguen enteras hacia abajo.
+    _x0, _x1, _y0, _y1, z0, z1 = _caja(nucleo, losa)
+    assert (z0, z1) == pytest.approx((-0.10, 0.0), abs=1e-9)
+    for trabe in trabes:
+        _tx0, _tx1, _ty0, _ty1, tz0, tz1 = _caja(nucleo, trabe["globalid"])
+        assert (tz0, tz1) == pytest.approx((-0.40, 0.0), abs=1e-9)
+
+
+def _volumen_entre(nucleo: ModeloNucleo, a: str, b: str) -> float:
+    info_a = nucleo._piezas_de_elemento(_entidad(nucleo, a))
+    info_b = nucleo._piezas_de_elemento(_entidad(nucleo, b))
+    total = 0.0
+    for pieza_a in info_a["piezas"]:
+        for pieza_b in info_b["piezas"]:
+            z0 = max(pieza_a["z0"], pieza_b["z0"])
+            z1 = min(pieza_a["z1"], pieza_b["z1"])
+            if z1 - z0 <= 1e-9:
+                continue
+            total += pieza_a["poligono"]().intersection(pieza_b["poligono"]()).area * (z1 - z0)
+    return total
+
+
+def test_columna_en_esquina_de_losa_no_traslapa_volumen() -> None:
+    nucleo, nivel = _nuevo()
+    losa = _losa_entre_cuatro_trabes(nucleo, nivel)
+    columna = _zapata_con_columna(nucleo, nivel, 0, 0)
+    # La columna baja hasta el dado y atraviesa el espesor de la losa.
+    _x0, _x1, _y0, _y1, z0, z1 = _caja(nucleo, losa)
+    _cx0, _cx1, _cy0, _cy1, cz0, cz1 = _caja(nucleo, columna)
+    assert cz0 < z0 and cz1 > z1
+    assert _volumen_entre(nucleo, losa, columna) == pytest.approx(0.0, abs=1e-9)

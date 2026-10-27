@@ -1995,6 +1995,10 @@ class ModeladoMixin:
             if elemento.is_a("IfcColumn") or self._es_viga_estructural(elemento):
                 if self._leer_pset(elemento, "OPENRVT_Estructura"):
                     self._regenerar_estructura(elemento)
+        # O012b: losa y muro dependen de las vigas, columnas y castillos vecinos.
+        for losa in list(self.modelo.by_type("IfcSlab")):
+            if self._leer_pset(losa, "OPENRVT_Losa"):
+                self._regenerar_losa(losa)
         self._recrear_relaciones_uniones()
 
     def _regenerar_estructura(self, elemento: Any) -> None:
@@ -2423,6 +2427,115 @@ class ModeladoMixin:
         return unidos
 
     # ------------------------------------------------------------------ losas
+    def _geometria_losa(self, losa: Any):
+        """Huella recortada de la losa (o su contorno si todavía no se recortó)."""
+        from shapely import wkt
+        from shapely.geometry import Polygon
+
+        datos = self._leer_pset(losa, "OPENRVT_Losa")
+        texto = datos.get("Recorte")
+        if texto:
+            try:
+                return wkt.loads(str(texto))
+            except Exception:
+                LOG.debug("no se pudo leer el recorte de la losa", exc_info=True)
+        return Polygon(self._poligono_de_losa(losa))
+
+    def _prisma_de_huella(
+        self, geometria: Any, z0: float, z1: float
+    ) -> tuple[list[list[float]], list[list[int]]]:
+        """Prisma vertical de una huella arbitraria (con huecos o varias piezas)."""
+        from shapely.ops import triangulate
+
+        triangulos: list[list[tuple[float, float]]] = []
+        for triangulo in triangulate(geometria):
+            if not geometria.covers(triangulo.representative_point()):
+                continue
+            puntos = [(float(p[0]), float(p[1])) for p in triangulo.exterior.coords[:3]]
+            area2 = sum(
+                puntos[i][0] * puntos[(i + 1) % 3][1]
+                - puntos[(i + 1) % 3][0] * puntos[i][1]
+                for i in range(3)
+            )
+            if area2 < 0:
+                puntos.reverse()
+            triangulos.append(puntos)
+
+        vertices: list[list[float]] = []
+        caras: list[list[int]] = []
+        bordes: dict[tuple, dict[str, Any]] = {}
+
+        def _redondo(punto: tuple[float, float]) -> tuple[float, float]:
+            return (round(punto[0], 9), round(punto[1], 9))
+
+        for triangulo in triangulos:
+            base = len(vertices)
+            for x, y in triangulo:
+                vertices.append([x, y, z0])
+            for x, y in triangulo:
+                vertices.append([x, y, z1])
+            caras.append([base + 3, base + 4, base + 5])
+            caras.append([base + 2, base + 1, base])
+            for i in range(3):
+                j = (i + 1) % 3
+                a, b = triangulo[i], triangulo[j]
+                clave = tuple(sorted((_redondo(a), _redondo(b))))
+                registro = bordes.setdefault(clave, {"cuenta": 0, "a": a, "b": b})
+                registro["cuenta"] += 1
+
+        for registro in bordes.values():
+            if registro["cuenta"] != 1:
+                continue
+            a, b = registro["a"], registro["b"]
+            base = len(vertices)
+            vertices.extend(
+                [
+                    [a[0], a[1], z0], [b[0], b[1], z0],
+                    [b[0], b[1], z1], [a[0], a[1], z1],
+                ]
+            )
+            caras.append([base, base + 1, base + 2, base + 3])
+        return vertices, caras
+
+    def _regenerar_losa(self, losa: Any) -> None:
+        """O012b: recorta la losa en planta contra trabes y columnas."""
+        from shapely import wkt
+        from shapely.geometry import Polygon
+
+        datos = dict(self._leer_pset(losa, "OPENRVT_Losa"))
+        if not datos:
+            return
+        espesor = float(datos.get("Espesor") or 0.12)
+        if espesor <= 0:
+            return
+        original = datos.get("Contorno")
+        if original:
+            try:
+                huella = wkt.loads(str(original))
+            except Exception:
+                huella = Polygon(self._poligono_de_losa(losa))
+        else:
+            huella = Polygon(self._poligono_de_losa(losa))
+        vigas, columnas = self._barras_estructura()
+        recorte = uniones.recortar_losa(
+            list(huella.exterior.coords)[:-1], vigas, columnas, -espesor, 0.0
+        )
+        if recorte.is_empty:
+            # Nunca se deja una losa sin cuerpo: se conserva la huella original.
+            recorte = huella
+        vertices, caras = self._prisma_de_huella(recorte, -espesor, 0.0)
+        self._quitar_representaciones(losa, "Body")
+        rep = geometry_api.add_mesh_representation(
+            self.modelo, context=self._contexto(), vertices=[vertices], faces=[caras]
+        )
+        rep.RepresentationIdentifier = "Body"
+        geometry_api.assign_representation(self.modelo, product=losa, representation=rep)
+        datos["Contorno"] = huella.wkt
+        datos["Recorte"] = recorte.wkt
+        datos["Area"] = round(float(recorte.area), 9)
+        datos["Perimetro"] = round(float(recorte.length), 9)
+        self._guardar_pset(losa, "OPENRVT_Losa", datos)
+
     def losa_crear(
         self,
         nivel: str,
@@ -2445,29 +2558,18 @@ class ModeladoMixin:
         if espesor <= 0:
             raise self._error("El espesor de la losa debe ser positivo.", -32602)
 
+        from shapely.geometry import Polygon
+
         self._instantanea()
         losa = root.create_entity(self.modelo, ifc_class="IfcSlab")
         losa.Name = "Losa"
         losa.PredefinedType = "FLOOR"
         elevacion = float(nivel_entidad.Elevation or 0.0) + desfase
-        # El contorno se guarda local y la losa se coloca en la elevación del nivel.
-        rep = geometry_api.add_slab_representation(
-            self.modelo,
-            context=self._contexto(),
-            depth=espesor,
-            direction_sense="NEGATIVE",
-            polyline=poligono,
-        )
-        rep.RepresentationIdentifier = "Body"
-        geometry_api.assign_representation(self.modelo, product=losa, representation=rep)
         matriz = np.identity(4)
         matriz[0][3] = 0.0
         matriz[1][3] = 0.0
         matriz[2][3] = elevacion
         geometry_api.edit_object_placement(self.modelo, product=losa, matrix=matriz)
-        spatial_api.assign_container(
-            self.modelo, products=[losa], relating_structure=nivel_entidad
-        )
         self._guardar_pset(
             losa,
             "OPENRVT_Losa",
@@ -2475,7 +2577,12 @@ class ModeladoMixin:
                 "Espesor": espesor,
                 "Desfase": desfase,
                 "Puntos": len(poligono),
+                "Contorno": Polygon(poligono).wkt,
             },
+        )
+        self._regenerar_losa(losa)
+        spatial_api.assign_container(
+            self.modelo, products=[losa], relating_structure=nivel_entidad
         )
         self.con_cambios = True
         return self._resultado([losa], mensaje=f"Losa creada ({abs(_poligono_area(poligono)):.2f} m²).")
@@ -3377,6 +3484,17 @@ class ModeladoMixin:
     def _poligono_de_losa(self, losa: Any) -> list[tuple[float, float]]:
         from ifcopenshell.util.placement import get_local_placement
 
+        datos = self._leer_pset(losa, "OPENRVT_Losa")
+        if datos.get("Contorno"):
+            try:
+                from shapely import wkt
+
+                return [
+                    (float(p[0]), float(p[1]))
+                    for p in wkt.loads(str(datos["Contorno"])).exterior.coords[:-1]
+                ]
+            except Exception:
+                pass
         try:
             item = losa.Representation.Representations[0].Items[0]
             perfil = item.SweptArea

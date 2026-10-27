@@ -395,6 +395,38 @@ def _aplicar_x(
         estado[perdedora.gid]["cortes"].append((ta, tb))
 
 
+def recortar_losa(
+    poligono: list[tuple[float, float]],
+    vigas: list[Barra],
+    columnas: list[Barra],
+    z0: float,
+    z1: float,
+):
+    """O012b: huella de la losa recortada en planta contra vigas y columnas.
+
+    La losa es de menor jerarquía que las vigas y las columnas, así que se le
+    quita la huella completa de cualquiera que comparta su rango de altura. Si
+    la viga es más peraltada, la losa ocupa solo su espesor y la viga sigue
+    entera hacia abajo: por eso el recorte es solo en planta.
+    """
+    from shapely.geometry import Polygon
+
+    huella_losa = Polygon(poligono)
+    if not huella_losa.is_valid:
+        huella_losa = huella_losa.buffer(0)
+    for barra in [*vigas, *columnas]:
+        solape = min(z1, barra.z1) - max(z0, barra.z0)
+        if solape <= TOLERANCIA:
+            continue
+        recorte = Polygon(huella(barra))
+        if not recorte.is_valid:
+            recorte = recorte.buffer(0)
+        huella_losa = huella_losa.difference(recorte)
+        if huella_losa.is_empty:
+            break
+    return huella_losa
+
+
 def _segmentos(lo: float, hi: float, cortes: list[tuple[float, float]]) -> list[tuple[float, float]]:
     if hi - lo <= TOLERANCIA:
         return []

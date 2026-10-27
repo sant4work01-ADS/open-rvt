@@ -595,10 +595,12 @@ class MedicionMixin:
         if elemento.is_a("IfcSlab"):
             datos = self._leer_pset(elemento, "OPENRVT_Losa")
             espesor = float(datos.get("Espesor") or 0.12)
-            puntos = self._poligono_de_losa(elemento)
-            if len(puntos) < 3:
-                return None
             if criterio == "area":
+                if datos.get("Area") is not None:
+                    return float(datos["Area"]), factores
+                puntos = self._poligono_de_losa(elemento)
+                if len(puntos) < 3:
+                    return None
                 return abs(_poligono_area(puntos)), factores
             if criterio == "volumen":
                 info = self._cantidades_por_gid().get(_gid(elemento))
@@ -606,6 +608,11 @@ class MedicionMixin:
                     return None
                 return float(info["volumen_neto_m3"]), factores
             if criterio == "cimbra_borde":
+                if datos.get("Perimetro") is not None:
+                    return float(datos["Perimetro"]) * espesor, factores
+                puntos = self._poligono_de_losa(elemento)
+                if len(puntos) < 3:
+                    return None
                 perimetro = sum(
                     math.hypot(
                         puntos[(i + 1) % len(puntos)][0] - puntos[i][0],

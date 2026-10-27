@@ -758,6 +758,8 @@ class InteraccionesMixin:
         datos_columna.update({"Base": tope, "Altura": nueva_altura})
         self._guardar_pset(columna_entidad, "OPENRVT_Estructura", datos_columna)
         self._regenerar_estructura(columna_entidad)
+        # O012b: el dado nuevo recorta las vigas y la columna baja: se recalcula todo.
+        self._recalcular_uniones_estructura()
         liga_columna = self._leer_liga(columna_entidad)
         self._guardar_liga(
             zapata,
@@ -1263,14 +1265,12 @@ class InteraccionesMixin:
                 area_neta -= ancho * alto
             detalle["area_neta_m2"] = round(max(area_neta, 0.0), 6)
         elif alias == "losa":
-            puntos = self._poligono_de_losa(elemento)
-            if len(puntos) < 3:
-                return None
             datos = self._leer_pset(elemento, "OPENRVT_Losa")
             espesor = float(datos.get("Espesor") or 0.12)
             nivel_e = self._nivel_de_elemento(elemento)
             z1 = float(nivel_e.Elevation or 0.0) + float(datos.get("Desfase") or 0.0)
-            poligono = Polygon(puntos)
+            # O012b: la huella ya viene recortada contra trabes y columnas.
+            poligono = self._geometria_losa(elemento)
             piezas.append(
                 {
                     "poligono": (lambda p=poligono: p),
