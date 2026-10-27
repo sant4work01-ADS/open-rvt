@@ -385,3 +385,20 @@ def test_zapata_sin_dado_no_inventa_una_columna_falsa() -> None:
         if e["globalid"] == zapata
     )
     assert info["volumen_neto_m3"] == pytest.approx(1.2 * 1.2 * 0.25 + 1.2 * 1.2 * 0.05, abs=1e-9)
+
+
+def test_columna_y_castillo_nacen_en_la_cara_superior_del_dado() -> None:
+    nucleo, nivel = _nuevo()
+    columna = _zapata_con_columna(nucleo, nivel, 0, 0)
+    # Zapata Z = -1.00; peralte 0.25 + dado 0.60 → cara superior del dado en -0.15.
+    datos_columna = nucleo._leer_pset(_entidad(nucleo, columna), "OPENRVT_Estructura")
+    assert datos_columna["Base"] == pytest.approx(-0.15, abs=1e-9)
+    _x0, _x1, _y0, _y1, z0, _z1 = _caja(nucleo, columna)
+    assert z0 == pytest.approx(-0.15, abs=1e-9)
+
+    muro = nucleo.muro_crear(MURO, nivel, 10, 0, 14, 0, altura=2.60)["creados"][0]
+    castillo = nucleo.castillo_crear_en_muro(K, muro, 0.0)["creados"][0]
+    datos_castillo = nucleo._leer_pset(_entidad(nucleo, castillo), "OPENRVT_Estructura")
+    assert datos_castillo["Base"] == pytest.approx(0.0, abs=1e-9)
+    _cx0, _cx1, _cy0, _cy1, cz0, _cz1 = _caja(nucleo, castillo)
+    assert cz0 == pytest.approx(0.0, abs=1e-9)
