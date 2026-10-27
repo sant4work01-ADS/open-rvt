@@ -151,6 +151,7 @@ class InteraccionesMixin:
         spatial_api.assign_container(
             self.modelo, products=[columna], relating_structure=nivel_entidad
         )
+        self._recalcular_uniones_estructura()
         return columna, elevacion
 
     def _viga_nueva(
@@ -188,6 +189,7 @@ class InteraccionesMixin:
         spatial_api.assign_container(
             self.modelo, products=[viga], relating_structure=nivel_entidad
         )
+        self._recalcular_uniones_estructura()
         return viga
 
     # ------------------------------------------------------------------ castillos
@@ -1109,8 +1111,15 @@ class InteraccionesMixin:
             ux, uy = (x2 - x1) / largo, (y2 - y1) / largo
             rot = math.atan2(uy, ux)
             z = float(pset.get("Z") or 0.0)
-            bruto = caja((x1 + x2) / 2.0, (y1 + y2) / 2.0, rot, largo, b,
-                         z - h / 2.0, z + h / 2.0)
+            bruto = b * h * largo
+            # O012: el neto sale de los tramos ya recortados por las uniones.
+            tramos = self._tramos_de_viga(elemento)
+            for s0, s1 in tramos:
+                if s1 - s0 <= TOLERANCIA_CALCULO:
+                    continue
+                cx = x1 + ux * (s0 + s1) / 2.0
+                cy = y1 + uy * (s0 + s1) / 2.0
+                caja(cx, cy, rot, s1 - s0, b, z - h / 2.0, z + h / 2.0)
         elif alias == "zapata":
             _, seccion, _ = self._seccion_y_armado(tipo_entidad)
             largo = float(seccion.get("Largo") or 1.20)

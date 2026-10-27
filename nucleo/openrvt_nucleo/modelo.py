@@ -282,6 +282,9 @@ class ModeloNucleo(
         # O007a: si el archivo no trae biblioteca, se siembra al abrirlo.
         self._asegurar_biblioteca()
         self.crear_tipos_estructura()
+        # O012: los archivos anteriores pueden traer vigas encimadas; se recortan
+        # al abrir sin perder elementos.
+        self._recalcular_uniones_estructura()
         return self.info()
 
     def guardar(self, ruta: str | None = None) -> dict[str, Any]:

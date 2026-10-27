@@ -24,6 +24,8 @@ import ifcopenshell.api.type as type_api
 import ifcopenshell.api.unit as unit_api
 import numpy as np
 
+from . import uniones
+
 LOG = logging.getLogger("openrvt_nucleo.modelado")
 
 # Tipos de muro que crea un proyecto nuevo. El nombre es el que ve el usuario.
@@ -1724,6 +1726,21 @@ class ModeladoMixin:
         caja = self._caja_entre(-b / 2.0, b / 2.0, -h / 2.0, h / 2.0, 0.0, largo)
         return self._malla_de_cajas([caja])
 
+    def _cuerpo_viga_tramos(
+        self, seccion: dict[str, Any], tramos: list[tuple[float, float]]
+    ) -> Any:
+        """O012: uno o varios prismas en el eje local, ya recortados en las uniones."""
+        b = float(seccion.get("B") or 0.20)
+        h = float(seccion.get("H") or 0.40)
+        cajas = [
+            self._caja_entre(-b / 2.0, b / 2.0, -h / 2.0, h / 2.0, a, c)
+            for a, c in tramos
+            if c - a > TOLERANCIA_CALCULO
+        ]
+        if not cajas:
+            cajas = [self._caja_entre(-b / 2.0, b / 2.0, -h / 2.0, h / 2.0, 0.0, 0.001)]
+        return self._malla_de_cajas(cajas)
+
     def _cuerpo_zapata(self, seccion: dict[str, Any]) -> Any:
         largo = float(seccion.get("Largo") or 1.2)
         ancho = float(seccion.get("Ancho") or 1.2)
@@ -1811,6 +1828,133 @@ class ModeladoMixin:
             raise self._error("La altura de la columna debe ser positiva.", -32602)
         return resultado
 
+    def _es_viga_estructural(self, elemento: Any) -> bool:
+        if elemento.is_a("IfcBeam"):
+            return True
+        return elemento.is_a("IfcFooting") and _texto(
+            getattr(elemento, "PredefinedType", "")
+        ) == "FOOTING_BEAM"
+
+    def _barra_de_elemento(self, elemento: Any) -> uniones.Barra | None:
+        """Convierte una columna o viga del modelo en la barra pura de uniones."""
+        datos = self._leer_pset(elemento, "OPENRVT_Estructura")
+        if not datos:
+            return None
+        tipo = self._tipo_entidad(elemento)
+        alias, seccion, _ = self._seccion_y_armado(tipo)
+        if alias is None:
+            return None
+        if elemento.is_a("IfcColumn"):
+            base = float(datos.get("Base") or 0.0)
+            alto = float(datos.get("Altura") or 2.60)
+            return uniones.Barra(
+                gid=_gid(elemento),
+                tipo="columna",
+                x1=float(datos.get("X") or 0.0),
+                y1=float(datos.get("Y") or 0.0),
+                x2=float(datos.get("X") or 0.0),
+                y2=float(datos.get("Y") or 0.0),
+                ancho=float(seccion.get("B") or seccion.get("D") or 0.30),
+                fondo=float(seccion.get("H") or seccion.get("D") or 0.30),
+                z0=base,
+                z1=base + alto,
+                rotacion=float(datos.get("Rotacion") or 0.0),
+            )
+        if self._es_viga_estructural(elemento):
+            x1 = float(datos.get("X1") or 0.0)
+            y1 = float(datos.get("Y1") or 0.0)
+            x2 = float(datos.get("X2") or 0.0)
+            y2 = float(datos.get("Y2") or 0.0)
+            alto = float(seccion.get("H") or 0.40)
+            centro = float(datos.get("Z") or 0.0)
+            return uniones.Barra(
+                gid=_gid(elemento),
+                tipo="viga",
+                x1=x1,
+                y1=y1,
+                x2=x2,
+                y2=y2,
+                ancho=float(seccion.get("B") or 0.20),
+                z0=centro - alto / 2.0,
+                z1=centro + alto / 2.0,
+            )
+        return None
+
+    def _barras_estructura(self) -> tuple[list[uniones.Barra], list[uniones.Barra]]:
+        vigas: list[uniones.Barra] = []
+        columnas: list[uniones.Barra] = []
+        for elemento in self.modelo.by_type("IfcElement"):
+            if not (
+                elemento.is_a("IfcColumn")
+                or self._es_viga_estructural(elemento)
+            ):
+                continue
+            barra = self._barra_de_elemento(elemento)
+            if barra is None:
+                continue
+            if barra.tipo == "columna":
+                columnas.append(barra)
+            else:
+                vigas.append(barra)
+        return vigas, columnas
+
+    def _tramos_de_viga(self, elemento: Any) -> list[tuple[float, float]]:
+        """Tramos recortados de una viga, en metros sobre su eje original."""
+        barra = self._barra_de_elemento(elemento)
+        if barra is None or barra.tipo != "viga":
+            return [(0.0, 1.0)]
+        vigas, columnas = self._barras_estructura()
+        tramos, _uniones_aplicadas = uniones.calcular(vigas, columnas)
+        return tramos.get(barra.gid) or [(0.0, barra.largo)]
+
+    def _recrear_relaciones_uniones(self) -> None:
+        """Una relación IFC estándar por unión, con el elemento que manda primero."""
+        for rel in list(self.modelo.by_type("IfcRelConnectsElements")):
+            if _texto(getattr(rel, "Name", "")) == "OPEN-RVT unión":
+                try:
+                    self.modelo.remove(rel)
+                except Exception:
+                    LOG.debug("no se pudo quitar una unión anterior", exc_info=True)
+        vigas, columnas = self._barras_estructura()
+        _tramos, aplicadas = uniones.calcular(vigas, columnas)
+        for union in aplicadas:
+            try:
+                maestro = self._entidad_por_gid(union["maestro"])
+                esclavo = self._entidad_por_gid(union["esclavo"])
+            except Exception:
+                continue
+            existente = False
+            for rel in self.modelo.by_type("IfcRelConnectsElements"):
+                if (
+                    getattr(rel, "RelatingElement", None) == maestro
+                    and getattr(rel, "RelatedElement", None) == esclavo
+                ):
+                    existente = True
+                    break
+            if existente:
+                continue
+            try:
+                self.modelo.create_entity(
+                    "IfcRelConnectsElements",
+                    GlobalId=ifcopenshell.guid.new(),
+                    OwnerHistory=None,
+                    Name="OPEN-RVT unión",
+                    Description=None,
+                    ConnectionGeometry=None,
+                    RelatingElement=maestro,
+                    RelatedElement=esclavo,
+                )
+            except Exception:
+                LOG.warning("no se pudo registrar la unión", exc_info=True)
+
+    def _recalcular_uniones_estructura(self) -> None:
+        """Vuelve a cortar todas las vigas: al mover, borrar o cambiar un vecino."""
+        for elemento in list(self.modelo.by_type("IfcElement")):
+            if elemento.is_a("IfcColumn") or self._es_viga_estructural(elemento):
+                if self._leer_pset(elemento, "OPENRVT_Estructura"):
+                    self._regenerar_estructura(elemento)
+        self._recrear_relaciones_uniones()
+
     def _regenerar_estructura(self, elemento: Any) -> None:
         tipo = self._tipo_entidad(elemento)
         alias, seccion, _armado = self._seccion_y_armado(tipo)
@@ -1845,7 +1989,8 @@ class ModeladoMixin:
             largo = float(datos.get("Longitud") or math.hypot(x2 - x1, y2 - y1))
             if largo <= TOLERANCIA_CALCULO:
                 largo = 1.0
-            cuerpo = self._cuerpo_viga(seccion, largo)
+            tramos = self._tramos_de_viga(elemento)
+            cuerpo = self._cuerpo_viga_tramos(seccion, tramos)
             ux, uy = (x2 - x1) / largo, (y2 - y1) / largo
             matriz = self._matriz_viga(x1, y1, float(datos.get("Z") or 0.0), ux, uy)
         elif elemento.is_a("IfcFooting") and _texto(
@@ -1911,6 +2056,7 @@ class ModeladoMixin:
         spatial_api.assign_container(
             self.modelo, products=[columna], relating_structure=nivel_entidad
         )
+        self._recalcular_uniones_estructura()
         if eje_a or eje_b:
             self._guardar_liga(columna, {"EjeA": _texto(eje_a), "EjeB": _texto(eje_b)})
         self.con_cambios = True
@@ -1965,6 +2111,7 @@ class ModeladoMixin:
         spatial_api.assign_container(
             self.modelo, products=[viga], relating_structure=nivel_entidad
         )
+        self._recalcular_uniones_estructura()
         self.con_cambios = True
         return self._resultado([viga], mensaje=f"Viga creada ({largo:.2f} m).")
 
@@ -2708,6 +2855,7 @@ class ModeladoMixin:
                 self._unir_muros(producto)
                 # O007c: castillos, cerramientos y dalas siguen al muro.
                 self._actualizar_dependientes_muro(producto)
+        self._recalcular_uniones_estructura()
         self.con_cambios = True
         return self._resultado(
             modificados=[g for g in afectados if not g.is_a("IfcOpeningElement")],
@@ -2802,6 +2950,7 @@ class ModeladoMixin:
                     borrados.append(_gid(producto))
                 except Exception:
                     LOG.warning("no se pudo borrar %s", _gid(producto), exc_info=True)
+        self._recalcular_uniones_estructura()
         self.con_cambios = True
         return self._resultado(borrados=borrados, mensaje=f"{len(borrados)} elemento(s) borrado(s).")
 
@@ -2913,6 +3062,7 @@ class ModeladoMixin:
                     is_si=True,
                 )
                 creados.append(copia)
+        self._recalcular_uniones_estructura()
         self.con_cambios = True
         return self._resultado(creados=creados, mensaje=f"{len(creados)} elemento(s) copiado(s).")
 
@@ -3126,6 +3276,7 @@ class ModeladoMixin:
                     )
         else:
             raise self._error("Este elemento no tiene propiedades editables.", -32025)
+        self._recalcular_uniones_estructura()
         self.con_cambios = True
         return self._resultado(modificados=modificados, mensaje="Elemento actualizado.")
 
