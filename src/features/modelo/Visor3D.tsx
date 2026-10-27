@@ -29,6 +29,7 @@ import {
   calcularFamiliasCotas,
   formatearCota,
   parsearCota,
+  parsearElevacion,
   posicionTextoEntreMarcas,
 } from "./cotas";
 import {
@@ -67,6 +68,7 @@ import {
   direccionAlzado,
   vectorIso,
 } from "./vistas";
+import { mallaConNormalesPlanas } from "./geometria";
 
 interface Props {
   vista: Vista;
@@ -97,6 +99,75 @@ interface Navegacion {
     direccion: THREE.Vector3;
     distancia: number;
   };
+}
+
+/**
+ * O010: estado de cámara que se conserva por vista. Guarda lo que el usuario dejó
+ * (paneo, zoom, órbita) para restaurarlo al volver a la vista; los cambios del modelo
+ * solo actualizan el recorte de profundidad.
+ */
+interface CamaraGuardada {
+  tipo: "orto" | "perspectiva";
+  objetivo: [number, number, number];
+  direccion: [number, number, number];
+  arriba: [number, number, number];
+  distancia: number;
+  izquierda?: number;
+  derecha?: number;
+  arribaPlano?: number;
+  abajo?: number;
+  fov?: number;
+}
+
+/** Dirección y arriba con los que se encuadra una vista (sin tocar el modelo). */
+function direccionDeVista(vista: Vista): {
+  direccion: [number, number, number];
+  arriba: [number, number, number];
+} {
+  if (vista.tipo === "planta") {
+    return { direccion: [0, 0, 1], arriba: [...ARRIBA_PLANTA] };
+  }
+  if (vista.tipo === "alzado") {
+    return { direccion: direccionAlzado(vista.orientacion ?? "sur"), arriba: [0, 0, 1] };
+  }
+  if (vista.tipo === "corte") {
+    const [nx, ny] = normalCorte(vista);
+    return { direccion: [-nx, -ny, 0], arriba: [0, 0, 1] };
+  }
+  return { direccion: vectorIso(), arriba: [0, 0, 1] };
+}
+
+/** Crea la cámara de una vista con la navegación indicada (o la inicial de la caja). */
+function crearCamaraDeVista(
+  vista: Vista,
+  caja: Caja,
+  aspecto: number,
+  nav: Navegacion,
+): THREE.Camera {
+  if (nav.tipo === "perspectiva") {
+    const perspectiva = camaraPerspectiva(caja, { aspecto });
+    const camera = new THREE.PerspectiveCamera(
+      perspectiva.fov,
+      aspecto,
+      perspectiva.cerca,
+      perspectiva.lejos,
+    );
+    return camera;
+  }
+  const { direccion, arriba } = direccionDeVista(vista);
+  const inicial = camaraOrtografica(caja, direccion, {
+    arriba,
+    centro: [nav.objetivo.x, nav.objetivo.y, nav.objetivo.z],
+  });
+  const limites = ajustarAspecto(inicial, aspecto);
+  return new THREE.OrthographicCamera(
+    limites.izquierda,
+    limites.derecha,
+    limites.arriba,
+    limites.abajo,
+    inicial.cerca,
+    inicial.lejos,
+  );
 }
 
 /** O006a: texto de cota que se puede editar con doble clic. */
@@ -613,6 +684,9 @@ export function Visor3D({
   const meshes = useRef<THREE.Mesh[]>([]);
   const grosores = useRef<EntradaGrosor[]>([]);
   const navegacion = useRef<Navegacion | null>(null);
+  // O010: la cámara de cada vista se conserva al cambiar de vista y entre redibujos.
+  const camarasGuardadas = useRef(new Map<string, CamaraGuardada>());
+  const vistaDeCamara = useRef<string | null>(null);
   const arrastre = useRef<{
     x: number;
     y: number;
@@ -650,6 +724,8 @@ export function Visor3D({
   const cotasInteraccion = useRef<CotaInteractiva[]>([]);
   const [cotaEditando, setCotaEditando] = useState<CotaEnEdicion | null>(null);
   const [textoCotaEditando, setTextoCotaEditando] = useState("");
+  // O010: el error de una cota se muestra junto a la caja, no en la barra de estado.
+  const [errorCota, setErrorCota] = useState<string | null>(null);
   const moverSiguientes = useModelo((s) => s.cotasMoverSiguientes);
   const fijarMoverSiguientes = useModelo((s) => s.fijarCotasMoverSiguientes);
   const separarEjes = useModelo((s) => s.separarEjes);
@@ -800,6 +876,30 @@ export function Visor3D({
     if (escena.current) escena.current.background = colorDeFondo(oscuro);
   }, [oscuro]);
 
+  /** O010: guarda el encuadre actual de la vista para restaurarlo después. */
+  const guardarCamaraActual = useCallback(() => {
+    const nav = navegacion.current;
+    const camera = camara.current;
+    const id = vistaDeCamara.current;
+    if (!nav || !camera || !id) return;
+    const guardada: CamaraGuardada = {
+      tipo: nav.tipo,
+      objetivo: [nav.objetivo.x, nav.objetivo.y, nav.objetivo.z],
+      direccion: [nav.direccion.x, nav.direccion.y, nav.direccion.z],
+      arriba: [nav.arriba.x, nav.arriba.y, nav.arriba.z],
+      distancia: nav.distancia,
+    };
+    if (camera instanceof THREE.OrthographicCamera) {
+      guardada.izquierda = camera.left;
+      guardada.derecha = camera.right;
+      guardada.arribaPlano = camera.top;
+      guardada.abajo = camera.bottom;
+    } else if (camera instanceof THREE.PerspectiveCamera) {
+      guardada.fov = camera.fov;
+    }
+    camarasGuardadas.current.set(id, guardada);
+  }, []);
+
   const aplicarCamara = useCallback(() => {
     const nav = navegacion.current;
     const camera = camara.current;
@@ -812,11 +912,29 @@ export function Visor3D({
       camera.far = nav.distancia + diagonalCaja(cajaVista) * 3 + 10;
       camera.updateProjectionMatrix();
     } else if (camera instanceof THREE.PerspectiveCamera) {
+      // O010: un near proporcional a la distancia evita la pérdida de precisión de
+      // profundidad que hacía manchas y caras mal sombreadas en perspectiva.
+      camera.near = Math.max(0.01, Math.min(0.1, nav.distancia * 0.004));
       camera.far = nav.distancia + diagonalCaja(cajaVista) * 4 + 10;
       camera.updateProjectionMatrix();
     }
     camera.updateMatrixWorld();
-  }, [cajaVista]);
+    const nodo = contenedor.current;
+    if (nodo) {
+      nodo.dataset.camara = JSON.stringify({
+        tipo: nav.tipo,
+        objetivo: [nav.objetivo.x, nav.objetivo.y, nav.objetivo.z],
+        direccion: [nav.direccion.x, nav.direccion.y, nav.direccion.z],
+        distancia: nav.distancia,
+        izquierda: camera instanceof THREE.OrthographicCamera ? camera.left : null,
+        derecha: camera instanceof THREE.OrthographicCamera ? camera.right : null,
+        arribaPlano: camera instanceof THREE.OrthographicCamera ? camera.top : null,
+        abajo: camera instanceof THREE.OrthographicCamera ? camera.bottom : null,
+        fov: camera instanceof THREE.PerspectiveCamera ? camera.fov : null,
+      });
+    }
+    guardarCamaraActual();
+  }, [cajaVista, guardarCamaraActual]);
   // O006e: metros de mundo por píxel de pantalla en la cámara actual. Es la base
   // de la tolerancia de enganche (12 px) y del tamaño de su marca (10 px).
   const metrosPorPixelActual = useCallback(() => {
@@ -838,48 +956,67 @@ export function Visor3D({
   }, []);
 
 
-  // Cámara de la vista activa (solo se reencuadra al cambiar de vista o de modelo).
+  // O010: la cámara se crea/restaura solo al abrir una vista. Los cambios del modelo
+  // (cajaVista) NO la reencuadran: solo actualizan near/far más abajo.
   useEffect(() => {
     const nodo = contenedor.current;
     if (!nodo || !renderer.current) return;
     const aspecto = Math.max(nodo.clientWidth, 1) / Math.max(nodo.clientHeight, 1);
+    guardarCamaraActual();
+    vistaDeCamara.current = vista.id;
+
     const nav = crearNavegacion(vista, cajaVista, aspecto);
-    navegacion.current = nav;
-    const centro = nav.objetivo;
-    if (nav.tipo === "perspectiva") {
-      const perspectiva = camaraPerspectiva(cajaVista, { aspecto });
-      const camera = new THREE.PerspectiveCamera(50, aspecto, perspectiva.cerca, perspectiva.lejos);
-      camara.current = camera;
-    } else {
-      const direccion: [number, number, number] =
-        vista.tipo === "planta"
-          ? [0, 0, 1]
-          : vista.tipo === "alzado"
-            ? direccionAlzado(vista.orientacion ?? "sur")
-            : vista.tipo === "corte"
-              ? [-normalCorte(vista)[0], -normalCorte(vista)[1], 0]
-              : vectorIso();
-      const arriba: [number, number, number] =
-        vista.tipo === "planta" ? [...ARRIBA_PLANTA] : [0, 0, 1];
-      const inicial = camaraOrtografica(cajaVista, direccion, {
-        arriba,
-        centro: [centro.x, centro.y, centro.z],
-      });
-      const limites = ajustarAspecto(inicial, aspecto);
-      const camera = new THREE.OrthographicCamera(
-        limites.izquierda,
-        limites.derecha,
-        limites.arriba,
-        limites.abajo,
-        inicial.cerca,
-        inicial.lejos,
-      );
-      camara.current = camera;
+    const guardada = camarasGuardadas.current.get(vista.id);
+    if (guardada && guardada.tipo === nav.tipo) {
+      nav.objetivo.set(...guardada.objetivo);
+      nav.direccion.set(...guardada.direccion).normalize();
+      nav.arriba.set(...guardada.arriba);
+      nav.distancia = guardada.distancia;
     }
+    navegacion.current = nav;
+    const camera = crearCamaraDeVista(vista, cajaVista, aspecto, nav);
+    if (guardada && guardada.tipo === nav.tipo) {
+      if (camera instanceof THREE.OrthographicCamera) {
+        camera.left = guardada.izquierda ?? camera.left;
+        camera.right = guardada.derecha ?? camera.right;
+        camera.top = guardada.arribaPlano ?? camera.top;
+        camera.bottom = guardada.abajo ?? camera.bottom;
+      } else if (camera instanceof THREE.PerspectiveCamera) {
+        camera.fov = guardada.fov ?? camera.fov;
+        camera.aspect = aspecto;
+      }
+    }
+    camara.current = camera;
     aplicarCamara();
     // `aplicarCamara` es estable por referencia del componente; se usa a través de refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vista.id, vista.tipo, vista.orientacion, cajaVista, dimensiones.ancho, dimensiones.alto]);
+  }, [vista.id, vista.tipo, vista.orientacion]);
+
+  // Al cambiar el tamaño del lienzo (por ejemplo, al redimensionar un panel) se
+  // conserva el zoom y el centro: solo se adapta el aspecto.
+  useEffect(() => {
+    const camera = camara.current;
+    if (!camera) return;
+    const nodo = contenedor.current;
+    if (!nodo) return;
+    const aspecto = Math.max(nodo.clientWidth, 1) / Math.max(nodo.clientHeight, 1);
+    if (camera instanceof THREE.OrthographicCamera) {
+      const alto = camera.top - camera.bottom;
+      const ancho = alto * aspecto;
+      camera.left = -ancho / 2;
+      camera.right = ancho / 2;
+    } else if (camera instanceof THREE.PerspectiveCamera) {
+      camera.aspect = aspecto;
+    }
+    aplicarCamara();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dimensiones.ancho, dimensiones.alto]);
+
+  // Los cambios del modelo solo ajustan el recorte de profundidad.
+  useEffect(() => {
+    aplicarCamara();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cajaVista]);
 
   // Vista activa y geometría: filtros de categorías/niveles, recorte y relleno.
   useEffect(() => {
@@ -1016,7 +1153,12 @@ export function Visor3D({
       const geometria = new THREE.BufferGeometry();
       geometria.setAttribute("position", new THREE.BufferAttribute(elemento.vertices, 3));
       geometria.setIndex(new THREE.BufferAttribute(elemento.indices, 1));
-      geometria.computeVertexNormals();
+      // O010: normales planas por cara (vértices no compartidos) para que las caras
+      // de un muro se vean de un tono uniforme en isométrico y en perspectiva.
+      const plana = mallaConNormalesPlanas(elemento.vertices, elemento.indices);
+      const geometriaSolido = new THREE.BufferGeometry();
+      geometriaSolido.setAttribute("position", new THREE.BufferAttribute(plana.posiciones, 3));
+      geometriaSolido.setAttribute("normal", new THREE.BufferAttribute(plana.normales, 3));
 
       const seleccionado =
         elemento.globalid === seleccion || seleccionados.includes(elemento.globalid);
@@ -1079,13 +1221,14 @@ export function Visor3D({
       // Lo que queda por encima del corte no se dibuja como cara: solo su silueta
       // discontinua, para que no tape la planta.
       if (!encimaDelCorte) {
-        const malla = new THREE.Mesh(geometria, material);
+        const malla = new THREE.Mesh(geometriaSolido, material);
         malla.userData.globalid = elemento.globalid;
         malla.renderOrder = 0;
         grupoLocal.add(malla);
         meshes.current.push(malla);
       } else {
         material.dispose();
+        geometriaSolido.dispose();
       }
 
       const categoriaEstilo = elemento.categoria;
@@ -1142,7 +1285,11 @@ export function Visor3D({
           bordes.dispose();
         }
       } else if (
-        vista.estilo !== "sombreado" &&
+        // O010: en 3D (iso y perspectiva) las aristas se dibujan siempre, también en
+        // «Sombreado»; antes la perspectiva se quedaba sin bordes.
+        (vista.estilo !== "sombreado" ||
+          vista.tipo === "iso" ||
+          vista.tipo === "perspectiva") &&
         !encimaDelCorte &&
         !(vista.tipo === "planta" && categoriaEstilo === "muros")
       ) {
@@ -2102,7 +2249,8 @@ export function Visor3D({
               3,
               grupoLocal,
             );
-            const etiquetaTotal = formatearCota(total);
+            // O010: la cota total lleva su rótulo para no confundirse con una parcial.
+            const etiquetaTotal = `Total ${formatearCota(total)}`;
             const spriteTotal = textoCota(etiquetaTotal, colorNivel, fondo, altoTexto);
             if (spriteTotal) {
               const pos = puntoHZ(tTotal + 0.35, (primero.elevacion + ultimo.elevacion) / 2);
@@ -2122,7 +2270,10 @@ export function Visor3D({
         datosNiveles.push(textos);
 
         // Ejes que cruzan el plano de la vista: línea vertical y burbuja abajo.
+        // O010: se ordenan de izquierda a derecha tal como se ven en esta vista
+        // (la coordenada `s` es la horizontal de la pantalla para alzados y cortes).
         const altoBurbuja = Math.max(tamano * 0.035, 0.35);
+        const cruces: Array<{ eje: (typeof referencias.ejes)[number]; s: number }> = [];
         for (const eje of referencias.ejes) {
           const ax = eje.x1 - planoPunto.x;
           const ay = eje.y1 - planoPunto.y;
@@ -2135,7 +2286,10 @@ export function Visor3D({
           if (t < -1e-6 || t > 1 + 1e-6) continue;
           const x = eje.x1 + t * (eje.x2 - eje.x1);
           const y = eje.y1 + t * (eje.y2 - eje.y1);
-          const s = proyectarT(x, y);
+          cruces.push({ eje, s: proyectarT(x, y) });
+        }
+        cruces.sort((a, b) => a.s - b.s);
+        for (const { eje, s } of cruces) {
           lineaCerrada(
             [puntoHZ(s, zMin - 0.3), puntoHZ(s, zMax + 0.3)],
             materialEjeNivel,
@@ -2154,6 +2308,11 @@ export function Visor3D({
             burbuja.renderOrder = 20;
             grupoLocal.add(burbuja);
           }
+        }
+        if (contenedor.current) {
+          contenedor.current.dataset.ejesAlzadoOrden = cruces
+            .map(({ eje }) => eje.etiqueta)
+            .join(",");
         }
       }
     }
@@ -2521,14 +2680,17 @@ export function Visor3D({
     metrosPorPixelActual,
   ]);
 
-  // Ajustar la cámara a la vista (botón y Z luego A).
+  // Ajustar la cámara a la vista (botón y F). Es la única acción que reencuadra.
   const ajustar = useCallback(() => {
     const nodo = contenedor.current;
     if (!nodo) return;
     const aspecto = Math.max(nodo.clientWidth, 1) / Math.max(nodo.clientHeight, 1);
-    navegacion.current = crearNavegacion(vista, cajaVista, aspecto);
+    const nav = crearNavegacion(vista, cajaVista, aspecto);
+    navegacion.current = nav;
+    vistaDeCamara.current = vista.id;
+    camara.current = crearCamaraDeVista(vista, cajaVista, aspecto, nav);
     aplicarCamara();
-  }, [aplicarCamara, vista, caja]);
+  }, [aplicarCamara, vista, cajaVista]);
 
   // O006d: zoom con + y − desde el teclado, centrado en la vista.
   const zoomEnCentro = useCallback(
@@ -2577,18 +2739,19 @@ export function Visor3D({
 
   const confirmarCota = async () => {
     if (!cotaEditando) return;
-    let valor: number | null = parsearCota(textoCotaEditando);
-    if (cotaEditando.tipo === "elevacion") {
-      const crudo = textoCotaEditando.trim().replace(",", ".");
-      const numero = Number(crudo);
-      valor = Number.isFinite(numero) ? numero : null;
-    }
+    const valor =
+      cotaEditando.tipo === "elevacion"
+        ? parsearElevacion(textoCotaEditando)
+        : parsearCota(textoCotaEditando);
     if (valor === null) {
-      fijarAviso(
-        "Cota no válida. Escriba un número positivo en metros (4.50) o en centímetros (450cm).",
+      setErrorCota(
+        cotaEditando.tipo === "elevacion"
+          ? "Cota no válida: use .1, 0,1, 10cm, 100mm o un número negativo."
+          : "Cota no válida: escriba un número positivo (4.50 o 450cm).",
       );
       return;
     }
+    setErrorCota(null);
     const edicion = cotaEditando;
     setCotaEditando(null);
     if (edicion.tipo === "parcial" && edicion.referencia && edicion.mover) {
@@ -3104,6 +3267,7 @@ export function Visor3D({
             arriba: Math.max(8, Math.min(rect.height - 90, evento.clientY - rect.top - 70)),
           });
           setTextoCotaEditando(mejor.valor.toFixed(2));
+          setErrorCota(null);
           return;
         }
       }
@@ -3356,7 +3520,10 @@ export function Visor3D({
               data-testid="cota-campo"
               autoFocus
               value={textoCotaEditando}
-              onChange={(e) => setTextoCotaEditando(e.target.value)}
+              onChange={(e) => {
+                setTextoCotaEditando(e.target.value);
+                setErrorCota(null);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
@@ -3370,6 +3537,14 @@ export function Visor3D({
             />
             <span className="text-muted-foreground">m</span>
           </div>
+          {errorCota && (
+            <span
+              data-testid="cota-error"
+              className="max-w-[15rem] text-[10px] leading-tight text-red-600"
+            >
+              {errorCota}
+            </span>
+          )}
           {cotaEditando.tipo !== "elevacion" && cotaEditando.tipo !== "rebase" && (
             <label className="flex items-center gap-1 whitespace-nowrap text-muted-foreground">
               <input
