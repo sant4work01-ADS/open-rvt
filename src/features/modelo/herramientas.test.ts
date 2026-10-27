@@ -17,6 +17,7 @@ import {
   type EjeReferencia,
   type Referencias,
 } from "./herramientas";
+import { geometriaEje } from "./ejesVista";
 
 const refs: Referencias = {
   ...REFERENCIAS_VACIAS,
@@ -64,6 +65,45 @@ describe("enganches", () => {
     const e = buscarEnganche([3.1, 3.9], r);
     expect(e.tipo).toBe("cruce");
     expect(e.punto).toEqual([3, 4]);
+  });
+
+  test("O013: el cruce de ejes engancha a 0.10 m aunque el zoom deje 12 px por debajo", () => {
+    // Regresión de O007b: con la cámara real de una planta de 4 × 4 m, 12 px son
+    // 0.0864 m, así que el clic diagonal a (0.10, −0.10) —0.1414 m del cruce— caía
+    // en la cuadrícula de 5 cm en vez de en el cruce. La línea del IfcGrid manda y
+    // el cruce engancha dentro de media columna (0.30 / 2 = 0.15 m).
+    const r: Referencias = {
+      ...REFERENCIAS_VACIAS,
+      ejes: [
+        { globalid: "e1", etiqueta: "1", x1: 0, y1: 0, x2: 0, y2: 4, vertical: true },
+        { globalid: "eA", etiqueta: "A", x1: 0, y1: 0, x2: 4, y2: 0, vertical: false },
+      ],
+    };
+    const e = buscarEnganche([0.1, -0.1], r, null, 0.0072);
+    expect(e.tipo).toBe("cruce");
+    expect(e.punto).toEqual([0, 0]);
+    // Fuera de media columna no hay cruce: sigue mandando la cuadrícula.
+    expect(buscarEnganche([0.18, -0.18], r, null, 0.0072).tipo).toBe("cuadricula");
+  });
+
+  test("O013: los codos de la vista no mueven el cruce del modelo", () => {
+    // Los codos y el extremo libre son anotación de la vista. La línea que engancha
+    // es la del IfcGrid (baseInicio→baseFin), no la polilínea dibujada.
+    const ajuste = { codosFin: [[2, 3] as [number, number]], extremoFin: [2, 4] as [number, number] };
+    const g = geometriaEje(ajuste, [0, 0], [4, 0], { globoInicio: true });
+    expect(g.baseInicio).toEqual([0, 0]);
+    expect(g.baseFin).toEqual([4, 0]);
+    expect(g.puntos).toContainEqual([2, 3]);
+    const r: Referencias = {
+      ...REFERENCIAS_VACIAS,
+      ejes: [
+        { globalid: "e1", etiqueta: "1", x1: 0, y1: 0, x2: 0, y2: 4, vertical: true },
+        { globalid: "eA", etiqueta: "A", x1: g.baseInicio[0], y1: g.baseInicio[1], x2: g.baseFin[0], y2: g.baseFin[1], vertical: false },
+      ],
+    };
+    expect(buscarEnganche([0.1, 0.1], r, null, 0.0072)).toMatchObject({ tipo: "cruce", punto: [0, 0] });
+    // El cruce real sigue en (0,0); el codo en (2,3) no crea un cruce falso.
+    expect(buscarEnganche([2.05, 3.05], r, null, 0.0072).tipo).not.toBe("cruce");
   });
 
   test("engancha la intersección de dos ejes", () => {

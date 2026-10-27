@@ -189,6 +189,10 @@ test("O003b: casa nueva, losa, puerta, ventana, mover/deshacer y reabrir", async
     await muroTecleado(ses, [8, 3], 6);
     await muroTecleado(ses, [4, 6], 8);
     await muroTecleado(ses, [0, 3], 6);
+    // O005c: el primer Esc cancela el trazo en curso y conserva la herramienta; el
+    // segundo la apaga. Sin el segundo, volver a pulsar «Muro» la apagaría y no habría
+    // snap que comprobar.
+    await tecla(ses, "Escape");
     await tecla(ses, "Escape");
     await esperarElementos(ses, 4);
     assert.equal(await (await ses.porTestid("visor")).getAttribute("data-mallas"), "4");
@@ -207,6 +211,9 @@ test("O003b: casa nueva, losa, puerta, ventana, mover/deshacer y reabrir", async
     const capturaPlanta = path.join(CAPTURAS, "o003b_planta_dibujando.png");
     await ses.captura(capturaPlanta);
     assert.deepEqual(dimensionesPng(capturaPlanta), { ancho: 1600, alto: 900 });
+    // O005c: el primer Esc cancela el trazo y el segundo apaga la herramienta; si
+    // queda activa, los clics siguientes dibujan en vez de seleccionar.
+    await tecla(ses, "Escape");
     await tecla(ses, "Escape");
 
     // Selección de los cuatro muros y losa desde muros.

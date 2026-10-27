@@ -266,7 +266,10 @@ test("O007b: columnas en los cruces, trabe, zapata, editor con armex y capturas"
     const tipos = await invocar(ses, "tipos.listar", { clase: "IfcColumnType" });
     const castillo = tipos.find((t) => t.nombre === "K-1 Castillo 15×15");
     assert.equal(castillo.armado.Armex, "15x15-4");
-    assert.ok(Math.abs(castillo.acero.total_kg - 1.82) < 1e-3);
+    // La malla armex 15×15-4 pesa 1.82 kg/m (tabla de armex). El tipo se expresa
+    // con 3.00 m de referencia: 1.82 × 3.00 = 5.46 kg por pieza tipo.
+    assert.ok(Math.abs(castillo.acero.kg_m - 1.82) < 1e-9, `kg/m: ${castillo.acero.kg_m}`);
+    assert.ok(Math.abs(castillo.acero.total_kg - 5.46) < 1e-9, `kg: ${castillo.acero.total_kg}`);
 
     // 3D con el color del material.
     await tecla(ses, "Escape", "Escape");

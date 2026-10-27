@@ -50,6 +50,12 @@ export const PASO_CUADRICULA = 0.05;
 export const PASO_ANGULO = Math.PI / 12; // 15°
 /** O006e: la tolerancia del enganche es de 12 px de pantalla, no de 25 cm. */
 export const TOLERANCIA_PX = 12;
+/**
+ * O013: el cruce de ejes engancha siempre dentro de media columna (0.30 / 2 m),
+ * aunque el zoom haga que 12 px midan menos. El cruce es la referencia de obra
+ * para columnas, castillos y zapatas; los codos son anotación y no lo desplazan.
+ */
+export const TOLERANCIA_CRUCE_M = 0.15;
 /** 0,02 m/px es el zoom de trabajo por omisión cuando no se conoce la cámara. */
 export const METROS_POR_PIXEL_POR_OMISION = 0.02;
 
@@ -152,11 +158,18 @@ export function buscarEnganche(
     ? metrosPorPixel
     : METROS_POR_PIXEL_POR_OMISION;
   const tolerancia = TOLERANCIA_PX * mpp;
-  const candidatos: Array<{ punto: Punto2; tipo: TipoEnganche }> = [];
-  for (const p of refs.extremos) candidatos.push({ punto: p, tipo: "extremo" });
-  for (const p of refs.medios) candidatos.push({ punto: p, tipo: "medio" });
-  for (const p of crucesDeEjes(refs.ejes)) candidatos.push({ punto: p, tipo: "cruce" });
-  for (const p of refs.intersecciones) candidatos.push({ punto: p, tipo: "interseccion" });
+  // O013: los ejes son líneas del modelo (IfcGrid); sus cruces tienen un alcance
+  // mínimo de media columna y no dependen del zoom ni de los codos de la vista.
+  const toleranciaCruce = Math.max(tolerancia, TOLERANCIA_CRUCE_M);
+  const candidatos: Array<{ punto: Punto2; tipo: TipoEnganche; alcance: number }> = [];
+  for (const p of refs.extremos) candidatos.push({ punto: p, tipo: "extremo", alcance: tolerancia });
+  for (const p of refs.medios) candidatos.push({ punto: p, tipo: "medio", alcance: tolerancia });
+  for (const p of crucesDeEjes(refs.ejes)) {
+    candidatos.push({ punto: p, tipo: "cruce", alcance: toleranciaCruce });
+  }
+  for (const p of refs.intersecciones) {
+    candidatos.push({ punto: p, tipo: "interseccion", alcance: tolerancia });
+  }
   if (desde) {
     for (const muro of refs.muros) {
       const proy = proyectarSobreSegmento(
@@ -165,11 +178,11 @@ export function buscarEnganche(
         [muro.x2, muro.y2],
       );
       if (distancia(raton, proy.punto) <= tolerancia) {
-        candidatos.push({ punto: proy.punto, tipo: "perpendicular" });
+        candidatos.push({ punto: proy.punto, tipo: "perpendicular", alcance: tolerancia });
       }
     }
   }
-  const validos = candidatos.filter((c) => distancia(raton, c.punto) <= tolerancia);
+  const validos = candidatos.filter((c) => distancia(raton, c.punto) <= c.alcance);
   if (validos.length === 0) {
     return { punto: redondearCuadricula(raton), tipo: "cuadricula" };
   }
