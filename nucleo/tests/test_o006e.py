@@ -57,11 +57,18 @@ def test_esquina_en_l_recorta_los_dos_muros_y_suma_su_volumen(tipo: str) -> None
     volumenes = _volumenes(nucleo)
     assert set(volumenes) == set(muros)
     espesor = _espesor(nucleo, tipo)
-    esperado = (4 + 3 - espesor) * espesor * 2.60
+    # O010: inglete limpio. Cada cuerpo llega a la cara exterior del otro y la
+    # huella suma (L1 + L2 − 2·centro) · espesor, donde `centro` es la posición del
+    # eje del cuerpo respecto del eje del muro (0 si la línea de ubicación es el centro).
+    entidad = nucleo._entidad_por_gid(muros[0])
+    datos = nucleo._datos_muro(entidad)
+    offset = nucleo._desfase_de_muro(entidad, espesor)
+    centro = offset + espesor / 2.0
+    esperado = (4 + 3 - 2 * centro) * espesor * 2.60
     assert sum(volumenes.values()) == pytest.approx(esperado, abs=0.001)
-    # Los dos cuerpos se recortan: ninguno conserva el volumen rectangular completo.
-    assert volumenes[muros[0]] < 4 * espesor * 2.60
-    assert volumenes[muros[1]] < 3 * espesor * 2.60
+    # O010: ningún cuerpo sobresale de su rectángulo de eje (no hay picos).
+    assert volumenes[muros[0]] <= 4 * espesor * 2.60 + 1e-3
+    assert volumenes[muros[1]] <= 3 * espesor * 2.60 + 1e-3
     uniones = nucleo.modelo.by_type("IfcRelConnectsPathElements")
     assert len(uniones) == 1
 

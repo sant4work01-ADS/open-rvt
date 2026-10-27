@@ -106,6 +106,83 @@ describe("huellas de muros unidas (O006e)", () => {
 });
 
 
+describe("área de la huella en L, T y cruz (O010)", () => {
+  function areaAnillo(anillo: Array<[number, number]>): number {
+    let suma = 0;
+    for (let i = 0; i < anillo.length; i += 1) {
+      const [x1, y1] = anillo[i];
+      const [x2, y2] = anillo[(i + 1) % anillo.length];
+      suma += x1 * y2 - x2 * y1;
+    }
+    return Math.abs(suma) / 2;
+  }
+
+  function areaHuella(huellas: ReturnType<typeof unirHuellas>): number {
+    return huellas.reduce(
+      (total, poligono) =>
+        total +
+        areaAnillo(poligono.exterior) -
+        poligono.huecos.reduce((resta, hueco) => resta + areaAnillo(hueco), 0),
+      0,
+    );
+  }
+
+  test("L con espesores iguales: área exacta L1·t + L2·t", () => {
+    const huellas = unirHuellas(L);
+    expect(huellas).toHaveLength(1);
+    expect(areaHuella(huellas)).toBeCloseTo((4 + 3) * 0.15, 6);
+  });
+
+  test("T con espesores iguales: el que llega se descuenta una sola vez", () => {
+    const huellas = unirHuellas(T);
+    expect(huellas).toHaveLength(1);
+    // Pasante 8×t + el que llega 3×t − el cruce t×(t/2).
+    expect(areaHuella(huellas)).toBeCloseTo(8 * 0.15 + 3 * 0.15 - 0.15 * 0.075, 6);
+  });
+
+  test("cruz: área de la unión, sin contar dos veces el cruce", () => {
+    const cruz = [
+      muro("h", [0, 4, 8, 4]),
+      muro("v", [4, 0, 4, 8]),
+    ];
+    const huellas = unirHuellas(cruz);
+    expect(huellas).toHaveLength(1);
+    expect(areaHuella(huellas)).toBeCloseTo(8 * 0.15 + 8 * 0.15 - 0.15 * 0.15, 6);
+  });
+
+  test("L con espesores distintos: cada muro llega a la cara exterior del otro", () => {
+    const distintos = [
+      muro("h", [0, 0, 4, 0], nucleo(0.15)),
+      muro("v", [4, 0, 4, 3], nucleo(0.2)),
+    ];
+    const huellas = unirHuellas(distintos);
+    expect(huellas).toHaveLength(1);
+    // El inglete limpio suma exactamente los dos largos por su espesor.
+    expect(areaHuella(huellas)).toBeCloseTo(4 * 0.15 + 3 * 0.2, 6);
+    expect(contarVertices(huellas[0])).toBe(6);
+  });
+
+  test("T y cruz con espesores distintos: sin solapes ni huecos", () => {
+    const t = [
+      muro("pasante", [0, 0, 8, 0], nucleo(0.15)),
+      muro("llega", [4, 0, 4, 3], nucleo(0.2)),
+    ];
+    expect(areaHuella(unirHuellas(t))).toBeCloseTo(
+      8 * 0.15 + 3 * 0.2 - (0.15 * 0.2) / 2,
+      6,
+    );
+    const cruz = [
+      muro("h", [0, 4, 8, 4], nucleo(0.15)),
+      muro("v", [4, 0, 4, 8], nucleo(0.2)),
+    ];
+    expect(areaHuella(unirHuellas(cruz))).toBeCloseTo(
+      8 * 0.15 + 8 * 0.2 - 0.15 * 0.2,
+      6,
+    );
+  });
+});
+
+
 describe("castillos y columnas en planta (O007c)", () => {
   const castillo: SeccionPlanta = {
     globalid: "k1",

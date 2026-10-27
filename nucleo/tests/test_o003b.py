@@ -141,13 +141,13 @@ def test_volumen_de_muros_descuenta_aberturas():
     nucleo, _nivel, muros = _casa()
     volumenes = _volumenes(nucleo, "IfcWall")
     assert set(volumenes) == set(muros)
-    # O006e: las esquinas en L recortan media thickness en cada extremo, así que
-    # cada muro mide (largo − espesor) antes de descontar sus aberturas.
+    # O010: el inglete limpio hace que cada muro conserve exactamente su largo de
+    # eje por el espesor (sin picos ni muescas) antes de descontar sus aberturas.
     esperado = {
-        muros[0]: (8 - 0.15) * 2.60 * 0.15 - 0.90 * 2.10 * 0.15,
-        muros[1]: (6 - 0.15) * 2.60 * 0.15 - 2 * 1.20 * 1.20 * 0.15,
-        muros[2]: (8 - 0.15) * 2.60 * 0.15,
-        muros[3]: (6 - 0.15) * 2.60 * 0.15,
+        muros[0]: 8 * 2.60 * 0.15 - 0.90 * 2.10 * 0.15,
+        muros[1]: 6 * 2.60 * 0.15 - 2 * 1.20 * 1.20 * 0.15,
+        muros[2]: 8 * 2.60 * 0.15,
+        muros[3]: 6 * 2.60 * 0.15,
     }
     for gid, volumen in esperado.items():
         assert abs(volumenes[gid] - volumen) <= volumen * 0.01, (gid, volumenes[gid], volumen)

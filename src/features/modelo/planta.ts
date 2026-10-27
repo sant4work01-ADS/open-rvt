@@ -92,17 +92,20 @@ function extensionesEnExtremos(
   todos: MuroPlanta[],
 ): { inicio: number; fin: number } {
   const [x1, y1, x2, y2] = muro.eje;
-  const e = espesorDe(muro) / 2;
   let inicio = 0;
   let fin = 0;
   for (const otro of todos) {
     if (otro.globalid === muro.globalid) continue;
     const [ox1, oy1, ox2, oy2] = otro.eje;
+    // O010: en L cada muro llega a la cara exterior del otro. La extensión es el
+    // medio espesor del vecino; con espesores distintos, usar el propio dejaría
+    // una muesca en el muro delgado.
+    const alcance = espesorDe(otro) / 2;
     if (Math.hypot(ox1 - x1, oy1 - y1) <= 0.01 || Math.hypot(ox2 - x1, oy2 - y1) <= 0.01) {
-      inicio = Math.max(inicio, e);
+      inicio = Math.max(inicio, alcance);
     }
     if (Math.hypot(ox1 - x2, oy1 - y2) <= 0.01 || Math.hypot(ox2 - x2, oy2 - y2) <= 0.01) {
-      fin = Math.max(fin, e);
+      fin = Math.max(fin, alcance);
     }
   }
   return { inicio, fin };
