@@ -7,7 +7,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { Sesion, esperar, By, until } = require("./arnes");
+const { Sesion, esperar, By, until, Key } = require("./arnes");
 
 const RAIZ = path.resolve(__dirname, "..");
 const RESULTADOS = path.join(RAIZ, "resultados", "O012");
@@ -384,6 +384,89 @@ test("O012-2: muros de la captura 2 con capas ingleteadas en 3D", async () => {
       "despues-muros-perspectiva.png",
       "despues-muros-isometrico.png",
       "despues-muros-planta.png",
+    ]) {
+      const ruta = path.join(RESULTADOS, archivo);
+      assert.ok(fs.existsSync(ruta), `falta ${archivo}`);
+      if (archivo.endsWith(".png")) {
+        const medidas = dimensionesPng(ruta);
+        assert.ok(medidas.ancho > 1000 && medidas.alto > 600);
+      }
+    }
+  } finally {
+    await ses.cerrar();
+  }
+});
+
+test("O012-3: trabe contra columna (anexo del usuario), planta y alzado", async () => {
+  antesDelUsuario("2026-10-27-trabe-contra-columna.jpg", "antes-trabe-columna.jpg");
+  const ses = await Sesion.abrir({
+    prueba: "o012-trabe-columna",
+    tamano: DIMENSION,
+    lateralExpandido: true,
+    compositar: true,
+  });
+  try {
+    await activar(ses, "cmd-nuevo");
+    await ses.driver.wait(async () => {
+      try {
+        return (await textoDom(ses, '[data-testid="estado-esquema"]')) === "IFC4";
+      } catch {
+        return false;
+      }
+    }, 20_000, "el modelo nuevo no cargó");
+
+    await cambiarPestana(ses, "Modelar");
+    await elegirVista(ses, "Planta Nivel 0");
+    await ajustar(ses);
+    await activar(ses, "cmd-zapata");
+    for (const [x, y] of [[0, 0], [6, 0]]) await clicMundo(ses, x, y);
+    await tecla(ses, "Escape");
+    await tecla(ses, "Escape");
+    await activar(ses, "cmd-columna");
+    for (const [x, y] of [[0, 0], [6, 0]]) await clicMundo(ses, x, y);
+    await tecla(ses, "Escape");
+    await tecla(ses, "Escape");
+    await activar(ses, "cmd-trabe");
+    await clicMundo(ses, 0, 0);
+    await clicMundo(ses, 6, 0);
+    await tecla(ses, "Escape");
+    await tecla(ses, "Escape");
+    await esperarMallas(ses, 5);
+
+    // La trabe nace a nivel del piso; se sube al lecho alto de la columna desde
+    // Propiedades para reproducir el dibujo del usuario.
+    await clicMundo(ses, 3, 0);
+    const campoDesfase = await ses.porTestid("elemento-desfase");
+    await campoDesfase.click();
+    await campoDesfase.sendKeys(Key.chord(Key.CONTROL, "a"));
+    await campoDesfase.sendKeys("2.5");
+    await campoDesfase.sendKeys(Key.TAB);
+    await esperar(500);
+    await cambiarPestana(ses, "Vista");
+    await elegirVista(ses, "3D Perspectiva");
+    await ajustar(ses);
+    await esperar(700);
+
+    const cantidades = await invocar(ses, "cantidades.estructura", {});
+    const trabe = cantidades.elementos.find((e) => e.alias === "trabe");
+    assert.ok(trabe, "no se creó la trabe");
+    // CT/T-1: 0.20 × 0.40; 6.00 − 0.15 − 0.15 = 5.70 → 0.20·0.40·5.70 = 0.456.
+    assert.ok(
+      Math.abs(trabe.volumen_neto_m3 - 0.456) < 5e-3,
+      `trabe ${trabe.volumen_neto_m3} != 0.456`,
+    );
+
+    await elegirVista(ses, "Planta Nivel 0");
+    await ajustar(ses);
+    await ses.captura(path.join(RESULTADOS, "despues-trabe-columna-planta.png"));
+    await elegirVista(ses, "Alzado Norte");
+    await ajustar(ses);
+    await ses.captura(path.join(RESULTADOS, "despues-trabe-columna-alzado.png"));
+
+    for (const archivo of [
+      "antes-trabe-columna.jpg",
+      "despues-trabe-columna-planta.png",
+      "despues-trabe-columna-alzado.png",
     ]) {
       const ruta = path.join(RESULTADOS, archivo);
       assert.ok(fs.existsSync(ruta), `falta ${archivo}`);
