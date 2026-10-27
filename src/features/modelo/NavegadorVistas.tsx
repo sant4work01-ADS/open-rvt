@@ -28,7 +28,7 @@ export function NavegadorVistas({
     <aside
       data-testid="navegador-vistas"
       aria-label="Navegador de vistas"
-      className="flex w-[210px] shrink-0 flex-col overflow-y-auto border-r bg-background"
+      className="flex min-h-0 w-full flex-col overflow-y-auto border-r bg-background"
     >
       <div className="border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         Vistas

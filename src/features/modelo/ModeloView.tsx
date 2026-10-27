@@ -14,6 +14,7 @@ import { DialogoCotas } from "./DialogoCotas";
 import { DialogoCastillos } from "./DialogoCastillos";
 import { CantidadesView } from "./CantidadesView";
 import { EditorTipos } from "@/features/tipos/EditorTipos";
+import { PanelRedimensionable } from "@/app/PanelRedimensionable";
 
 export function ModeloView() {
   const ruta = useModelo((s) => s.ruta);
@@ -71,13 +72,15 @@ export function ModeloView() {
 
   return (
     <div data-testid="modelo-editor" className="flex min-h-0 flex-1 overflow-hidden">
-      <NavegadorVistas
-        vistas={vistas}
-        activaId={vista?.id ?? null}
-        onElegir={fijarVista}
-        cantidadesActiva={esCantidades}
-        onCantidades={() => fijarVista("cantidades")}
-      />
+      <PanelRedimensionable id="vistas" lado="izquierdo" etiqueta="el panel Vistas">
+        <NavegadorVistas
+          vistas={vistas}
+          activaId={vista?.id ?? null}
+          onElegir={fijarVista}
+          cantidadesActiva={esCantidades}
+          onCantidades={() => fijarVista("cantidades")}
+        />
+      </PanelRedimensionable>
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex h-8 shrink-0 items-center gap-2 border-b px-3 text-xs">
           <span className="font-medium" data-testid="vista-activa-nombre">
@@ -148,7 +151,11 @@ export function ModeloView() {
           )}
         </div>
       </div>
-      {panelAbierto && <PanelPropiedades />}
+      {panelAbierto && (
+        <PanelRedimensionable id="propiedades" lado="derecho" etiqueta="el panel Propiedades">
+          <PanelPropiedades />
+        </PanelRedimensionable>
+      )}
       {dialogoEstilos && <DialogoEstilos />}
       {dialogoCotas && <DialogoCotas />}
       {dialogoCastillos && <DialogoCastillos />}
