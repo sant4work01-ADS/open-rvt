@@ -43,6 +43,7 @@ import {
 } from "./herramientas";
 import { estilosPorDefecto, normalizarEstilos, type Estilos } from "./estilos";
 import { construirAberturas } from "./aberturas";
+import { normalizarAjusteEje } from "./ejesVista";
 
 export type RespuestaGuardar = "guardar" | "descartar" | "cancelar";
 export type Herramienta =
@@ -942,8 +943,10 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       if (!vista) return;
       const ejes = { ...(vista.ejes ?? {}) };
       for (const [globalid, ajuste] of Object.entries(cambios)) {
-        if (!ajuste || Object.keys(ajuste).length === 0) delete ejes[globalid];
-        else ejes[globalid] = ajuste;
+        // La misma validación que al leer el pset: máximo 2 codos y puntos finitos.
+        const limpio = normalizarAjusteEje(ajuste);
+        if (!limpio) delete ejes[globalid];
+        else ejes[globalid] = limpio;
       }
       const vistas = get().vistas.map((v) =>
         v.id === vistaId
