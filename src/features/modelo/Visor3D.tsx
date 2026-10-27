@@ -2748,7 +2748,7 @@ export function Visor3D({
       setErrorCota(
         cotaEditando.tipo === "elevacion"
           ? "Cota no válida: use .1, 0,1, 10cm, 100mm o un número negativo."
-          : "Cota no válida: escriba un número positivo (4.50 o 450cm).",
+          : "Cota no válida: use .15, 0,15, 15cm o 150mm (mayor que cero).",
       );
       return;
     }

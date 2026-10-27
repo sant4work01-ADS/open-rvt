@@ -167,31 +167,11 @@ export function formatearCota(valor: number): string {
 }
 
 /**
- * Acepta «4.5», «4,5» y «450cm». Devuelve metros o `null` si no es un número
- * positivo. No usa `parseFloat` con texto suelto para no aceptar «4.5.6».
+ * O011: una sola regla de lectura numérica para cotas y elevaciones. Acepta
+ * `.15`, `,15`, `0.15`, `1.`, `15cm`, `150mm`, `0.15m` y espacios. Devuelve
+ * metros o `null`. No usa `parseFloat` con texto suelto para no aceptar «4.5.6».
  */
-export function parsearCota(texto: string): number | null {
-  let limpio = (texto ?? "").trim().toLocaleLowerCase("es").replace(/\s+/g, "");
-  if (!limpio) return null;
-  let factor = 1;
-  if (limpio.endsWith("cm")) {
-    factor = 0.01;
-    limpio = limpio.slice(0, -2);
-  } else if (limpio.endsWith("m")) {
-    limpio = limpio.slice(0, -1);
-  }
-  limpio = limpio.replace(",", ".");
-  if (!/^[+-]?\d+(?:\.\d+)?$/.test(limpio)) return null;
-  const valor = Number(limpio) * factor;
-  if (!Number.isFinite(valor) || valor <= 0) return null;
-  return Math.round(valor * 1e6) / 1e6;
-}
-
-/**
- * O010: elevaciones de nivel. Acepta ".1", "0.1", "0,1", "10cm", "100mm", "3m" y
- * numeros negativos (sotanos). No confunde "4.5.6" ni texto suelto con un numero.
- */
-export function parsearElevacion(texto: string): number | null {
+function valorEnMetros(texto: string): number | null {
   let limpio = (texto ?? "").trim().toLocaleLowerCase("es").replace(/\s+/g, "");
   if (!limpio) return null;
   let factor = 1;
@@ -210,6 +190,24 @@ export function parsearElevacion(texto: string): number | null {
   const valor = Number(limpio) * factor;
   if (!Number.isFinite(valor)) return null;
   return Math.round(valor * 1e6) / 1e6;
+}
+
+/**
+ * Acepta «4.5», «4,5», «450cm», «4500mm», «.15» y «.15m». Devuelve metros o
+ * `null` si no es un número positivo.
+ */
+export function parsearCota(texto: string): number | null {
+  const valor = valorEnMetros(texto);
+  if (valor === null || valor <= 0) return null;
+  return valor;
+}
+
+/**
+ * O010: elevaciones de nivel. Acepta ".1", "0.1", "0,1", "10cm", "100mm", "3m" y
+ * numeros negativos (sotanos). No confunde "4.5.6" ni texto suelto con un numero.
+ */
+export function parsearElevacion(texto: string): number | null {
+  return valorEnMetros(texto);
 }
 
 /** La cota total solo se lee; nunca se edita. */
