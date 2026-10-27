@@ -31,6 +31,16 @@ export interface CategoriasVisibles {
   otros: boolean;
 }
 
+/** O011: ajustes de un eje que solo viven en esta vista (no tocan el IfcGrid). */
+export interface AjusteEjeVista {
+  /** Extremos libres: si existe, ese extremo no sigue la alineación común. */
+  extremoInicio?: [number, number];
+  extremoFin?: [number, number];
+  /** Codos: 0, 1 o 2 vértices entre el final de la línea y el globo, por extremo. */
+  codosInicio?: [number, number][];
+  codosFin?: [number, number][];
+}
+
 export interface Vista {
   id: string;
   nombre: string;
@@ -59,6 +69,8 @@ export interface Vista {
   alturaArriba?: number;
   /** O006a: cotas automáticas entre ejes en planta (activadas por omisión). */
   cotasEjes?: boolean;
+  /** O011: ajustes de eje en esta vista. Clave: GlobalId del eje. */
+  ejes?: Record<string, AjusteEjeVista>;
 }
 
 export interface Nivel {

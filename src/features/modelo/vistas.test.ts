@@ -189,6 +189,67 @@ describe("OPENRVT_Vistas", () => {
   });
 });
 
+describe("O011: ajustes de eje en la vista", () => {
+  it("una vista de la 0.5.7 (sin `ejes`) se conserva tal cual y sin ajustes", () => {
+    // JSON de una vista guardada por la versión anterior: no tiene la clave `ejes`.
+    const vieja = leerVistas(
+      JSON.stringify([
+        {
+          id: "planta-nivel-0",
+          nombre: "Planta Nivel 0",
+          tipo: "planta",
+          nivel: "nivel-0",
+          nivelesVisibles: ["nivel-0"],
+          escala: 100,
+          estilo: "aristas",
+        },
+      ]),
+    );
+    expect(vieja).toHaveLength(1);
+    expect(vieja[0].ejes).toBeUndefined();
+    expect(vieja[0].nombre).toBe("Planta Nivel 0");
+    expect(vieja[0].escala).toBe(100);
+  });
+
+  it("conserva extremos y codos válidos, recorta a dos y descarta puntos rotos", () => {
+    const vista = normalizarVista({
+      tipo: "planta",
+      nombre: "P",
+      ejes: {
+        "eje-1": {
+          extremoFin: [1.5, 8],
+          codosFin: [
+            [0.5, 7.5],
+            [-0.5, 7.5],
+            [9, 9],
+          ],
+        },
+        "eje-2": { extremoInicio: ["x", 2] },
+        "eje-3": {},
+      },
+    })!;
+    expect(vista.ejes).toEqual({
+      "eje-1": {
+        extremoFin: [1.5, 8],
+        codosFin: [
+          [0.5, 7.5],
+          [-0.5, 7.5],
+        ],
+      },
+    });
+  });
+
+  it("ida y vuelta por el pset conserva los ajustes", () => {
+    const vistas = crearVistas(NIVELES);
+    vistas[0] = {
+      ...vistas[0],
+      ejes: { "eje-1": { extremoFin: [0, 9], codosInicio: [[0.5, 0.5]] } },
+    };
+    const otraVez = leerVistas(serializarVistas(vistas));
+    expect(otraVez[0].ejes).toEqual(vistas[0].ejes);
+  });
+});
+
 describe("caja de las mallas", () => {
   it("calcula los límites de todos los vértices decodificados", () => {
     const malla = (vertices: number[]): ElementoMalla => ({

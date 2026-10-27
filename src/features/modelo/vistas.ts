@@ -13,9 +13,11 @@ import {
   type Orientacion,
   type TipoVista,
   type Vista,
+  type AjusteEjeVista,
 } from "./tipos";
 import type { EstiloCategoriaVista } from "./estilos";
 import type { EjeReferencia } from "./herramientas";
+import { normalizarAjusteEje } from "./ejesVista";
 
 export type Vector3 = [number, number, number];
 
@@ -424,6 +426,16 @@ export function normalizarVista(valor: unknown): Vista | null {
       estilos[clave as Categoria] = cambio;
     }
   }
+  // O011: los ajustes de eje son datos de la vista y pasan por la misma validación
+  // que el resto (máximo dos codos por extremo, puntos finitos).
+  const ejes: Record<string, AjusteEjeVista> = {};
+  if (v.ejes && typeof v.ejes === "object") {
+    for (const [globalid, crudo] of Object.entries(v.ejes as Record<string, unknown>)) {
+      if (!globalid) continue;
+      const ajuste = normalizarAjusteEje(crudo as AjusteEjeVista);
+      if (ajuste) ejes[globalid] = ajuste;
+    }
+  }
   return {
     id: typeof v.id === "string" && v.id ? v.id : `vista-${Math.random().toString(36).slice(2)}`,
     nombre: typeof v.nombre === "string" && v.nombre ? v.nombre : "Vista",
@@ -447,6 +459,7 @@ export function normalizarVista(valor: unknown): Vista | null {
         ? v.alturaArriba
         : undefined,
     cotasEjes: v.cotasEjes !== false,
+    ejes: Object.keys(ejes).length > 0 ? ejes : undefined,
   };
 }
 
