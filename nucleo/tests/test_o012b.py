@@ -26,7 +26,7 @@ from shapely.geometry import Polygon
 RAIZ = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(RAIZ / "nucleo"))
 
-from openrvt_nucleo.modelo import ModeloNucleo  # noqa: E402
+from openrvt_nucleo.modelo import ErrorNucleo, ModeloNucleo  # noqa: E402
 
 CT = "CT-1 Contratrabe 20×40"
 COL = "C-1 Columna 30×30"
@@ -402,3 +402,15 @@ def test_columna_y_castillo_nacen_en_la_cara_superior_del_dado() -> None:
     assert datos_castillo["Base"] == pytest.approx(0.0, abs=1e-9)
     _cx0, _cx1, _cy0, _cy1, cz0, _cz1 = _caja(nucleo, castillo)
     assert cz0 == pytest.approx(0.0, abs=1e-9)
+
+
+def test_bordes_de_losa_y_muro_negativos_cero_y_datos_incompletos() -> None:
+    nucleo, nivel = _nuevo()
+    with pytest.raises(ErrorNucleo):
+        nucleo.losa_crear(nivel, [(0, 0), (1, 0), (1, 1)], espesor=0.0)
+    with pytest.raises(ErrorNucleo):
+        nucleo.losa_crear(nivel, [(0, 0), (1, 0)], espesor=0.10)
+    with pytest.raises(ErrorNucleo):
+        nucleo.muro_crear(MURO, nivel, 0, 0, 4, 0, altura=0.0)
+    assert len(nucleo.modelo.by_type("IfcSlab")) == 0
+    assert len(nucleo.modelo.by_type("IfcWall")) == 0
