@@ -712,3 +712,86 @@ test("O011-4: abre un modelo con vistas de la 0.5.7 (sin `ejes`)", async () => {
     fs.rmSync(carpeta, { recursive: true, force: true });
   }
 });
+
+test("O011-5: una cota editada como .15 se guarda y el error es el de la spec", async () => {
+  const ses = await Sesion.abrir({
+    prueba: "o011-cotas",
+    tamano: { ancho: 1600, alto: 900 },
+    lateralExpandido: true,
+    compositar: true,
+  });
+  try {
+    await crearModelo(ses);
+    await crearNiveles(ses, 1);
+    await dibujarEjes(ses, [0, 6, 12]);
+    const antes = await invocar(ses, "modelo.referencias");
+    const ejes = [...antes.ejes].sort((a, b) => a.x1 - b.x1);
+    assert.equal(ejes.length, 3);
+    // Con tres ejes la cadena tiene parciales y total; la primera parcial es 6.00.
+    assert.ok(
+      JSON.parse(await atributoVisor(ses, "cotas"))[0].parciales.includes("6.00"),
+      "faltan las cotas parciales de la retícula",
+    );
+
+    const dobleClicCota = async (texto) => {
+      const punto = await ses.driver.executeScript(
+        (texto) => document.querySelector('[data-testid="visor"]').__openrvtCotaAPantalla(texto, 0),
+        texto,
+      );
+      assert.ok(punto, `no se encontró la cota ${texto}`);
+      await ses.driver.executeScript(
+        (punto) => {
+          const canvas = document.querySelector('[data-testid="visor"] canvas');
+          canvas.dispatchEvent(
+            new MouseEvent("dblclick", {
+              bubbles: true,
+              cancelable: true,
+              button: 0,
+              clientX: punto.x,
+              clientY: punto.y,
+            }),
+          );
+        },
+        punto,
+      );
+      await esperar(300);
+    };
+
+    // 6.00 m entre los dos primeros ejes; se escribe .15 (15 cm) y la cadena manda.
+    await dobleClicCota("6.00");
+    const campo = await ses.porTestid("cota-campo");
+    await campo.sendKeys(Key.CONTROL, "a");
+    await campo.sendKeys(".15");
+    await campo.sendKeys(Key.ENTER);
+    await esperar(900);
+
+    const despues = await invocar(ses, "modelo.referencias");
+    const movidos = [...despues.ejes].sort((a, b) => a.x1 - b.x1);
+    assert.ok(
+      Math.abs(Math.abs(movidos[1].x1 - movidos[0].x1) - 0.15) < 1e-6,
+      `la cota .15 no movió el eje a 0.15 m: ${JSON.stringify(movidos)}`,
+    );
+    // La lectura reportada es la misma que se guardó.
+    const textos = JSON.parse(await atributoVisor(ses, "cotas"));
+    assert.ok(
+      textos.some((familia) => familia.parciales.includes("0.15")),
+      `el reporte de cotas no muestra 0.15: ${JSON.stringify(textos)}`,
+    );
+
+    // Un texto mal formado no mueve nada y muestra el mensaje exacto de la spec.
+    await dobleClicCota("0.15");
+    const campo2 = await ses.porTestid("cota-campo");
+    await campo2.sendKeys(Key.CONTROL, "a");
+    await campo2.sendKeys("4.5.6");
+    await campo2.sendKeys(Key.ENTER);
+    await esperar(400);
+    assert.equal(
+      await textoDom(ses, '[data-testid="cota-error"]'),
+      "Cota no válida: use .15, 0,15, 15cm o 150mm (mayor que cero).",
+    );
+    const sinCambios = await invocar(ses, "modelo.referencias");
+    assert.deepEqual(sinCambios.ejes, despues.ejes);
+  } finally {
+    await ses.cerrar();
+  }
+});
