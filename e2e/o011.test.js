@@ -661,3 +661,54 @@ print(f"{max_racha} {mejor:.1f} {cercanos}")
     await ses.cerrar();
   }
 });
+
+test("O011-4: abre un modelo con vistas de la 0.5.7 (sin `ejes`)", async () => {
+  const ses = await Sesion.abrir({
+    prueba: "o011-compatibilidad",
+    tamano: { ancho: 1600, alto: 900 },
+    lateralExpandido: true,
+    compositar: true,
+  });
+  const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), "openrvt-o011-viejo-"));
+  const ruta = path.join(carpeta, "o011-viejo.ifc");
+  try {
+    await instalarDialogos(ses, { abrir: ruta, guardar: ruta });
+    await crearModelo(ses);
+    await crearNiveles(ses, 1);
+    await dibujarEjes(ses, [0, 6]);
+    await cambiarPestana(ses, "Inicio");
+    await activar(ses, "cmd-guardar");
+    await esperar(800);
+
+    // Simula el pset que dejaba la 0.5.7: las vistas no tienen la clave `ejes`.
+    const vistas = await invocar(ses, "vistas.leer");
+    assert.ok(vistas.length > 0);
+    const antiguas = vistas.map((vista) => {
+      const copia = { ...vista };
+      delete copia.ejes;
+      return copia;
+    });
+    assert.ok(antiguas.every((vista) => vista.ejes === undefined));
+    await invocar(ses, "vistas.guardar", { lista: antiguas });
+    await invocar(ses, "proyecto.guardar", { ruta });
+    await esperar(500);
+
+    await activar(ses, "cmd-abrir");
+    await ses.driver.wait(async () => {
+      try {
+        return (await textoDom(ses, '[data-testid="estado-modelo"]')) === "o011-viejo.ifc";
+      } catch {
+        return false;
+      }
+    }, 30_000, "no abrió el modelo de la 0.5.7");
+    await elegirVista(ses, "Planta Nivel 0");
+    assert.equal(await atributoVisor(ses, "ejes"), "2");
+    assert.deepEqual(await ajustes(ses), {});
+    // Los ejes siguen dibujándose y se pueden seleccionar sin ajustes previos.
+    await seleccionarEje(ses, "1");
+    assert.ok(await ses.porTestid("eje-codo-fin-agregar"));
+  } finally {
+    await ses.cerrar();
+    fs.rmSync(carpeta, { recursive: true, force: true });
+  }
+});
