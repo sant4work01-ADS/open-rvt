@@ -825,7 +825,7 @@ export function Visor3D({
   const ajusteActualEje = (globalid: string): AjusteEjeVista | undefined =>
     ajusteEnCurso?.[globalid] ?? vista.ejes?.[globalid];
 
-  const pantallaDePunto = (
+  const pantallaDePunto = useCallback((
     punto: [number, number, number],
   ): { x: number; y: number } | null => {
     const nodo = contenedor.current;
@@ -838,9 +838,9 @@ export function Visor3D({
       x: rect.left + ((p.x + 1) / 2) * rect.width,
       y: rect.top + ((1 - p.y) / 2) * rect.height,
     };
-  };
+  }, []);
 
-  const asaEjeEn = (clientX: number, clientY: number) => {
+  const asaEjeEn = useCallback((clientX: number, clientY: number) => {
     let mejor: (typeof ejesInteraccion.current)[number] | null = null;
     let distancia = 16;
     for (const asa of ejesInteraccion.current) {
@@ -853,9 +853,9 @@ export function Visor3D({
       }
     }
     return mejor;
-  };
+  }, [pantallaDePunto]);
 
-  const lineaEjeEn = (clientX: number, clientY: number) => {
+  const lineaEjeEn = useCallback((clientX: number, clientY: number) => {
     let mejor: string | null = null;
     let distancia = 8;
     for (const linea of lineasEje.current) {
@@ -877,10 +877,10 @@ export function Visor3D({
       }
     }
     return mejor;
-  };
+  }, [pantallaDePunto]);
 
   /** Punto de la vista bajo el cursor; `null` fuera del plano de dibujo. */
-  const puntoVistaDesdeEvento = (clientX: number, clientY: number): Punto2 | null => {
+  const puntoVistaDesdeEvento = useCallback((clientX: number, clientY: number): Punto2 | null => {
     const nodo = contenedor.current;
     const camera = camara.current;
     const ctx = contextoEje.current;
@@ -902,7 +902,7 @@ export function Visor3D({
     const plano = new THREE.Plane(normal, -ctx.profundidad);
     if (!rayo.ray.intersectPlane(plano, punto)) return null;
     return [punto.x * ctx.h[0] + punto.y * ctx.h[1], punto.z];
-  };
+  }, []);
 
   const persistirAjusteEje = (globalid: string, ajuste: AjusteEjeVista | undefined) => {
     void fijarAjustesEjes(vista.id, { [globalid]: normalizarAjusteEje(ajuste) ?? null });
