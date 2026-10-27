@@ -1980,8 +1980,12 @@ class ModeladoMixin:
                 y1=float(datos.get("Y") or 0.0),
                 x2=float(datos.get("X") or 0.0),
                 y2=float(datos.get("Y") or 0.0),
-                ancho=float(seccion.get("B") or seccion.get("D") or 0.30),
-                fondo=float(seccion.get("H") or seccion.get("D") or 0.30),
+                ancho=float(
+                    datos.get("B") or seccion.get("B") or seccion.get("D") or 0.30
+                ),
+                fondo=float(
+                    datos.get("H") or seccion.get("H") or seccion.get("D") or 0.30
+                ),
                 z0=base,
                 z1=base + alto,
                 rotacion=float(datos.get("Rotacion") or 0.0),
@@ -1991,7 +1995,7 @@ class ModeladoMixin:
             y1 = float(datos.get("Y1") or 0.0)
             x2 = float(datos.get("X2") or 0.0)
             y2 = float(datos.get("Y2") or 0.0)
-            alto = float(seccion.get("H") or 0.40)
+            alto = float(datos.get("H") or seccion.get("H") or 0.40)
             centro = float(datos.get("Z") or 0.0)
             return uniones.Barra(
                 gid=_gid(elemento),
@@ -2000,7 +2004,7 @@ class ModeladoMixin:
                 y1=y1,
                 x2=x2,
                 y2=y2,
-                ancho=float(seccion.get("B") or 0.20),
+                ancho=float(datos.get("B") or seccion.get("B") or 0.20),
                 z0=centro - alto / 2.0,
                 z1=centro + alto / 2.0,
             )

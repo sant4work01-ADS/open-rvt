@@ -263,6 +263,8 @@ class InteraccionesMixin:
         self._regenerar_estructura(castillo)
         self._guardar_liga(castillo, {"Muro": _gid(muro), "Distancia": distancia})
         self._conectar(castillo, muro)
+        # O012b: con B/H del muro ya fijados, se recortan las vigas y el muro vecino.
+        self._recalcular_uniones_estructura()
         return castillo
 
     def castillos_automaticos(
