@@ -187,6 +187,31 @@ export function parsearCota(texto: string): number | null {
   return Math.round(valor * 1e6) / 1e6;
 }
 
+/**
+ * O010: elevaciones de nivel. Acepta ".1", "0.1", "0,1", "10cm", "100mm", "3m" y
+ * numeros negativos (sotanos). No confunde "4.5.6" ni texto suelto con un numero.
+ */
+export function parsearElevacion(texto: string): number | null {
+  let limpio = (texto ?? "").trim().toLocaleLowerCase("es").replace(/\s+/g, "");
+  if (!limpio) return null;
+  let factor = 1;
+  if (limpio.endsWith("mm")) {
+    factor = 0.001;
+    limpio = limpio.slice(0, -2);
+  } else if (limpio.endsWith("cm")) {
+    factor = 0.01;
+    limpio = limpio.slice(0, -2);
+  } else if (limpio.endsWith("m")) {
+    limpio = limpio.slice(0, -1);
+  }
+  limpio = limpio.replace(",", ".");
+  // Se admite la forma decimal sin cero inicial (`.1`) y el punto final (`1.`).
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(limpio)) return null;
+  const valor = Number(limpio) * factor;
+  if (!Number.isFinite(valor)) return null;
+  return Math.round(valor * 1e6) / 1e6;
+}
+
 /** La cota total solo se lee; nunca se edita. */
 export function cotaEditable(cota: CotaLinea): boolean {
   return (cota.tipo === "parcial" || cota.tipo === "rebase") && cota.editable;

@@ -38,16 +38,18 @@ function CampoNumero({
   testid,
   onCambio,
   paso = 0.01,
+  ayuda,
 }: {
   etiqueta: string;
   valor: number | undefined;
   testid: string;
   onCambio: (valor: number) => void;
   paso?: number;
+  ayuda?: string;
 }) {
   return (
-    <label className="flex items-center justify-between gap-2 text-xs">
-      <span className="text-muted-foreground">{etiqueta}</span>
+    <label className="flex items-center justify-between gap-2 text-xs" title={ayuda}>
+      <span className="cursor-help text-muted-foreground">{etiqueta}</span>
       <input
         data-testid={testid}
         type="number"
@@ -63,7 +65,7 @@ function CampoNumero({
   );
 }
 
-function PropiedadesVista({ vista }: { vista: Vista }) {
+export function PropiedadesVista({ vista }: { vista: Vista }) {
   const actualizar = useModelo((s) => s.actualizarVista);
   const niveles = useModelo((s) => s.niveles);
   const estilos = useModelo((s) => s.estilos);
@@ -126,20 +128,39 @@ function PropiedadesVista({ vista }: { vista: Vista }) {
         </select>
       </label>
       {(vista.tipo === "planta" || vista.tipo === "corte") && (
-        <>
-          <CampoNumero
-            etiqueta="Altura del plano de corte (m)"
-            testid="vista-altura"
-            valor={vista.alturaPlano}
-            onCambio={(alturaPlano) => cambiar({ alturaPlano })}
-          />
-          <CampoNumero
-            etiqueta="Profundidad (m)"
-            testid="vista-profundidad"
-            valor={vista.profundidad}
-            onCambio={(profundidad) => cambiar({ profundidad })}
-          />
-        </>
+        <details data-testid="vista-rango-avanzado" className="rounded border bg-muted/20 px-2 py-1">
+          <summary
+            className="cursor-help text-xs font-semibold"
+            title="Cuánto del modelo se ve por encima y por debajo del plano de corte. No cambia la altura del nivel."
+          >
+            Rango de vista (avanzado)
+          </summary>
+          <div className="mt-2 flex flex-col gap-1">
+            <CampoNumero
+              etiqueta="Altura del plano de corte (m)"
+              testid="vista-altura"
+              valor={vista.alturaPlano}
+              onCambio={(alturaPlano) => cambiar({ alturaPlano })}
+              ayuda="Altura a la que se cortan los muros y demás elementos en esta vista. Es independiente de la elevación del nivel."
+            />
+            <CampoNumero
+              etiqueta="Profundidad (m)"
+              testid="vista-profundidad"
+              valor={vista.profundidad}
+              onCambio={(profundidad) => cambiar({ profundidad })}
+              ayuda="Qué tan abajo se sigue viendo el modelo desde el plano de corte."
+            />
+            {vista.tipo === "planta" && (
+              <CampoNumero
+                etiqueta="Sobre el corte, hasta (m)"
+                testid="vista-altura-arriba"
+                valor={vista.alturaArriba ?? 3}
+                onCambio={(alturaArriba) => cambiar({ alturaArriba })}
+                ayuda="Distancia por encima del corte hasta la que se dibujan siluetas de losas, cubiertas y vigas."
+              />
+            )}
+          </div>
+        </details>
       )}
       {vista.tipo === "alzado" && (
         <div className="flex items-center justify-between gap-2">
@@ -191,15 +212,6 @@ function PropiedadesVista({ vista }: { vista: Vista }) {
           ))}
         </div>
       </fieldset>
-
-      {vista.tipo === "planta" && (
-        <CampoNumero
-          etiqueta="Sobre el corte, hasta (m)"
-          testid="vista-altura-arriba"
-          valor={vista.alturaArriba ?? 3}
-          onCambio={(alturaArriba) => cambiar({ alturaArriba })}
-        />
-      )}
 
       {vista.tipo === "planta" && (
         <label className="flex items-center justify-between gap-2">
@@ -595,7 +607,7 @@ export function PanelPropiedades() {
     <aside
       data-testid="panel-propiedades"
       aria-label="Propiedades"
-      className="flex w-[275px] shrink-0 flex-col overflow-y-auto border-l bg-background"
+      className="flex min-h-0 w-full flex-col overflow-y-auto border-l bg-background"
     >
       <div className="border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {seleccion ? "Propiedades del elemento" : "Propiedades de la vista"}

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { useModelo } from "./estado";
+import { parsearElevacion } from "./cotas";
 
 export function NivelesView() {
   const niveles = useModelo((s) => s.niveles);
@@ -15,13 +16,20 @@ export function NivelesView() {
   const error = useModelo((s) => s.error);
   const [nombre, setNombre] = useState("");
   const [elevacion, setElevacion] = useState("");
+  const [errores, setErrores] = useState<Record<string, string>>({});
+  const [errorNuevo, setErrorNuevo] = useState<string | null>(null);
 
   const agregar = async () => {
     const siguiente =
       niveles.length > 0 ? Math.max(...niveles.map((n) => n.elevacion)) + 3 : 0;
-    const elev = elevacion.trim() === "" ? siguiente : Number(elevacion);
+    const elev =
+      elevacion.trim() === "" ? siguiente : parsearElevacion(elevacion);
     const nombreFinal = nombre.trim() || `Nivel ${niveles.length}`;
-    if (!Number.isFinite(elev)) return;
+    if (elev === null) {
+      setErrorNuevo("Cota no válida: use .1, 0,1, 10cm, 100mm o un número negativo.");
+      return;
+    }
+    setErrorNuevo(null);
     if (await crearNivel(nombreFinal, elev)) {
       setNombre("");
       setElevacion("");
@@ -60,23 +68,46 @@ export function NivelesView() {
                 />
               </td>
               <td className="py-1 pr-2">
-                <input
-                  key={`${nivel.globalid}-${nivel.elevacion}`}
-                  data-testid={`nivel-elevacion-${nivel.globalid}`}
-                  type="number"
-                  step={0.05}
-                  defaultValue={nivel.elevacion}
-                  onBlur={(e) => {
-                    const valor = Number(e.target.value);
-                    if (Number.isFinite(valor) && valor !== nivel.elevacion) {
-                      void editarNivel(nivel.globalid, nivel.nombre, valor);
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                  }}
-                  className="w-28 rounded border bg-background px-2 py-1 text-right"
-                />
+                <div className="flex flex-col gap-1">
+                  <input
+                    key={`${nivel.globalid}-${nivel.elevacion}`}
+                    data-testid={`nivel-elevacion-${nivel.globalid}`}
+                    type="text"
+                    inputMode="decimal"
+                    defaultValue={nivel.elevacion}
+                    onBlur={(e) => {
+                      const valor = parsearElevacion(e.target.value);
+                      if (valor === null) {
+                        setErrores((prev) => ({
+                          ...prev,
+                          [nivel.globalid]:
+                            "Cota no válida: use .1, 0,1, 10cm, 100mm o un número negativo.",
+                        }));
+                        return;
+                      }
+                      setErrores((prev) => {
+                        const resto = { ...prev };
+                        delete resto[nivel.globalid];
+                        return resto;
+                      });
+                      if (valor !== nivel.elevacion) {
+                        void editarNivel(nivel.globalid, nivel.nombre, valor);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                    }}
+                    className="w-28 rounded border bg-background px-2 py-1 text-right"
+                  />
+                  {errores[nivel.globalid] && (
+                    <span
+                      data-testid={`nivel-error-${nivel.globalid}`}
+                      className="max-w-[11rem] text-[10px] leading-tight text-red-600"
+                    >
+                      {errores[nivel.globalid]}
+                    </span>
+                  )}
+                </div>
               </td>
               <td className="py-1 text-right">
                 <button
@@ -109,13 +140,24 @@ export function NivelesView() {
           <span className="text-muted-foreground">Elevación</span>
           <input
             data-testid="nivel-nuevo-elevacion"
-            type="number"
-            step={0.05}
+            type="text"
+            inputMode="decimal"
             value={elevacion}
-            onChange={(e) => setElevacion(e.target.value)}
-            placeholder="0.00"
+            onChange={(e) => {
+              setElevacion(e.target.value);
+              setErrorNuevo(null);
+            }}
+            placeholder="0.00, .1, 10cm"
             className="w-28 rounded border bg-background px-2 py-1 text-right"
           />
+          {errorNuevo && (
+            <span
+              data-testid="nivel-nuevo-error"
+              className="max-w-52 text-[10px] leading-tight text-red-600"
+            >
+              {errorNuevo}
+            </span>
+          )}
         </label>
         <button
           type="button"

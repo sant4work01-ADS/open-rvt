@@ -7,6 +7,7 @@ import {
   formatearCota,
   moverSiguientesCotas,
   parsearCota,
+  parsearElevacion,
   posicionTextoEntreMarcas,
 } from "./cotas";
 
@@ -117,6 +118,29 @@ describe("texto de las cotas", () => {
     expect(parsearCota("0")).toBeNull();
     expect(parsearCota("-2")).toBeNull();
     expect(parsearCota("0cm")).toBeNull();
+  });
+
+  it("O010: elevaciones aceptan .1, coma, cm, mm y negativos", () => {
+    expect(parsearElevacion(".1")).toBe(0.1);
+    expect(parsearElevacion("0.1")).toBe(0.1);
+    expect(parsearElevacion("0,1")).toBe(0.1);
+    expect(parsearElevacion("10cm")).toBe(0.1);
+    expect(parsearElevacion("100mm")).toBe(0.1);
+    expect(parsearElevacion("12 cm")).toBe(0.12);
+    expect(parsearElevacion("3m")).toBe(3);
+    expect(parsearElevacion("-.5")).toBe(-0.5);
+    expect(parsearElevacion("-2,25")).toBe(-2.25);
+    expect(parsearElevacion("0")).toBe(0);
+    expect(parsearElevacion("1.")).toBe(1);
+  });
+
+  it("O010: elevaciones rechazan texto y números mal formados", () => {
+    expect(parsearElevacion("")).toBeNull();
+    expect(parsearElevacion("   ")).toBeNull();
+    expect(parsearElevacion("abc")).toBeNull();
+    expect(parsearElevacion("4.5.6")).toBeNull();
+    expect(parsearElevacion("10cmx")).toBeNull();
+    expect(parsearElevacion("--1")).toBeNull();
   });
 });
 
