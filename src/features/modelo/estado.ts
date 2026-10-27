@@ -15,6 +15,7 @@ import {
   type RespuestaInfo,
   type RespuestaTeselado,
   type Vista,
+  type AjusteEjeVista,
 } from "./tipos";
 import {
   cajaDeMallas,
@@ -42,6 +43,7 @@ import {
 } from "./herramientas";
 import { estilosPorDefecto, normalizarEstilos, type Estilos } from "./estilos";
 import { construirAberturas } from "./aberturas";
+import { normalizarAjusteEje } from "./ejesVista";
 
 export type RespuestaGuardar = "guardar" | "descartar" | "cancelar";
 export type Herramienta =
@@ -286,6 +288,11 @@ interface EstadoModelo {
   responderGuardar: (respuesta: RespuestaGuardar) => void;
   fijarVista: (id: string) => void;
   actualizarVista: (id: string, cambios: Partial<Vista>) => Promise<void>;
+  /** O011: guarda los ajustes de anotación de uno o varios ejes de la vista. */
+  fijarAjustesEjes: (
+    vistaId: string,
+    cambios: Record<string, AjusteEjeVista | null>,
+  ) => Promise<void>;
   guardarEstilos: (estilos: Estilos) => Promise<void>;
   abrirDialogoEstilos: () => void;
   cerrarDialogoEstilos: () => void;
@@ -928,6 +935,26 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     actualizarVista: async (id, cambios) => {
       const vistas = get().vistas.map((v) => (v.id === id ? { ...v, ...cambios, id } : v));
       set({ vistas, conCambios: true });
+      await persistirVistas(vistas);
+    },
+
+    fijarAjustesEjes: async (vistaId, cambios) => {
+      const vista = get().vistas.find((v) => v.id === vistaId);
+      if (!vista) return;
+      const ejes = { ...(vista.ejes ?? {}) };
+      for (const [globalid, ajuste] of Object.entries(cambios)) {
+        // La misma validación que al leer el pset: máximo 2 codos y puntos finitos.
+        const limpio = normalizarAjusteEje(ajuste);
+        if (!limpio) delete ejes[globalid];
+        else ejes[globalid] = limpio;
+      }
+      const vistas = get().vistas.map((v) =>
+        v.id === vistaId
+          ? { ...v, id: v.id, ejes: Object.keys(ejes).length > 0 ? ejes : undefined }
+          : v,
+      );
+      set({ vistas, conCambios: true });
+      // Una sola escritura del pset = una sola entrada de deshacer por arrastre.
       await persistirVistas(vistas);
     },
 

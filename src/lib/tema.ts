@@ -97,6 +97,10 @@ interface EstadoTema {
   lateralExpandido: boolean;
   /** Ancho elegido del sidebar expandido en rem base; `null` = ajustado al contenido (spec 044). */
   lateralAncho: number | null;
+  /** O011: panel de Vistas plegado (deja solo la barra de iconos de módulos). */
+  panelIzquierdoPlegado: boolean;
+  /** O011: panel de Propiedades plegado. */
+  panelDerechoPlegado: boolean;
   /** Color del tema (predefinido o personalizado). */
   color: EleccionColor;
   /** Hasta 5 temas personalizados. */
@@ -117,6 +121,10 @@ interface EstadoTema {
   fijarLateralExpandido: (expandido: boolean) => void;
   /** Fija el ancho del sidebar (`null` = por omisión) y lo guarda en config.json. */
   fijarLateralAncho: (ancho: number | null) => void;
+  /** O011: pliega o abre el panel izquierdo y lo guarda en config.json. */
+  fijarPanelIzquierdoPlegado: (plegado: boolean) => void;
+  /** O011: pliega o abre el panel derecho y lo guarda en config.json. */
+  fijarPanelDerechoPlegado: (plegado: boolean) => void;
   /** Cambia el color del tema, lo aplica al instante y lo guarda en config.json. */
   fijarColor: (c: EleccionColor) => void;
   /** Cambia uno de los 5 temas personalizados. */
@@ -150,6 +158,8 @@ export const useTema = create<EstadoTema>((set, get) => ({
   barraCompacta: false,
   lateralExpandido: false,
   lateralAncho: null,
+  panelIzquierdoPlegado: false,
+  panelDerechoPlegado: false,
   color: { id: TEMA_COLOR_DEFECTO },
   personalizados: [...Array.from({ length: 5 }, () => ({ nombre: "", acento: "#0f766e" }))],
   cargado: false,
@@ -190,6 +200,8 @@ export const useTema = create<EstadoTema>((set, get) => ({
           typeof cfg.lateral_ancho_rem === "number" && cfg.lateral_ancho_rem > 0
             ? cfg.lateral_ancho_rem
             : null,
+        panelIzquierdoPlegado: cfg.panel_izquierdo_plegado === true,
+        panelDerechoPlegado: cfg.panel_derecho_plegado === true,
         cargado: true,
       });
     } catch {
@@ -260,6 +272,18 @@ export const useTema = create<EstadoTema>((set, get) => ({
   fijarLateralAncho: (ancho) => {
     set({ lateralAncho: ancho });
     ipc.guardarLateralAncho(ancho).catch(() => {
+      /* la preferencia ya está aplicada; se reintentará en el siguiente cambio */
+    });
+  },
+  fijarPanelIzquierdoPlegado: (plegado) => {
+    set({ panelIzquierdoPlegado: plegado });
+    ipc.guardarPanelIzquierdoPlegado(plegado).catch(() => {
+      /* la preferencia ya está aplicada; se reintentará en el siguiente cambio */
+    });
+  },
+  fijarPanelDerechoPlegado: (plegado) => {
+    set({ panelDerechoPlegado: plegado });
+    ipc.guardarPanelDerechoPlegado(plegado).catch(() => {
       /* la preferencia ya está aplicada; se reintentará en el siguiente cambio */
     });
   },

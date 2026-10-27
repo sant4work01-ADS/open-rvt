@@ -12,6 +12,8 @@ export function montarApp(
     idioma?: "es" | "en";
     lateralExpandido?: boolean;
     lateralAncho?: number | null;
+    panelIzquierdoPlegado?: boolean;
+    panelDerechoPlegado?: boolean;
   } = {},
 ) {
   useTema.setState({
@@ -20,6 +22,8 @@ export function montarApp(
     idioma: opciones.idioma ?? "es",
     lateralExpandido: opciones.lateralExpandido ?? false,
     lateralAncho: opciones.lateralAncho ?? null,
+    panelIzquierdoPlegado: opciones.panelIzquierdoPlegado ?? false,
+    panelDerechoPlegado: opciones.panelDerechoPlegado ?? false,
     cargado: false,
   });
   return render(<App />);

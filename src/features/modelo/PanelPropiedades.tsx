@@ -598,7 +598,7 @@ function PropiedadesElemento() {
   );
 }
 
-export function PanelPropiedades() {
+export function PanelPropiedades({ onPlegar }: { onPlegar?: () => void }) {
   const seleccion = useModelo((s) => s.seleccion);
   const vistas = useModelo((s) => s.vistas);
   const vistaActivaId = useModelo((s) => s.vistaActivaId);
@@ -609,8 +609,22 @@ export function PanelPropiedades() {
       aria-label="Propiedades"
       className="flex min-h-0 w-full flex-col overflow-y-auto border-l bg-background"
     >
-      <div className="border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {seleccion ? "Propiedades del elemento" : "Propiedades de la vista"}
+      <div className="flex items-center justify-between border-b px-3 py-1.5">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {seleccion ? "Propiedades del elemento" : "Propiedades de la vista"}
+        </span>
+        {onPlegar && (
+          <button
+            type="button"
+            data-testid="panel-derecho-plegar"
+            aria-label="Plegar panel derecho"
+            title="Plegar el panel de Propiedades (Ctrl+Alt+→)"
+            onClick={onPlegar}
+            className="rounded px-1 text-sm text-muted-foreground hover:bg-muted"
+          >
+            ›
+          </button>
+        )}
       </div>
       {seleccion ? (
         <PropiedadesElemento />

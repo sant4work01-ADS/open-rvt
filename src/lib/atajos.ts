@@ -12,7 +12,9 @@ export type AccionGlobal =
   | "nuevoArchivo"
   | "abrirArchivo"
   | "guardarArchivo"
-  | "guardarComo";
+  | "guardarComo"
+  | "panelIzquierdo"
+  | "panelDerecho";
 
 export interface TeclaEv {
   key: string;
@@ -45,6 +47,8 @@ const ETIQUETA_TECLA: Record<string, string> = {
   Escape: "Esc",
   F1: "F1",
   "+": "Suma",
+  ArrowLeft: "←",
+  ArrowRight: "→",
 };
 
 export const ATAJOS_GLOBALES: Atajo<AccionGlobal>[] = [
@@ -134,6 +138,23 @@ export const ATAJOS_GLOBALES: Atajo<AccionGlobal>[] = [
     mods: { ctrl: true },
     origen: "propio",
     descripcion: "Achicar la interfaz",
+    enTexto: true,
+  },
+  {
+    // O011: plegar o abrir los paneles laterales del área de trabajo.
+    accion: "panelIzquierdo",
+    key: "ArrowLeft",
+    mods: { ctrl: true, alt: true },
+    origen: "propio",
+    descripcion: "Plegar o abrir el panel izquierdo (Vistas)",
+    enTexto: true,
+  },
+  {
+    accion: "panelDerecho",
+    key: "ArrowRight",
+    mods: { ctrl: true, alt: true },
+    origen: "propio",
+    descripcion: "Plegar o abrir el panel derecho (Propiedades)",
     enTexto: true,
   },
   {

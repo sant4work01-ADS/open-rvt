@@ -111,6 +111,30 @@ describe("texto de las cotas", () => {
     expect(parsearCota("4.5m")).toBe(4.5);
   });
 
+  it("O011: acepta cotas que empiezan con punto o coma", () => {
+    // Valores de la spec: .15 = 15 cm = 0.15 m; 15 cm y 150 mm son la misma medida.
+    expect(parsearCota(".15")).toBe(0.15);
+    expect(parsearCota(",15")).toBe(0.15);
+    expect(parsearCota(".15m")).toBe(0.15);
+    expect(parsearCota("15cm")).toBe(0.15);
+    expect(parsearCota("150mm")).toBe(0.15);
+    expect(parsearCota("0.15")).toBe(0.15);
+    expect(parsearCota(" 15 cm ")).toBe(0.15);
+    expect(parsearCota("0")).toBeNull();
+    expect(parsearCota("-.15")).toBeNull();
+    expect(parsearCota("4.5.6")).toBeNull();
+  });
+
+  it("O011: la misma regla de lectura deja las elevaciones con signo", () => {
+    expect(parsearElevacion(".15")).toBe(0.15);
+    expect(parsearElevacion(",15")).toBe(0.15);
+    expect(parsearElevacion(".15m")).toBe(0.15);
+    expect(parsearElevacion("15cm")).toBe(0.15);
+    expect(parsearElevacion("150mm")).toBe(0.15);
+    expect(parsearElevacion("-.15")).toBe(-0.15);
+    expect(parsearElevacion("4.5.6")).toBeNull();
+  });
+
   it("rechaza valores no numéricos, cero y negativos", () => {
     expect(parsearCota("")).toBeNull();
     expect(parsearCota("abc")).toBeNull();

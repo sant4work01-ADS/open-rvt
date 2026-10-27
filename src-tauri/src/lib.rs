@@ -195,6 +195,28 @@ fn guardar_lateral_ancho(
     guardar(&app, &estado)
 }
 
+/// O011: recuerda si el panel izquierdo (Vistas) está plegado.
+#[tauri::command]
+fn guardar_panel_izquierdo_plegado(
+    app: tauri::AppHandle,
+    estado: State<'_, EstadoApp>,
+    plegado: bool,
+) -> Result<(), String> {
+    estado.config().panel_izquierdo_plegado = plegado;
+    guardar(&app, &estado)
+}
+
+/// O011: recuerda si el panel derecho (Propiedades) está plegado.
+#[tauri::command]
+fn guardar_panel_derecho_plegado(
+    app: tauri::AppHandle,
+    estado: State<'_, EstadoApp>,
+    plegado: bool,
+) -> Result<(), String> {
+    estado.config().panel_derecho_plegado = plegado;
+    guardar(&app, &estado)
+}
+
 #[tauri::command]
 fn guardar_ancho_columna(
     app: tauri::AppHandle,
@@ -318,6 +340,8 @@ pub fn run() {
             guardar_barra_compacta,
             guardar_lateral_expandido,
             guardar_lateral_ancho,
+            guardar_panel_izquierdo_plegado,
+            guardar_panel_derecho_plegado,
             guardar_ancho_columna,
             restablecer_anchos,
             fijar_titulo_ventana,
@@ -444,6 +468,14 @@ mod tests {
         assert_eq!(c.escala_ui, 120);
         assert_eq!(c.idioma, "es");
         assert!(c.anchos_columnas.is_empty());
+        // O011: los paneles nacen abiertos y la preferencia se conserva en JSON.
+        assert!(!c.panel_izquierdo_plegado);
+        assert!(!c.panel_derecho_plegado);
+        let mut plegado = c.clone();
+        plegado.panel_izquierdo_plegado = true;
+        plegado.panel_derecho_plegado = true;
+        let vuelta: Config = serde_json::from_str(&serde_json::to_string(&plegado).unwrap()).unwrap();
+        assert!(vuelta.panel_izquierdo_plegado && vuelta.panel_derecho_plegado);
         let texto = serde_json::to_string(&c).unwrap();
         let vuelta: Config = serde_json::from_str(&texto).unwrap();
         assert_eq!(vuelta.tema, c.tema);
