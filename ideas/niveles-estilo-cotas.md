@@ -12,7 +12,11 @@ Referencia: `img/niveles-referencia.jpg`. Al usuario no le gustan los niveles ac
   - se actualizan al mover un nivel.
 - **Ejes (rejillas)**: burbuja circular arriba; la misma articulación con codo cuando una burbuja se enciman con otra (ver el primer eje de la imagen).
 
+## Centrado del texto (pedido del usuario, 2026-10-30)
+- El número o letra de la burbuja del eje (y el texto de la cabeza del nivel) hoy no queda bien centrado. Revisar y centrar de verdad: centro geométrico del glifo (no la línea base), horizontal y vertical, con 1, 2 o 3 caracteres (A, 12, A.1), a cualquier zoom y en impresión/exportación.
+
 ## Criterios
+- El texto de burbujas y cabezas queda centrado (desviación ≤ 0.5 px a zoom 100 % y 400 %, medida con prueba).
 - Ninguna cabeza ni burbuja se encima con otra en la vista por omisión.
 - Las cotas suman exacto (la total = suma de la cadena) y usan la precisión del proyecto.
 - Configurable por estilo de nivel: prefijo, decimales, unidad, tipo de cabeza, color y si lleva cotas.
