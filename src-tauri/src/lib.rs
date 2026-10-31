@@ -9,6 +9,8 @@
 
 mod bitacora;
 mod estado;
+#[cfg(windows)]
+mod gestos_windows;
 mod nucleo;
 
 use bitacora::{Bitacora, EstadoBitacora};
@@ -353,6 +355,7 @@ pub fn run() {
             bitacora_exportar,
             diagnostico_webview,
             guardar_texto,
+            simular_gesto_nativo,
         ])
         .setup(|app| {
             // O006c: la bitácora vive junto a OPEN-RVT.log y arranca antes del núcleo
@@ -393,7 +396,10 @@ pub fn run() {
                 }
             }
             #[cfg(windows)]
-            configurar_webview2(app.handle());
+            {
+                configurar_webview2(app.handle());
+                gestos_windows::instalar(app.handle());
+            }
             Ok(())
         })
         .build(tauri::generate_context!())
@@ -425,6 +431,38 @@ fn registro_de_la_app() -> tauri_plugin_log::Builder {
         }
     }
     constructor
+}
+
+/// O018: comando de prueba (solo debug) que inyecta un `gesto-nativo` como si
+/// viniera de Windows. Permite validar el zoom nativo y la grabación en E2E sin
+/// hacer un gesto físico.
+#[cfg(debug_assertions)]
+#[tauri::command]
+fn simular_gesto_nativo(
+    app: tauri::AppHandle,
+    tipo: String,
+    valor: f64,
+) -> Result<(), String> {
+    app.emit(
+        "gesto-nativo",
+        serde_json::json!({
+            "ms": 0,
+            "ventana": "principal",
+            "mensaje": tipo,
+            "detalle": { "ullArguments": valor, "flags": 0 },
+        }),
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[cfg(not(debug_assertions))]
+#[tauri::command]
+fn simular_gesto_nativo(
+    _app: tauri::AppHandle,
+    _tipo: String,
+    _valor: f64,
+) -> Result<(), String> {
+    Err("simular_gesto_nativo solo existe en compilaciones de prueba".into())
 }
 
 /// Capa A de la spec 021 (solo Windows / WebView2): la ventana no ofrece menús,
@@ -511,10 +549,12 @@ fn configurar_webview2(app: &tauri::AppHandle) {
         if let Ok(s3) = ajustes.cast::<ICoreWebView2Settings3>() {
             let _ = s3.SetAreBrowserAcceleratorKeysEnabled(false);
         }
-        // O017: el pellizco del touchpad debe llegar a la página, no al zoom visual
-        // de WebView2. Si esta versión no expone Settings5 se sigue sin romper.
+        // O018 (corrección del dato): con IsPinchZoomEnabled(false) la ventana
+        // Tauri se quedaba el pellizco. El Explorador y Brave sí lo entregan como
+        // wheel con ctrlKey; con true WebView2 hace lo mismo y `alRodar` lo trata
+        // (preventDefault incluido). Si Settings5 no existe se sigue sin romper.
         if let Ok(s5) = ajustes.cast::<ICoreWebView2Settings5>() {
-            let _ = s5.SetIsPinchZoomEnabled(false);
+            let _ = s5.SetIsPinchZoomEnabled(true);
         }
         // O017b: los gestos de navegación por deslizamiento tampoco deben quedarse
         // el pellizco. Si Settings6 no existe se sigue sin romper.
