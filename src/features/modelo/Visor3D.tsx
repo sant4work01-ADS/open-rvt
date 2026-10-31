@@ -908,7 +908,9 @@ export function Visor3D({
   const [oscuro, setOscuro] = useState(() =>
     typeof document !== "undefined" ? document.documentElement.classList.contains("dark") : false,
   );
-  const [dimensiones, setDimensiones] = useState({ ancho: 1, alto: 1 });  // O006a: textos de cota dibujados y edición en el sitio.
+  const [dimensiones, setDimensiones] = useState({ ancho: 1, alto: 1 });
+  // O030: el zoom obliga a recalcular la anotación en modo «Pantalla».
+  const [zoomTick, setZoomTick] = useState(0);  // O006a: textos de cota dibujados y edición en el sitio.
   const cotasInteraccion = useRef<CotaInteractiva[]>([]);
   // O011b: etiquetas de nivel y cotas del alzado, con su rectángulo, para las E2E.
   const anotacionesAlzado = useRef<AnotacionAlzado[]>([]);
@@ -3544,6 +3546,7 @@ export function Visor3D({
     niveles,
     ajusteEnCurso,
     ajustesNivelEnCurso,
+    zoomTick,
   ]);
 
   // O003b: marcadores de la herramienta de dibujo (puntos, snap y vista previa).
@@ -3813,6 +3816,7 @@ export function Visor3D({
         nav.distancia = Math.max(0.5, nav.distancia * factor);
       }
       aplicarCamara();
+      setZoomTick((tick) => tick + 1);
     },
     [aplicarCamara],
   );

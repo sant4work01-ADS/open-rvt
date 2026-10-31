@@ -290,6 +290,9 @@ test("O025: niveles, ejes y cotas en alzado como la referencia", async () => {
     // La referencia está dibujada a 1:20; a 1:100 un tramo de 0.20 m mide 2 mm
     // de papel y su texto de 2.5 mm nunca cabría.
     await fijarValor(ses, "vista-escala", "20");
+    // Para las capturas de referencia se usa «Pantalla» (texto legible); la
+    // colocación es la misma y O030 fija «A escala» como modo por omisión.
+    await fijarValor(ses, "vista-anotacion-escala", "pantalla");
     await esperar(500);
     await activar(ses, "visor-ajustar");
     await esperar(700);
