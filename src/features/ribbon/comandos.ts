@@ -236,7 +236,7 @@ export function construirComandosRibbon(a: AccionesRibbon): ComandoRibbon[] {
       tamano: "grande",
       habilitado: true,
       activo: a.herramientaActiva === "nivel",
-      descripcion: "Dibujar un nivel en alzado o corte con dos clics",
+      descripcion: "En alzado o corte: dibujar un nivel con dos clics; en planta: agregar el siguiente nivel",
       accion: a.nuevoNivel,
     },
     {

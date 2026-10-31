@@ -324,7 +324,25 @@ export function App() {
         estilosObjeto: () => useModelo.getState().abrirDialogoEstilos(),
         estilosAnotacion: () => useModelo.getState().abrirDialogoAnotacion(),
         // OPEN-RVT: herramientas de modelado (spec O003b).
-        nuevoNivel: () => useModelo.getState().activarHerramienta("nivel"),
+        // O029: en alzado/corte se dibuja; en planta, 3D o en un modelo sin
+        // niveles agrega el siguiente nivel (+3.00 sobre el más alto), como antes.
+        nuevoNivel: () => {
+          const estado = useModelo.getState();
+          const vista = estado.vistas.find((v) => v.id === estado.vistaActivaId);
+          if (
+            estado.niveles.length > 0 &&
+            vista &&
+            (vista.tipo === "alzado" || vista.tipo === "corte")
+          ) {
+            estado.activarHerramienta("nivel");
+            return;
+          }
+          const siguiente =
+            estado.niveles.length > 0
+              ? Math.max(...estado.niveles.map((n) => n.elevacion)) + 3
+              : 0;
+          void estado.crearNivel(`Nivel ${estado.niveles.length}`, siguiente);
+        },
         nuevoEje: () => useModelo.getState().activarHerramienta("eje"),
         nuevosEjesPorSeparaciones: () => useModelo.getState().abrirDialogoCotas(),
         herramientaMuro: () => useModelo.getState().activarHerramienta("muro"),
