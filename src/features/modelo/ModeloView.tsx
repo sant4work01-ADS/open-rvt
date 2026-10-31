@@ -33,6 +33,9 @@ export function ModeloView() {
   const cargando = useModelo((s) => s.cargando);
   const error = useModelo((s) => s.error);
   const fijarVista = useModelo((s) => s.fijarVista);
+  const actualizarVista = useModelo((s) => s.actualizarVista);
+  const duplicarVista = useModelo((s) => s.duplicarVista);
+  const eliminarVista = useModelo((s) => s.eliminarVista);
   const dialogoEstilos = useModelo((s) => s.dialogoEstilos);
   const dialogoCotas = useModelo((s) => s.dialogoCotas);
   const dialogoCastillos = useModelo((s) => s.dialogoCastillos);
@@ -85,6 +88,9 @@ export function ModeloView() {
             cantidadesActiva={esCantidades}
             onCantidades={() => fijarVista("cantidades")}
             onPlegar={() => fijarPanelIzquierdoPlegado(true)}
+            onRenombrar={(id, nombre) => void actualizarVista(id, { nombre })}
+            onDuplicar={(id) => void duplicarVista(id)}
+            onEliminar={(id) => void eliminarVista(id)}
           />
         </PanelRedimensionable>
       )}

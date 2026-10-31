@@ -300,6 +300,10 @@ interface EstadoModelo {
   responderGuardar: (respuesta: RespuestaGuardar) => void;
   fijarVista: (id: string) => void;
   actualizarVista: (id: string, cambios: Partial<Vista>) => Promise<void>;
+  /** O022: duplica una vista (copia completa con id y nombre nuevos). */
+  duplicarVista: (id: string) => Promise<string | null>;
+  /** O022: elimina una vista salvo que sea la última de su tipo. */
+  eliminarVista: (id: string) => Promise<boolean>;
   /** O011: guarda los ajustes de anotación de uno o varios ejes de la vista. */
   fijarAjustesEjes: (
     vistaId: string,
@@ -953,6 +957,51 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       const vistas = get().vistas.map((v) => (v.id === id ? { ...v, ...cambios, id } : v));
       set({ vistas, conCambios: true });
       await persistirVistas(vistas);
+    },
+
+    duplicarVista: async (id) => {
+      const estado = get();
+      const original = estado.vistas.find((v) => v.id === id);
+      if (!original) return null;
+      const base = `${original.nombre} (copia)`;
+      const nombres = new Set(estado.vistas.map((v) => v.nombre));
+      let nombre = base;
+      let n = 2;
+      while (nombres.has(nombre)) {
+        nombre = `${base} ${n}`;
+        n += 1;
+      }
+      let nuevoId = `vista-${Date.now().toString(36)}`;
+      while (estado.vistas.some((v) => v.id === nuevoId)) nuevoId += "-c";
+      const copia: Vista = {
+        ...original,
+        id: nuevoId,
+        nombre,
+        categorias: { ...original.categorias },
+        nivelesVisibles: [...original.nivelesVisibles],
+        estilos: original.estilos ? { ...original.estilos } : undefined,
+        ejes: original.ejes ? { ...original.ejes } : undefined,
+        nivelesAjuste: original.nivelesAjuste ? { ...original.nivelesAjuste } : undefined,
+      };
+      const indice = estado.vistas.findIndex((v) => v.id === id);
+      const vistas = [...estado.vistas];
+      vistas.splice(indice + 1, 0, copia);
+      set({ vistas, vistaActivaId: nuevoId, conCambios: true, modoCorte: false, puntoCorte: null });
+      await persistirVistas(vistas);
+      return nuevoId;
+    },
+
+    eliminarVista: async (id) => {
+      const estado = get();
+      const vista = estado.vistas.find((v) => v.id === id);
+      if (!vista) return false;
+      const delMismoTipo = estado.vistas.filter((v) => v.tipo === vista.tipo);
+      if (delMismoTipo.length <= 1) return false;
+      const vistas = estado.vistas.filter((v) => v.id !== id);
+      const activa = estado.vistaActivaId === id ? (vistas[0]?.id ?? null) : estado.vistaActivaId;
+      set({ vistas, vistaActivaId: activa, conCambios: true, modoCorte: false, puntoCorte: null });
+      await persistirVistas(vistas);
+      return true;
     },
 
     fijarAjustesEjes: async (vistaId, cambios) => {

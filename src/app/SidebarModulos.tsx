@@ -214,7 +214,8 @@ export function SidebarModulos({
             className={cn(
               "relative flex items-center rounded-md text-muted-foreground transition-colors hover:bg-muted",
               expandido ? "gap-2 px-1" : "justify-center",
-              id === activo && "bg-accent text-accent-foreground hover:bg-accent",
+              id === activo &&
+                "bg-accent text-accent-foreground shadow-[inset_2px_0_0_hsl(var(--primary))] hover:bg-accent",
             )}
             style={{
               height: `calc(${BOTON_REM}rem * var(--factor-sidebar))`,
@@ -247,7 +248,7 @@ export function SidebarModulos({
         title={expandido ? t("modulos.colapsarMenu") : t("modulos.expandirMenu")}
         onClick={() => fijarLateral(!expandido)}
         className={cn(
-          "mt-auto flex items-center rounded-md text-muted-foreground hover:bg-muted",
+          "mt-auto flex items-center rounded-md text-muted-foreground transition-colors hover:bg-muted",
           expandido ? "gap-2 px-1" : "justify-center",
         )}
         style={{
