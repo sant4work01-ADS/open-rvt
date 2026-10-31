@@ -139,6 +139,58 @@ async function clicMundo(ses, x, y, z = 0) {
   await esperar(500);
 }
 
+async function moverRaton(ses, x, y, z) {
+  const punto = await ses.driver.executeScript(
+    (x, y, z) => {
+      const visor = document.querySelector('[data-testid="visor"]');
+      if (!visor || typeof visor.__openrvtMundoAPantalla !== "function") {
+        throw new Error("el visor no expone __openrvtMundoAPantalla");
+      }
+      return visor.__openrvtMundoAPantalla(x, y, z);
+    },
+    x,
+    y,
+    z,
+  );
+  await ses.driver.executeScript(
+    (punto) => {
+      window.dispatchEvent(
+        new PointerEvent("pointermove", {
+          bubbles: true,
+          clientX: punto.x,
+          clientY: punto.y,
+          pointerId: 1,
+          pointerType: "mouse",
+        }),
+      );
+    },
+    punto,
+  );
+  await esperar(350);
+}
+
+async function clicPantalla(ses, punto) {
+  await ses.driver.executeScript(
+    (punto) => {
+      const canvas = document.querySelector('[data-testid="visor"] canvas');
+      const opciones = {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        pointerId: 1,
+        pointerType: "mouse",
+        clientX: punto.x,
+        clientY: punto.y,
+      };
+      canvas.dispatchEvent(new PointerEvent("pointerdown", opciones));
+      window.dispatchEvent(new PointerEvent("pointerup", { ...opciones, buttons: 0 }));
+    },
+    punto,
+  );
+  await esperar(500);
+}
+
 async function niveles(ses) {
   return invocar(ses, "modelo.niveles");
 }
@@ -213,7 +265,28 @@ test("O029: nivel intermedio dibujado en alzado, planta y copia +3.00", async ()
       "nivel",
       "la herramienta Nivel no se activó en el alzado",
     );
-    await clicMundo(ses, 1, 0, 1.2);
+    // Captura (a): cursor entre Nivel 1 y Nivel 2 con la herramienta activa.
+    await moverRaton(ses, 1, 0, 1.5);
+    const fantasma = await ses.driver.executeScript(
+      () => !!document.querySelector('[data-testid="nivel-fantasma"]'),
+    );
+    assert.equal(fantasma, true, "no se dibujó la línea fantasma del nivel");
+    const cotasTemp = await ses.driver.executeScript(() => ({
+      inferior: !!document.querySelector('[data-testid="nivel-cota-temporal-0"]'),
+      superior: !!document.querySelector('[data-testid="nivel-cota-temporal-1"]'),
+    }));
+    assert.equal(cotasTemp.inferior, true, "falta la cota temporal al nivel inferior");
+    assert.equal(cotasTemp.superior, true, "falta la cota temporal al nivel superior");
+    assert.equal(
+      await ses.driver.executeScript(
+        () => document.querySelector('[data-testid="nivel-herramienta-nombre"]')?.value,
+      ),
+      "Nivel 1.5",
+      "el nombre automático no sale de la elevación real (1.50)",
+    );
+    await ses.captura(path.join(CAPTURAS, "o029-alzado-herramienta.png"));
+
+    await clicMundo(ses, 1, 0, 1.5);
     await ses.driver.actions({ async: true }).sendKeys("1.50").perform();
     await ses.driver.actions({ async: true }).sendKeys(Key.ENTER).perform();
     await esperar(1500);
@@ -226,6 +299,28 @@ test("O029: nivel intermedio dibujado en alzado, planta y copia +3.00", async ()
     assert.equal(creado.nombre, "Nivel 1.5");
     const orden = (await niveles(ses)).map((n) => n.elevacion);
     assert.deepEqual([...orden].sort((a, b) => a - b), [0, 1.5, 3]);
+    // O029: tras crear se sigue en el alzado y con la herramienta activa (como Eje).
+    assert.equal(
+      await ses.driver.executeScript(
+        () => document.querySelector('[data-testid="barra-herramienta"]')?.dataset.herramienta,
+      ),
+      "nivel",
+      "crear el nivel cambió o desactivó la herramienta",
+    );
+    assert.equal(
+      await ses.driver.executeScript(
+        () => document.querySelector('[data-testid="visor"]')?.dataset.tipo,
+      ),
+      "alzado",
+      "crear el nivel cambió a la planta nueva",
+    );
+    assert.equal(
+      await ses.driver.executeScript(
+        () => document.querySelector('[data-testid="nivel-herramienta-nombre"]')?.value,
+      ),
+      "Nivel 1.5",
+      "la barra no conserva el nombre del nivel recién creado a 1.50",
+    );
 
     // 3. «Npt +1.50m» medido en el alzado y planta nueva en el navegador.
     await activar(ses, "visor-ajustar");
@@ -246,20 +341,55 @@ test("O029: nivel intermedio dibujado en alzado, planta y copia +3.00", async ()
       "no apareció la planta del nivel nuevo",
     );
     assert.ok(planta);
-    await ses.captura(path.join(CAPTURAS, "o029-nivel-1-50.png"));
+    await ses.captura(path.join(CAPTURAS, "o029-alzado-nivel-creado.png"));
 
-    // 4. Copiar/Desfasar +3.00 → 4.50 desde el módulo Niveles.
-    await irModulo(ses, "niveles");
-    await fijarValor(ses, "nivel-copiar-base", creado.globalid);
-    await fijarValor(ses, "nivel-copiar-desfase", "3.00");
-    await activar(ses, "nivel-copiar");
+    // 4. Seleccionar «Nivel 1.5» en el ALZADO y Copiar +3.00 desde Modificar.
+    await ses.driver.executeScript(
+      () => document.querySelector('[data-testid="herramienta-cancelar"]')?.click(),
+    );
+    await esperar(400);
+    await activar(ses, "visor-ajustar");
+    await esperar(500);
+    const puntoLinea = await ses.driver.executeScript(() => {
+      const visor = document.querySelector('[data-testid="visor"]');
+      const datos = visor.__openrvtAlzadoAnotacionesPantalla();
+      const linea = (datos?.lineasNivel ?? []).find(
+        (l) => l.tipo === "nivel" && Math.abs(l.elev - 1.5) < 1e-6,
+      );
+      if (!linea || linea.puntos.length < 2) return null;
+      const a = linea.puntos[0];
+      const b = linea.puntos[1];
+      return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    });
+    assert.ok(puntoLinea, "no se encontró la línea del Nivel 1.5 en el alzado");
+    await clicPantalla(ses, puntoLinea);
+    assert.ok(
+      await ses.driver.executeScript(
+        () => document.querySelector('[data-testid="visor"]')?.dataset.nivelSeleccionado,
+      ),
+      "el clic en la línea no seleccionó el nivel",
+    );
+    await activar(ses, "cmd-copiar");
+    assert.equal(
+      await ses.driver.executeScript(
+        () => document.querySelector('[data-testid="barra-herramienta"]')?.dataset.herramienta,
+      ),
+      "copiar",
+      "Copiar no se activó en el alzado con un nivel seleccionado",
+    );
+    await ses.driver.actions({ async: true }).sendKeys("3.00").perform();
+    await ses.driver.actions({ async: true }).sendKeys(Key.ENTER).perform();
     const copia = await esperarHasta(
       async () => (await niveles(ses)).find((n) => Math.abs(n.elevacion - 4.5) < 1e-6),
       15_000,
       "Copiar +3.00 no creó el nivel a 4.50",
     );
-    assert.ok(copia);
-    await ses.captura(path.join(CAPTURAS, "o029-copiar-4-50.png"));
+    assert.equal(copia.nombre, "Nivel 3", "la copia no se nombró por su posición");
+    await ses.driver.executeScript(
+      () => document.querySelector('[data-testid="herramienta-cancelar"]')?.click(),
+    );
+    await esperar(600);
+    await ses.captura(path.join(CAPTURAS, "o029-alzado-copiar-4-50.png"));
 
     // 5. Deshacer en un paso quita la copia; otro paso quita el 1.50 y su planta.
     await activar(ses, "cmd-deshacer");
