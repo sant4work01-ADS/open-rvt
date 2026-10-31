@@ -3,6 +3,9 @@
 import { describe, expect, it } from "vitest";
 import {
   agregarCodoEje,
+  imanAlineacion,
+  imanMultiplo,
+  restringirArrastre,
   arrastrarExtremoEje,
   copiarAjusteEje,
   extremoEje,
@@ -312,5 +315,55 @@ describe("O021: candado de alineación, globos por extremo y copia", () => {
     expect(r.codosFin).toBeUndefined();
     expect(r.extremoInicio).toEqual([0, -1]);
     expect(r.globoFin).toBe(false);
+  });
+
+
+  // O027: valores calculados a mano: un eje vertical solo cambia su coordenada y.
+  it("extremo de eje vertical con delta (3, 5) queda en (0, 5)", () => {
+    expect(restringirArrastre("extremo", "vertical", [3, 5])).toEqual([0, 5]);
+  });
+
+  it("extremo de eje horizontal con delta (3, 5) queda en (3, 0)", () => {
+    expect(restringirArrastre("extremo", "horizontal", [3, 5])).toEqual([3, 0]);
+  });
+
+  it("globo de eje vertical con delta (3, 5) queda en (3, 0)", () => {
+    expect(restringirArrastre("globo", "vertical", [3, 5])).toEqual([3, 0]);
+  });
+
+  it("globo de eje horizontal con delta (3, 5) queda en (0, 5)", () => {
+    expect(restringirArrastre("globo", "horizontal", [3, 5])).toEqual([0, 5]);
+  });
+
+  it("el quiebre del codo avanza solo a lo largo del eje vertical", () => {
+    expect(restringirArrastre("codo", "vertical", [3, 5])).toEqual([0, 5]);
+  });
+
+  it("la cabeza de nivel sube en vertical aunque el puntero vaya en diagonal", () => {
+    expect(restringirArrastre("nivel-cabeza", "horizontal", [3, 5])).toEqual([0, 5]);
+  });
+
+  it("el extremo de la línea de nivel solo se corre en horizontal", () => {
+    expect(restringirArrastre("nivel-extremo", "vertical", [3, 5])).toEqual([3, 0]);
+  });
+
+  it("con Shift el arrastre es libre (3, 5)", () => {
+    expect(restringirArrastre("extremo", "vertical", [3, 5], true)).toEqual([3, 5]);
+  });
+
+  it("imán: engancha a la alineación más cercana dentro de la tolerancia", () => {
+    // Candidatos de otros ejes: 0, 4 y 8 m. 4,20 está a 0,20 de 4 (tol 0,30).
+    expect(imanAlineacion(4.2, [0, 4, 8], 0.3)).toEqual({ valor: 4, enganchado: true });
+    // 5,50 está a 1,50 del más cercano: no engancha.
+    expect(imanAlineacion(5.5, [0, 4, 8], 0.3)).toEqual({ valor: 5.5, enganchado: false });
+  });
+
+  it("imán de globo: engancha el desplazamiento a múltiplos de un diámetro", () => {
+    // Paso 0,80 m (diámetro de globo a 1:100): 1,65 → 1,60 a 0,05 exactos.
+    expect(imanMultiplo(1.65, 0, 0.8, 0.05)).toEqual({ valor: 1.6, enganchado: true });
+    // 1,70 está a 0,10 del múltiplo: fuera de la tolerancia.
+    expect(imanMultiplo(1.7, 0, 0.8, 0.05)).toEqual({ valor: 1.7, enganchado: false });
+    // El enganche se mide desde la posición original, no desde cero.
+    expect(imanMultiplo(2.45, 0.75, 0.8, 0.05)).toEqual({ valor: 2.45, enganchado: false });
   });
 });
