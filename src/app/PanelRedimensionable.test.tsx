@@ -73,3 +73,29 @@ describe("paneles redimensionables (O010)", () => {
     expect(limitarAnchoPanel(Number.NaN, LIMITES_PANELES.vistas)).toBe(210);
   });
 });
+
+describe("O022: ancho recordado en ambos lados", () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(cleanup);
+
+  it("vistas y propiedades guardan cada uno su propio ancho", () => {
+    montar("vistas");
+    fireEvent.keyDown(screen.getByRole("separator", { name: "Redimensionar prueba" }), {
+      key: "ArrowRight",
+    });
+    cleanup();
+    montar("propiedades");
+    fireEvent.keyDown(screen.getByRole("separator", { name: "Redimensionar prueba" }), {
+      key: "ArrowLeft",
+    });
+    expect(localStorage.getItem("openrvt.ancho-panel.vistas")).toBe(
+      String(LIMITES_PANELES.vistas.defecto + 16),
+    );
+    expect(localStorage.getItem("openrvt.ancho-panel.propiedades")).toBe(
+      String(LIMITES_PANELES.propiedades.defecto + 16),
+    );
+    cleanup();
+    montar("propiedades");
+    expect(anchoDe("propiedades")).toBe(LIMITES_PANELES.propiedades.defecto + 16);
+  });
+});

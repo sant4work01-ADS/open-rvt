@@ -63,7 +63,9 @@ describe("O022: secciones plegables y rejilla de estilos", () => {
   ];
 
   function montar() {
-    const actualizar = vi.fn(async (_id: string, _cambios: Partial<Vista>) => {});
+    const actualizar = vi.fn<
+      (id: string, cambios: Partial<Vista>) => Promise<void>
+    >(async () => {});
     useModelo.setState({ niveles: dosNiveles, actualizarVista: actualizar });
     render(<PropiedadesVista vista={{ ...vista, nivelesVisibles: ["n0"] }} />);
     return actualizar;
