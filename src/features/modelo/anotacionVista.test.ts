@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { estilosPorDefecto, estiloCotaPorDefecto } from "./estilos";
 import {
   calcularLayoutAlzado,
+  segmentosTrazoPunto,
   sumaCadena,
   textoNivel,
   type CajaAnotacion,
@@ -62,14 +63,15 @@ describe("O025: colocación de niveles con el estilo por omisión", () => {
 
   it("las cabezas 2.00 y 2.20 se separan con codo: una baja y otra sube", () => {
     const l = layout();
-    // A mano: banda de cabeza 3.5 mm = 0.35 m y aire mínimo 0.5 mm = 0.05 m.
-    // El hueco real es 0.20 m; se reparte 0.10 m a cada lado: 1.90 y 2.30.
+    // A mano: banda 2.5 mm (texto) + aire 2 mm = 4.5 mm = 0.45 m de separación
+    // mínima. El grupo 1.50/2.00/2.20 necesita 0.90 m y mide 0.70 m: el solver
+    // simétrico deja 1.45, 1.90 y 2.35, con huecos de 4.5 mm.
     const baja = l.cabezas[3];
     const sube = l.cabezas[4];
     expect(baja.z).toBeCloseTo(1.9, 9);
-    expect(sube.z).toBeCloseTo(2.3, 9);
+    expect(sube.z).toBeCloseTo(2.35, 9);
     expect(baja.desplazamiento).toBeCloseTo(-0.1, 9);
-    expect(sube.desplazamiento).toBeCloseTo(0.1, 9);
+    expect(sube.desplazamiento).toBeCloseTo(0.15, 9);
     expect(l.lineas.some((x) => x.tipo === "guia-nivel")).toBe(true);
   });
 
@@ -96,15 +98,78 @@ describe("O025: colocación de niveles con el estilo por omisión", () => {
 
   it("ningún texto cruza una línea de nivel que no le pertenece", () => {
     const l = layout();
-    const elevaciones = NIVELES.map((n) => n.elevacion);
+    // Solo cuentan las líneas de nivel dibujadas: terminan donde empieza la
+    // anotación, así que un texto lejano a la derecha no puede cruzarlas.
     for (const caja of l.cajas) {
-      for (const elevacion of elevaciones) {
+      for (const linea of l.lineas.filter((x) => x.tipo === "nivel")) {
+        const [ta, tb] = [linea.puntos[0][0], linea.puntos[1][0]];
+        const cruzaT = caja.t0 < Math.max(ta, tb) && caja.t1 > Math.min(ta, tb);
+        const cruzaZ =
+          caja.z0 < (linea.elevacion as number) - 1e-9 &&
+          caja.z1 > (linea.elevacion as number) + 1e-9;
         expect(
-          caja.z0 < elevacion - 1e-9 && caja.z1 > elevacion + 1e-9,
-          `${caja.tipo} ${caja.texto} cruza el nivel ${elevacion}`,
+          cruzaT && cruzaZ,
+          `${caja.tipo} ${caja.texto} cruza el nivel ${linea.elevacion}`,
         ).toBe(false);
       }
     }
+  });
+
+  it("las cabezas van en una sola columna; 2.20 sube y 2.00 baja con codo", () => {
+    const l = layout();
+    const xs = l.cabezas.map((c) => c.t);
+    for (const x of xs) expect(x).toBeCloseTo(xs[0], 12);
+    const textos = l.cabezas.map((c) => c.cajaTexto.t0);
+    for (const x of textos) expect(x).toBeCloseTo(textos[0], 12);
+    const n200 = l.cabezas.find((c) => c.elevacion === 2)!;
+    const n220 = l.cabezas.find((c) => c.elevacion === 2.2)!;
+    expect(n220.z - n220.elevacion).toBeGreaterThan(0);
+    expect(n200.z - n200.elevacion).toBeLessThan(0);
+    expect(n220.z).toBeGreaterThan(n200.z);
+    // 0.00 y 0.50 no se mueven; 1.50 cede 0.05 m para dejar aire a 2.00.
+    expect(l.cabezas[0].z).toBeCloseTo(0, 12);
+    expect(l.cabezas[1].z).toBeCloseTo(0.5, 12);
+    expect(l.cabezas[2].z).toBeCloseTo(1.45, 12);
+    const guia220 = l.lineas.find(
+      (x) => x.tipo === "guia-nivel" && x.elevacion === 2.2,
+    )!;
+    expect(guia220.puntos).toHaveLength(3);
+    expect(guia220.puntos[0][1]).toBeCloseTo(2.2, 12);
+    expect(guia220.puntos[2][0]).toBeCloseTo(n220.t, 12);
+    expect(guia220.puntos[2][1]).toBeCloseTo(n220.z, 12);
+    expect((guia220.punto as [number, number])[0]).toBeCloseTo(l.tGuia, 12);
+    expect((guia220.punto as [number, number])[1]).toBeCloseTo(2.2, 12);
+  });
+
+  it("la cadena y la total van antes que las cabezas y sin tocarse", () => {
+    const l = layout();
+    expect(l.tFin).toBeLessThan(l.tCadena);
+    expect(l.tCadena).toBeLessThan(l.tTotal);
+    expect(l.tTotal).toBeLessThan(l.tCabeza);
+    const total = l.total!;
+    // El texto de la total cabe entre la cadena y su línea, sin tocarlas.
+    expect(total.cajaTexto.t0).toBeGreaterThan(l.tCadena + 1e-9);
+    expect(total.cajaTexto.t1).toBeLessThan(l.tTotal - 1e-9);
+    expect(l.tFinAnotacion).toBeGreaterThan(l.cabezas[0].cajaTexto.t1);
+  });
+
+  it("el trazo-punto alterna trazo largo y punto corto", () => {
+    const tramos = segmentosTrazoPunto(
+      [
+        [0, 0],
+        [2, 0],
+      ],
+      100,
+    );
+    // A 1:100: trazo 6 mm = 0.60 m, hueco 0.20 m, punto 0.5 mm = 0.05 m.
+    expect(tramos[0]).toEqual([
+      [0, 0],
+      [0.6, 0],
+    ]);
+    const largos = tramos.filter(([a, b]) => Math.abs(b[0] - a[0] - 0.6) < 1e-9);
+    const puntos = tramos.filter(([a, b]) => Math.abs(b[0] - a[0] - 0.05) < 1e-9);
+    expect(largos.length).toBeGreaterThanOrEqual(2);
+    expect(puntos.length).toBeGreaterThanOrEqual(2);
   });
 
   it("en tramos chicos (0.20) los remates van por fuera; en 0.50 por dentro", () => {

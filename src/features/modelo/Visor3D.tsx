@@ -53,7 +53,7 @@ import {
 } from "./orbita";
 import { DESFASE_NOMBRE_CABEZA, normalizarAjusteNivel } from "./niveles";
 import { baseTextoAnotacion } from "./anotacion";
-import { calcularLayoutAlzado } from "./anotacionVista";
+import { calcularLayoutAlzado, segmentosTrazoPunto } from "./anotacionVista";
 import {
   categoriaOculta,
   factorEscala,
@@ -2966,8 +2966,39 @@ export function Visor3D({
           separacionGlobosMm: vista.separacionGlobos,
           ajustesNivel: ajustesMundo,
         });
+        // Encuadre exacto de la zona de anotación para las capturas y pruebas.
+        const nodoEncuadre = contenedor.current;
+        if (nodoEncuadre) {
+          (nodoEncuadre as unknown as Record<string, unknown>).__openrvtEnfocarAlzado = (
+            tCentro: number,
+            zCentro: number,
+            altoMundo: number,
+          ) => {
+            const camera = camara.current;
+            const nav = navegacion.current;
+            if (!(camera instanceof THREE.OrthographicCamera) || !nav) return;
+            const rect = nodoEncuadre.getBoundingClientRect();
+            const aspecto = Math.max(rect.width, 1) / Math.max(rect.height, 1);
+            const mitad = Math.max(0.4, altoMundo) / 2;
+            camera.left = -mitad * aspecto;
+            camera.right = mitad * aspecto;
+            camera.top = mitad;
+            camera.bottom = -mitad;
+            camera.updateProjectionMatrix();
+            nav.objetivo.set(
+              h[0] * tCentro + d[0] * profundidad,
+              h[1] * tCentro + d[1] * profundidad,
+              zCentro,
+            );
+            aplicarCamara();
+          };
+        }
         const patronLinea = (patron: typeof estiloNivel.patron): PatronLinea =>
           patron === "trazo" ? "discontinua" : patron;
+        // El trazo-punto se dibuja con segmentos propios (trazo, hueco, punto,
+        // hueco): LineMaterial solo admite un guion y un hueco iguales.
+        const patronNivel = estiloNivel.patron;
+        const patronEjeNivel = estiloEje.patron;
         const colorNivel = oscuro ? "#e8eaed" : estiloNivel.color;
         const colorEje = oscuro ? "#e0b07a" : estiloEje.color;
         const colorCota = oscuro ? "#e8eaed" : estiloCota.color;
@@ -2976,7 +3007,7 @@ export function Visor3D({
           mm: estiloNivel.grosor * factorEscala(vista.escala),
           escala: vista.escala,
           color: colorNivel,
-          patron: patronLinea(estiloNivel.patron),
+          patron: patronNivel === "trazo-punto" ? "continua" : patronLinea(patronNivel),
           registro,
           mundoPorPx,
           profundidad: false,
@@ -2985,7 +3016,7 @@ export function Visor3D({
           mm: estiloEje.grosor * factorEscala(vista.escala),
           escala: vista.escala,
           color: colorEje,
-          patron: patronLinea(estiloEje.patron),
+          patron: patronEjeNivel === "trazo-punto" ? "continua" : patronLinea(patronEjeNivel),
           registro,
           mundoPorPx,
           profundidad: false,
@@ -3049,7 +3080,36 @@ export function Visor3D({
         for (const linea of layout.lineas) {
           const puntos = linea.puntos.map(([t, z]) => puntoHZ(t, z));
           const material = linea.tipo === "extension" ? materialCota : materialNivel;
-          lineaCerrada(puntos, material, linea.tipo === "extension" ? 2.7 : 3, grupoLocal);
+          const orden = linea.tipo === "extension" ? 2.7 : 3;
+          if (linea.tipo === "nivel" && patronNivel === "trazo-punto") {
+            for (const [a, b] of segmentosTrazoPunto(linea.puntos, vista.escala)) {
+              lineaCerrada(
+                [puntoHZ(a[0], a[1]), puntoHZ(b[0], b[1])],
+                material,
+                orden,
+                grupoLocal,
+              );
+            }
+          } else {
+            lineaCerrada(puntos, material, orden, grupoLocal);
+          }
+          if (linea.punto) {
+            // Punto de arranque de la guía sobre la altura del nivel.
+            const disco = new THREE.Mesh(
+              new THREE.CircleGeometry(mmAMundo(0.6, vista.escala), 16),
+              new THREE.MeshBasicMaterial({
+                color: new THREE.Color(colorNivel),
+                side: THREE.DoubleSide,
+                depthTest: false,
+                depthWrite: false,
+              }),
+            );
+            const base = puntoHZ(linea.punto[0], linea.punto[1]);
+            disco.position.set(base[0], base[1], base[2]);
+            orientarAnotacion(disco, haciaCamara);
+            disco.renderOrder = 21;
+            grupoLocal.add(disco);
+          }
           lineasNivelRef.current.push({
             tipo: linea.tipo === "guia-nivel" ? "guia" : linea.tipo,
             elev: linea.elevacion,
@@ -3205,12 +3265,23 @@ export function Visor3D({
 
         const nombresGlobos: string[] = [];
         for (const linea of layout.ejesLineas) {
-          lineaCerrada(
-            linea.puntos.map(([t, z]) => puntoHZ(t, z)),
-            materialEjeNivel,
-            2.9,
-            grupoLocal,
-          );
+          if (patronEjeNivel === "trazo-punto") {
+            for (const [a, b] of segmentosTrazoPunto(linea.puntos, vista.escala)) {
+              lineaCerrada(
+                [puntoHZ(a[0], a[1]), puntoHZ(b[0], b[1])],
+                materialEjeNivel,
+                2.9,
+                grupoLocal,
+              );
+            }
+          } else {
+            lineaCerrada(
+              linea.puntos.map(([t, z]) => puntoHZ(t, z)),
+              materialEjeNivel,
+              2.9,
+              grupoLocal,
+            );
+          }
         }
         for (const globo of layout.globos) {
           const eje = cruces.find(({ eje: e }) => e.globalid === globo.globalid)?.eje;
@@ -3280,6 +3351,7 @@ export function Visor3D({
             totalX: layout.tTotal,
           });
           contenedor.current.dataset.nivelesZ = JSON.stringify(ordenados.map((n) => n.elevacion));
+          contenedor.current.dataset.nivelesPatron = estiloNivel.patron;
           contenedor.current.dataset.nivelesCabezas = JSON.stringify({
             h: [h[0], h[1]],
             d: [d[0], d[1]],

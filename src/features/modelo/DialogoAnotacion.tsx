@@ -100,7 +100,7 @@ function PreviaAnotacion({ estilos }: { estilos: Estilos }) {
     [niveles, ejes, estilos.niveles, estilos.ejes, estiloCota],
   );
   const t0 = layout.tInicio;
-  const t1 = layout.tFin + 9;
+  const t1 = layout.tFinAnotacion + 0.8;
   const z0 = Math.min(-0.6, ...layout.cabezas.map((c) => c.z - 0.4));
   const z1 = layout.zGlobo + layout.globos[0]?.radio + 0.6;
   const ancho = 620;
@@ -134,13 +134,22 @@ function PreviaAnotacion({ estilos }: { estilos: Estilos }) {
       ))}
       {layout.lineas.map((linea, i) =>
         linea.tipo === "guia-nivel" ? (
-          <polyline
-            key={`guia-${i}`}
-            points={linea.puntos.map(tO).join(" ")}
-            fill="none"
-            stroke={colorNivel}
-            strokeWidth="1"
-          />
+          <g key={`guia-${i}`}>
+            <polyline
+              points={linea.puntos.map(tO).join(" ")}
+              fill="none"
+              stroke={colorNivel}
+              strokeWidth="1"
+            />
+            {linea.punto && (
+              <circle
+                cx={x(linea.punto[0])}
+                cy={y(linea.punto[1])}
+                r={2}
+                fill={colorNivel}
+              />
+            )}
+          </g>
         ) : null,
       )}
       {layout.lineas

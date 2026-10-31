@@ -239,6 +239,7 @@ async function datosVisor(ses) {
       nivelesZ: JSON.parse(visor.dataset.nivelesZ ?? "[]"),
       nivelesX: JSON.parse(visor.dataset.nivelesX ?? "{}"),
       remate: visor.dataset.nivelesCotaRemate,
+      patron: visor.dataset.nivelesPatron,
       separacion: Number(visor.dataset.nivelesSeparacionGlobos),
     };
   });
@@ -288,10 +289,6 @@ test("O025: niveles, ejes y cotas en alzado como la referencia", async () => {
     await esperar(900);
     await activar(ses, "visor-ajustar");
     await esperar(700);
-    await ses.driver.executeScript(() => {
-      document.querySelector('[data-testid="visor"]').__openrvtZoom(0.75);
-    });
-    await esperar(600);
 
     const datos = await anotaciones(ses);
     const etiquetasNivel = datos.etiquetas.filter((e) => e.tipo === "nivel");
@@ -304,22 +301,6 @@ test("O025: niveles, ejes y cotas en alzado como la referencia", async () => {
     const totales = datos.etiquetas.filter((e) => e.tipo === "total").map((e) => e.texto);
     assert.deepEqual(totales, ["2.20"]);
 
-    for (let i = 0; i < datos.etiquetas.length; i += 1) {
-      for (let j = i + 1; j < datos.etiquetas.length; j += 1) {
-        assert.equal(
-          seIntersectan(datos.etiquetas[i], datos.etiquetas[j]),
-          false,
-          `se enciman «${datos.etiquetas[i].texto}» y «${datos.etiquetas[j].texto}»`,
-        );
-      }
-    }
-    for (const globo of datos.globos) {
-      for (const etiqueta of datos.etiquetas) {
-        const caja = { x0: globo.x - globo.radio, x1: globo.x + globo.radio, y0: globo.y - globo.radio, y1: globo.y + globo.radio };
-        assert.equal(seIntersectan(caja, etiqueta), false, `el globo ${globo.etiqueta} encima de ${etiqueta.texto}`);
-      }
-    }
-
     const base = await datosVisor(ses);
     assert.deepEqual(base.nivelesZ, [0, 0.5, 1.5, 2, 2.2]);
     // A 1:100, 10 mm de papel = 1.00 m y el radio del globo = 0.40 m: 2.20+1.00+0.40.
@@ -327,8 +308,69 @@ test("O025: niveles, ejes y cotas en alzado como la referencia", async () => {
     // 7 mm entre filas = 0.70 m.
     assert.ok(Math.abs(base.nivelesX.totalX - base.nivelesX.parcialX - 0.7) < 1e-6);
     assert.equal(base.remate, "flecha-rellena");
+    assert.equal(base.patron, "trazo-punto", `patrón de nivel ${base.patron}`);
 
+    // Captura a 1:100 con Ajustar (vista completa).
     await cambiarPestana(ses, "Vista");
+    await ses.captura(path.join(PROGRESO, "alzado-referencia-ajustar.png"));
+
+    // Encuadrar la anotación para que llene la vista, como la referencia:
+    // los cinco niveles y el globo, con la cadena y las cabezas.
+    const encuadre = await datosVisor(ses);
+    await ses.driver.executeScript(
+      (t, z, alto) => {
+        document.querySelector('[data-testid="visor"]').__openrvtEnfocarAlzado(t, z, alto);
+      },
+      encuadre.nivelesX.etiquetaX,
+      1.5,
+      3.5,
+    );
+    await esperar(700);
+    // Cerrar el aviso de navegación para que no tape los niveles bajos.
+    await ses.driver.executeScript(() => {
+      document.querySelector('[data-testid="ayuda-navegacion-cerrar"]')?.click();
+    });
+    await esperar(300);
+    const acercado = await anotaciones(ses);
+    // Cajas reales a zoom de anotación: nada se encima.
+    for (let i = 0; i < acercado.etiquetas.length; i += 1) {
+      for (let j = i + 1; j < acercado.etiquetas.length; j += 1) {
+        assert.equal(
+          seIntersectan(acercado.etiquetas[i], acercado.etiquetas[j]),
+          false,
+          `se enciman «${acercado.etiquetas[i].texto}» ${JSON.stringify(acercado.etiquetas[i])} y «${acercado.etiquetas[j].texto}» ${JSON.stringify(acercado.etiquetas[j])}`,
+        );
+      }
+    }
+    for (const globo of acercado.globos) {
+      for (const etiqueta of acercado.etiquetas) {
+        const caja = {
+          x0: globo.x - globo.radio,
+          x1: globo.x + globo.radio,
+          y0: globo.y - globo.radio,
+          y1: globo.y + globo.radio,
+        };
+        assert.equal(
+          seIntersectan(caja, etiqueta),
+          false,
+          `el globo ${globo.etiqueta} encima de ${etiqueta.texto}`,
+        );
+      }
+    }
+    const cabezas = acercado.etiquetas.filter((e) => e.tipo === "nivel");
+    assert.equal(cabezas.length, 5);
+    const xCabezas = cabezas.map((e) => e.x0);
+    for (const x of xCabezas) {
+      assert.ok(Math.abs(x - xCabezas[0]) < 2, `cabeza descentrada: ${xCabezas.join(",")}`);
+    }
+    const c220 = cabezas.find((e) => e.texto === "Npt +2.20m");
+    const c200 = cabezas.find((e) => e.texto === "Npt +2.00m");
+    assert.ok(c220 && c200, "faltan las cabezas 2.00/2.20");
+    assert.ok(
+      (c220.y0 + c220.y1) / 2 < (c200.y0 + c200.y1) / 2,
+      "la cabeza 2.20 debe quedar arriba de la 2.00",
+    );
+
     await activar(ses, "cmd-tema-oscuro");
     await esperar(500);
     await ses.captura(path.join(PROGRESO, "alzado-referencia-oscuro.png"));

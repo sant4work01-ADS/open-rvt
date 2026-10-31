@@ -32,6 +32,8 @@ export interface LineaAnotacion {
   tipo: "nivel" | "guia-nivel" | "extension" | "cota" | "cota-total" | "eje" | "guia-eje";
   puntos: Array<[number, number]>;
   elevacion?: number;
+  /** Punto sobre la línea del nivel donde arranca la guía (referencia). */
+  punto?: [number, number];
 }
 
 export interface CabezaNivelCalc {
@@ -82,7 +84,12 @@ export interface CotaTotalCalc extends CotaTramoCalc {
 
 export interface LayoutAlzado {
   tInicio: number;
+  /** Fin de las líneas de nivel (más allá del último eje). */
   tFin: number;
+  /** Borde derecho de toda la anotación (texto de la cabeza más ancha). */
+  tFinAnotacion: number;
+  /** Punto de la línea del nivel donde arranca la guía con codo. */
+  tGuia: number;
   tCadena: number;
   tTotal: number;
   tCabeza: number;
@@ -117,8 +124,8 @@ export interface EntradaLayoutAlzado {
 const MM = (mm: number, escala: EscalaVista) => mmAMundo(mm, escala);
 
 /** Ancho aproximado del texto, en mundo, con el mismo criterio que el visor. */
-export function anchoTextoAprox(texto: string, altoMundo: number): number {
-  return Math.max(0.1, texto.length * altoMundo * 0.75);
+export function anchoTextoAprox(texto: string, altoMundo: number, factor = 0.75): number {
+  return Math.max(0.1, texto.length * altoMundo * factor);
 }
 
 export function formatearNumero(valor: number, decimales: number, unidad = ""): string {
@@ -162,14 +169,50 @@ export function acomodarCabezasSimetrico(
   return zs;
 }
 
-/** Codo de una cabeza: punto en la línea, quiebre y llegada a la cabeza. */
-function guiaCabeza(tFin: number, zLinea: number, tCabeza: number, zCabeza: number, escala: EscalaVista) {
-  const avance = MM(2, escala);
-  return [
-    [tFin, zLinea],
-    [tFin + avance, zLinea],
-    [tCabeza, zCabeza],
-  ] as Array<[number, number]>;
+/**
+ * Segmentos de una línea trazo-punto: trazo largo, hueco, punto, hueco.
+ * Devuelve pares de puntos en mundo para dibujar con material continuo, porque
+ * LineMaterial solo admite un par guion/hueco y no dibujaría el punto.
+ */
+export function segmentosTrazoPunto(
+  puntos: Array<[number, number]>,
+  escala: EscalaVista,
+): Array<[[number, number], [number, number]]> {
+  const patron = [MM(6, escala), MM(2, escala), MM(0.5, escala), MM(2, escala)];
+  if (puntos.length < 2) return [];
+  const salida: Array<[[number, number], [number, number]]> = [];
+  let indice = 0;
+  let restante = patron[0];
+  let restanteTramo = Math.hypot(puntos[1][0] - puntos[0][0], puntos[1][1] - puntos[0][1]);
+  let segmento = 0;
+  let cursor = puntos[0];
+  let direccion = [
+    (puntos[1][0] - puntos[0][0]) / (restanteTramo || 1),
+    (puntos[1][1] - puntos[0][1]) / (restanteTramo || 1),
+  ];
+  const dibujando = (i: number) => i % 2 === 0;
+  while (segmento + 1 < puntos.length) {
+    const paso = Math.min(restante, restanteTramo);
+    const siguiente: [number, number] = [cursor[0] + direccion[0] * paso, cursor[1] + direccion[1] * paso];
+    if (dibujando(indice) && paso > 1e-9) salida.push([cursor, siguiente]);
+    cursor = siguiente;
+    restante -= paso;
+    restanteTramo -= paso;
+    if (restanteTramo <= 1e-9) {
+      segmento += 1;
+      if (segmento + 1 >= puntos.length) break;
+      cursor = puntos[segmento];
+      const dx = puntos[segmento + 1][0] - puntos[segmento][0];
+      const dz = puntos[segmento + 1][1] - puntos[segmento][1];
+      restanteTramo = Math.hypot(dx, dz);
+      direccion = [dx / (restanteTramo || 1), dz / (restanteTramo || 1)];
+    }
+    if (restante <= 1e-9) {
+      indice = (indice + 1) % patron.length;
+      restante = patron[indice];
+    }
+  }
+  return salida;
 }
 
 export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado {
@@ -184,17 +227,46 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
   const sMin = ejes.length > 0 ? ejes[0].s : entrada.tMinCaja;
   const sMax = ejes.length > 0 ? ejes[ejes.length - 1].s : entrada.tMaxCaja;
   const tInicio = Math.min(entrada.tMinCaja, sMin - extension);
-  const tCadena = sMax + MM(10, escala);
-  const tTotal = tCadena + MM(estiloCota.distanciaFilas, escala);
-  const tFin = Math.max(sMax + extension, tTotal + MM(4, escala));
-  const tCabeza = tFin + MM(6, escala);
+  // La referencia corta las líneas de nivel al terminar el último eje y dibuja
+  // la anotación más a la derecha, sobre la misma altura.
+  const tFin = sMax + extension;
 
-  const altoCabeza = MM(estiloNivel.tamanoCabeza, escala);
+  const altoTextoCota = MM(estiloCota.altoTexto, escala);
+  const separacion = MM(estiloCota.separacionTexto, escala);
+  const remate = MM(estiloCota.tamanoRemate, escala);
+  const separacionExt = MM(estiloCota.separacionExtension, escala);
+  const prolongacion = MM(estiloCota.prolongacion, escala);
+
+  const tExtInicio = tFin + separacionExt;
+  const tCadena = tExtInicio + MM(6, escala);
+  const tTotal = tCadena + MM(estiloCota.distanciaFilas, escala);
+  const textoTotal =
+    niveles.length >= 2
+      ? formatearNumero(
+          elevaciones[elevaciones.length - 1] - elevaciones[0],
+          estiloCota.decimales,
+          estiloCota.unidad,
+        )
+      : "";
+  const anchoTextoTotal = anchoTextoAprox(textoTotal, altoTextoCota, 0.55);
+  // La total va en su fila; su texto ocupa el hueco entre filas si cabe y, si
+  // no, se saca hacia afuera para no tocar la cadena.
+  const totalCabeEntreFilas = anchoTextoTotal + separacion <= tTotal - tCadena;
+  const bordeTextoTotal = totalCabeEntreFilas
+    ? tTotal - separacion
+    : tTotal + separacion + anchoTextoTotal;
+  const tGuia = bordeTextoTotal + MM(3, escala);
+  const tCabeza = tGuia + MM(7, escala);
+
+  // La referencia usa un triángulo ancho y bajo (3.5 mm de ancho): si fuera
+  // cuadrado, las cabezas de niveles juntos se tocarían.
   const anchoCabeza = MM(estiloNivel.tamanoCabeza, escala);
+  const altoCabeza = anchoCabeza * 0.7;
   const altoTextoNivel = MM(estiloNivel.altoTexto, escala);
   const banda = Math.max(altoCabeza, altoTextoNivel);
-  // Solo se pide un aire mínimo: la referencia separa lo justo para no encimar.
-  const auto = acomodarCabezasSimetrico(elevaciones, banda, MM(0.5, escala));
+  // Aire suficiente para que ni triángulos ni textos se toquen a zoom de
+  // anotación (el texto en pantalla nunca baja de 11 px).
+  const auto = acomodarCabezasSimetrico(elevaciones, banda, MM(2, escala));
 
   const lineas: LineaAnotacion[] = [];
   const cabezas: CabezaNivelCalc[] = [];
@@ -214,8 +286,19 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
     const manual = entrada.ajustesNivel?.[nivel.globalid];
     const z = Number.isFinite(manual) ? (manual as number) : auto[i];
     const desplazamiento = z - zLinea;
-    const guia = guiaCabeza(tFin, zLinea, tCabeza, z, escala);
-    lineas.push({ tipo: "guia-nivel", elevacion: zLinea, puntos: guia });
+    // Guía quebrada: nace en un punto sobre la altura del nivel, avanza un poco
+    // y sube o baja hasta la cabeza. Todas las cabezas comparten columna.
+    const puntosGuia: Array<[number, number]> = [
+      [tGuia, zLinea],
+      [tGuia + MM(1.5, escala), zLinea],
+      [tCabeza, z],
+    ];
+    lineas.push({
+      tipo: "guia-nivel",
+      elevacion: zLinea,
+      puntos: puntosGuia,
+      punto: [tGuia, zLinea],
+    });
     const poligono: Array<[number, number]> =
       estiloNivel.cabeza === "triangulo-relleno" || estiloNivel.cabeza === "triangulo"
         ? [
@@ -226,24 +309,18 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
         : [];
     const texto = textoNivel(zLinea, estiloNivel);
     const anchoTexto = anchoTextoAprox(texto, altoTextoNivel);
-    // Las cabezas desplazadas llevan el texto en una columna más a la derecha
-    // para que dos cabezas cercanas nunca encimen sus textos.
-    const columnaExtra = Math.abs(desplazamiento) > 1e-9 ? anchoTexto * 1.2 : 0;
-    const bordeTexto = tCabeza + anchoCabeza / 2 + MM(1, escala) + columnaExtra;
-    // Si la cabeza bajó, el texto va debajo del vértice para no tachar la línea;
-    // si subió o no se movió, arriba del vértice, a la altura de la cabeza.
-    const zTexto =
-      desplazamiento < -1e-9
-        ? { z0: z - altoTextoNivel, z1: z }
-        : { z0: z + (altoCabeza - altoTextoNivel) / 2, z1: z + (altoCabeza + altoTextoNivel) / 2 };
+    const bordeTexto = tCabeza + anchoCabeza / 2 + MM(1, escala);
+    // El texto va siempre a la derecha del triángulo y centrado con él, como en
+    // la referencia: así dos niveles juntos nunca enciman sus textos.
+    const centroZ = z + altoCabeza / 2;
     const cajaTexto: CajaAnotacion = {
       tipo: "nivel",
       texto,
       t0: bordeTexto,
       t1: bordeTexto + anchoTexto,
-      z0: zTexto.z0,
-      z1: zTexto.z1,
-      centro: [bordeTexto + anchoTexto / 2, (zTexto.z0 + zTexto.z1) / 2],
+      z0: centroZ - altoTextoNivel / 2,
+      z1: centroZ + altoTextoNivel / 2,
+      centro: [bordeTexto + anchoTexto / 2, centroZ],
     };
     cabezas.push({
       globalid: nivel.globalid,
@@ -258,14 +335,13 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
     });
     cajas.push(cajaTexto);
   }
+  const anchoMaxTextoNivel = cabezas.reduce(
+    (max, c) => Math.max(max, c.cajaTexto.t1 - c.cajaTexto.t0),
+    0,
+  );
+  const tFinAnotacion = tCabeza + anchoCabeza / 2 + MM(1, escala) + anchoMaxTextoNivel;
 
   // Cotas: cadena entre niveles consecutivos y total en la fila de afuera.
-  const altoTextoCota = MM(estiloCota.altoTexto, escala);
-  const separacion = MM(estiloCota.separacionTexto, escala);
-  const remate = MM(estiloCota.tamanoRemate, escala);
-  const separacionExt = MM(estiloCota.separacionExtension, escala);
-  const prolongacion = MM(estiloCota.prolongacion, escala);
-
   const cotaDe = (
     desde: number,
     hasta: number,
@@ -275,16 +351,19 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
   ): CotaTramoCalc => {
     const valor = hasta - desde;
     const texto = formatearNumero(valor, estiloCota.decimales, estiloCota.unidad);
-    const ancho = anchoTextoAprox(texto, altoTextoCota);
+    const ancho = anchoTextoAprox(texto, altoTextoCota, 0.55);
     const fuera = Math.abs(valor) < 2 * remate;
-    // Si el tramo es más chico que el texto, éste no cabe entre las dos líneas:
-    // se saca por encima del nivel superior para no tachar ninguna línea.
-    const centroZ =
-      fuera && Math.abs(valor) < altoTextoCota + 2 * separacion
-        ? hasta + separacion + altoTextoCota / 2
-        : (desde + hasta) / 2;
-    // La cadena va a la izquierda de su línea; la total, a la derecha (referencia).
-    const t0 = textoDerecha ? t + separacion : t - separacion - ancho;
+    // Si el tramo es más chico que el texto, éste se saca fuera del hueco
+    // (sobre el nivel superior) para no tachar ninguna línea.
+    const noCabe = Math.abs(valor) < altoTextoCota + 2 * separacion;
+    const centroZ = noCabe ? hasta + separacion + altoTextoCota / 2 : (desde + hasta) / 2;
+    // Cadena: texto a la izquierda de su línea. Total: en su hueco si cabe y,
+    // si no, a la derecha, sin tocar la cadena.
+    const t0 = textoDerecha
+      ? totalCabeEntreFilas
+        ? t - separacion - ancho
+        : t + separacion
+      : t - separacion - ancho;
     const cajaTexto: CajaAnotacion = {
       tipo,
       texto,
@@ -315,7 +394,7 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
       tipo: "extension",
       elevacion: nivel.elevacion,
       puntos: [
-        [sMax + separacionExt, nivel.elevacion],
+        [tExtInicio, nivel.elevacion],
         [tTotal + prolongacion, nivel.elevacion],
       ],
     });
@@ -384,6 +463,8 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
   return {
     tInicio,
     tFin,
+    tFinAnotacion,
+    tGuia,
     tCadena,
     tTotal,
     tCabeza,
