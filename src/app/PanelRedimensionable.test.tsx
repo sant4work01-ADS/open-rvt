@@ -72,6 +72,13 @@ describe("paneles redimensionables (O010)", () => {
     expect(limitarAnchoPanel(9999, LIMITES_PANELES.vistas)).toBe(420);
     expect(limitarAnchoPanel(Number.NaN, LIMITES_PANELES.vistas)).toBe(210);
   });
+
+  it("O022b: el panel de propiedades nunca baja de 260 px", () => {
+    expect(LIMITES_PANELES.propiedades.minimo).toBeGreaterThanOrEqual(260);
+    expect(limitarAnchoPanel(10, LIMITES_PANELES.propiedades)).toBe(
+      LIMITES_PANELES.propiedades.minimo,
+    );
+  });
 });
 
 describe("O022: ancho recordado en ambos lados", () => {

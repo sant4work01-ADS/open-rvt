@@ -49,8 +49,8 @@ function CampoNumero({
   ayuda?: string;
 }) {
   return (
-    <label className="flex h-7 items-center justify-between gap-2 text-xs" title={ayuda}>
-      <span className="cursor-help truncate text-muted-foreground">{etiqueta}</span>
+    <label className="prop-fila text-xs" title={ayuda}>
+      <span className="prop-etiqueta cursor-help text-muted-foreground">{etiqueta}</span>
       <input
         data-testid={testid}
         type="number"
@@ -106,16 +106,16 @@ function Seccion({
 }) {
   return (
     <section data-testid={`seccion-${id}`} className="border-t pt-1 first:border-t-0 first:pt-0">
-      <div className="flex h-7 items-center gap-1">
+      <div className="prop-seccion-cabecera">
         <button
           type="button"
           data-testid={`seccion-${id}-plegar`}
           aria-expanded={!plegada}
           onClick={() => onAlternar(id)}
-          className="flex min-w-0 flex-1 items-center gap-1 rounded px-1 text-left font-semibold hover:bg-muted"
+          className="flex min-w-0 flex-1 items-center gap-1 rounded px-1 py-0.5 text-left font-semibold hover:bg-muted"
         >
           {plegada ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
-          <span className="truncate">{titulo}</span>
+          <span className="prop-seccion-titulo">{titulo}</span>
         </button>
         {acciones}
       </div>
@@ -134,7 +134,7 @@ function BotonesTodos({
   onNinguno: () => void;
 }) {
   return (
-    <span className="flex shrink-0 items-center gap-0.5 text-[10px]">
+    <span className="prop-seccion-acciones flex shrink-0 items-center gap-0.5 text-[10px]">
       <button
         type="button"
         data-testid={`${prefijo}-todos`}
@@ -202,7 +202,7 @@ export function PropiedadesVista({ vista }: { vista: Vista }) {
   return (
     <div
       data-testid="propiedades-vista"
-      className="flex min-w-0 flex-col gap-2 overflow-x-hidden p-3 text-xs"
+      className="propiedades-adaptable flex min-w-0 flex-col gap-2 overflow-x-hidden p-3 text-xs"
     >
       <Seccion
         id="identidad"
@@ -210,8 +210,11 @@ export function PropiedadesVista({ vista }: { vista: Vista }) {
         plegada={plegada("identidad")}
         onAlternar={alternarSeccion}
       >
-        <label className="flex h-7 items-center gap-2">
-          <span className="w-24 shrink-0 truncate text-muted-foreground" title="Nombre de la vista">
+        <label className="prop-fila">
+          <span
+            className="prop-etiqueta cursor-help text-muted-foreground"
+            title="Nombre de la vista"
+          >
             Nombre
           </span>
           <input
@@ -221,8 +224,8 @@ export function PropiedadesVista({ vista }: { vista: Vista }) {
             className="h-7 min-w-0 flex-1 rounded border bg-background px-2"
           />
         </label>
-        <label className="flex h-7 items-center gap-2">
-          <span className="w-24 shrink-0 truncate text-muted-foreground" title="Tipo de vista">
+        <label className="prop-fila">
+          <span className="prop-etiqueta cursor-help text-muted-foreground" title="Tipo de vista">
             Tipo
           </span>
           <select
@@ -287,8 +290,11 @@ export function PropiedadesVista({ vista }: { vista: Vista }) {
           </details>
         )}
         {vista.tipo === "alzado" && (
-          <div className="flex h-7 items-center gap-2">
-            <span className="w-24 shrink-0 truncate text-muted-foreground" title="Punto cardinal hacia el que mira el alzado">
+          <div className="prop-fila">
+            <span
+              className="prop-etiqueta cursor-help text-muted-foreground"
+              title="Punto cardinal hacia el que mira el alzado"
+            >
               Orientación
             </span>
             <span data-testid="vista-orientacion" className="flex-1 text-right">
@@ -297,8 +303,11 @@ export function PropiedadesVista({ vista }: { vista: Vista }) {
           </div>
         )}
         {vista.tipo === "corte" && (
-          <div className="flex h-7 items-center gap-2">
-            <span className="w-24 shrink-0 truncate text-muted-foreground" title="Dirección de la mirada del corte (x, y)">
+          <div className="prop-fila">
+            <span
+              className="prop-etiqueta cursor-help text-muted-foreground"
+              title="Dirección de la mirada del corte (x, y)"
+            >
               Dirección
             </span>
             <span data-testid="vista-direccion" className="flex-1 text-right">
@@ -323,7 +332,7 @@ export function PropiedadesVista({ vista }: { vista: Vista }) {
               checked={visibles.includes(nivel.globalid)}
               onChange={() => alternarNivel(nivel.globalid)}
             />
-            <span className="truncate">{nivel.nombre}</span>
+            <span className="prop-truncar truncate">{nivel.nombre}</span>
           </label>
         ))}
       </Seccion>
@@ -337,7 +346,7 @@ export function PropiedadesVista({ vista }: { vista: Vista }) {
           <BotonesTodos prefijo="categorias" onTodos={todasCategorias} onNinguno={ningunaCategoria} />
         }
       >
-        <div className="grid grid-cols-2 gap-x-2">
+        <div className="prop-categorias">
           {CATEGORIAS.map((categoria) => (
             <label key={categoria.id} className="flex h-7 min-w-0 items-center gap-2">
               <input
@@ -350,7 +359,7 @@ export function PropiedadesVista({ vista }: { vista: Vista }) {
                   })
                 }
               />
-              <span className="truncate">{categoria.nombre}</span>
+              <span className="prop-truncar truncate">{categoria.nombre}</span>
             </label>
           ))}
         </div>
@@ -364,19 +373,19 @@ export function PropiedadesVista({ vista }: { vista: Vista }) {
       >
         <div
           data-testid="vista-estilos-categorias"
-          className="grid grid-cols-[minmax(0,1fr)_3.25rem_3.25rem] items-center gap-x-1 gap-y-0"
+          className="prop-estilos"
         >
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <span className="prop-estilos-encabezado text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
             Objeto
           </span>
           <span
-            className="text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+            className="prop-estilos-encabezado text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
             title="Grosor de las líneas de proyección (mm de papel a 1:100)"
           >
             Proyección
           </span>
           <span
-            className="text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+            className="prop-estilos-encabezado text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
             title="Grosor de la línea de corte (mm de papel a 1:100)"
           >
             Corte
@@ -385,9 +394,9 @@ export function PropiedadesVista({ vista }: { vista: Vista }) {
             const cambio = vista.estilos?.[categoria.id];
             const defecto = estilos.categorias[categoria.id];
             return (
-              <div key={categoria.id} className="contents">
+              <div key={categoria.id} className="prop-estilo-fila">
                 <label
-                  className="flex h-7 min-w-0 items-center gap-1"
+                  className="prop-estilo-nombre flex h-7 min-w-0 items-center gap-1"
                   title={`Ocultar ${categoria.nombre} en esta vista`}
                 >
                   <input
@@ -396,37 +405,47 @@ export function PropiedadesVista({ vista }: { vista: Vista }) {
                     checked={cambio?.oculta === true}
                     onChange={(e) => cambiarEstilo(categoria.id, { oculta: e.target.checked })}
                   />
-                  <span className="truncate">{categoria.nombre}</span>
+                  <span className="prop-truncar truncate">{categoria.nombre}</span>
                 </label>
-                <input
-                  type="number"
-                  step="0.05"
-                  min="0"
-                  aria-label={`Grosor de proyección de ${categoria.nombre} en mm`}
-                  title="Proyección (mm)"
-                  data-testid={`vista-estilo-${categoria.id}-proyeccion`}
-                  value={cambio?.proyeccion ?? defecto.proyeccion}
-                  onChange={(e) => {
-                    const valor = Number(e.target.value);
-                    if (Number.isFinite(valor)) cambiarEstilo(categoria.id, { proyeccion: valor });
-                  }}
-                  className="h-6 w-full min-w-0 rounded border bg-background px-1 text-right tabular-nums"
-                />
-                <input
-                  type="number"
-                  step="0.05"
-                  min="0"
-                  aria-label={`Grosor de corte de ${categoria.nombre} en mm`}
-                  title="Corte (mm); vacío si la categoría no se corta"
-                  data-testid={`vista-estilo-${categoria.id}-corte`}
-                  value={cambio?.corte ?? defecto.corte ?? ""}
-                  placeholder={defecto.corte === null ? "—" : String(defecto.corte)}
-                  onChange={(e) => {
-                    const valor = Number(e.target.value);
-                    if (Number.isFinite(valor)) cambiarEstilo(categoria.id, { corte: valor });
-                  }}
-                  className="h-6 w-full min-w-0 rounded border bg-background px-1 text-right tabular-nums"
-                />
+                <span className="prop-estilo-campo">
+                  <span className="prop-estilo-campo-etiqueta text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Proyección
+                  </span>
+                  <input
+                    type="number"
+                    step="0.05"
+                    min="0"
+                    aria-label={`Grosor de proyección de ${categoria.nombre} en mm`}
+                    title="Proyección (mm)"
+                    data-testid={`vista-estilo-${categoria.id}-proyeccion`}
+                    value={cambio?.proyeccion ?? defecto.proyeccion}
+                    onChange={(e) => {
+                      const valor = Number(e.target.value);
+                      if (Number.isFinite(valor)) cambiarEstilo(categoria.id, { proyeccion: valor });
+                    }}
+                    className="h-6 w-full min-w-0 rounded border bg-background px-1 text-right tabular-nums"
+                  />
+                </span>
+                <span className="prop-estilo-campo">
+                  <span className="prop-estilo-campo-etiqueta text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Corte
+                  </span>
+                  <input
+                    type="number"
+                    step="0.05"
+                    min="0"
+                    aria-label={`Grosor de corte de ${categoria.nombre} en mm`}
+                    title="Corte (mm); vacío si la categoría no se corta"
+                    data-testid={`vista-estilo-${categoria.id}-corte`}
+                    value={cambio?.corte ?? defecto.corte ?? ""}
+                    placeholder={defecto.corte === null ? "—" : String(defecto.corte)}
+                    onChange={(e) => {
+                      const valor = Number(e.target.value);
+                      if (Number.isFinite(valor)) cambiarEstilo(categoria.id, { corte: valor });
+                    }}
+                    className="h-6 w-full min-w-0 rounded border bg-background px-1 text-right tabular-nums"
+                  />
+                </span>
               </div>
             );
           })}
@@ -440,8 +459,11 @@ export function PropiedadesVista({ vista }: { vista: Vista }) {
         onAlternar={alternarSeccion}
       >
         {vista.tipo === "planta" && (
-          <label className="flex h-7 items-center gap-2">
-            <span className="w-24 shrink-0 truncate text-muted-foreground" title="Dibuja las cotas de los ejes en la planta">
+          <label className="prop-fila">
+            <span
+              className="prop-etiqueta cursor-help text-muted-foreground"
+              title="Dibuja las cotas de los ejes en la planta"
+            >
               Cotas de ejes
             </span>
             <input
@@ -452,8 +474,11 @@ export function PropiedadesVista({ vista }: { vista: Vista }) {
             />
           </label>
         )}
-        <label className="flex h-7 items-center gap-2">
-          <span className="w-24 shrink-0 truncate text-muted-foreground" title="Forma de dibujar las aristas de los objetos">
+        <label className="prop-fila">
+          <span
+            className="prop-etiqueta cursor-help text-muted-foreground"
+            title="Forma de dibujar las aristas de los objetos"
+          >
             Estilo
           </span>
           <select
@@ -469,8 +494,11 @@ export function PropiedadesVista({ vista }: { vista: Vista }) {
             ))}
           </select>
         </label>
-        <label className="flex h-7 items-center gap-2">
-          <span className="w-24 shrink-0 truncate text-muted-foreground" title="Escala de referencia de la vista">
+        <label className="prop-fila">
+          <span
+            className="prop-etiqueta cursor-help text-muted-foreground"
+            title="Escala de referencia de la vista"
+          >
             Escala
           </span>
           <select
@@ -817,7 +845,7 @@ export function PropiedadesElemento() {
         <dl className="mt-1 grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-x-2 gap-y-1">
           {Object.entries(propiedades.atributos).map(([clave, valor]) => (
             <div key={clave} className="contents">
-              <dt className="truncate text-muted-foreground" title={clave}>
+              <dt className="prop-truncar truncate text-muted-foreground" title={clave}>
                 {clave}
               </dt>
               <dd className="break-words">{formatear(valor)}</dd>
@@ -853,7 +881,7 @@ export function PropiedadesElemento() {
           <dl className="mt-1 grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-x-2 gap-y-1">
             {Object.entries(valores).map(([clave, valor]) => (
               <div key={clave} className="contents">
-                <dt className="truncate text-muted-foreground" title={clave}>
+                <dt className="prop-truncar truncate text-muted-foreground" title={clave}>
                   {clave}
                 </dt>
                 <dd className="break-words">{formatear(valor)}</dd>

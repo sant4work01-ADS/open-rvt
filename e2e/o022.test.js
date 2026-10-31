@@ -220,7 +220,7 @@ test("O022: sidebars con buscador, plegado, menú y ancho mínimo en la app real
         contenidoCliente: contenido.clientWidth,
       };
     });
-    assert.equal(medidas.ancho, 220, "el panel debe quedar en su ancho mínimo");
+    assert.equal(medidas.ancho, 270, "el panel debe quedar en su ancho mínimo");
     assert.ok(
       medidas.panelIgual,
       `panel con scroll horizontal: ${medidas.panelScroll} > ${medidas.panelCliente}`,
@@ -229,6 +229,47 @@ test("O022: sidebars con buscador, plegado, menú y ancho mínimo en la app real
       medidas.contenidoIgual,
       `contenido con scroll horizontal: ${medidas.contenidoScroll} > ${medidas.contenidoCliente}`,
     );
+
+    // 7b. A ancho mínimo ningún texto del panel queda cortado (sin elipsis).
+    const recortes = await ses.driver.executeScript(() => {
+      const panel = document.querySelector('[data-testid="panel-propiedades"]');
+      return Array.from(panel.querySelectorAll("*"))
+        .filter((el) => el.children.length === 0 && (el.textContent ?? "").trim() !== "")
+        .filter((el) => el.scrollWidth > el.clientWidth + 1)
+        .map((el) => ({
+          etiqueta: el.tagName,
+          texto: el.textContent.trim(),
+          scroll: el.scrollWidth,
+          cliente: el.clientWidth,
+        }));
+    });
+    assert.deepEqual(recortes, [], `textos cortados en el panel: ${JSON.stringify(recortes)}`);
+
+    // 7c. El diseño angosto se activa: etiqueta arriba, categorías en una columna y
+    //     el nombre del objeto de estilos en su propia fila.
+    const disposicion = await ses.driver.executeScript(() => {
+      const panel = document.querySelector('[data-testid="panel-propiedades"]');
+      const campoNombre = document.querySelector('[data-testid="vista-nombre"]')?.closest("label");
+      const categorias = panel.querySelector(".prop-categorias");
+      const estilo = panel.querySelector(".prop-estilo-fila");
+      return {
+        nombreColumna: getComputedStyle(campoNombre).flexDirection,
+        columnasCategorias: getComputedStyle(categorias)
+          .gridTemplateColumns.trim()
+          .split(/\s+/).length,
+        estiloBloque: getComputedStyle(estilo).display,
+      };
+    });
+    assert.equal(disposicion.nombreColumna, "column", "la etiqueta debe ir arriba del campo");
+    assert.equal(disposicion.columnasCategorias, 1, "las categorías deben ir en una columna");
+    assert.equal(disposicion.estiloBloque, "block", "el objeto de estilos va en su propia fila");
+
+    // 7d. Captura del bloque de estilos a ancho mínimo (nombre completo + dos campos).
+    await ses.driver.executeScript(() => {
+      document.querySelector('[data-testid="seccion-estilos"]')?.scrollIntoView({ block: "end" });
+    });
+    await esperar(200);
+    await ses.captura(path.join(SALIDA, "despues-estilos-claro.png"));
 
     // 8. Las secciones del panel derecho se pliegan y lo recuerdan.
     await activar(ses, "seccion-niveles-plegar");
@@ -244,12 +285,19 @@ test("O022: sidebars con buscador, plegado, menú y ancho mínimo en la app real
     await activar(ses, "cmd-tema-oscuro");
     await esperar(300);
     await ses.captura(path.join(SALIDA, "despues-oscuro.png"));
+    await ses.driver.executeScript(() => {
+      document.querySelector('[data-testid="seccion-estilos"]')?.scrollIntoView({ block: "end" });
+    });
+    await esperar(200);
+    await ses.captura(path.join(SALIDA, "despues-estilos-oscuro.png"));
 
     for (const nombre of [
       "antes-claro.png",
       "antes-oscuro.png",
       "despues-claro.png",
       "despues-oscuro.png",
+      "despues-estilos-claro.png",
+      "despues-estilos-oscuro.png",
     ]) {
       const ruta = path.join(SALIDA, nombre);
       assert.ok(fs.statSync(ruta).size > 5000, `captura vacía: ${ruta}`);

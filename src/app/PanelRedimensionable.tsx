@@ -11,7 +11,7 @@ export interface LimitesPanel {
 
 export const LIMITES_PANELES = {
   vistas: { minimo: 160, maximo: 420, defecto: 210 },
-  propiedades: { minimo: 220, maximo: 520, defecto: 275 },
+  propiedades: { minimo: 270, maximo: 520, defecto: 300 },
 } as const satisfies Record<string, LimitesPanel>;
 
 export type PanelId = keyof typeof LIMITES_PANELES;

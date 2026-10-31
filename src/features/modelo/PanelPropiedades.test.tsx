@@ -1,5 +1,5 @@
 // O010: el rango de vista queda en un grupo plegado, cerrado por omisión.
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useModelo } from "./estado";
 import { estilosPorDefecto } from "./estilos";
@@ -123,16 +123,62 @@ describe("O022: secciones plegables y rejilla de estilos", () => {
   it("la rejilla de estilos tiene encabezados Proyección y Corte en mm", () => {
     montar();
     const rejilla = screen.getByTestId("vista-estilos-categorias");
-    expect(rejilla.className).toContain("grid-cols-[minmax(0,1fr)_3.25rem_3.25rem]");
+    expect(rejilla.className).toContain("prop-estilos");
     expect(rejilla.className).not.toContain("overflow-x-auto");
-    expect(within(rejilla).getByText("Proyección")).toBeTruthy();
-    expect(within(rejilla).getByText("Corte")).toBeTruthy();
     expect(
-      screen.getByTestId("vista-estilo-muros-proyeccion").getAttribute("aria-label"),
-    ).toBe("Grosor de proyección de Muros en mm");
+      Array.from(rejilla.querySelectorAll(".prop-estilos-encabezado")).map((el) =>
+        el.textContent?.trim(),
+      ),
+    ).toEqual(["Objeto", "Proyección", "Corte"]);
+    for (const [sufijo, texto] of [
+      ["proyeccion", "Grosor de proyección de Muros en mm"],
+      ["corte", "Grosor de corte de Muros en mm"],
+    ]) {
+      expect(
+        screen.getByTestId(`vista-estilo-muros-${sufijo}`).getAttribute("aria-label"),
+      ).toBe(texto);
+    }
+  });
+
+  it("O022b: cada categoría de estilos lleva su etiqueta propia para el ancho angosto", () => {
+    montar();
+    const proyeccion = screen.getByTestId("vista-estilo-muros-proyeccion");
+    const campo = proyeccion.parentElement as HTMLElement;
+    expect(campo.className).toContain("prop-estilo-campo");
+    expect(campo.textContent).toContain("Proyección");
+    const corte = screen.getByTestId("vista-estilo-muros-corte");
+    expect((corte.parentElement as HTMLElement).textContent).toContain("Corte");
+  });
+
+  it("O022b: Proyección y Corte muestran el valor correcto del modelo (Muros)", () => {
+    montar();
+    // estilos.ts (por defecto): muros = { corte: 0.5, proyeccion: 0.18 }.
     expect(
-      screen.getByTestId("vista-estilo-muros-corte").getAttribute("aria-label"),
-    ).toBe("Grosor de corte de Muros en mm");
+      (screen.getByTestId("vista-estilo-muros-proyeccion") as HTMLInputElement).value,
+    ).toBe("0.18");
+    expect(
+      (screen.getByTestId("vista-estilo-muros-corte") as HTMLInputElement).value,
+    ).toBe("0.5");
+    // estilos.ts (por defecto): puertas = { corte: 0.25, proyeccion: 0.13 }.
+    expect(
+      (screen.getByTestId("vista-estilo-puertas-proyeccion") as HTMLInputElement).value,
+    ).toBe("0.13");
+    expect(
+      (screen.getByTestId("vista-estilo-puertas-corte") as HTMLInputElement).value,
+    ).toBe("0.25");
+  });
+
+  it("O022b: el contenedor y las filas usan las clases adaptables", () => {
+    montar();
+    expect(screen.getByTestId("propiedades-vista").className).toContain(
+      "propiedades-adaptable",
+    );
+    const nombre = screen.getByTestId("vista-nombre").closest("label");
+    expect(nombre?.className).toContain("prop-fila");
+    expect(nombre?.querySelector(".prop-etiqueta")?.textContent).toBe("Nombre");
+    expect(screen.getByTestId("vista-tipo").closest("label")?.className).toContain("prop-fila");
+    const categorias = screen.getByTestId("categoria-muros").closest("div");
+    expect(categorias?.className).toContain("prop-categorias");
   });
 
   it("las filas de campos miden 28 px y no desbordan el ancho mínimo", () => {
