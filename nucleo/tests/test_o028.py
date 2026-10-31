@@ -185,3 +185,24 @@ def test_herramientas_por_lote_y_rpc() -> None:
         "restricciones.soltar_enlace", {"globalid": zapatas["creados"][0]}
     )
     assert _pset(nucleo, zapatas["creados"][0]).get("EnlaceTipo") is None
+
+
+def test_columna_y_zapata_al_crearse_sobre_un_cruce_quedan_enlazadas() -> None:
+    nucleo = _nuevo()
+    a, _b, uno, _dos = _reticula(nucleo)
+    tipo_columna = _tipo(nucleo, "IfcColumnType", "C-1 Columna 30×30")
+    tipo_zapata = _tipo(nucleo, "IfcFootingType", "Z-1 Zapata 1.20×1.20")
+    columna = nucleo.columna_crear(
+        tipo_columna, _nivel(nucleo), 0.0, 0.0, eje_a=a, eje_b=uno
+    )["creados"][0]
+    zapata = nucleo.zapata_crear(
+        tipo_zapata, _nivel(nucleo), 0.0, 0.0, eje_a=a, eje_b=uno
+    )["creados"][0]
+    for gid in (columna, zapata):
+        datos = _pset(nucleo, gid)
+        assert datos["EnlaceTipo"] == "cruce"
+        assert datos["EnlaceEjeA"] == a
+        assert datos["EnlaceEjeB"] == uno
+    nucleo.ejes_mover(a, 1.0)
+    assert _plano(nucleo, columna)[0] == pytest.approx(1.0)
+    assert _plano(nucleo, zapata)[0] == pytest.approx(1.0)

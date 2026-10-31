@@ -420,6 +420,8 @@ class Servidor:
                 params.get("y", 0.0),
                 params.get("rotacion", 0.0),
                 params.get("desplante", 1.00),
+                str(params.get("ejeA") or ""),
+                str(params.get("ejeB") or ""),
             )
         if metodo in ("zapatas_corridas.crear", "zapata_corrida.crear"):
             return self._exigir().zapata_corrida_crear(

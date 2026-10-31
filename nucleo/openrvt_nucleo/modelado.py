@@ -1094,6 +1094,28 @@ class ModeladoMixin:
         "EnlaceRotacion",
     )
 
+    def _guardar_enlace_punto(
+        self, elemento: Any, eje_a: str, eje_b: str, x: float, y: float
+    ) -> None:
+        """O028: crea el enlace de cruce al colocar el elemento sobre él."""
+        if not (eje_a and eje_b):
+            return
+        try:
+            px, py = self._cruce_de_ejes(_texto(eje_a), _texto(eje_b))
+        except Exception:
+            return
+        datos = self._leer_pset(elemento, PSET_RESTRICCIONES)
+        datos.update(
+            {
+                "EnlaceTipo": "cruce",
+                "EnlaceEjeA": _texto(eje_a),
+                "EnlaceEjeB": _texto(eje_b),
+                "EnlaceDX": float(x) - px,
+                "EnlaceDY": float(y) - py,
+            }
+        )
+        self._guardar_pset(elemento, PSET_RESTRICCIONES, datos)
+
     def _enlace_de(self, elemento: Any) -> dict[str, Any]:
         datos = self._leer_pset(elemento, PSET_RESTRICCIONES)
         tipo = _texto(datos.get("EnlaceTipo"))
@@ -3217,6 +3239,7 @@ class ModeladoMixin:
                 "AlturaSinConexion": alto,
             },
         )
+        self._guardar_enlace_punto(columna, eje_a, eje_b, x, y)
         self._regenerar_estructura(columna)
         spatial_api.assign_container(
             self.modelo, products=[columna], relating_structure=nivel_entidad
@@ -3288,6 +3311,8 @@ class ModeladoMixin:
         y: float,
         rotacion: float = 0.0,
         desplante: float = 1.00,
+        eje_a: str = "",
+        eje_b: str = "",
     ) -> dict[str, Any]:
         self._exigir_modelo()
         tipo_entidad = self._tipo_estructura(tipo, ("IfcFootingType",))
@@ -3315,6 +3340,7 @@ class ModeladoMixin:
                 "Desplante": desplante, "Nivel": nivel,
             },
         )
+        self._guardar_enlace_punto(zapata, eje_a, eje_b, x, y)
         self._regenerar_estructura(zapata)
         spatial_api.assign_container(
             self.modelo, products=[zapata], relating_structure=nivel_entidad

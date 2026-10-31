@@ -742,7 +742,10 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     if (!tipo || !nivel) return false;
     const rotacion = (get().rotacionSiguiente * Math.PI) / 180;
     const metodo = herramienta === "zapata" ? "zapatas.crear" : "columnas.crear";
-    const cruce = herramienta === "columna" ? ejesEnPunto(punto) : [];
+    const cruce =
+      herramienta === "columna" || herramienta === "zapata"
+        ? ejesEnPunto(punto)
+        : [];
     const resultado = await ejecutarResultado(metodo, {
       tipo: tipo.nombre,
       nivel,
