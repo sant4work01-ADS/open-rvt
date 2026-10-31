@@ -351,6 +351,8 @@ pub fn run() {
             bitacora_agregar,
             bitacora_sesion,
             bitacora_exportar,
+            diagnostico_webview,
+            guardar_texto,
         ])
         .setup(|app| {
             // O006c: la bitácora vive junto a OPEN-RVT.log y arranca antes del núcleo
@@ -430,8 +432,67 @@ fn registro_de_la_app() -> tauri_plugin_log::Builder {
 /// siguen llegando (WebView2 solo apaga los suyos). En debug se dejan las DevTools.
 /// Copiado intacto de PresupuestosPro.
 #[cfg(windows)]
+/// O017b: lee los ajustes reales de WebView2 que afectan a la rueda y el pellizco.
+/// Fuera de Windows no hay WebView2 y devuelve null.
+#[tauri::command]
+fn diagnostico_webview(app: tauri::AppHandle) -> Option<serde_json::Value> {
+    #[cfg(windows)]
+    {
+        use webview2_com::Microsoft::Web::WebView2::Win32::{
+            ICoreWebView2Settings3, ICoreWebView2Settings5,
+        };
+        use windows_core::{Interface, BOOL};
+
+        use std::sync::{Arc, Mutex};
+
+        let ventana = tauri::Manager::get_webview_window(&app, "main")?;
+        let resultado = Arc::new(Mutex::new(None));
+        let guardado = Arc::clone(&resultado);
+        let _ = ventana.with_webview(move |w| unsafe {
+            let Ok(nucleo) = w.controller().CoreWebView2() else {
+                return;
+            };
+            let Ok(ajustes) = nucleo.Settings() else {
+                return;
+            };
+            let mut zoom_control = BOOL(0);
+            let zoom_ok = ajustes.IsZoomControlEnabled(&mut zoom_control).is_ok();
+            let mut pinch = BOOL(0);
+            let pinch_ok = ajustes
+                .cast::<ICoreWebView2Settings5>()
+                .and_then(|s| s.IsPinchZoomEnabled(&mut pinch))
+                .is_ok();
+            let mut atajos = BOOL(0);
+            let atajos_ok = ajustes
+                .cast::<ICoreWebView2Settings3>()
+                .and_then(|s| s.AreBrowserAcceleratorKeysEnabled(&mut atajos))
+                .is_ok();
+            *guardado.lock().unwrap() = Some(serde_json::json!({
+                "zoom_control": zoom_ok.then(|| zoom_control.as_bool()),
+                "pinch_zoom": pinch_ok.then(|| pinch.as_bool()),
+                "atajos_navegador": atajos_ok.then(|| atajos.as_bool()),
+            }));
+        });
+        let salida = resultado.lock().unwrap().take();
+        salida
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        None
+    }
+}
+
+/// O017b: escribe el JSON del diagnóstico en la ruta elegida por el usuario.
+#[tauri::command]
+fn guardar_texto(ruta: String, contenido: String) -> Result<(), String> {
+    std::fs::write(&ruta, contenido).map_err(|e| e.to_string())
+}
+
 fn configurar_webview2(app: &tauri::AppHandle) {
-    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings3;
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2Settings3, ICoreWebView2Settings5, ICoreWebView2Settings6,
+    };
     use windows_core::Interface;
 
     let Some(ventana) = tauri::Manager::get_webview_window(app, "main") else {
@@ -449,6 +510,16 @@ fn configurar_webview2(app: &tauri::AppHandle) {
         let _ = ajustes.SetIsStatusBarEnabled(false);
         if let Ok(s3) = ajustes.cast::<ICoreWebView2Settings3>() {
             let _ = s3.SetAreBrowserAcceleratorKeysEnabled(false);
+        }
+        // O017: el pellizco del touchpad debe llegar a la página, no al zoom visual
+        // de WebView2. Si esta versión no expone Settings5 se sigue sin romper.
+        if let Ok(s5) = ajustes.cast::<ICoreWebView2Settings5>() {
+            let _ = s5.SetIsPinchZoomEnabled(false);
+        }
+        // O017b: los gestos de navegación por deslizamiento tampoco deben quedarse
+        // el pellizco. Si Settings6 no existe se sigue sin romper.
+        if let Ok(s6) = ajustes.cast::<ICoreWebView2Settings6>() {
+            let _ = s6.SetIsSwipeNavigationEnabled(false);
         }
         #[cfg(not(debug_assertions))]
         {

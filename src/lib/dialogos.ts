@@ -24,7 +24,8 @@ export interface PeticionDialogo {
     | "guardar-zip"
     | "abrir-ifc"
     | "guardar-ifc"
-    | "guardar-medicion";
+    | "guardar-medicion"
+    | "guardar-diagnostico";
   titulo: string;
   /** Nombre de archivo sugerido (solo en los de guardar). */
   predeterminado: string;
@@ -245,4 +246,21 @@ export async function elegirDestinoIfc(nombreSugerido: string): Promise<string |
   });
   if (!r) return null;
   return r.toLowerCase().endsWith(".ifc") ? r : `${r}.ifc`;
+}
+
+/** O017b: destino del diagnóstico de rueda/touchpad (.json). */
+export async function elegirDestinoDiagnostico(nombreSugerido: string): Promise<string | null> {
+  const f = window.__PP_DIALOGO_PRUEBAS__;
+  if (f)
+    return f({
+      tipo: "guardar-diagnostico",
+      titulo: tr("comun.guardar-diagnostico", "Guardar diagnóstico de rueda"),
+      predeterminado: `${nombreSugerido}.json`,
+    });
+  const r = await save({
+    defaultPath: `${nombreSugerido}.json`,
+    filters: [{ name: tr("comun.diagnostico-json", "Diagnóstico (JSON)"), extensions: ["json"] }],
+  });
+  if (!r) return null;
+  return r.toLowerCase().endsWith(".json") ? r : `${r}.json`;
 }
