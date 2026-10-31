@@ -262,6 +262,8 @@ interface EstadoModelo {
   borrarNivel: (globalid: string) => Promise<void>;
   crearEje: (etiqueta: string, x1: number, y1: number, x2: number, y2: number) => Promise<void>;
   editarEje: (globalid: string, etiqueta: string) => Promise<void>;
+  /** O026: desplaza un eje entero (lo usa la prueba E2E de la propagación). */
+  moverEje: (globalid: string, desplazamiento: number) => Promise<boolean>;
   borrarEje: (globalid: string) => Promise<void>;
   /** O006a: retícula completa desde separaciones (una sola operación). */
   crearEjesPorSeparaciones: (
@@ -1900,6 +1902,10 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
     editarEje: async (globalid, etiqueta) => {
       await ejecutar("ejes.editar", { globalid, etiqueta });
+    },
+
+    moverEje: async (globalid, desplazamiento) => {
+      return ejecutar("ejes.mover", { globalid, desplazamiento });
     },
 
     borrarEje: async (globalid) => {

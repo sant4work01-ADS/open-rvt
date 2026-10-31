@@ -4435,6 +4435,19 @@ export function Visor3D({
           });
           return;
         }
+        if (referencia.tipo === "nivel") {
+          let zMin = Infinity;
+          let zMax = -Infinity;
+          for (let i = 2; i < mallaAlinear.vertices.length; i += 3) {
+            const z = mallaAlinear.vertices[i];
+            if (z < zMin) zMin = z;
+            if (z > zMax) zMax = z;
+          }
+          const caraNivel =
+            impactoAlinear.point.z > (zMin + zMax) / 2 ? "tope" : "base";
+          void aplicarAlinear(gidAlinear, caraNivel, puntoAlinear);
+          return;
+        }
         let direccion: { ux: number; uy: number } | undefined;
         if (referencia.tipo === "eje") {
           const eje = referencias.ejes.find((e) => e.globalid === referencia.globalid);
@@ -4452,7 +4465,13 @@ export function Visor3D({
           direccion = { ux: 1, uy: 0 };
         }
         const recta = rectaDeMalla(mallaAlinear, direccion);
-        const cara = recta ? caraEnPunto(recta, puntoAlinear) : "cercana";
+        // Si se toca la cara del lado positivo, el centro queda del lado negativo
+        // de la referencia (y al revés): el núcleo recibe la cara que coincide.
+        const cara = recta
+          ? caraEnPunto(recta, puntoAlinear) === "cara1"
+            ? "cara2"
+            : "cara1"
+          : "cercana";
         void aplicarAlinear(gidAlinear, cara, puntoAlinear);
         return;
       }
@@ -5153,6 +5172,11 @@ export function Visor3D({
       if (!asa) return null;
       return pantallaDePunto(asa.punto);
     };
+    // O026: mover un eje desde la E2E por el mismo comando que la interfaz.
+    (nodo as unknown as Record<string, unknown>).__openrvtMoverEje = (
+      globalid: string,
+      desplazamiento: number,
+    ) => useModelo.getState().moverEje(globalid, desplazamiento);
     // O011: posición en pantalla de un globo o extremo de eje (para las E2E).
     (nodo as unknown as Record<string, unknown>).__openrvtEjeAPantalla = (
       etiqueta: string,
@@ -5442,8 +5466,21 @@ export function Visor3D({
     (vista.tipo === "planta" || vista.tipo === "alzado" || vista.tipo === "corte");
 
   // O026: guía azul punteada de la referencia y candado de la alineación.
-  const guiaAlinear = (() => {
-    if (!referenciaAlinear) return null;
+  // Se proyecta en un efecto: durante el render no se leen refs de cámara.
+  const [guiaAlinear, setGuiaAlinear] = useState<{
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    candado: { x: number; y: number } | null;
+    bloqueada: boolean;
+  } | null>(null);
+  useEffect(() => {
+    if (!referenciaAlinear) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setGuiaAlinear(null);
+      return;
+    }
     const z = vista.tipo === "planta" ? 0.05 : (vista.alturaPlano ?? 1.2);
     let a: [number, number, number] | null = null;
     let b: [number, number, number] | null = null;
@@ -5464,16 +5501,21 @@ export function Visor3D({
         b = [recta.x + recta.ux * 1.5, recta.y + recta.uy * 1.5, z];
       }
     }
-    if (!a || !b) return null;
     const rectNodo = contenedor.current?.getBoundingClientRect();
-    if (!rectNodo) return null;
+    if (!a || !b || !rectNodo) {
+      setGuiaAlinear(null);
+      return;
+    }
     const pa = pantallaDePunto(a);
     const pb = pantallaDePunto(b);
-    if (!pa || !pb) return null;
+    if (!pa || !pb) {
+      setGuiaAlinear(null);
+      return;
+    }
     const candado = alineando
       ? pantallaDePunto([alineando.punto[0], alineando.punto[1], z])
       : null;
-    return {
+    setGuiaAlinear({
       x1: pa.x - rectNodo.left,
       y1: pa.y - rectNodo.top,
       x2: pb.x - rectNodo.left,
@@ -5482,8 +5524,8 @@ export function Visor3D({
         ? { x: candado.x - rectNodo.left, y: candado.y - rectNodo.top }
         : null,
       bloqueada: !!alineando?.bloqueada,
-    };
-  })();
+    });
+  }, [referenciaAlinear, alineando, vista, mallas, referencias.ejes, pantallaDePunto]);
 
   return (
     <div
@@ -5510,6 +5552,29 @@ export function Visor3D({
             height: Math.abs(ventanaSeleccion.y2 - ventanaSeleccion.y1),
           }}
         />
+      )}
+      {herramienta === "alinear" && vista.tipo !== "planta" && (
+        <div
+          data-testid="alinear-niveles"
+          className="absolute left-2 top-12 z-30 flex max-w-[16rem] flex-wrap gap-1 rounded border bg-background/95 p-1 text-[11px] shadow"
+        >
+          <span className="w-full text-muted-foreground">
+            Referencia: un nivel (base o tope según la mitad que toque)
+          </span>
+          {niveles.map((nivel) => (
+            <button
+              key={nivel.globalid}
+              type="button"
+              data-testid={`alinear-nivel-${nivel.globalid}`}
+              onClick={() =>
+                elegirReferenciaAlinear({ tipo: "nivel", globalid: nivel.globalid })
+              }
+              className="rounded border px-1 py-0.5 hover:bg-muted"
+            >
+              {nivel.nombre}
+            </button>
+          ))}
+        </div>
       )}
       {guiaAlinear && (
         <svg
