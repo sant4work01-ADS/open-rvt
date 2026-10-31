@@ -95,11 +95,17 @@ describe("O025: colocación de niveles con el estilo por omisión", () => {
     const guias = l.lineas.filter((x) => x.tipo === "guia-nivel");
     expect(guias.map((g) => g.elevacion).sort((a, b) => (a as number) - (b as number))).toEqual([2, 2.2]);
     for (const guia of guias) {
-      expect(guia.puntos).toHaveLength(2);
+      // Guía quebrada (O014b/O025): horizontal, diagonal y horizontal hasta la cabeza.
+      expect(guia.puntos).toHaveLength(4);
       expect(guia.punto).toBeDefined();
-      expect(guia.puntos[0][0]).toBeCloseTo(l.tGuia, 12);
-      expect(guia.puntos[0][1]).toBeCloseTo(guia.elevacion as number, 12);
-      expect(guia.puntos[1][0]).toBeCloseTo(l.tCabeza, 12);
+      const [a, b, c, d] = guia.puntos;
+      expect(a[0]).toBeCloseTo(l.tGuia, 12);
+      expect(a[1]).toBeCloseTo(guia.elevacion as number, 12);
+      expect(b[1]).toBeCloseTo(a[1], 12);
+      expect(Math.abs(b[0] - c[0])).toBeGreaterThan(1e-9);
+      expect(Math.abs(b[1] - c[1])).toBeGreaterThan(1e-9);
+      expect(d[1]).toBeCloseTo(c[1], 12);
+      expect(d[0]).toBeCloseTo(l.tCabeza, 12);
     }
     // 1.50, 0.50 y 0.00 van sin codo: su línea de nivel llega al triángulo y no
     // llevan punto.

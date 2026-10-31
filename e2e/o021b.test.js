@@ -40,6 +40,23 @@ async function activar(ses, testid) {
   await esperar(350);
 }
 
+async function fijarValor(ses, testid, valor) {
+  await ses.driver.executeScript(
+    (testid, valor) => {
+      const el = document.querySelector(`[data-testid="${testid}"]`);
+      if (!el) throw new Error(`falta ${testid}`);
+      const prototipo =
+        el.tagName === "SELECT" ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(prototipo, "value").set.call(el, valor);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    },
+    testid,
+    valor,
+  );
+  await esperar(200);
+}
+
 async function elegirVista(ses, nombre) {
   const boton = await ses.driver.wait(
     until.elementLocated(

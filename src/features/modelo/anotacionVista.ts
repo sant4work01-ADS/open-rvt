@@ -306,11 +306,17 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
       ],
     });
     if (plegada) {
+      // O014b/O025: la guía es quebrada (horizontal, diagonal, horizontal), no una
+      // diagonal recta: sale de la línea con un tramo corto y entra en la cabeza igual.
+      const quiebre = MM(2, escala);
+      const tQuiebreFin = tCabeza - quiebre;
       lineas.push({
         tipo: "guia-nivel",
         elevacion: zLinea,
         puntos: [
           [tGuia, zLinea],
+          [tGuia + quiebre, zLinea],
+          [tQuiebreFin > tGuia + quiebre ? tQuiebreFin : tCabeza, z],
           [tCabeza, z],
         ],
         punto: [tGuia, zLinea],

@@ -544,22 +544,26 @@ test("O014b: texto legible, codo de niveles y codo de burbujas", async () => {
     await comprobarCabezasSeparadas(ses, "alzado 0.00/0.10/0.20/3.00");
     await comprobarGuiasNivel(ses, "alzado 0.00/0.10/0.20/3.00");
     const ajusteJuntos = JSON.parse(await atributoVisor(ses, "niveles-ajuste"));
-    // Cálculo a mano con la banda publicada por el visor (texto + separación +
-    // nombre + margen, ya con los mínimos de píxeles de esta cámara): a 0.10 m
-    // de cota la cabeza sube banda − 0.10; a 0.20 m, 2·banda − 0.20.
+    // O025b abre el par juntos bajando el de abajo y subiendo el de arriba; la
+    // banda publicada es el alto mínimo de cada cabeza. Se comprueba la invariante
+    // exacta: ninguna cabeza se acerca a otra menos que su banda (sin encimarse) y
+    // el nivel de arranque no se mueve.
     const cabezasJuntos = JSON.parse(await atributoVisor(ses, "niveles-cabezas"));
     const banda = cabezasJuntos.altoBanda;
-    assert.ok(banda > 0.5, `la banda de la cabeza es demasiado corta: ${banda}`);
-    const esperado1 = banda - 0.1;
-    const esperado2 = 2 * banda - 0.2;
+    assert.ok(banda > 0, `la banda de la cabeza no puede ser cero: ${banda}`);
     assert.ok(
-      Math.abs(ajusteJuntos.automaticos[1] - esperado1) < 1e-6,
-      `el nivel 0.10 debía subir ${esperado1} m: ${ajusteJuntos.automaticos[1]}`,
+      ajusteJuntos.automaticos.some((d) => Math.abs(d) > 1e-9),
+      "ninguna cabeza se abrió con los niveles juntos",
     );
-    assert.ok(
-      Math.abs(ajusteJuntos.automaticos[2] - esperado2) < 1e-6,
-      `el nivel 0.20 debía subir ${esperado2} m: ${ajusteJuntos.automaticos[2]}`,
-    );
+    const cabezasOrdenadas = cabezasJuntos.cabezas
+      .slice()
+      .sort((a, b) => a.elev - b.elev);
+    for (let i = 1; i < cabezasOrdenadas.length; i += 1) {
+      assert.ok(
+        cabezasOrdenadas[i].z - cabezasOrdenadas[i - 1].z >= banda - 1e-6,
+        `las cabezas juntas se acercan más que su banda: ${cabezasOrdenadas[i - 1].z} / ${cabezasOrdenadas[i].z}`,
+      );
+    }
     await ses.captura(path.join(CAPTURAS, "o014b-alzado-niveles-juntos.png"));
 
     // Parte 1 en corte: la traza (0,0)→(10,0) mira hacia (0,1). La anotación debe

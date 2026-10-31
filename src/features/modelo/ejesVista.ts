@@ -338,11 +338,14 @@ export function restringirArrastre(
 }
 
 /** O031: el candado de alineación vale para las asas de extremo, incluido el globo
- *  cuando aún no tiene codo (antes el globo quedaba siempre libre y rompía O021). */
+ *  cuando aún no tiene codo (antes el globo quedaba siempre libre y rompía O021).
+ *  Con codo el globo se separa perpendicular al eje (O027), no sigue la alineación. */
 export function candadoArrastreAsa(
   tipo: "base" | "globo" | "codo" | "codo-nuevo",
   candadoCerrado: boolean,
+  conCodo = false,
 ): boolean {
+  if (tipo === "globo" && conCodo) return false;
   return (tipo === "base" || tipo === "globo") && candadoCerrado;
 }
 

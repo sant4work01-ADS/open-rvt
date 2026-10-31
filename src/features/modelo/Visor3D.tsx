@@ -3479,6 +3479,15 @@ export function Visor3D({
 
         const nombresGlobos: string[] = [];
         for (const linea of layout.ejesLineas) {
+          const ejeLinea = cruces.find(({ s }) => Math.abs(s - linea.puntos[0][0]) < 1e-9)?.eje;
+          if (ejeLinea) {
+            // O031: la E2E lee las líneas de eje del alzado (incluido el codo).
+            lineasEje.current.push({
+              globalid: ejeLinea.globalid,
+              etiqueta: ejeLinea.etiqueta,
+              puntos: linea.puntos.map(([t, z]) => puntoHZ(t, z)),
+            });
+          }
           if (patronEjeNivel === "trazo-punto") {
             for (const [a, b] of segmentosTrazoPunto(linea.puntos, vista.escala)) {
               lineaCerrada(
@@ -3579,7 +3588,9 @@ export function Visor3D({
             desfaseInferior: 0,
             bordeTexto: layout.tCabeza + anchoCabeza / 2 + mmAMundo(1, vista.escala),
             haciaCamara,
-            guias: [],
+            guias: layout.lineas
+              .filter((linea) => linea.tipo === "guia-nivel")
+              .map((linea) => ({ elev: linea.elevacion, puntos: linea.puntos })),
             cabezas: layout.cabezas.map((c) => ({
               z: c.z,
               t: c.t,
@@ -4740,7 +4751,14 @@ export function Visor3D({
               etiqueta: asa.etiqueta,
               lado: asa.lado,
               indice: asa.tipo === "codo" ? asa.indice : null,
-              candado: candadoArrastreAsa(asa.tipo, !candados[asa.lado]),
+              candado: candadoArrastreAsa(
+                asa.tipo,
+                !candados[asa.lado],
+                !!(asa.lado === "inicio"
+                  ? vista.ejes?.[asa.globalid]?.codosInicio
+                  : vista.ejes?.[asa.globalid]?.codosFin
+                )?.length,
+              ),
               familia:
                 ctx.tipo === "planta"
                   ? eje.vertical

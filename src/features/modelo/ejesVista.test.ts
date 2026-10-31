@@ -258,6 +258,8 @@ describe("O021: candado de alineación, globos por extremo y copia", () => {
     expect(candadoArrastreAsa("base", true)).toBe(true);
     expect(candadoArrastreAsa("globo", false)).toBe(false);
     expect(candadoArrastreAsa("codo", true)).toBe(false);
+    // Con codo el globo se separa perpendicular al eje: no sigue la alineación.
+    expect(candadoArrastreAsa("globo", true, true)).toBe(false);
   });
 
   it("no arrastra ejes paralelos que no comparten la alineación", () => {

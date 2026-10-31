@@ -136,6 +136,9 @@ async function crearModelo(ses) {
 }
 
 async function crearNiveles(ses, cantidad) {
+  // O029: en un alzado «Nivel» activa la herramienta de dibujo; el modelo nuevo
+  // abre en alzado, así que hay que situarse en una planta antes de crear niveles.
+  await elegirVista(ses, "Planta Nivel 0");
   for (let i = 0; i < cantidad; i += 1) await activar(ses, "cmd-nivel");
 }
 

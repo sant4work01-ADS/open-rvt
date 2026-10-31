@@ -253,6 +253,8 @@ test("O015: losa con relleno de proyección en planta y de material en corte", a
     }, 20_000, "el modelo nuevo no cargó");
     await cambiarPestana(ses, "Modelar");
     // El modelo nuevo ya trae el Nivel 0 (0,00); «Nivel» añade el Nivel 1 (+3,00).
+    // O029: en un alzado «Nivel» activa el dibujo; hay que situarse en una planta.
+    await elegirVista(ses, "Planta Nivel 0");
     await activar(ses, "cmd-nivel");
     let niveles = [];
     await ses.driver.wait(async () => {
