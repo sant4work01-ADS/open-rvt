@@ -42,10 +42,12 @@ import {
   mmAMundoConMinimoPx,
   mmAPx,
   PATRONES_LINEA_DASH,
+  rellenoDeElemento,
   type Estilos,
   type MaterialNombre,
   type PatronLinea,
   type PatronRelleno,
+  type RelacionCorte,
 } from "./estilos";
 import {
   basePlano,
@@ -631,6 +633,73 @@ function texturaPatron(
   textura.colorSpace = THREE.SRGBColorSpace;
   CACHE_TEXTURAS.set(clave, textura);
   return textura;
+}
+
+/**
+ * O015: huella de una losa proyectada sobre el plano de planta. Se toman los
+ * triángulos horizontales de su cara superior (su z más alta); si la malla no
+ * trae ninguno, se usan todos los horizontales. Así una losa debajo del corte se
+ * ve con relleno tenue sin inventar un rectángulo que no corresponde a su forma.
+ */
+function geometriaProyeccionLosa(
+  elemento: ElementoMalla,
+  z: number,
+): THREE.BufferGeometry | null {
+  const v = elemento.vertices;
+  const indices = elemento.indices;
+  let maxZ = -Infinity;
+  for (let i = 2; i < v.length; i += 3) maxZ = Math.max(maxZ, v[i]);
+  const horizontales: number[] = [];
+  const superiores: number[] = [];
+  for (let t = 0; t + 2 < indices.length; t += 3) {
+    const ia = indices[t] * 3;
+    const ib = indices[t + 1] * 3;
+    const ic = indices[t + 2] * 3;
+    const ax = v[ia];
+    const ay = v[ia + 1];
+    const az = v[ia + 2];
+    const bx = v[ib];
+    const by = v[ib + 1];
+    const bz = v[ib + 2];
+    const cx = v[ic];
+    const cy = v[ic + 1];
+    const cz = v[ic + 2];
+    const ux = bx - ax;
+    const uy = by - ay;
+    const uz = bz - az;
+    const wx = cx - ax;
+    const wy = cy - ay;
+    const wz = cz - az;
+    const nx = uy * wz - uz * wy;
+    const ny = uz * wx - ux * wz;
+    const nz = ux * wy - uy * wx;
+    const largo = Math.hypot(nx, ny, nz);
+    if (largo < 1e-9) continue;
+    if (Math.abs(nz) / largo <= 0.5) continue;
+    const triangulo = [ax, ay, z, bx, by, z, cx, cy, z];
+    horizontales.push(...triangulo);
+    if (az >= maxZ - 0.01 && bz >= maxZ - 0.01 && cz >= maxZ - 0.01) {
+      superiores.push(...triangulo);
+    }
+  }
+  const elegidos = superiores.length > 0 ? superiores : horizontales;
+  if (elegidos.length === 0) return null;
+  const geometria = new THREE.BufferGeometry();
+  geometria.setAttribute("position", new THREE.BufferAttribute(new Float32Array(elegidos), 3));
+  return geometria;
+}
+
+/** Relleno de proyección tenue de una losa en planta (gris claro al 15 %). */
+function materialProyeccionTenue(): THREE.MeshBasicMaterial {
+  return new THREE.MeshBasicMaterial({
+    color: new THREE.Color(0x9aa0a6),
+    transparent: true,
+    opacity: 0.15,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+  });
 }
 
 /** Material de relleno para un material de la tabla. */
@@ -1387,6 +1456,9 @@ export function Visor3D({
     let polilineasSeccion = 0;
     let lineasCapasPlanta = 0;
     let mallasCapas3D = 0;
+    // O015: cuántos rellenos de losa se generaron (patrón de corte y proyección).
+    let rellenosLosaPatron = 0;
+    let rellenosLosaProyeccion = 0;
 
     /** Coloca un polígono de relleno en el plano de sección. */
     const agregarRelleno = (
@@ -1414,7 +1486,9 @@ export function Visor3D({
         normalSeccion,
       );
       malla.matrix.setPosition(origen);
-      malla.renderOrder = 1.05;
+      // O015: por encima de la tapa gris del stencil (1.1) para que el patrón del
+      // material se vea también en «Sombreado».
+      malla.renderOrder = 1.2;
       group.add(malla);
     };
 
@@ -1483,6 +1557,28 @@ export function Visor3D({
       const siluetaArriba =
         encimaDelCorte &&
         dibujaSiluetaSobreCorte(vista, elemento.categoria, nivelDelElemento, minZ);
+
+      // O015: la relación con el plano de corte y el relleno salen de una regla
+      // única (`rellenoDeElemento`), no de casos sueltos por categoría.
+      const atraviesa =
+        planoSeccion !== null &&
+        minD <= -planoSeccion.constante + 1e-4 &&
+        maxD >= -planoSeccion.constante - 1e-4;
+      const relacion: RelacionCorte =
+        vista.tipo === "planta"
+          ? encimaDelCorte
+            ? "arriba"
+            : maxZ < corteZ - 1e-4
+              ? "debajo"
+              : "cortado"
+          : atraviesa
+            ? "cortado"
+            : "arriba";
+      const rellenoElemento = rellenoDeElemento(
+        elemento.categoria,
+        relacion,
+        vista.estilo,
+      );
 
       const material =
         diseno
@@ -1618,12 +1714,28 @@ export function Visor3D({
         }
       }
 
+      // O015: la losa que queda debajo del corte se rellena con una proyección
+      // tenue sobre el plano de planta, además de su contorno de proyección.
+      if (rellenoElemento === "proyeccion-tenue" && vista.tipo === "planta") {
+        const geometriaProyeccion = geometriaProyeccionLosa(elemento, corteZ - 0.01);
+        if (geometriaProyeccion) {
+          const proyeccion = new THREE.Mesh(geometriaProyeccion, materialProyeccionTenue());
+          proyeccion.userData.globalid = elemento.globalid;
+          proyeccion.renderOrder = 1.05;
+          grupoLocal.add(proyeccion);
+          meshes.current.push(proyeccion);
+          rellenosLosaProyeccion += 1;
+        }
+      }
+
       // Sección real del plano de corte con esta malla (solo si lo atraviesa).
-      const atraviesa =
-        planoSeccion !== null &&
-        minD <= -planoSeccion.constante + 1e-4 &&
-        maxD >= -planoSeccion.constante - 1e-4;
-      if (diseno && planoSeccion && origenSeccion && !encimaDelCorte && atraviesa) {
+      if (
+        planoSeccion &&
+        origenSeccion &&
+        !encimaDelCorte &&
+        atraviesa &&
+        (rellenoElemento === "patron" || rellenoElemento === "patron-sombreado")
+      ) {
         const polilineas = interseccionPlanoMalla(
           elemento.vertices,
           elemento.indices,
@@ -1685,6 +1797,7 @@ export function Visor3D({
                     materialPorCapa(banda.material),
                     grupoLocal,
                   );
+                  if (categoriaEstilo === "losas") rellenosLosaPatron += 1;
                 }
               }
               if (capas.length > 1 && !esMuroEnPlanta) {
@@ -2862,6 +2975,8 @@ export function Visor3D({
       nodoVisor.dataset.rellenoMateriales = String(
         Object.values(estilos.materiales).filter((m) => m.patron !== "vidrio").length,
       );
+      nodoVisor.dataset.rellenoLosaPatron = String(rellenosLosaPatron);
+      nodoVisor.dataset.rellenoLosaProyeccion = String(rellenosLosaProyeccion);
       nodoVisor.dataset.estiloVista = vista.estilo;
       nodoVisor.dataset.redibujo = String(
         Number(nodoVisor.dataset.redibujo ?? "0") + 1,

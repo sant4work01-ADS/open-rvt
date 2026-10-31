@@ -1,6 +1,6 @@
 // OPEN-RVT: estilos de objeto (plumillas) de la spec O005. La tabla vive en el
 // frontend y se guarda como JSON en el pset OPENRVT_Estilos del IfcProject.
-import type { Categoria, EscalaVista, Vista } from "./tipos";
+import type { Categoria, EscalaVista, EstiloVista, Vista } from "./tipos";
 
 export type PatronLinea = "continua" | "discontinua" | "trazo-punto" | "discontinua-larga";
 export type PatronRelleno =
@@ -280,12 +280,53 @@ export function categoriaOculta(vista: Vista, categoria: CategoriaEstilo): boole
   return vista.estilos?.[categoria as Categoria]?.oculta === true;
 }
 
+/**
+ * O015: relación de un elemento con el plano de corte de la vista.
+ * `cortado` lo atraviesa, `debajo` queda por debajo (proyección en planta) y
+ * `arriba` por encima (solo silueta, si la categoría la permite).
+ */
+export type RelacionCorte = "cortado" | "debajo" | "arriba";
+
+/**
+ * O015: relleno que corresponde a un elemento según su categoría, su relación con
+ * el plano de corte y el estilo de la vista. Es la única regla que consulta el
+ * visor, para que planta, corte y cualquier estilo se comporten igual.
+ *
+ * - Cortado: patrón del material del tipo (en «Sombreado» va sobre el gris de la
+ *   sección; en «Líneas» solo el achurado vectorial).
+ * - Debajo del corte: solo las losas llevan la proyección tenue; el resto no se
+ *   rellena (sus aristas ya se dibujan con el grosor de proyección).
+ * - Arriba del corte: nada; la silueta discontinua se resuelve aparte.
+ */
+export type RellenoElemento =
+  | "patron"
+  | "patron-sombreado"
+  | "proyeccion-tenue"
+  | "ninguno";
+
+export function rellenoDeElemento(
+  categoria: Categoria,
+  relacion: RelacionCorte,
+  estiloVista: EstiloVista,
+): RellenoElemento {
+  if (relacion === "arriba") return "ninguno";
+  if (relacion === "debajo") {
+    return categoria === "losas" ? "proyeccion-tenue" : "ninguno";
+  }
+  return estiloVista === "lineas-ocultas" ? "patron" : "patron-sombreado";
+}
+
 /** Material de relleno a partir del nombre del tipo de muro/losa de O003b. */
 export function materialPorTipo(tipo: string): MaterialNombre {
   const texto = (tipo || "").toLocaleLowerCase("es");
   if (texto.includes("block") || texto.includes("bloque")) return "block";
   if (texto.includes("tabique")) return "tabique";
   if (texto.includes("concreto") || texto.includes("hormig")) return "concreto";
+  // O015: la losa creada por la app es IfcSlab FLOOR sin tipo de material; su
+  // material por omisión es el concreto, no el genérico.
+  if (texto.includes("floor") || texto.includes("slab") || texto.includes("losa")) {
+    return "concreto";
+  }
   if (texto.includes("tierra")) return "tierra";
   if (texto.includes("aislante")) return "aislante";
   if (texto.includes("madera")) return "madera";
