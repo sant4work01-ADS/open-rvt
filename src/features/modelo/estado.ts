@@ -44,6 +44,7 @@ import {
 import { estilosPorDefecto, normalizarEstilos, type Estilos } from "./estilos";
 import { construirAberturas } from "./aberturas";
 import { normalizarAjusteEje } from "./ejesVista";
+import { normalizarAjusteNivel } from "./niveles";
 
 export type RespuestaGuardar = "guardar" | "descartar" | "cancelar";
 export type Herramienta =
@@ -303,6 +304,11 @@ interface EstadoModelo {
   fijarAjustesEjes: (
     vistaId: string,
     cambios: Record<string, AjusteEjeVista | null>,
+  ) => Promise<void>;
+  /** O014b: guarda los desplazamientos manuales de las cabezas de nivel. */
+  fijarAjustesNiveles: (
+    vistaId: string,
+    cambios: Record<string, { desplazamiento: number } | null>,
   ) => Promise<void>;
   guardarEstilos: (estilos: Estilos) => Promise<void>;
   abrirDialogoEstilos: () => void;
@@ -962,6 +968,31 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       const vistas = get().vistas.map((v) =>
         v.id === vistaId
           ? { ...v, id: v.id, ejes: Object.keys(ejes).length > 0 ? ejes : undefined }
+          : v,
+      );
+      set({ vistas, conCambios: true });
+      // Una sola escritura del pset = una sola entrada de deshacer por arrastre.
+      await persistirVistas(vistas);
+    },
+
+    fijarAjustesNiveles: async (vistaId, cambios) => {
+      const vista = get().vistas.find((v) => v.id === vistaId);
+      if (!vista) return;
+      const nivelesAjuste = { ...(vista.nivelesAjuste ?? {}) };
+      for (const [globalid, ajuste] of Object.entries(cambios)) {
+        // Misma validación que al leer el pset: solo desplazamientos finitos.
+        const limpio = normalizarAjusteNivel(ajuste);
+        if (!limpio) delete nivelesAjuste[globalid];
+        else nivelesAjuste[globalid] = limpio;
+      }
+      const vistas = get().vistas.map((v) =>
+        v.id === vistaId
+          ? {
+              ...v,
+              id: v.id,
+              nivelesAjuste:
+                Object.keys(nivelesAjuste).length > 0 ? nivelesAjuste : undefined,
+            }
           : v,
       );
       set({ vistas, conCambios: true });

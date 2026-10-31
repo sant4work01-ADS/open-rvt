@@ -239,6 +239,33 @@ describe("O011: ajustes de eje en la vista", () => {
     });
   });
 
+  it("O014b: guarda el desplazamiento manual de una cabeza de nivel y descarta los rotos", () => {
+    const vista = normalizarVista({
+      tipo: "alzado",
+      nombre: "A",
+      nivelesAjuste: {
+        "nivel-1": { desplazamiento: 0.35 },
+        "nivel-2": { desplazamiento: "x" },
+        "nivel-3": {},
+      },
+    })!;
+    expect(vista.nivelesAjuste).toEqual({
+      "nivel-1": { desplazamiento: 0.35 },
+    });
+  });
+
+  it("O014b: ida y vuelta por el pset conserva el desplazamiento de nivel", () => {
+    const vistas = crearVistas(NIVELES);
+    vistas[1] = {
+      ...vistas[1],
+      nivelesAjuste: { "nivel-1": { desplazamiento: 0.42 } },
+    };
+    const otraVez = leerVistas(serializarVistas(vistas));
+    expect(otraVez[1].nivelesAjuste).toEqual({
+      "nivel-1": { desplazamiento: 0.42 },
+    });
+  });
+
   it("ida y vuelta por el pset conserva los ajustes", () => {
     const vistas = crearVistas(NIVELES);
     vistas[0] = {
