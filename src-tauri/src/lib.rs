@@ -431,7 +431,9 @@ fn registro_de_la_app() -> tauri_plugin_log::Builder {
 /// Copiado intacto de PresupuestosPro.
 #[cfg(windows)]
 fn configurar_webview2(app: &tauri::AppHandle) {
-    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings3;
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2Settings3, ICoreWebView2Settings5,
+    };
     use windows_core::Interface;
 
     let Some(ventana) = tauri::Manager::get_webview_window(app, "main") else {
@@ -449,6 +451,11 @@ fn configurar_webview2(app: &tauri::AppHandle) {
         let _ = ajustes.SetIsStatusBarEnabled(false);
         if let Ok(s3) = ajustes.cast::<ICoreWebView2Settings3>() {
             let _ = s3.SetAreBrowserAcceleratorKeysEnabled(false);
+        }
+        // O017: el pellizco del touchpad debe llegar a la página, no al zoom visual
+        // de WebView2. Si esta versión no expone Settings5 se sigue sin romper.
+        if let Ok(s5) = ajustes.cast::<ICoreWebView2Settings5>() {
+            let _ = s5.SetIsPinchZoomEnabled(false);
         }
         #[cfg(not(debug_assertions))]
         {
