@@ -5,7 +5,10 @@ import {
   factorPellizco,
   factorRueda,
   factorZoomRueda,
+  resumirGrabacion,
   textoDiagnosticoRueda,
+  textoResumenGrabacion,
+  type EventoGrabado,
 } from "./rueda";
 
 const evento = (cambios: Partial<Parameters<DetectorRueda["clasificar"]>[0]> = {}) => ({
@@ -104,6 +107,94 @@ describe("detector de rueda y touchpad", () => {
     expect(factorZoomRueda(evento({ deltaY: 0.5 }), "touchpad")).toBeCloseTo(
       Math.pow(1.0018, 0.5),
       8,
+    );
+  });
+
+  // O017b: con Ctrl, un gesto que solo trae deltaX también hace zoom; el paso
+  // mínimo de 0,75 evita que deltas de 0,5 dejen la vista casi quieta.
+  it("factorZoomRueda acepta deltaX y aplica un paso mínimo al pellizco", () => {
+    // 1,01^−2 = 0,9802960494… (dos dedos horizontales con Ctrl).
+    expect(factorZoomRueda(evento({ deltaY: 0, deltaX: -2, ctrlKey: true }), "raton")).toBeCloseTo(
+      0.980296,
+      6,
+    );
+    // 1,01^−0,75 = 0,9925639… (delta real de 0,5 elevado al paso mínimo).
+    expect(factorZoomRueda(evento({ deltaY: -0.5, ctrlKey: true }), "touchpad")).toBeCloseTo(
+      0.992565,
+      6,
+    );
+    // Sin movimiento no hay factor: la vista no debe saltar.
+    expect(factorZoomRueda(evento({ deltaY: 0, deltaX: 0, ctrlKey: true }), "touchpad")).toBe(1);
+  });
+
+  // O017b: valores calculados a mano; dos ruedas de zoom con factores 0,9 y 0,8,
+  // un pointerdown sin Ctrl y un keydown/keyup de Control (100 ms entre eventos).
+  it("resumirGrabacion agrupa por tipo y por acción y multiplica los factores", () => {
+    const eventos: EventoGrabado[] = [
+      {
+        t: 0,
+        tipo: "wheel",
+        ctrlKey: true,
+        shiftKey: false,
+        deltaX: 0,
+        deltaY: -0.5,
+        deltaMode: 0,
+        accion: "zoom",
+        dispositivo: "touchpad",
+        factor: 0.9,
+        escalaAntes: 10,
+        escalaDespues: 9,
+      },
+      {
+        t: 100,
+        tipo: "wheel",
+        ctrlKey: true,
+        shiftKey: false,
+        deltaX: 0,
+        deltaY: -1.25,
+        deltaMode: 0,
+        accion: "zoom",
+        dispositivo: "touchpad",
+        factor: 0.8,
+        escalaAntes: 9,
+        escalaDespues: 7.2,
+      },
+      { t: 200, tipo: "pointerdown", ctrlKey: false, shiftKey: false, pointerType: "touch" },
+      { t: 300, tipo: "keydown", ctrlKey: true, shiftKey: false, key: "Control" },
+      { t: 400, tipo: "keyup", ctrlKey: false, shiftKey: false, key: "Control" },
+    ];
+    const resumen = resumirGrabacion(eventos);
+    expect(resumen.total).toBe(5);
+    expect(resumen.duracionMs).toBe(400);
+    expect(resumen.porTipo.wheel).toEqual({
+      cantidad: 2,
+      pctCtrl: 100,
+      deltaMode: 0,
+      deltaYMin: -1.25,
+      deltaYMax: -0.5,
+      deltaYMedia: -0.875,
+      pctFraccionarios: 100,
+      intervaloMedioMs: 100,
+    });
+    expect(resumen.porTipo.pointerdown).toEqual({
+      cantidad: 1,
+      pctCtrl: 0,
+      deltaMode: null,
+      deltaYMin: null,
+      deltaYMax: null,
+      deltaYMedia: null,
+      pctFraccionarios: null,
+      intervaloMedioMs: null,
+    });
+    expect(resumen.porTipo.keydown?.pctCtrl).toBe(100);
+    expect(resumen.porTipo.keyup?.pctCtrl).toBe(0);
+    expect(resumen.porAccion.zoom?.cantidad).toBe(2);
+    expect(resumen.zoom.eventos).toBe(2);
+    expect(resumen.zoom.productoFactores).toBeCloseTo(0.72, 12);
+    expect(resumen.zoom.escalaInicial).toBe(10);
+    expect(resumen.zoom.escalaFinal).toBe(7.2);
+    expect(textoResumenGrabacion(resumen)).toContain(
+      "zoom: 2 eventos · producto 0.72 · escala 10 → 7.2",
     );
   });
 
