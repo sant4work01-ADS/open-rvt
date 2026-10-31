@@ -51,3 +51,16 @@ Datos reales (31-oct, laptop del usuario; OPEN-RVT 0.5.10):
   (`herramientas/preparar_python.sh windows` antes; `OPENRVT_E2E_BINARIO` como `C:/...`;
   `CARGO_TARGET_DIR=$HOME/.cache/pp-target/openrvt-o018`, `-j 3`.)
 - LF (cuenta CRLF con Python, no con grep); commits por parte; sin push, merge ni versión.
+
+## Corrección del dato (31-oct 01:30)
+El usuario corrigió: el pellizco SÍ funciona en el Explorador de Windows y en Brave (Chromium). El fallo es
+propio de la ventana Tauri/WebView2 de OPEN-RVT. Además de la escucha nativa (que dirá si el mensaje llega al
+HWND principal o a la hija de WebView2), prueba y documenta en O018.md, uno por uno y con la grabación:
+1. `IsPinchZoomEnabled` en true (como estaba en 0.5.9) con `alRodar` haciendo `preventDefault`: Chromium
+   debería mandar el pellizco como `wheel` con `ctrlKey` a la página.
+2. Revisa en `src-tauri` y `tauri.conf.json` todo lo que toque la ventana o el webview (`additionalBrowserArgs`,
+   `zoomHotkeysEnabled`, `dragDropEnabled`, decoraciones propias/`decorations: false` con región de arrastre,
+   transparencia) y anota cuál puede interceptar el gesto (p. ej. una capa de arrastre encima del visor o el
+   IDropTarget de arrastrar archivos). Prueba quitarlo de uno en uno.
+Elige la corrección mínima que haga que el pellizco llegue como `wheel` con ctrlKey; el zoom nativo de la parte 3
+queda solo si ninguna de estas basta.
