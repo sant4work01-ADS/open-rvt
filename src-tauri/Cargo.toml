@@ -32,3 +32,12 @@ serde_json.workspace = true
 [target.'cfg(target_os = "windows")'.dependencies]
 webview2-com = "0.39"
 windows-core = "0.62"
+# O018: escucha nativa de gestos (WM_GESTURE, WM_POINTER, rueda y toques).
+# Misma versión que ya trae webview2-com; no debe bajar crates nuevos.
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_UI_Input_Pointer",
+    "Win32_UI_Input_Touch",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }

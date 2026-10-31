@@ -357,7 +357,7 @@ test("O017b: grabar 2 s, resumir y exportar el diagnóstico", async () => {
     if (process.platform === "win32") {
       assert.deepEqual(datos.ajustes_webview, {
         zoom_control: false,
-        pinch_zoom: false,
+        pinch_zoom: true,
         atajos_navegador: false,
       });
     } else {

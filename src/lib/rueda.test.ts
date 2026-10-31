@@ -211,3 +211,55 @@ describe("detector de rueda y touchpad", () => {
     );
   });
 });
+
+describe("grabación de gestos nativos (O018)", () => {
+  it("cuenta los nativo:<mensaje> por mensaje y por ventana", () => {
+    const eventos: EventoGrabado[] = [
+      {
+        t: 0,
+        tipo: "nativo:GID_ZOOM",
+        ctrlKey: false,
+        shiftKey: false,
+        ventana: "principal",
+        detalle: { ullArguments: 100 },
+      },
+      {
+        t: 40,
+        tipo: "nativo:GID_ZOOM",
+        ctrlKey: false,
+        shiftKey: false,
+        ventana: "principal",
+        detalle: { ullArguments: 120 },
+      },
+      {
+        t: 90,
+        tipo: "nativo:WM_MOUSEWHEEL",
+        ctrlKey: false,
+        shiftKey: false,
+        ventana: "webview-hija",
+        detalle: { delta: -120, control: true },
+      },
+    ];
+    const resumen = resumirGrabacion(eventos);
+    expect(resumen.total).toBe(3);
+    expect(resumen.porTipo["nativo:GID_ZOOM"]?.cantidad).toBe(2);
+    expect(resumen.porTipo["nativo:WM_MOUSEWHEEL"]?.cantidad).toBe(1);
+    expect(resumen.nativos.porMensaje).toEqual({
+      GID_ZOOM: 2,
+      WM_MOUSEWHEEL: 1,
+    });
+    expect(resumen.nativos.porVentana).toEqual({ principal: 2, "webview-hija": 1 });
+    const texto = textoResumenGrabacion(resumen);
+    expect(texto).toContain("nativo GID_ZOOM: 2");
+    expect(texto).toContain("nativo WM_MOUSEWHEEL: 1");
+    expect(texto).toContain("ventana principal: 2");
+    expect(texto).toContain("ventana webview-hija: 1");
+  });
+
+  it("sin gestos nativos los contadores quedan vacíos", () => {
+    const resumen = resumirGrabacion([
+      { t: 0, tipo: "keydown", ctrlKey: true, shiftKey: false, key: "Control" },
+    ]);
+    expect(resumen.nativos).toEqual({ porMensaje: {}, porVentana: {} });
+  });
+});

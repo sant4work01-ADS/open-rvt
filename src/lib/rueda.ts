@@ -31,7 +31,9 @@ export type TipoEventoGrabado =
   | "touchmove"
   | "touchend"
   | "keydown"
-  | "keyup";
+  | "keyup"
+  /** O018: mensaje nativo de Windows, p. ej. `nativo:GID_ZOOM`. */
+  | `nativo:${string}`;
 
 export interface EventoGrabado {
   /** Milisegundos desde el inicio de la grabación. */
@@ -51,6 +53,10 @@ export interface EventoGrabado {
   escalaAntes?: number;
   escalaDespues?: number;
   factor?: number;
+  /** O018: ventana que entregó el gesto nativo. */
+  ventana?: string;
+  /** O018: carga útil nativa (ullArguments, delta, pointerId…). */
+  detalle?: unknown;
 }
 
 export interface ResumenGrupo {
@@ -69,13 +75,18 @@ export interface ResumenGrupo {
 export interface ResumenGrabacion {
   total: number;
   duracionMs: number;
-  porTipo: Partial<Record<TipoEventoGrabado, ResumenGrupo>>;
+  porTipo: Record<string, ResumenGrupo>;
   porAccion: Partial<Record<AccionRueda, ResumenGrupo>>;
   zoom: {
     eventos: number;
     productoFactores: number;
     escalaInicial: number | null;
     escalaFinal: number | null;
+  };
+  /** O018: cantidad de gestos nativos por mensaje y por ventana. */
+  nativos: {
+    porMensaje: Record<string, number>;
+    porVentana: Record<string, number>;
   };
 }
 
@@ -310,7 +321,7 @@ function resumirGrupo(eventos: EventoGrabado[]): ResumenGrupo {
  * ve si la escala de la cámara cambió de verdad entre `alRodar` y después.
  */
 export function resumirGrabacion(eventos: EventoGrabado[]): ResumenGrabacion {
-  const porTipo: Partial<Record<TipoEventoGrabado, ResumenGrupo>> = {};
+  const porTipo: Record<string, ResumenGrupo> = {};
   const porAccion: Partial<Record<AccionRueda, ResumenGrupo>> = {};
   const tipos = [...new Set(eventos.map((evento) => evento.tipo))];
   for (const tipo of tipos) {
@@ -327,6 +338,15 @@ export function resumirGrabacion(eventos: EventoGrabado[]): ResumenGrabacion {
   const conEscalaDespues = [...zooms]
     .reverse()
     .find((evento) => typeof evento.escalaDespues === "number");
+  const nativos = eventos.filter((evento) => evento.tipo.startsWith("nativo:"));
+  const porMensaje: Record<string, number> = {};
+  const porVentana: Record<string, number> = {};
+  for (const evento of nativos) {
+    const mensaje = evento.tipo.slice("nativo:".length);
+    porMensaje[mensaje] = (porMensaje[mensaje] ?? 0) + 1;
+    const ventana = evento.ventana ?? "desconocida";
+    porVentana[ventana] = (porVentana[ventana] ?? 0) + 1;
+  }
   return {
     total: eventos.length,
     duracionMs: eventos.length < 2 ? 0 : eventos[eventos.length - 1].t - eventos[0].t,
@@ -338,6 +358,7 @@ export function resumirGrabacion(eventos: EventoGrabado[]): ResumenGrabacion {
       escalaInicial: conEscalaAntes[0]?.escalaAntes ?? null,
       escalaFinal: conEscalaDespues?.escalaDespues ?? null,
     },
+    nativos: { porMensaje, porVentana },
   };
 }
 
@@ -368,6 +389,12 @@ export function textoResumenGrabacion(resumen: ResumenGrabacion): string {
     `zoom: ${resumen.zoom.eventos} eventos · producto ${Number(resumen.zoom.productoFactores.toFixed(6))}` +
       ` · escala ${resumen.zoom.escalaInicial ?? "—"} → ${resumen.zoom.escalaFinal ?? "—"}`,
   );
+  for (const [mensaje, cantidad] of Object.entries(resumen.nativos.porMensaje)) {
+    lineas.push(`nativo ${mensaje}: ${cantidad}`);
+  }
+  for (const [ventana, cantidad] of Object.entries(resumen.nativos.porVentana)) {
+    lineas.push(`ventana ${ventana}: ${cantidad}`);
+  }
   return lineas.join("\n");
 }
 
