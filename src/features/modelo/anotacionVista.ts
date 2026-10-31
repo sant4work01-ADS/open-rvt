@@ -118,7 +118,7 @@ const MM = (mm: number, escala: EscalaVista) => mmAMundo(mm, escala);
 
 /** Ancho aproximado del texto, en mundo, con el mismo criterio que el visor. */
 export function anchoTextoAprox(texto: string, altoMundo: number): number {
-  return Math.max(0.1, texto.length * altoMundo * 0.62);
+  return Math.max(0.1, texto.length * altoMundo * 0.75);
 }
 
 export function formatearNumero(valor: number, decimales: number, unidad = ""): string {
@@ -271,6 +271,7 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
     hasta: number,
     t: number,
     tipo: "parcial" | "total",
+    textoDerecha = false,
   ): CotaTramoCalc => {
     const valor = hasta - desde;
     const texto = formatearNumero(valor, estiloCota.decimales, estiloCota.unidad);
@@ -282,14 +283,16 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
       fuera && Math.abs(valor) < altoTextoCota + 2 * separacion
         ? hasta + separacion + altoTextoCota / 2
         : (desde + hasta) / 2;
+    // La cadena va a la izquierda de su línea; la total, a la derecha (referencia).
+    const t0 = textoDerecha ? t + separacion : t - separacion - ancho;
     const cajaTexto: CajaAnotacion = {
       tipo,
       texto,
-      t0: t - separacion - ancho,
-      t1: t - separacion,
+      t0,
+      t1: t0 + ancho,
       z0: centroZ - altoTextoCota / 2,
       z1: centroZ + altoTextoCota / 2,
-      centro: [t - separacion - ancho / 2, centroZ],
+      centro: [t0 + ancho / 2, centroZ],
     };
     const remates: [RemateCota, RemateCota] = fuera
       ? [
@@ -328,7 +331,7 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
   }
   let total: CotaTotalCalc | null = null;
   if (niveles.length >= 2) {
-    const base = cotaDe(elevaciones[0], elevaciones[elevaciones.length - 1], tTotal, "total");
+    const base = cotaDe(elevaciones[0], elevaciones[elevaciones.length - 1], tTotal, "total", true);
     total = { ...base, tipo: "total" };
     lineas.push({
       tipo: "cota-total",
