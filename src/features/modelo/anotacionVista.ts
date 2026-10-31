@@ -119,6 +119,10 @@ export interface EntradaLayoutAlzado {
   separacionGlobosMm?: number;
   /** Desplazamientos manuales de cabeza (mundo, por GlobalId). */
   ajustesNivel?: Record<string, number>;
+  /** Alto real del texto de nivel en mundo (incluye el mínimo en píxeles del visor). */
+  altoTextoNivelMundo?: number;
+  /** Alto real del texto de cota en mundo (incluye el mínimo en píxeles del visor). */
+  altoTextoCotaMundo?: number;
 }
 
 const MM = (mm: number, escala: EscalaVista) => mmAMundo(mm, escala);
@@ -227,19 +231,23 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
   const sMin = ejes.length > 0 ? ejes[0].s : entrada.tMinCaja;
   const sMax = ejes.length > 0 ? ejes[ejes.length - 1].s : entrada.tMaxCaja;
   const tInicio = Math.min(entrada.tMinCaja, sMin - extension);
-  // La referencia corta las líneas de nivel al terminar el último eje y dibuja
-  // la anotación más a la derecha, sobre la misma altura.
-  const tFin = sMax + extension;
+  const tFin = Math.max(sMax + extension, tInicio);
 
-  const altoTextoCota = MM(estiloCota.altoTexto, escala);
+  const altoTextoCota = entrada.altoTextoCotaMundo ?? MM(estiloCota.altoTexto, escala);
   const separacion = MM(estiloCota.separacionTexto, escala);
   const remate = MM(estiloCota.tamanoRemate, escala);
   const separacionExt = MM(estiloCota.separacionExtension, escala);
   const prolongacion = MM(estiloCota.prolongacion, escala);
+  const altoTextoNivel = entrada.altoTextoNivelMundo ?? MM(estiloNivel.altoTexto, escala);
 
-  const tExtInicio = tFin + separacionExt;
-  const tCadena = tExtInicio + MM(6, escala);
-  const tTotal = tCadena + MM(estiloCota.distanciaFilas, escala);
+  // La referencia (dibujada a 1:20) usa un triángulo ancho y bajo: si fuera
+  // cuadrado, las cabezas de niveles juntos se tocarían.
+  const anchoCabeza = MM(estiloNivel.tamanoCabeza, escala);
+  const altoCabeza = anchoCabeza * 0.7;
+  const altoBanda = Math.max(altoCabeza, altoTextoNivel);
+
+  // Cadena y total en filas separadas. La fila de la total se ensancha lo justo
+  // para que su texto quepa a la izquierda sin tocar la cadena.
   const textoTotal =
     niveles.length >= 2
       ? formatearNumero(
@@ -249,24 +257,32 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
         )
       : "";
   const anchoTextoTotal = anchoTextoAprox(textoTotal, altoTextoCota, 0.55);
-  // La total va en su fila; su texto ocupa el hueco entre filas si cabe y, si
-  // no, se saca hacia afuera para no tocar la cadena.
-  const totalCabeEntreFilas = anchoTextoTotal + separacion <= tTotal - tCadena;
-  const bordeTextoTotal = totalCabeEntreFilas
-    ? tTotal - separacion
-    : tTotal + separacion + anchoTextoTotal;
-  const tGuia = bordeTextoTotal + MM(3, escala);
-  const tCabeza = tGuia + MM(7, escala);
+  const tExtInicio = tFin + separacionExt;
+  const tCadena = tExtInicio + MM(6, escala);
+  const filaSiguiente = Math.max(
+    MM(estiloCota.distanciaFilas, escala),
+    anchoTextoTotal + 2 * separacion + MM(1, escala),
+  );
+  const tTotal = tCadena + filaSiguiente;
+  // Punto de arranque de la guía (solo en cabezas con codo) y columna única de
+  // cabezas, siempre más afuera que las cotas.
+  const tGuia = tTotal + MM(6, escala);
+  const tCabeza = Math.max(tGuia + MM(4, escala), tTotal + MM(14, escala));
 
-  // La referencia usa un triángulo ancho y bajo (3.5 mm de ancho): si fuera
-  // cuadrado, las cabezas de niveles juntos se tocarían.
-  const anchoCabeza = MM(estiloNivel.tamanoCabeza, escala);
-  const altoCabeza = anchoCabeza * 0.7;
-  const altoTextoNivel = MM(estiloNivel.altoTexto, escala);
-  const banda = Math.max(altoCabeza, altoTextoNivel);
-  // Aire suficiente para que ni triángulos ni textos se toquen a zoom de
-  // anotación (el texto en pantalla nunca baja de 11 px).
-  const auto = acomodarCabezasSimetrico(elevaciones, banda, MM(2, escala));
+  // Cabezas juntas: se abren en vertical con codo (2.20 sube, 2.00 baja). El
+  // umbral incluye el triángulo, su texto y el aire de la referencia; a 1:20 el
+  // par de 0.20 m mide 10 mm de papel y este umbral lo marca como «junto».
+  const zs = [...elevaciones];
+  const umbralCodo = altoCabeza + altoTextoNivel + MM(6, escala);
+  for (let i = 0; i + 1 < zs.length; i += 1) {
+    const hueco = elevaciones[i + 1] - elevaciones[i];
+    if (hueco < umbralCodo) {
+      const d = Math.max((umbralCodo - hueco) / 2, MM(4, escala));
+      zs[i] -= d;
+      zs[i + 1] += d;
+    }
+  }
+  const auto = acomodarCabezasSimetrico(zs, altoBanda, MM(2, escala));
 
   const lineas: LineaAnotacion[] = [];
   const cabezas: CabezaNivelCalc[] = [];
@@ -275,30 +291,31 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
   for (let i = 0; i < niveles.length; i += 1) {
     const nivel = niveles[i];
     const zLinea = nivel.elevacion;
+    const manual = entrada.ajustesNivel?.[nivel.globalid];
+    const z = Number.isFinite(manual) ? (manual as number) : auto[i];
+    const desplazamiento = z - zLinea;
+    const plegada = Math.abs(desplazamiento) > 1e-9;
+    // Sin codo la línea de nivel llega hasta el vértice del triángulo; con codo
+    // termina en el punto donde nace la guía quebrada.
     lineas.push({
       tipo: "nivel",
       elevacion: zLinea,
       puntos: [
         [tInicio, zLinea],
-        [tFin, zLinea],
+        [plegada ? tGuia : tCabeza, zLinea],
       ],
     });
-    const manual = entrada.ajustesNivel?.[nivel.globalid];
-    const z = Number.isFinite(manual) ? (manual as number) : auto[i];
-    const desplazamiento = z - zLinea;
-    // Guía quebrada: nace en un punto sobre la altura del nivel, avanza un poco
-    // y sube o baja hasta la cabeza. Todas las cabezas comparten columna.
-    const puntosGuia: Array<[number, number]> = [
-      [tGuia, zLinea],
-      [tGuia + MM(1.5, escala), zLinea],
-      [tCabeza, z],
-    ];
-    lineas.push({
-      tipo: "guia-nivel",
-      elevacion: zLinea,
-      puntos: puntosGuia,
-      punto: [tGuia, zLinea],
-    });
+    if (plegada) {
+      lineas.push({
+        tipo: "guia-nivel",
+        elevacion: zLinea,
+        puntos: [
+          [tGuia, zLinea],
+          [tCabeza, z],
+        ],
+        punto: [tGuia, zLinea],
+      });
+    }
     const poligono: Array<[number, number]> =
       estiloNivel.cabeza === "triangulo-relleno" || estiloNivel.cabeza === "triangulo"
         ? [
@@ -310,8 +327,8 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
     const texto = textoNivel(zLinea, estiloNivel);
     const anchoTexto = anchoTextoAprox(texto, altoTextoNivel);
     const bordeTexto = tCabeza + anchoCabeza / 2 + MM(1, escala);
-    // El texto va siempre a la derecha del triángulo y centrado con él, como en
-    // la referencia: así dos niveles juntos nunca enciman sus textos.
+    // Texto siempre a la derecha del triángulo y centrado con él, como en la
+    // referencia: así los niveles juntos nunca enciman sus textos.
     const centroZ = z + altoCabeza / 2;
     const cajaTexto: CajaAnotacion = {
       tipo: "nivel",
@@ -341,34 +358,27 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
   );
   const tFinAnotacion = tCabeza + anchoCabeza / 2 + MM(1, escala) + anchoMaxTextoNivel;
 
-  // Cotas: cadena entre niveles consecutivos y total en la fila de afuera.
+  // Texto de cota: a la izquierda de su línea y centrado en el tramo. En tramos
+  // donde los remates no caben (0.20) las flechas van por fuera apuntando
+  // adentro; el texto sigue fuera del hueco para no pisar ninguna flecha.
   const cotaDe = (
     desde: number,
     hasta: number,
     t: number,
     tipo: "parcial" | "total",
-    textoDerecha = false,
   ): CotaTramoCalc => {
     const valor = hasta - desde;
     const texto = formatearNumero(valor, estiloCota.decimales, estiloCota.unidad);
     const ancho = anchoTextoAprox(texto, altoTextoCota, 0.55);
-    const fuera = Math.abs(valor) < 2 * remate;
-    // Si el tramo es más chico que el texto, éste se saca fuera del hueco
-    // (sobre el nivel superior) para no tachar ninguna línea.
-    const noCabe = Math.abs(valor) < altoTextoCota + 2 * separacion;
-    const centroZ = noCabe ? hasta + separacion + altoTextoCota / 2 : (desde + hasta) / 2;
-    // Cadena: texto a la izquierda de su línea. Total: en su hueco si cabe y,
-    // si no, a la derecha, sin tocar la cadena.
-    const t0 = textoDerecha
-      ? totalCabeEntreFilas
-        ? t - separacion - ancho
-        : t + separacion
-      : t - separacion - ancho;
+    const fuera = Math.abs(valor) < 3 * altoTextoCota + 2 * remate;
+    const centroZ = (desde + hasta) / 2;
+    const t1 = t - separacion;
+    const t0 = t1 - ancho;
     const cajaTexto: CajaAnotacion = {
       tipo,
       texto,
       t0,
-      t1: t0 + ancho,
+      t1,
       z0: centroZ - altoTextoCota / 2,
       z1: centroZ + altoTextoCota / 2,
       centro: [t0 + ancho / 2, centroZ],
@@ -410,7 +420,7 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
   }
   let total: CotaTotalCalc | null = null;
   if (niveles.length >= 2) {
-    const base = cotaDe(elevaciones[0], elevaciones[elevaciones.length - 1], tTotal, "total", true);
+    const base = cotaDe(elevaciones[0], elevaciones[elevaciones.length - 1], tTotal, "total");
     total = { ...base, tipo: "total" };
     lineas.push({
       tipo: "cota-total",

@@ -2954,6 +2954,10 @@ export function Visor3D({
             ajustesMundo[nivel.globalid] = nivel.elevacion + ajuste.desplazamiento;
           }
         }
+        // Tamaños reales de texto (con el mínimo en píxeles del visor): la
+        // colocación y las cajas de las pruebas usan exactamente lo dibujado.
+        const altoTexto = mmAMundoConMinimoPx(estiloNivel.altoTexto, vista.escala, mundoPorPx, 11);
+        const altoTextoCota = mmAMundoConMinimoPx(estiloCota.altoTexto, vista.escala, mundoPorPx, 11);
         const layout = calcularLayoutAlzado({
           niveles: ordenados,
           ejes: cruces.map(({ eje, s }) => ({ globalid: eje.globalid, etiqueta: eje.etiqueta, s })),
@@ -2965,6 +2969,8 @@ export function Visor3D({
           tMaxCaja: tMax,
           separacionGlobosMm: vista.separacionGlobos,
           ajustesNivel: ajustesMundo,
+          altoTextoNivelMundo: altoTexto,
+          altoTextoCotaMundo: altoTextoCota,
         });
         // Encuadre exacto de la zona de anotación para las capturas y pruebas.
         const nodoEncuadre = contenedor.current;
@@ -3030,11 +3036,9 @@ export function Visor3D({
           mundoPorPx,
           profundidad: false,
         });
-        const altoTexto = mmAMundoConMinimoPx(estiloNivel.altoTexto, vista.escala, mundoPorPx, 11);
-        const altoTextoCota = mmAMundoConMinimoPx(estiloCota.altoTexto, vista.escala, mundoPorPx, 11);
         const altoNombre = mmAMundoConMinimoPx(2, vista.escala, mundoPorPx, 8);
-        const altoCabeza = mmAMundo(estiloNivel.tamanoCabeza, vista.escala);
-        const anchoCabeza = altoCabeza;
+        const anchoCabeza = mmAMundo(estiloNivel.tamanoCabeza, vista.escala);
+        const altoCabeza = anchoCabeza * 0.7;
 
         anotacionesAlzado.current = [];
         lineasNivelRef.current = [];
@@ -3349,6 +3353,9 @@ export function Visor3D({
             etiquetaX: layout.tCabeza,
             parcialX: layout.tCadena,
             totalX: layout.tTotal,
+            anotacionFin: layout.tFinAnotacion,
+            globoZ: layout.zGlobo,
+            radioGlobo: layout.globos[0]?.radio ?? 0,
           });
           contenedor.current.dataset.nivelesZ = JSON.stringify(ordenados.map((n) => n.elevacion));
           contenedor.current.dataset.nivelesPatron = estiloNivel.patron;

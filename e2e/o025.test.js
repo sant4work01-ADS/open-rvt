@@ -153,7 +153,7 @@ async function dibujarMuroAlto(ses, alto) {
   }, alto);
   assert.equal(ok, true, "no se pudo fijar la altura del muro");
   await clicMundo(ses, 0, 0);
-  await clicMundo(ses, 18, 0);
+  await clicMundo(ses, 3, 0);
   await tecla(ses, "Escape", "Escape");
   await tecla(ses, "Escape", "Escape");
   await esperar(700);
@@ -205,7 +205,7 @@ async function crearEjesReferencia(ses) {
     "no abrió el diálogo de ejes por separaciones",
   );
   await fijarValor(ses, "eje-sep-horizontal-separaciones", "");
-  await fijarValor(ses, "eje-sep-vertical-separaciones", "4, 4, 4");
+  await fijarValor(ses, "eje-sep-vertical-separaciones", "0.7, 0.7, 0.7");
   await fijarValor(ses, "eje-sep-vertical-etiqueta", "1");
   await fijarValor(ses, "eje-sep-vertical-origen", "0");
   await fijarValor(ses, "eje-sep-vertical-longitud", "20");
@@ -287,6 +287,10 @@ test("O025: niveles, ejes y cotas en alzado como la referencia", async () => {
 
     await elegirVista(ses, "Alzado Norte");
     await esperar(900);
+    // La referencia está dibujada a 1:20; a 1:100 un tramo de 0.20 m mide 2 mm
+    // de papel y su texto de 2.5 mm nunca cabría.
+    await fijarValor(ses, "vista-escala", "20");
+    await esperar(500);
     await activar(ses, "visor-ajustar");
     await esperar(700);
 
@@ -303,27 +307,36 @@ test("O025: niveles, ejes y cotas en alzado como la referencia", async () => {
 
     const base = await datosVisor(ses);
     assert.deepEqual(base.nivelesZ, [0, 0.5, 1.5, 2, 2.2]);
-    // A 1:100, 10 mm de papel = 1.00 m y el radio del globo = 0.40 m: 2.20+1.00+0.40.
-    assert.ok(Math.abs(base.globoZ - 3.6) < 0.001, `globo en ${base.globoZ}`);
-    // 7 mm entre filas = 0.70 m.
-    assert.ok(Math.abs(base.nivelesX.totalX - base.nivelesX.parcialX - 0.7) < 1e-6);
+    // A 1:20, 10 mm de papel = 0.20 m y el radio del globo = 0.08 m: 2.20+0.20+0.08.
+    assert.ok(Math.abs(base.globoZ - 2.48) < 0.001, `globo en ${base.globoZ}`);
+    // Cadena, total y cabezas en columnas crecientes, dentro de la anotación.
+    assert.ok(base.nivelesX.totalX > base.nivelesX.parcialX, "la total no está a la derecha de la cadena");
+    assert.ok(base.nivelesX.etiquetaX > base.nivelesX.totalX, "las cabezas no están a la derecha de la total");
+    assert.ok(base.nivelesX.anotacionFin > base.nivelesX.etiquetaX, "la anotación no termina tras las cabezas");
     assert.equal(base.remate, "flecha-rellena");
     assert.equal(base.patron, "trazo-punto", `patrón de nivel ${base.patron}`);
 
-    // Captura a 1:100 con Ajustar (vista completa).
+    // Captura a 1:20 con Ajustar (vista completa, globos incluidos).
     await cambiarPestana(ses, "Vista");
     await ses.captura(path.join(PROGRESO, "alzado-referencia-ajustar.png"));
 
-    // Encuadrar la anotación para que llene la vista, como la referencia:
-    // los cinco niveles y el globo, con la cadena y las cabezas.
+    // Encuadrar toda la anotación (ejes, cotas y cabezas) para que llene la
+    // vista, como la referencia.
     const encuadre = await datosVisor(ses);
+    const zBajo = Math.min(...encuadre.nivelesZ) - 0.1;
+    const zAlto = encuadre.nivelesX.globoZ + encuadre.nivelesX.radioGlobo;
     await ses.driver.executeScript(
-      (t, z, alto) => {
-        document.querySelector('[data-testid="visor"]').__openrvtEnfocarAlzado(t, z, alto);
+      (t0, t1, z0, z1) => {
+        const visor = document.querySelector('[data-testid="visor"]');
+        const rect = visor.getBoundingClientRect();
+        const aspecto = Math.max(rect.width, 1) / Math.max(rect.height, 1);
+        const alto = Math.max(z1 - z0, (t1 - t0) / aspecto) * 1.08;
+        visor.__openrvtEnfocarAlzado((t0 + t1) / 2, (z0 + z1) / 2, alto);
       },
-      encuadre.nivelesX.etiquetaX,
-      1.5,
-      3.5,
+      encuadre.nivelesX.desde,
+      encuadre.nivelesX.anotacionFin,
+      zBajo,
+      zAlto,
     );
     await esperar(700);
     // Cerrar el aviso de navegación para que no tape los niveles bajos.
@@ -359,9 +372,16 @@ test("O025: niveles, ejes y cotas en alzado como la referencia", async () => {
     }
     const cabezas = acercado.etiquetas.filter((e) => e.tipo === "nivel");
     assert.equal(cabezas.length, 5);
+    // Todas las cabezas en una sola columna a la derecha de las cotas.
     const xCabezas = cabezas.map((e) => e.x0);
     for (const x of xCabezas) {
       assert.ok(Math.abs(x - xCabezas[0]) < 2, `cabeza descentrada: ${xCabezas.join(",")}`);
+    }
+    for (const cota of acercado.etiquetas.filter((e) => e.tipo !== "nivel")) {
+      assert.ok(
+        xCabezas[0] > cota.x1,
+        `la cabeza no está más afuera que la cota ${cota.texto}`,
+      );
     }
     const c220 = cabezas.find((e) => e.texto === "Npt +2.20m");
     const c200 = cabezas.find((e) => e.texto === "Npt +2.00m");
@@ -402,9 +422,11 @@ test("O025: niveles, ejes y cotas en alzado como la referencia", async () => {
     );
     await esperar(800);
     const moved = await datosVisor(ses);
-    // 20 mm de papel = 2.00 m: centro = 2.20 + 2.00 + 0.40.
-    assert.ok(Math.abs(moved.globoZ - 4.6) < 0.001, `globo en ${moved.globoZ}`);
-    assert.ok(moved.separacion > base.separacion + 0.5, "la separación no se guardó");
+    // 20 mm de papel a 1:20 = 0.40 m: centro = 2.20 + 0.40 + 0.08.
+    assert.ok(Math.abs(moved.globoZ - 2.68) < 0.001, `globo en ${moved.globoZ}`);
+    // 20 mm de papel a 1:20 = 0.40 m (antes 10 mm = 0.20 m).
+    assert.ok(Math.abs(moved.separacion - 0.4) < 0.001, `separación ${moved.separacion}`);
+    assert.ok(moved.separacion > base.separacion, "la separación no se guardó");
 
     await activar(ses, "cmd-estilos-anotacion");
     await ses.driver.wait(
@@ -430,6 +452,24 @@ test("O025: niveles, ejes y cotas en alzado como la referencia", async () => {
     const conTick = await datosVisor(ses);
     assert.equal(conTick.remate, "tick-arquitectonico");
     await ses.captura(path.join(PROGRESO, "alzado-referencia-tick.png"));
+
+    // A 1:100 el tramo de 0.20 m mide 2 mm de papel: no se exige que quepa,
+    // solo que ninguna caja se encime.
+    await fijarValor(ses, "vista-escala", "100");
+    await esperar(600);
+    await activar(ses, "visor-ajustar");
+    await esperar(700);
+    const a100 = await anotaciones(ses);
+    for (let i = 0; i < a100.etiquetas.length; i += 1) {
+      for (let j = i + 1; j < a100.etiquetas.length; j += 1) {
+        assert.equal(
+          seIntersectan(a100.etiquetas[i], a100.etiquetas[j]),
+          false,
+          `a 1:100 se enciman «${a100.etiquetas[i].texto}» y «${a100.etiquetas[j].texto}»`,
+        );
+      }
+    }
+    await ses.captura(path.join(PROGRESO, "alzado-referencia-1-100.png"));
   } finally {
     await ses.cerrar();
     fs.rmSync(carpeta, { recursive: true, force: true });

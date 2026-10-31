@@ -7,7 +7,7 @@ import type { EstiloCategoriaVista } from "./estilos";
 export type TipoVista = "planta" | "alzado" | "corte" | "iso" | "perspectiva";
 export type Orientacion = "norte" | "sur" | "este" | "oeste";
 export type EstiloVista = "sombreado" | "aristas" | "lineas-ocultas";
-export type EscalaVista = 50 | 100 | 200;
+export type EscalaVista = 20 | 50 | 100 | 200;
 export type Categoria =
   | "muros"
   | "losas"
@@ -302,7 +302,7 @@ export const ESTILOS: ReadonlyArray<{ id: EstiloVista; nombre: string }> = [
   { id: "lineas-ocultas", nombre: "Líneas ocultas" },
 ];
 
-export const ESCALAS: readonly EscalaVista[] = [50, 100, 200];
+export const ESCALAS: readonly EscalaVista[] = [20, 50, 100, 200];
 
 /** Etiqueta legible del tipo de vista. */
 export function nombreTipo(tipo: TipoVista): string {

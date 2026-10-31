@@ -531,6 +531,8 @@ export function leerEstilos(texto: string): Estilos {
 /** Factor de escala respecto a 1:100 (la tabla está expresada a esa escala). */
 export function factorEscala(escala: EscalaVista): number {
   switch (escala) {
+    case 20:
+      return 0.2;
     case 50:
       return 1.4;
     case 100:
