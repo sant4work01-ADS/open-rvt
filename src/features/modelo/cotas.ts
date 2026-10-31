@@ -233,6 +233,22 @@ export function posicionTextoEntreMarcas(
   return { centro: borde + ancho / 2 + marca, fuera: true };
 }
 
+/**
+ * O021b: centro del texto de una cota que no cabe entre sus marcas. Se saca a la
+ * derecha de la línea de cota y, si hay varias seguidas, alterna dos columnas para
+ * que las cajas de texto no se encimen.
+ */
+export function posicionTextoCotaFuera(
+  base: number,
+  anchoColumna: number,
+  separacion: number,
+  indice: number,
+  anchoTexto: number,
+): number {
+  const columna = Math.abs(Math.trunc(indice)) % 2;
+  return base + separacion + columna * (anchoColumna + separacion) + anchoTexto / 2;
+}
+
 /** Elección de la casilla «Mover los siguientes», recordada durante la sesión. */
 let moverSiguientes = true;
 

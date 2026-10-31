@@ -5,6 +5,7 @@ import {
   acomodarCabezas,
   altoBandaCabeza,
   desfaseInferiorCabeza,
+  posicionTextoNivel,
   textoCabezaNivel,
 } from "./niveles";
 
@@ -208,5 +209,26 @@ describe("O014b: alto real de la banda de la cabeza", () => {
       const baseActual = elevaciones[i] + d[i] + desfase;
       expect(baseActual).toBeGreaterThanOrEqual(techoAnterior - 1e-12);
     }
+  });
+});
+
+describe("O021b: el texto de nivel queda arriba de su línea", () => {
+  it("el borde inferior respeta el margen de 1,5 mm sobre la línea", () => {
+    // Línea en z=0, cabeza de 0.26 y texto de 0.25: centro = 0.26 + 0.15 + 0.125.
+    const centro = posicionTextoNivel(0, 0.26, 0.25, 0.15);
+    expect(centro).toBeCloseTo(0.535, 12);
+    expect(centro - 0.25 / 2).toBeCloseTo(0.41, 12);
+    expect(centro - 0.25 / 2).toBeGreaterThanOrEqual(0.15);
+  });
+
+  it("sin cabeza (estilo «ninguna») deja el margen exacto sobre la línea", () => {
+    // centro = 0 + 0 + 0.15 + 0.10 = 0.25; el borde inferior queda en 0.15.
+    const centro = posicionTextoNivel(0, 0, 0.2, 0.15);
+    expect(centro).toBeCloseTo(0.25, 12);
+    expect(centro - 0.2 / 2).toBeCloseTo(0.15, 12);
+  });
+
+  it("sigue el desplazamiento de una cabeza movida a mano", () => {
+    expect(posicionTextoNivel(2.4, 0.26, 0.25, 0.15)).toBeCloseTo(2.935, 12);
   });
 });

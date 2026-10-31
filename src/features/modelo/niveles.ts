@@ -106,6 +106,21 @@ export function acomodarBurbujas(
   return separarEtiquetas(xs, xs.map(() => diametro), separacionMin);
 }
 
+/**
+ * O021b: centro vertical del texto de un nivel. Queda ARRIBA de su línea con el
+ * margen pedido (1,5 mm de papel en el visor): primero la forma de la cabeza y
+ * después el margen, de modo que la línea nunca cruce el texto.
+ */
+export function posicionTextoNivel(
+  zCabeza: number,
+  altoForma: number,
+  altoTexto: number,
+  margen: number,
+): number {
+  const numero = (valor: number) => (Number.isFinite(valor) ? Math.max(0, valor) : 0);
+  return zCabeza + numero(altoForma) + numero(margen) + numero(altoTexto) / 2;
+}
+
 /** O014b: desplazamiento vertical manual de una cabeza, propio de la vista. */
 export function normalizarAjusteNivel(
   valor: unknown,

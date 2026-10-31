@@ -8,6 +8,7 @@ import {
   moverSiguientesCotas,
   parsearCota,
   parsearElevacion,
+  posicionTextoCotaFuera,
   posicionTextoEntreMarcas,
 } from "./cotas";
 
@@ -226,5 +227,27 @@ describe("O006b: colocación del texto de cota", () => {
     expect(posicionTextoEntreMarcas(0, 0.8, 1, 0.2)).toEqual({ centro: 1.5, fuera: true });
     // Con el tramo invertido también se saca por la derecha.
     expect(posicionTextoEntreMarcas(0.8, 0, 1, 0.2)).toEqual({ centro: 1.5, fuera: true });
+  });
+});
+
+describe("O021b: cotas chicas fuera de la línea, alternando columnas", () => {
+  // Base t=10, columna de 0.8, separación de 0.3, texto de 0.4.
+  it("la primera cota sale a la derecha de la línea", () => {
+    // 10 + 0.3 + 0 + 0.4/2 = 10.5; su caja [10.3, 10.7] no toca la línea.
+    expect(posicionTextoCotaFuera(10, 0.8, 0.3, 0, 0.4)).toBeCloseTo(10.5, 12);
+  });
+
+  it("la siguiente alterna a una segunda columna sin encimarse", () => {
+    // 10 + 0.3 + (0.8+0.3) + 0.2 = 11.6; caja [11.4, 11.8], separada de [10.3, 10.7].
+    expect(posicionTextoCotaFuera(10, 0.8, 0.3, 1, 0.4)).toBeCloseTo(11.6, 12);
+    const a0 = 10.5 - 0.2;
+    const a1 = 10.5 + 0.2;
+    const b0 = 11.6 - 0.2;
+    expect(b0).toBeGreaterThan(a1);
+    expect(a0).toBeGreaterThan(10);
+  });
+
+  it("la tercera vuelve a la primera columna", () => {
+    expect(posicionTextoCotaFuera(10, 0.8, 0.3, 2, 0.4)).toBeCloseTo(10.5, 12);
   });
 });
