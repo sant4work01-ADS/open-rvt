@@ -28,6 +28,8 @@ export function normalizarAjusteEje(
     : [];
   if (codosInicio.length > 0) salida.codosInicio = codosInicio.map((p) => [...p] as [number, number]);
   if (codosFin.length > 0) salida.codosFin = codosFin.map((p) => [...p] as [number, number]);
+  if (typeof ajuste.globoInicio === "boolean") salida.globoInicio = ajuste.globoInicio;
+  if (typeof ajuste.globoFin === "boolean") salida.globoFin = ajuste.globoFin;
   return ajusteVacio(salida) ? undefined : salida;
 }
 
@@ -37,7 +39,9 @@ export function ajusteVacio(ajuste: AjusteEjeVista | null | undefined): boolean 
     !esPunto(ajuste.extremoInicio) &&
     !esPunto(ajuste.extremoFin) &&
     (!ajuste.codosInicio || ajuste.codosInicio.length === 0) &&
-    (!ajuste.codosFin || ajuste.codosFin.length === 0)
+    (!ajuste.codosFin || ajuste.codosFin.length === 0) &&
+    typeof ajuste.globoInicio !== "boolean" &&
+    typeof ajuste.globoFin !== "boolean"
   );
 }
 
@@ -204,4 +208,104 @@ export function extremoEje(
 ): Punto2 {
   if (lado === "inicio") return ajuste?.extremoInicio ?? inicio;
   return ajuste?.extremoFin ?? fin;
+}
+
+/** O021: ¿se dibuja el globo de este lado? Por omisión el fin sí y el inicio solo
+ *  cuando el extremo se ha tocado, exactamente como se dibujaba en O011. */
+export function globoVisibleEje(
+  ajuste: AjusteEjeVista | undefined,
+  lado: LadoEje,
+): boolean {
+  const valor = lado === "inicio" ? ajuste?.globoInicio : ajuste?.globoFin;
+  if (typeof valor === "boolean") return valor;
+  if (lado === "fin") return true;
+  return !!ajuste && (!!ajuste.extremoInicio || !!ajuste.codosInicio?.length);
+}
+
+/** O021: copia profunda del acomodo (extremos, codos y globos) para otras vistas. */
+export function copiarAjusteEje(
+  ajuste: AjusteEjeVista | null | undefined,
+): AjusteEjeVista | undefined {
+  const limpio = normalizarAjusteEje(ajuste);
+  if (!limpio) return undefined;
+  return {
+    ...limpio,
+    ...(limpio.extremoInicio ? { extremoInicio: [...limpio.extremoInicio] as Punto2 } : {}),
+    ...(limpio.extremoFin ? { extremoFin: [...limpio.extremoFin] as Punto2 } : {}),
+    ...(limpio.codosInicio
+      ? { codosInicio: limpio.codosInicio.map((p) => [...p] as Punto2) }
+      : {}),
+    ...(limpio.codosFin ? { codosFin: limpio.codosFin.map((p) => [...p] as Punto2) } : {}),
+  };
+}
+
+export type FamiliaEje = "vertical" | "horizontal" | "alzado";
+
+interface EjeParaArrastre {
+  globalid: string;
+  vertical?: boolean;
+}
+
+/**
+ * O021: arrastre de un extremo con candado. Cerrado (`candado = true`) mueve todos
+ * los extremos de la misma familia que comparten la alineación; abierto mueve solo
+ * el eje pulsado. Devuelve los ajustes completos para persistirlos de una vez.
+ */
+export function arrastrarExtremoEje(
+  originales: Record<string, AjusteEjeVista>,
+  bases: Record<string, { inicio: Punto2; fin: Punto2 }>,
+  ejes: EjeParaArrastre[],
+  globalid: string,
+  lado: LadoEje,
+  punto: Punto2,
+  candado: boolean,
+  familia: FamiliaEje,
+  tolerancia = 1e-6,
+): Record<string, AjusteEjeVista> {
+  const cambios: Record<string, AjusteEjeVista> = { ...originales };
+  const basesEje = bases[globalid];
+  if (!basesEje) return cambios;
+  if (!candado) {
+    cambios[globalid] = fijarExtremoEje(originales[globalid], lado, punto) ?? {};
+    return cambios;
+  }
+  const actualEje = extremoEje(originales[globalid], lado, basesEje.inicio, basesEje.fin);
+  const delta: Punto2 = [punto[0] - actualEje[0], punto[1] - actualEje[1]];
+  const coordenada = (p: Punto2) =>
+    familia === "horizontal" ? p[0] : p[1];
+  const alineacion = coordenada(actualEje);
+  for (const eje of ejes) {
+    const mismaFamilia =
+      familia === "alzado" || (eje.vertical ? "vertical" : "horizontal") === familia;
+    if (!mismaFamilia) continue;
+    const b = bases[eje.globalid];
+    if (!b) continue;
+    const original = originales[eje.globalid];
+    const actual = extremoEje(original, lado, b.inicio, b.fin);
+    if (Math.abs(coordenada(actual) - alineacion) > tolerancia) continue;
+    const nuevo: Punto2 =
+      familia === "horizontal"
+        ? [actual[0] + delta[0], actual[1]]
+        : [actual[0], actual[1] + delta[1]];
+    cambios[eje.globalid] = fijarExtremoEje(
+      cambios[eje.globalid] ?? original,
+      lado,
+      nuevo,
+    ) ?? {};
+  }
+  return cambios;
+}
+
+/** O021: doble clic en un asa = devolver ese extremo al acomodo automático
+ *  (quita su extremo libre y los codos de ese lado; conserva el otro extremo). */
+export function restablecerExtremoEje(
+  ajuste: AjusteEjeVista | null | undefined,
+  lado: LadoEje,
+): AjusteEjeVista | undefined {
+  const base = normalizarAjusteEje(ajuste);
+  if (!base) return undefined;
+  const salida: AjusteEjeVista = { ...base };
+  delete salida[lado === "inicio" ? "extremoInicio" : "extremoFin"];
+  delete salida[lado === "inicio" ? "codosInicio" : "codosFin"];
+  return normalizarAjusteEje(salida);
 }

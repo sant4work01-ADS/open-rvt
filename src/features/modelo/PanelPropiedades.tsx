@@ -8,8 +8,10 @@ import {
   ESCALAS,
   ESTILOS,
   nombreTipo,
+  type AjusteEjeVista,
   type Vista,
 } from "./tipos";
+import { globoVisibleEje } from "./ejesVista";
 
 function formatear(valor: unknown): string {
   if (valor === null || valor === undefined) return "—";
@@ -686,11 +688,84 @@ export function PropiedadesElemento() {
   );
 }
 
+/** O021: propiedades del eje seleccionado (globos por extremo y extremos en automático). */
+function PropiedadesEje({ vista }: { vista: Vista }) {
+  const ejeSeleccionado = useModelo((s) => s.ejeSeleccionado);
+  const referencias = useModelo((s) => s.referencias);
+  const fijarAjustesEjes = useModelo((s) => s.fijarAjustesEjes);
+  const eje = referencias.ejes.find((e) => e.globalid === ejeSeleccionado);
+  if (!eje) return null;
+  const ajuste: AjusteEjeVista | undefined = vista.ejes?.[eje.globalid];
+  const guardar = (cambios: Partial<AjusteEjeVista>, limpiar = false) => {
+    if (limpiar) {
+      void fijarAjustesEjes(vista.id, { [eje.globalid]: null });
+      return;
+    }
+    const siguiente: AjusteEjeVista = { ...(ajuste ?? {}), ...cambios };
+    void fijarAjustesEjes(vista.id, { [eje.globalid]: siguiente });
+  };
+  const automaticos = !ajuste?.extremoInicio && !ajuste?.extremoFin;
+  return (
+    <div data-testid="propiedades-eje" className="flex flex-col gap-2 p-3 text-xs">
+      <div className="flex items-center justify-between">
+        <span className="font-semibold">Eje {eje.etiqueta}</span>
+        <span className="text-muted-foreground">{vista.nombre}</span>
+      </div>
+      <label className="flex items-center justify-between gap-2">
+        <span className="text-muted-foreground">Globo inicio</span>
+        <input
+          type="checkbox"
+          data-testid="eje-prop-globo-inicio"
+          checked={globoVisibleEje(ajuste, "inicio")}
+          onChange={(e) => guardar({ globoInicio: e.target.checked })}
+        />
+      </label>
+      <label className="flex items-center justify-between gap-2">
+        <span className="text-muted-foreground">Globo fin</span>
+        <input
+          type="checkbox"
+          data-testid="eje-prop-globo-fin"
+          checked={globoVisibleEje(ajuste, "fin")}
+          onChange={(e) => guardar({ globoFin: e.target.checked })}
+        />
+      </label>
+      <label
+        className="flex items-center justify-between gap-2"
+        title="Con los extremos en automático, el eje sigue la alineación común de la retícula."
+      >
+        <span className="text-muted-foreground">Extremos en automático</span>
+        <input
+          type="checkbox"
+          data-testid="eje-prop-automatico"
+          checked={automaticos}
+          onChange={(e) => {
+            if (!e.target.checked) return;
+            const siguiente: AjusteEjeVista = { ...(ajuste ?? {}) };
+            delete siguiente.extremoInicio;
+            delete siguiente.extremoFin;
+            void fijarAjustesEjes(vista.id, { [eje.globalid]: siguiente });
+          }}
+        />
+      </label>
+      <button
+        type="button"
+        data-testid="eje-prop-restablecer"
+        className="rounded border px-2 py-1 hover:bg-muted"
+        onClick={() => guardar({}, true)}
+      >
+        Restablecer acomodo de este eje
+      </button>
+    </div>
+  );
+}
+
 export function PanelPropiedades({ onPlegar }: { onPlegar?: () => void }) {
   const seleccion = useModelo((s) => s.seleccion);
+  const ejeSeleccionado = useModelo((s) => s.ejeSeleccionado);
   const vistas = useModelo((s) => s.vistas);
   const vistaActivaId = useModelo((s) => s.vistaActivaId);
   const vista = vistas.find((v) => v.id === vistaActivaId);
+  const hayEje = !!ejeSeleccionado && !!vista;
   return (
     <aside
       data-testid="panel-propiedades"
@@ -699,7 +774,11 @@ export function PanelPropiedades({ onPlegar }: { onPlegar?: () => void }) {
     >
       <div className="flex items-center justify-between border-b px-3 py-1.5">
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {seleccion ? "Propiedades del elemento" : "Propiedades de la vista"}
+          {seleccion
+            ? "Propiedades del elemento"
+            : hayEje
+              ? "Propiedades del eje"
+              : "Propiedades de la vista"}
         </span>
         {onPlegar && (
           <button
@@ -716,6 +795,8 @@ export function PanelPropiedades({ onPlegar }: { onPlegar?: () => void }) {
       </div>
       {seleccion ? (
         <PropiedadesElemento />
+      ) : hayEje && vista ? (
+        <PropiedadesEje vista={vista} />
       ) : vista ? (
         <PropiedadesVista vista={vista} />
       ) : (

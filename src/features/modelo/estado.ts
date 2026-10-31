@@ -151,6 +151,8 @@ interface EstadoModelo {
   /** O005: puertas y ventanas con sus datos de planta. */
   aberturas: Abertura[];
   vistaActivaId: string | null;
+  /** O021: eje seleccionado en el visor (para el panel de propiedades). */
+  ejeSeleccionado: string | null;
   seleccion: string | null;
   seleccionados: string[];
   propiedades: PropiedadesElemento | null;
@@ -324,6 +326,7 @@ interface EstadoModelo {
   ) => Promise<boolean>;
   recargarTipos: () => Promise<void>;
   seleccionar: (globalid: string | null, agregar?: boolean) => Promise<void>;
+  fijarEjeSeleccionado: (globalid: string | null) => void;
   iniciarCorte: () => void;
   cancelarCorte: () => void;
   anadirPuntoCorte: (punto: [number, number]) => Promise<void>;
@@ -840,6 +843,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     estilos: estilosPorDefecto(),
     aberturas: [],
     vistaActivaId: null,
+    ejeSeleccionado: null,
     seleccion: null,
     seleccionados: [],
     propiedades: null,
@@ -946,7 +950,11 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     },
 
     fijarVista: (id) => {
-      set({ vistaActivaId: id, modoCorte: false, puntoCorte: null });
+      set({ vistaActivaId: id, modoCorte: false, puntoCorte: null, ejeSeleccionado: null });
+    },
+
+    fijarEjeSeleccionado: (globalid) => {
+      set({ ejeSeleccionado: globalid });
     },
 
     actualizarVista: async (id, cambios) => {
@@ -1058,6 +1066,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         set({ seleccion: null, seleccionados: [], propiedades: null });
         return;
       }
+      set({ ejeSeleccionado: null });
       let seleccionados = get().seleccionados;
       if (agregar) {
         seleccionados = seleccionados.includes(globalid)

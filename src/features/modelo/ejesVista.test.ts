@@ -3,12 +3,16 @@
 import { describe, expect, it } from "vitest";
 import {
   agregarCodoEje,
+  arrastrarExtremoEje,
+  copiarAjusteEje,
   extremoEje,
   fijarExtremoEje,
   geometriaEje,
+  globoVisibleEje,
   mmPapelAMetros,
   normalizarAjusteEje,
   quitarCodoEje,
+  restablecerExtremoEje,
 } from "./ejesVista";
 
 const INICIO: [number, number] = [0, 0];
@@ -211,5 +215,102 @@ describe("O011: extremos libres y saneamiento", () => {
   it("no acepta un tercer codo por la puerta del saneamiento", () => {
     const ajuste = normalizarAjusteEje({ codosFin: [[0, 1], [0, 2], [0, 3]] })!;
     expect(ajuste.codosFin).toHaveLength(2);
+  });
+});
+
+describe("O021: candado de alineación, globos por extremo y copia", () => {
+  // Tres ejes verticales en x = 0, 4 y 8, de y = 0 (inicio) a y = 10 (fin).
+  // El extremo final de los tres comparte la alineación y = 10.
+  const bases = {
+    A: { inicio: [0, 0] as [number, number], fin: [0, 10] as [number, number] },
+    B: { inicio: [4, 0] as [number, number], fin: [4, 10] as [number, number] },
+    C: { inicio: [8, 0] as [number, number], fin: [8, 10] as [number, number] },
+  };
+  const ejes = [
+    { globalid: "A", vertical: true },
+    { globalid: "B", vertical: true },
+    { globalid: "C", vertical: true },
+  ];
+
+  it("con el candado cerrado mueve igual todos los extremos alineados", () => {
+    // Arrastrar A de (0,10) a (0,12): delta +2 en Y para los tres (la X no cambia).
+    const r = arrastrarExtremoEje({}, bases, ejes, "A", "fin", [0, 12], true, "vertical");
+    expect(r.A.extremoFin).toEqual([0, 12]);
+    expect(r.B.extremoFin).toEqual([4, 12]);
+    expect(r.C.extremoFin).toEqual([8, 12]);
+  });
+
+  it("con el candado abierto mueve solo el eje pulsado", () => {
+    const r = arrastrarExtremoEje({}, bases, ejes, "A", "fin", [0, 12], false, "vertical");
+    expect(r.A.extremoFin).toEqual([0, 12]);
+    expect(r.B?.extremoFin).toBeUndefined();
+    expect(r.C?.extremoFin).toBeUndefined();
+  });
+
+  it("no arrastra ejes paralelos que no comparten la alineación", () => {
+    // B ya terminó en y = 15: no debe seguir a A aunque sea vertical.
+    const originales = { B: { extremoFin: [4, 15] as [number, number] } };
+    const r = arrastrarExtremoEje(
+      originales,
+      bases,
+      ejes.slice(0, 2),
+      "A",
+      "fin",
+      [0, 12],
+      true,
+      "vertical",
+    );
+    expect(r.A.extremoFin).toEqual([0, 12]);
+    expect(r.B.extremoFin).toEqual([4, 15]);
+  });
+
+  it("el globo de inicio solo se pinta si el extremo se tocó, salvo orden expresa", () => {
+    expect(globoVisibleEje(undefined, "inicio")).toBe(false);
+    expect(globoVisibleEje(undefined, "fin")).toBe(true);
+    const tocado = { extremoInicio: [1, 1] as [number, number] };
+    expect(globoVisibleEje(tocado, "inicio")).toBe(true);
+    // Oculto explícitamente gana incluso si hay extremo libre.
+    expect(globoVisibleEje({ ...tocado, globoInicio: false }, "inicio")).toBe(false);
+    expect(globoVisibleEje({ globoFin: false }, "fin")).toBe(false);
+  });
+
+  it("normalizar conserva los globos aunque no haya extremos ni codos", () => {
+    expect(normalizarAjusteEje({ globoInicio: false, globoFin: true })).toEqual({
+      globoInicio: false,
+      globoFin: true,
+    });
+  });
+
+  it("copiar acomodo conserva extremos, codos y globos sin compartir arrays", () => {
+    const original = {
+      extremoFin: [1, 12] as [number, number],
+      codosFin: [[0, 10.3] as [number, number]],
+      globoInicio: false,
+      globoFin: true,
+    };
+    const copia = copiarAjusteEje(original)!;
+    expect(copia).toEqual(original);
+    copia.extremoFin![0] = 99;
+    copyCodos(copia);
+    expect(original.extremoFin[0]).toBe(1);
+    expect(original.codosFin![0][0]).toBe(0);
+  });
+
+  function copyCodos(copia: ReturnType<typeof copiarAjusteEje>) {
+    if (copia?.codosFin) copia.codosFin[0][0] = 77;
+  }
+
+  it("restablecer un extremo quita su extremo y sus codos y conserva el otro lado", () => {
+    const ajuste = {
+      extremoInicio: [0, -1] as [number, number],
+      extremoFin: [1, 12] as [number, number],
+      codosFin: [[0, 10.3] as [number, number]],
+      globoFin: false,
+    };
+    const r = restablecerExtremoEje(ajuste, "fin")!;
+    expect(r.extremoFin).toBeUndefined();
+    expect(r.codosFin).toBeUndefined();
+    expect(r.extremoInicio).toEqual([0, -1]);
+    expect(r.globoFin).toBe(false);
   });
 });

@@ -40,6 +40,7 @@ import {
   formatearCota,
   parsearCota,
   parsearElevacion,
+  posicionTextoCotaFuera,
   posicionTextoEntreMarcas,
 } from "./cotas";
 import { altoTextoBurbuja, desplazamientoCentrado } from "./centrado";
@@ -53,6 +54,7 @@ import {
 } from "./orbita";
 import {
   acomodarBurbujas,
+  posicionTextoNivel,
   acomodarCabezas,
   altoBandaCabeza,
   DESFASE_NOMBRE_CABEZA,
@@ -108,12 +110,15 @@ import { crearMallasCapas } from "./capas3d";
 import {
   MAXIMO_CODOS,
   agregarCodoEje,
-  extremoEje,
+  arrastrarExtremoEje,
+  copiarAjusteEje,
   fijarExtremoEje,
   geometriaEje,
+  globoVisibleEje,
   mmPapelAMetros,
   normalizarAjusteEje,
   quitarCodoEje,
+  restablecerExtremoEje,
   type LadoEje,
 } from "./ejesVista";
 
@@ -497,14 +502,43 @@ function crearTextoAnotacion(
       textRenderInfo?: { visibleBounds?: [number, number, number, number] };
     };
     const limites = info.textRenderInfo?.visibleBounds;
-    if (!limites) return;
-    if (alineacion === "izquierda") {
-      // El origen del grupo queda en el borde izquierdo visible del glifo.
-      texto3d.position.set(-limites[0], -(limites[1] + limites[3]) / 2, 0);
-      return;
+    // O021: centrar con la caja real de los glifos ya triangulados. La geometría
+    // puede no estar lista dentro de `sync`; en ese caso se reintenta en los dos
+    // cuadros siguientes hasta que exista.
+    const centrar = (): boolean => {
+      const geometria = texto3d.geometry;
+      if (!geometria) return false;
+      geometria.computeBoundingBox();
+      const caja = geometria.boundingBox;
+      if (!caja || caja.max.x - caja.min.x < 1e-9 || caja.max.y - caja.min.y < 1e-9) {
+        return false;
+      }
+      if (alineacion === "izquierda") {
+        texto3d.position.set(-caja.min.x, -(caja.min.y + caja.max.y) / 2, 0);
+      } else {
+        texto3d.position.set(
+          -(caja.min.x + caja.max.x) / 2,
+          -(caja.min.y + caja.max.y) / 2,
+          0,
+        );
+      }
+      return true;
+    };
+    if (centrar()) return;
+    // Mientras la geometría se construye, se usa la caja del renglón como respaldo.
+    if (limites) {
+      if (alineacion === "izquierda") {
+        texto3d.position.set(-limites[0], -(limites[1] + limites[3]) / 2, 0);
+      } else {
+        const [dx, dy] = desplazamientoCentrado(limites);
+        texto3d.position.set(dx, dy, 0);
+      }
     }
-    const [dx, dy] = desplazamientoCentrado(limites);
-    texto3d.position.set(dx, dy, 0);
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => {
+        if (!centrar()) requestAnimationFrame(centrar);
+      });
+    }
   });
   return texto3d;
 }
@@ -889,6 +923,7 @@ export function Visor3D({
   const [errorCota, setErrorCota] = useState<string | null>(null);
   // O011: eje seleccionado, codos y extremos libres de la vista.
   const [ejeSeleccionado, setEjeSeleccionado] = useState<string | null>(null);
+  // O021: `true` = candado abierto (solo este eje); `false` = cerrado (alineación común).
   const [candados, setCandados] = useState<{ inicio: boolean; fin: boolean }>({
     inicio: false,
     fin: false,
@@ -902,6 +937,11 @@ export function Visor3D({
     globalid: string;
     lado: LadoEje;
     indice: number | null;
+  } | null>(null);
+  // O021: diálogo para copiar el acomodo de un eje a vistas del mismo tipo.
+  const [dialogoCopiarEje, setDialogoCopiarEje] = useState<{
+    globalid: string;
+    seleccion: string[];
   } | null>(null);
   const arrastreEje = useRef<{
     globalid: string;
@@ -919,12 +959,16 @@ export function Visor3D({
       globalid: string;
       etiqueta: string;
       lado: LadoEje;
-      tipo: "globo" | "codo" | "base";
+      tipo: "globo" | "codo" | "codo-nuevo" | "base";
       indice: number | null;
       punto: [number, number, number];
     }>
   >([]);
   const lineasEje = useRef<Array<{ globalid: string; etiqueta: string; puntos: Array<[number, number, number]> }>>([]);
+  // O021b: líneas de nivel y de extensión para comprobar que ningún texto las cruza.
+  const lineasNivelRef = useRef<Array<{ tipo: string; elev?: number; puntos: Array<[number, number, number]> }>>([]);
+  // O021: globos dibujados, para medir en pantalla el centrado real de su texto.
+  const burbujasEje = useRef<Array<{ etiqueta: string; grupo: THREE.Group }>>([]);
   // O014b: asas de las cabezas de nivel para arrastrarlas y devolverlas a automático.
   const asasNivel = useRef<
     Array<{
@@ -946,6 +990,23 @@ export function Visor3D({
     Record<string, { desplazamiento: number }>
   >({});
   const ajusteEnCursoRef = useRef<Record<string, AjusteEjeVista> | null>(null);
+  // O021: la selección del eje también vive en el estado para que el panel de
+  // propiedades pueda editarla; el visor conserva su copia local para los gestos.
+  const ejeSeleccionadoStore = useModelo((s) => s.ejeSeleccionado);
+  const fijarEjeSeleccionadoStore = useModelo((s) => s.fijarEjeSeleccionado);
+  const ejeStorePrevio = useRef(ejeSeleccionadoStore);
+  useEffect(() => {
+    // Solo reacciona a cambios venidos del panel; si no, el primer clic se borraría
+    // porque el estado global todavía conserva el valor anterior.
+    if (ejeSeleccionadoStore !== ejeStorePrevio.current) {
+      ejeStorePrevio.current = ejeSeleccionadoStore;
+      setEjeSeleccionado(ejeSeleccionadoStore);
+    }
+  }, [ejeSeleccionadoStore]);
+  useEffect(() => {
+    ejeStorePrevio.current = ejeSeleccionado;
+    fijarEjeSeleccionadoStore(ejeSeleccionado);
+  }, [ejeSeleccionado, fijarEjeSeleccionadoStore]);
   const contextoEje = useRef<{
     tipo: "planta" | "alzado" | "corte";
     d: [number, number];
@@ -1182,14 +1243,51 @@ export function Visor3D({
   const alternarCandadoVista = (globalid: string, lado: LadoEje) => {
     const abierto = candados[lado];
     if (abierto) {
-      const ajuste = fijarExtremoEje(ajusteActualEje(globalid), lado, null);
-      persistirAjusteEje(globalid, ajuste);
+      // Al cerrar el candado el extremo vuelve a la alineación común.
+      persistirAjusteEje(globalid, fijarExtremoEje(ajusteActualEje(globalid), lado, null));
     }
     setCandados((c) => ({ ...c, [lado]: !abierto }));
   };
 
   const quitarCodoVista = (globalid: string, lado: LadoEje, indice: number) => {
     persistirAjusteEje(globalid, quitarCodoEje(ajusteActualEje(globalid), lado, indice));
+  };
+
+  // O021: globos, restablecer y copiar el acomodo a otras vistas.
+  const fijarGlobos = (
+    globalid: string,
+    cambios: { globoInicio?: boolean; globoFin?: boolean },
+  ) => {
+    const actual = normalizarAjusteEje(ajusteActualEje(globalid)) ?? {};
+    persistirAjusteEje(globalid, normalizarAjusteEje({ ...actual, ...cambios }));
+  };
+
+  const restablecerEjeVista = (globalid: string) => {
+    persistirAjusteEje(globalid, undefined);
+  };
+
+  const restablecerTodosLosEjes = () => {
+    const ejes = vista.ejes ?? {};
+    const cambios = Object.fromEntries(Object.keys(ejes).map((gid) => [gid, null]));
+    if (Object.keys(cambios).length === 0) return;
+    void fijarAjustesEjes(vista.id, cambios);
+  };
+
+  const abrirCopiarAcomodo = (globalid: string) => {
+    const otras = vistas.filter((v) => v.id !== vista.id && v.tipo === vista.tipo);
+    setDialogoCopiarEje({
+      globalid,
+      seleccion: otras.map((v) => v.id),
+    });
+  };
+
+  const copiarAcomodoAVistas = () => {
+    if (!dialogoCopiarEje) return;
+    const ajuste = copiarAjusteEje(ajusteActualEje(dialogoCopiarEje.globalid));
+    for (const vid of dialogoCopiarEje.seleccion) {
+      void fijarAjustesEjes(vid, { [dialogoCopiarEje.globalid]: ajuste ?? null });
+    }
+    setDialogoCopiarEje(null);
   };
 
   // O006d: distancia al eje paralelo más cercano mientras se dibuja un eje.
@@ -1538,6 +1636,7 @@ export function Visor3D({
     ejesInteraccion.current = [];
     lineasEje.current = [];
     asasNivel.current = [];
+    burbujasEje.current = [];
     while (grupoLocal.children.length) {
       const hijo = grupoLocal.children.pop()!;
       hijo.traverse((objeto) => {
@@ -2448,10 +2547,11 @@ export function Visor3D({
           const puntos = g.puntos.map(([x, y]) => [x, y, zEje] as [number, number, number]);
           lineaCerrada(puntos, materialEje, 1.6, grupoLocal);
           lineasEje.current.push({ globalid: eje.globalid, etiqueta: eje.etiqueta, puntos });
-          const globos: Array<{ punto: Punto2; lado: LadoEje }> = [
-            { punto: g.globoFin, lado: "fin" },
-          ];
-          if (g.globoInicio) globos.push({ punto: g.globoInicio, lado: "inicio" });
+          const globos: Array<{ punto: Punto2; lado: LadoEje }> = [];
+          if (globoVisibleEje(ajuste, "fin")) globos.push({ punto: g.globoFin, lado: "fin" });
+          if (g.globoInicio && globoVisibleEje(ajuste, "inicio")) {
+            globos.push({ punto: g.globoInicio, lado: "inicio" });
+          }
           for (const { punto, lado } of globos) {
             const burbuja = burbujaEje(
               eje.etiqueta,
@@ -2463,6 +2563,7 @@ export function Visor3D({
               burbuja.scale.set(altoBurbuja, altoBurbuja, 1);
               burbuja.renderOrder = 20;
               grupoLocal.add(burbuja);
+              burbujasEje.current.push({ etiqueta: eje.etiqueta, grupo: burbuja });
             }
             ejesInteraccion.current.push({
               globalid: eje.globalid,
@@ -2503,6 +2604,56 @@ export function Visor3D({
               });
             });
           }
+          // O021: asa de codo junto a cada globo (arrastrarla crea el codo) y asas
+          // circulares en los extremos reales de la línea para no perderlos de vista.
+          for (const { punto, lado } of globos) {
+            const haciaAdentro: Punto2 = lado === "fin"
+              ? [eje.x1 - eje.x2, eje.y1 - eje.y2]
+              : [eje.x2 - eje.x1, eje.y2 - eje.y1];
+            const largoHacia = Math.hypot(haciaAdentro[0], haciaAdentro[1]) || 1;
+            const separacionCodo = altoBurbuja * 0.9;
+            const asaCodo: Punto2 = [
+              punto[0] + (haciaAdentro[0] / largoHacia) * separacionCodo,
+              punto[1] + (haciaAdentro[1] / largoHacia) * separacionCodo,
+            ];
+            const ladoMundo = Math.max(altoBurbuja * 0.09, 0.04);
+            lineaCerrada(
+              [
+                [asaCodo[0] - ladoMundo, asaCodo[1] - ladoMundo, zEje],
+                [asaCodo[0] + ladoMundo, asaCodo[1] - ladoMundo, zEje],
+                [asaCodo[0] + ladoMundo, asaCodo[1] + ladoMundo, zEje],
+                [asaCodo[0] - ladoMundo, asaCodo[1] + ladoMundo, zEje],
+                [asaCodo[0] - ladoMundo, asaCodo[1] - ladoMundo, zEje],
+              ],
+              materialEje,
+              1.6,
+              grupoLocal,
+            );
+            ejesInteraccion.current.push({
+              globalid: eje.globalid,
+              etiqueta: eje.etiqueta,
+              lado,
+              tipo: "codo-nuevo",
+              indice: null,
+              punto: [asaCodo[0], asaCodo[1], zEje],
+            });
+          }
+          ejesInteraccion.current.push({
+            globalid: eje.globalid,
+            etiqueta: eje.etiqueta,
+            lado: "inicio",
+            tipo: "base",
+            indice: null,
+            punto: [g.baseInicio[0], g.baseInicio[1], zEje],
+          });
+          ejesInteraccion.current.push({
+            globalid: eje.globalid,
+            etiqueta: eje.etiqueta,
+            lado: "fin",
+            tipo: "base",
+            indice: null,
+            punto: [g.baseFin[0], g.baseFin[1], zEje],
+          });
         }
       }
     }
@@ -2860,9 +3011,8 @@ export function Visor3D({
           ),
           mmAMundo(4, vista.escala),
         );
-        const xEtiquetaParcial = tParcial + separacionTexto + anchoParcial / 2;
         const tTotal =
-          tParcial + separacionTexto + anchoParcial + separacionTexto;
+          tParcial + separacionTexto + 2 * anchoParcial + separacionTexto;
         const anchoTotal =
           ordenados.length >= 3
             ? anchoTextoAprox(
@@ -2874,6 +3024,7 @@ export function Visor3D({
             : mmAMundo(4, vista.escala);
         const xEtiquetaTotal = tTotal + separacionTexto + anchoTotal / 2;
         anotacionesAlzado.current = [];
+        lineasNivelRef.current = [];
         contextoEje.current = {
           tipo: vista.tipo,
           d,
@@ -2956,6 +3107,11 @@ export function Visor3D({
             3,
             grupoLocal,
           );
+          lineasNivelRef.current.push({
+            tipo: "nivel",
+            elev: z,
+            puntos: [puntoHZ(tInicioNivel, z), puntoHZ(tFinNivel, z)],
+          });
           const manual = ajustesNivel[nivel.globalid]?.desplazamiento;
           const desplazamiento =
             manual !== undefined && Number.isFinite(manual)
@@ -3035,8 +3191,15 @@ export function Visor3D({
               : estiloNivel.cabeza === "circulo"
                 ? altoCabeza / 2
                 : 0;
-          const zTexto =
-            estiloNivel.cabeza === "ninguna" ? zCabeza + altoTexto / 2 : zCabeza + altoCabeza / 2;
+          // O021b: el texto va ARRIBA de la línea del nivel con 1,5 mm de papel de
+          // margen, para que la propia línea no lo tache.
+          const margenTextoNivel = mmAMundo(1.5, vista.escala);
+          const zTexto = posicionTextoNivel(
+            zCabeza,
+            estiloNivel.cabeza === "ninguna" ? 0 : altoCabeza,
+            altoTexto,
+            margenTextoNivel,
+          );
           const texto = textoCabezaNivel(z, estiloNivel);
           // O014a: el texto se alinea por su borde izquierdo 1 mm a la derecha de la
           // cabeza, nunca centrado sobre el eje ni sobre el triángulo.
@@ -3125,12 +3288,18 @@ export function Visor3D({
         // O014a: `cotas: false` oculta la cadena y el total, no las líneas ni las cabezas.
         if (estiloNivel.cotas && ordenados.length >= 2) {
           for (const nivel of ordenados) {
+            const finExtension = tParcial + mmAMundo(0.5, vista.escala);
             lineaCerrada(
-              [puntoHZ(tFinNivel, nivel.elevacion), puntoHZ(tParcial + 0.15, nivel.elevacion)],
+              [puntoHZ(tFinNivel, nivel.elevacion), puntoHZ(finExtension, nivel.elevacion)],
               materialNivel,
               3,
               grupoLocal,
             );
+            lineasNivelRef.current.push({
+              tipo: "extension",
+              elev: nivel.elevacion,
+              puntos: [puntoHZ(tFinNivel, nivel.elevacion), puntoHZ(finExtension, nivel.elevacion)],
+            });
             marcarHZ(tParcial, nivel.elevacion);
           }
           for (let i = 0; i + 1 < ordenados.length; i += 1) {
@@ -3146,8 +3315,17 @@ export function Visor3D({
             const etiqueta = formatearCota(valor);
             const sprite = textoCota(etiqueta, colorNivel, fondo, altoTexto, haciaCamara);
             if (sprite) {
+              // O021b: las cotas chicas no caben entre líneas. Van fuera de la línea
+              // de cota y, si hay varias seguidas, alternan dos columnas.
+              const xTextoParcial = posicionTextoCotaFuera(
+                tParcial,
+                anchoParcial,
+                separacionTexto,
+                i,
+                anchoTextoAprox(etiqueta, altoTexto),
+              );
               const pos = puntoHZ(
-                xEtiquetaParcial,
+                xTextoParcial,
                 (inferior.elevacion + superior.elevacion) / 2,
               );
               sprite.position.set(pos[0], pos[1], pos[2]);
@@ -3176,12 +3354,21 @@ export function Visor3D({
           // misma medida de la parcial.
           if (ordenados.length >= 3) {
             for (const nivel of ordenados) {
+              const finExtensionTotal = tTotal + mmAMundo(0.5, vista.escala);
               lineaCerrada(
-                [puntoHZ(tParcial + 0.15, nivel.elevacion), puntoHZ(tTotal + 0.15, nivel.elevacion)],
+                [puntoHZ(tParcial + mmAMundo(0.5, vista.escala), nivel.elevacion), puntoHZ(finExtensionTotal, nivel.elevacion)],
                 materialNivel,
                 3,
                 grupoLocal,
               );
+              lineasNivelRef.current.push({
+                tipo: "extension",
+                elev: nivel.elevacion,
+                puntos: [
+                  puntoHZ(tParcial + mmAMundo(0.5, vista.escala), nivel.elevacion),
+                  puntoHZ(finExtensionTotal, nivel.elevacion),
+                ],
+              });
               marcarHZ(tTotal, nivel.elevacion);
             }
             const primero = ordenados[0];
@@ -3261,20 +3448,32 @@ export function Visor3D({
             oscuro ? "#1f2328" : "#ffffff",
             haciaCamara,
           );
-          if (burbuja) {
+          if (burbuja && globoVisibleEje(ajuste, "fin")) {
             const pos = puntoHZ(g.globoFin[0], g.globoFin[1]);
             burbuja.position.set(pos[0], pos[1], pos[2]);
             burbuja.scale.set(altoBurbuja, altoBurbuja, 1);
             burbuja.renderOrder = 20;
             grupoLocal.add(burbuja);
+            burbujasEje.current.push({ etiqueta: eje.etiqueta, grupo: burbuja });
           }
+          if (globoVisibleEje(ajuste, "fin")) {
+            ejesInteraccion.current.push({
+              globalid: eje.globalid,
+              etiqueta: eje.etiqueta,
+              lado: "fin",
+              tipo: "globo",
+              indice: null,
+              punto: puntoHZ(g.globoFin[0], g.globoFin[1]),
+            });
+          }
+          // O021: asa de codo junto al globo del alzado/corte.
           ejesInteraccion.current.push({
             globalid: eje.globalid,
             etiqueta: eje.etiqueta,
             lado: "fin",
-            tipo: "globo",
+            tipo: "codo-nuevo",
             indice: null,
-            punto: puntoHZ(g.globoFin[0], g.globoFin[1]),
+            punto: puntoHZ(g.globoFin[0], g.globoFin[1] - altoBurbuja * 0.9),
           });
           // El extremo de abajo no lleva globo, pero sí candado y asa.
           ejesInteraccion.current.push({
@@ -4326,12 +4525,45 @@ export function Visor3D({
           if (eje && punto) {
             setEjeSeleccionado(asa.globalid);
             setMenuEje(null);
+            const inicial: Record<string, AjusteEjeVista> = JSON.parse(
+              JSON.stringify(vista.ejes ?? {}),
+            );
+            // O021: el asa de codo crea el codo al empezar a arrastrarla; después el
+            // arrastre mueve el globo (extremo libre) con una quiebra.
+            if (asa.tipo === "codo-nuevo") {
+              const bases = ctx.bases[asa.globalid];
+              const ajuste = ajusteEnCurso?.[asa.globalid] ?? inicial[asa.globalid];
+              if (bases) {
+                const g = geometriaEje(ajuste, bases.inicio, bases.fin, {
+                  globoInicio: true,
+                });
+                const globo = asa.lado === "inicio" ? (g.globoInicio ?? bases.inicio) : g.globoFin;
+                const dx = bases.fin[0] - bases.inicio[0];
+                const dy = bases.fin[1] - bases.inicio[1];
+                const largo = Math.hypot(dx, dy);
+                if (largo > 1e-9) {
+                  const direccion: Punto2 =
+                    asa.lado === "inicio" ? [-dx / largo, -dy / largo] : [dx / largo, dy / largo];
+                  inicial[asa.globalid] = agregarCodoEje(
+                    ajuste,
+                    asa.lado,
+                    globo,
+                    direccion,
+                    mmPapelAMetros(3, vista.escala),
+                    mmPapelAMetros(8, vista.escala),
+                  );
+                }
+              }
+            }
             arrastreEje.current = {
               globalid: asa.globalid,
               etiqueta: asa.etiqueta,
               lado: asa.lado,
               indice: asa.tipo === "codo" ? asa.indice : null,
-              candado: asa.tipo === "codo" || candados[asa.lado],
+              candado:
+                asa.tipo === "codo" || asa.tipo === "codo-nuevo"
+                  ? false
+                  : !candados[asa.lado],
               familia:
                 ctx.tipo === "planta"
                   ? eje.vertical
@@ -4339,10 +4571,9 @@ export function Visor3D({
                     : "horizontal"
                   : "alzado",
               inicio: punto,
-              originales: JSON.parse(JSON.stringify(vista.ejes ?? {})),
+              originales: inicial,
               movido: false,
             };
-            const inicial = JSON.parse(JSON.stringify(vista.ejes ?? {}));
             ajusteEnCursoRef.current = inicial;
             setAjusteEnCurso(inicial);
           }
@@ -4422,35 +4653,20 @@ export function Visor3D({
             ];
           }
           cambios[arrEje.globalid] = siguiente;
-        } else if (arrEje.candado) {
-          const actual = cambios[arrEje.globalid] ?? arrEje.originales[arrEje.globalid];
-          cambios[arrEje.globalid] = fijarExtremoEje(actual, arrEje.lado, punto) ?? {};
         } else {
-          // Candado cerrado: el extremo sigue la alineación común y se mueven todos
-          // los ejes de la misma familia.
-          const delta: Punto2 = [
-            punto[0] - arrEje.inicio[0],
-            punto[1] - arrEje.inicio[1],
-          ];
-          for (const eje of referencias.ejes) {
-            const mismaFamilia =
-              arrEje.familia === "alzado" ||
-              (eje.vertical ? "vertical" : "horizontal") === arrEje.familia;
-            if (!mismaFamilia) continue;
-            const bases = ctx.bases[eje.globalid];
-            if (!bases) continue;
-            const original = arrEje.originales[eje.globalid];
-            const actual = extremoEje(original, arrEje.lado, bases.inicio, bases.fin);
-            const nuevo: Punto2 =
-              arrEje.familia === "horizontal"
-                ? [actual[0] + delta[0], actual[1]]
-                : [actual[0], actual[1] + delta[1]];
-            cambios[eje.globalid] = fijarExtremoEje(
-              cambios[eje.globalid] ?? original,
-              arrEje.lado,
-              nuevo,
-            ) ?? {};
-          }
+          // O021: candado cerrado = arrastra la alineación común de los ejes
+          // paralelos; abierto = solo este eje. La decisión vive en una función pura.
+          const siguientes = arrastrarExtremoEje(
+            cambios,
+            ctx.bases,
+            referencias.ejes,
+            arrEje.globalid,
+            arrEje.lado,
+            [punto[0], punto[1]],
+            arrEje.candado,
+            arrEje.familia,
+          );
+          Object.assign(cambios, siguientes);
         }
         ajusteEnCursoRef.current = cambios;
         setAjusteEnCurso(cambios);
@@ -4644,6 +4860,16 @@ export function Visor3D({
       if (evento.button === 1) {
         evento.preventDefault();
         ajustar();
+        return;
+      }
+      // O021: doble clic en un asa de eje = devolver ese extremo a automático.
+      const asaEje = asaEjeEn(evento.clientX, evento.clientY);
+      if (asaEje) {
+        evento.preventDefault();
+        persistirAjusteEje(
+          asaEje.globalid,
+          restablecerExtremoEje(ajusteActualEje(asaEje.globalid), asaEje.lado),
+        );
         return;
       }
       // O014b: doble clic en el asa de una cabeza nivel = volver al acomodo automático.
@@ -4914,6 +5140,61 @@ export function Visor3D({
         colorFondo: oscuro ? "#1f2328" : "#ffffff",
       };
     };
+    // O021: caja en pantalla del texto real del globo y desviación de su centro
+    // respecto del centro del globo (para medir el centrado con 1, 2 o 3 caracteres).
+    (nodo as unknown as Record<string, unknown>).__openrvtEjeTextoGloboPantalla = (
+      etiqueta: string,
+    ) => {
+      const camera = camara.current;
+      if (!camera) return null;
+      const entrada = burbujasEje.current.find((b) => b.etiqueta === etiqueta);
+      if (!entrada) return null;
+      const texto = entrada.grupo.children.find(
+        (hijo) => (hijo as THREE.Object3D & { text?: string }).text !== undefined,
+      ) as (THREE.Mesh & { textRenderInfo?: { visibleBounds?: [number, number, number, number] } }) | undefined;
+      if (!texto) return null;
+      camera.updateMatrixWorld();
+      entrada.grupo.updateMatrixWorld(true);
+      const rect = nodo.getBoundingClientRect();
+      if (!texto.geometry) return null;
+      texto.geometry.computeBoundingBox();
+      const caja = texto.geometry.boundingBox;
+      if (!caja) return null;
+      const cajaLocal = {
+        x0: caja.min.x + texto.position.x,
+        x1: caja.max.x + texto.position.x,
+        y0: caja.min.y + texto.position.y,
+        y1: caja.max.y + texto.position.y,
+      };
+      const puntos: Array<{ x: number; y: number }> = [];
+      for (const x of [cajaLocal.x0, cajaLocal.x1]) {
+        for (const y of [cajaLocal.y0, cajaLocal.y1]) {
+          const p = new THREE.Vector3(x, y, texto.position.z).applyMatrix4(texto.matrixWorld).project(camera);
+          puntos.push({
+            x: rect.left + ((p.x + 1) / 2) * rect.width,
+            y: rect.top + ((1 - p.y) / 2) * rect.height,
+          });
+        }
+      }
+      const mundoGlobo = new THREE.Vector3();
+      entrada.grupo.getWorldPosition(mundoGlobo);
+      const centroGlobo = pantallaDePunto([mundoGlobo.x, mundoGlobo.y, mundoGlobo.z]);
+      if (!centroGlobo) return null;
+      const x0 = Math.min(...puntos.map((p) => p.x));
+      const x1 = Math.max(...puntos.map((p) => p.x));
+      const y0 = Math.min(...puntos.map((p) => p.y));
+      const y1 = Math.max(...puntos.map((p) => p.y));
+      return {
+        etiqueta,
+        x0,
+        y0,
+        x1,
+        y1,
+        centro: { x: (x0 + x1) / 2, y: (y0 + y1) / 2 },
+        centroGlobo,
+        desviacion: Math.hypot((x0 + x1) / 2 - centroGlobo.x, (y0 + y1) / 2 - centroGlobo.y),
+      };
+    };
     // O011b: rectángulos de etiquetas, globos y líneas de eje en pantalla, para
     // comprobar que nada se encima en el alzado.
     (nodo as unknown as Record<string, unknown>).__openrvtAlzadoAnotacionesPantalla = () => {
@@ -4973,7 +5254,12 @@ export function Visor3D({
         etiqueta: linea.etiqueta,
         puntos: linea.puntos.map(([x, y, z]) => proyectar(x, y, z)),
       }));
-      return { etiquetas, globos, lineas };
+      const lineasNivel = lineasNivelRef.current.map((linea) => ({
+        tipo: linea.tipo,
+        elev: linea.elev,
+        puntos: linea.puntos.map(([x, y, z]) => proyectar(x, y, z)),
+      }));
+      return { etiquetas, globos, lineas, lineasNivel };
     };
     // Utilidad de las E2E: acercar o alejar por un factor exacto (0.125 = ×8).
     (nodo as unknown as Record<string, unknown>).__openrvtZoom = (factor: number) => {
@@ -5138,7 +5424,7 @@ export function Visor3D({
             type="button"
             data-testid="eje-candado-inicio"
             aria-pressed={candados.inicio}
-            title="Candado del extremo de inicio: abierto se mueve solo"
+            title="Candado del extremo de inicio: cerrado mueve los ejes alineados; abierto mueve solo este eje"
             onClick={() => alternarCandadoVista(ejeSeleccionadoDatos.globalid, "inicio")}
             className={`rounded border px-1.5 py-0.5 ${
               candados.inicio ? "bg-amber-200 text-amber-950" : "hover:bg-muted"
@@ -5150,7 +5436,7 @@ export function Visor3D({
             type="button"
             data-testid="eje-candado-fin"
             aria-pressed={candados.fin}
-            title="Candado del extremo final: abierto se mueve solo"
+            title="Candado del extremo final: cerrado mueve los ejes alineados; abierto mueve solo este eje"
             onClick={() => alternarCandadoVista(ejeSeleccionadoDatos.globalid, "fin")}
             className={`rounded border px-1.5 py-0.5 ${
               candados.fin ? "bg-amber-200 text-amber-950" : "hover:bg-muted"
@@ -5158,6 +5444,28 @@ export function Visor3D({
           >
             {candados.fin ? "🔓" : "🔒"} Fin
           </button>
+          <label className="flex items-center gap-1" title="Mostrar u ocultar el globo del extremo de inicio">
+            <input
+              type="checkbox"
+              data-testid="eje-globo-inicio"
+              checked={globoVisibleEje(ajusteSeleccionado, "inicio")}
+              onChange={(e) =>
+                fijarGlobos(ejeSeleccionadoDatos.globalid, { globoInicio: e.target.checked })
+              }
+            />
+            Globo inicio
+          </label>
+          <label className="flex items-center gap-1" title="Mostrar u ocultar el globo del extremo final">
+            <input
+              type="checkbox"
+              data-testid="eje-globo-fin"
+              checked={globoVisibleEje(ajusteSeleccionado, "fin")}
+              onChange={(e) =>
+                fijarGlobos(ejeSeleccionadoDatos.globalid, { globoFin: e.target.checked })
+              }
+            />
+            Globo fin
+          </label>
           <button
             type="button"
             data-testid="eje-codo-inicio-agregar"
@@ -5215,6 +5523,82 @@ export function Visor3D({
               Agregar codo
             </button>
           )}
+          {menuEje.indice === null && (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="eje-menu-globos-ambos"
+                className="w-full rounded px-2 py-1 text-left hover:bg-muted"
+                onClick={() => {
+                  fijarGlobos(menuEje.globalid, { globoInicio: true, globoFin: true });
+                  setMenuEje(null);
+                }}
+              >
+                Mostrar globo en ambos extremos
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="eje-menu-ocultar-inicio"
+                className="w-full rounded px-2 py-1 text-left hover:bg-muted"
+                onClick={() => {
+                  fijarGlobos(menuEje.globalid, { globoInicio: false });
+                  setMenuEje(null);
+                }}
+              >
+                Ocultar globo inicio
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="eje-menu-ocultar-fin"
+                className="w-full rounded px-2 py-1 text-left hover:bg-muted"
+                onClick={() => {
+                  fijarGlobos(menuEje.globalid, { globoFin: false });
+                  setMenuEje(null);
+                }}
+              >
+                Ocultar globo fin
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            role="menuitem"
+            data-testid="eje-menu-restablecer"
+            className="w-full rounded px-2 py-1 text-left hover:bg-muted"
+            onClick={() => {
+              restablecerEjeVista(menuEje.globalid);
+              setMenuEje(null);
+            }}
+          >
+            Restablecer acomodo de este eje
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            data-testid="eje-menu-restablecer-todos"
+            className="w-full rounded px-2 py-1 text-left hover:bg-muted"
+            onClick={() => {
+              restablecerTodosLosEjes();
+              setMenuEje(null);
+            }}
+          >
+            Restablecer todos los ejes de la vista
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            data-testid="eje-menu-copiar"
+            className="w-full rounded px-2 py-1 text-left hover:bg-muted"
+            onClick={() => {
+              abrirCopiarAcomodo(menuEje.globalid);
+              setMenuEje(null);
+            }}
+          >
+            Copiar acomodo a otras vistas…
+          </button>
           <button
             type="button"
             role="menuitem"
@@ -5223,6 +5607,68 @@ export function Visor3D({
           >
             Cerrar
           </button>
+        </div>
+      )}
+      {dialogoCopiarEje && (
+        <div
+          data-testid="eje-copiar-dialogo"
+          className="absolute inset-0 z-40 flex items-center justify-center bg-black/30 p-4"
+          onClick={() => setDialogoCopiarEje(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded border bg-background p-3 text-xs shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-2 font-semibold">Copiar acomodo a otras vistas</p>
+            {vistas.filter((v) => v.id !== vista.id && v.tipo === vista.tipo).length === 0 ? (
+              <p className="mb-2 text-muted-foreground">No hay otras vistas del mismo tipo.</p>
+            ) : (
+              <div className="mb-2 flex flex-col gap-1">
+                {vistas
+                  .filter((v) => v.id !== vista.id && v.tipo === vista.tipo)
+                  .map((v) => (
+                    <label key={v.id} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        data-testid={`eje-copiar-vista-${v.id}`}
+                        checked={dialogoCopiarEje.seleccion.includes(v.id)}
+                        onChange={(e) =>
+                          setDialogoCopiarEje((d) =>
+                            d
+                              ? {
+                                  ...d,
+                                  seleccion: e.target.checked
+                                    ? [...d.seleccion, v.id]
+                                    : d.seleccion.filter((id) => id !== v.id),
+                                }
+                              : d,
+                          )
+                        }
+                      />
+                      <span>{v.nombre}</span>
+                    </label>
+                  ))}
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                data-testid="eje-copiar-cancelar"
+                className="rounded border px-2 py-1 hover:bg-muted"
+                onClick={() => setDialogoCopiarEje(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                data-testid="eje-copiar-aceptar"
+                className="rounded border bg-primary px-2 py-1 text-primary-foreground hover:opacity-90"
+                onClick={copiarAcomodoAVistas}
+              >
+                Copiar
+              </button>
+            </div>
+          </div>
         </div>
       )}
       <ControlesZoom

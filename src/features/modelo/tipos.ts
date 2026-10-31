@@ -39,6 +39,10 @@ export interface AjusteEjeVista {
   /** Codos: 0, 1 o 2 vértices entre el final de la línea y el globo, por extremo. */
   codosInicio?: [number, number][];
   codosFin?: [number, number][];
+  /** O021: visibilidad del globo por extremo. Por omisión: fin visible e inicio
+   *  visible solo cuando el extremo se ha tocado (como en O011). */
+  globoInicio?: boolean;
+  globoFin?: boolean;
 }
 
 /** O014b: desplazamiento manual de la cabeza de un nivel dentro de una vista. */
