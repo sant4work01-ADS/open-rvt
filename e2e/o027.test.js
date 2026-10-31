@@ -159,39 +159,6 @@ async function ajustesVista(ses, nombre = "Planta Nivel 0") {
   return { vista, ejes: vista.ejes ?? {} };
 }
 
-async function arrastrarAsa(ses, etiqueta, lado, deltaY) {
-  const inicio = await ses.driver.executeScript(
-    (etiqueta, lado) =>
-      document.querySelector('[data-testid="visor"]').__openrvtEjeAPantalla(etiqueta, lado),
-    etiqueta,
-    lado,
-  );
-  assert.ok(inicio, `no se encontró el asa ${etiqueta}/${lado}`);
-  const fin = { x: inicio.x, y: inicio.y + deltaY };
-  await ses.driver.executeScript(
-    (inicio, fin) => {
-      const canvas = document.querySelector('[data-testid="visor"] canvas');
-      const abajo = {
-        bubbles: true,
-        cancelable: true,
-        button: 0,
-        buttons: 1,
-        pointerId: 7,
-        pointerType: "mouse",
-        clientX: inicio.x,
-        clientY: inicio.y,
-      };
-      canvas.dispatchEvent(new PointerEvent("pointerdown", abajo));
-      window.dispatchEvent(new PointerEvent("pointermove", { ...abajo, clientX: (inicio.x + fin.x) / 2, clientY: (inicio.y + fin.y) / 2 }));
-      window.dispatchEvent(new PointerEvent("pointermove", { ...abajo, clientX: fin.x, clientY: fin.y }));
-      window.dispatchEvent(new PointerEvent("pointerup", { ...abajo, buttons: 0, clientX: fin.x, clientY: fin.y }));
-    },
-    inicio,
-    fin,
-  );
-  await esperar(900);
-}
-
 async function seleccionarEjeEn(ses, x) {
   const punto = await proyectar(ses, x, 3);
   assert.ok(punto, `no se pudo proyectar el eje en x=${x}`);
