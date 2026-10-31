@@ -247,6 +247,28 @@ test("O019: las esquinas verticales de muros y losa se dibujan en 3D", async () 
       "7.0000,-1.0000",
       "7.0000,5.0000",
     ]);
+    // El hueco interior mide 5 × 4 m con muros de ~0.18 m; la esquina interior de
+    // la unión cae en el primer metro de cada cuadrante. Antes del arreglo las
+    // cuatro se suprimían (16 verticales en total, ninguna interior).
+    const cuadrantes = [
+      [0, 1, 0, 1],
+      [4, 5, 0, 1],
+      [4, 5, 3, 4],
+      [0, 1, 3, 4],
+    ];
+    for (const [x0, x1, y0, y1] of cuadrantes) {
+      const enCuadrante = verticales.filter(
+        (v) =>
+          v.z0 >= -1e-3 &&
+          v.x > x0 && v.x < x1 &&
+          v.y > y0 && v.y < y1,
+      );
+      assert.equal(
+        enCuadrante.length,
+        1,
+        `la esquina interior (${x0}..${x1}, ${y0}..${y1}) tiene ${enCuadrante.length} verticales`,
+      );
+    }
 
     const captura = path.join(RESULTADOS, "o019-perspectiva.png");
     await ses.captura(captura);
