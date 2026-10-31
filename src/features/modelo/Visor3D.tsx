@@ -23,7 +23,9 @@ import {
   type ResumenGrabacion,
   type TipoEventoGrabado,
 } from "@/lib/rueda";
+import { listen } from "@tauri-apps/api/event";
 import { copiarTexto } from "@/lib/portapapeles";
+import { debeIgnorarGestoNativo, factorGestoZoom } from "@/lib/gestos";
 import { elegirDestinoDiagnostico } from "@/lib/dialogos";
 import { commands } from "@/lib/bindings";
 import {
@@ -962,6 +964,11 @@ export function Visor3D({
   const [resumenGrabacion, setResumenGrabacion] = useState<ResumenGrabacion | null>(null);
   const grabacionRef = useRef<{ inicio: number; eventos: EventoGrabado[] } | null>(null);
   const temporizadorGrabacion = useRef<number | null>(null);
+  // O018: estado del gesto nativo y del anti doble zoom con Ctrl + rueda.
+  const actualizarGrosoresRef = useRef<() => void>(() => {});
+  const ultimoWheelCtrlRef = useRef<number | null>(null);
+  const distanciaGestoRef = useRef<number | null>(null);
+  const toquesNativosRef = useRef(new Map<number, { x: number; y: number }>());
 
   const detenerGrabacion = useCallback(() => {
     const grabacion = grabacionRef.current;
@@ -1379,6 +1386,50 @@ export function Visor3D({
     }
     guardarCamaraActual();
   }, [cajaVista, guardarCamaraActual]);
+  // O018: único punto de zoom del visor. Lo usan `alRodar` y el gesto nativo de
+  // Windows (GID_ZOOM y dos contactos PT_TOUCHPAD), centrado en un punto de
+  // pantalla. El factor es el de la convención del visor: <1 acerca.
+  const aplicarZoom = useCallback(
+    (factor: number, puntoPantalla?: { x: number; y: number }) => {
+      const camera = camara.current;
+      const nav = navegacion.current;
+      const nodo = contenedor.current;
+      if (!camera || !nav || !Number.isFinite(factor) || factor <= 0) return;
+      const rect = nodo?.getBoundingClientRect();
+      const x = puntoPantalla?.x ?? (rect ? rect.left + rect.width / 2 : 0);
+      const y = puntoPantalla?.y ?? (rect ? rect.top + rect.height / 2 : 0);
+      if (camera instanceof THREE.OrthographicCamera) {
+        if (!rect) return;
+        const raton = new THREE.Vector2(
+          ((x - rect.left) / Math.max(rect.width, 1)) * 2 - 1,
+          -((y - rect.top) / Math.max(rect.height, 1)) * 2 + 1,
+        );
+        const rayo = new THREE.Raycaster();
+        rayo.setFromCamera(raton, camera);
+        const direccionVista = new THREE.Vector3();
+        camera.getWorldDirection(direccionVista);
+        const plano = new THREE.Plane().setFromNormalAndCoplanarPoint(
+          direccionVista,
+          nav.objetivo,
+        );
+        const punto = new THREE.Vector3();
+        const hayPunto = rayo.ray.intersectPlane(plano, punto) !== null;
+        camera.left *= factor;
+        camera.right *= factor;
+        camera.top *= factor;
+        camera.bottom *= factor;
+        if (hayPunto) {
+          nav.objetivo.sub(punto).multiplyScalar(factor).add(punto);
+        }
+        camera.updateProjectionMatrix();
+      } else if (camera instanceof THREE.PerspectiveCamera) {
+        nav.distancia = Math.max(0.5, nav.distancia * factor);
+      }
+      aplicarCamara();
+      actualizarGrosoresRef.current();
+    },
+    [aplicarCamara],
+  );
   // O006e: metros de mundo por píxel de pantalla en la cámara actual. Es la base
   // de la tolerancia de enganche (12 px) y del tamaño de su marca (10 px).
   const metrosPorPixelActual = useCallback(() => {
@@ -3784,6 +3835,7 @@ export function Visor3D({
         entrada.material.resolution.set(ancho, alto);
       }
     };
+    actualizarGrosoresRef.current = actualizarGrosores;
     const escalaActual = () => {
       const camera = camara.current;
       const nav = navegacion.current;
@@ -3794,6 +3846,8 @@ export function Visor3D({
     };
     const alRodar = (evento: WheelEvent) => {
       evento.preventDefault();
+      // O018: si el pellizco llega como wheel con Ctrl, el gesto nativo se ignora.
+      if (evento.ctrlKey) ultimoWheelCtrlRef.current = performance.now();
       const camera = camara.current;
       const nav = navegacion.current;
       if (!camera || !nav) return;
@@ -3803,33 +3857,7 @@ export function Visor3D({
       const escalaAntes = escalaActual();
       const factor = accion === "zoom" ? factorZoomRueda(evento, dispositivo) : undefined;
       if (accion === "zoom" && factor !== undefined) {
-        if (camera instanceof THREE.OrthographicCamera) {
-          const rect = nodo.getBoundingClientRect();
-          const raton = new THREE.Vector2(
-            ((evento.clientX - rect.left) / rect.width) * 2 - 1,
-            -((evento.clientY - rect.top) / rect.height) * 2 + 1,
-          );
-          const rayo = new THREE.Raycaster();
-          rayo.setFromCamera(raton, camera);
-          const direccionVista = new THREE.Vector3();
-          camera.getWorldDirection(direccionVista);
-          const plano = new THREE.Plane().setFromNormalAndCoplanarPoint(
-            direccionVista,
-            nav.objetivo,
-          );
-          const punto = new THREE.Vector3();
-          const hayPunto = rayo.ray.intersectPlane(plano, punto) !== null;
-          camera.left *= factor;
-          camera.right *= factor;
-          camera.top *= factor;
-          camera.bottom *= factor;
-          if (hayPunto) {
-            nav.objetivo.sub(punto).multiplyScalar(factor).add(punto);
-          }
-          camera.updateProjectionMatrix();
-        } else if (camera instanceof THREE.PerspectiveCamera) {
-          nav.distancia = Math.max(0.5, nav.distancia * factor);
-        }
+        aplicarZoom(factor, { x: evento.clientX, y: evento.clientY });
       } else {
         // O006e: en 3D, Shift + dos dedos orbita; en planta panea en horizontal.
         const es3d = vista.tipo === "iso" || vista.tipo === "perspectiva";
@@ -3895,6 +3923,7 @@ export function Visor3D({
     return () => nodo.removeEventListener("wheel", alRodar);
   }, [
     aplicarCamara,
+    aplicarZoom,
     cajaVista,
     preferenciaRueda,
     fijarDetectado,
@@ -3953,6 +3982,100 @@ export function Visor3D({
       window.removeEventListener("keyup", alTecla, opciones);
     };
   }, [grabando, detenerGrabacion]);
+
+  // O018: gestos que Windows entrega por la escucha nativa. Se registran en la
+  // grabación como `nativo:<mensaje>` y, si nadie los duplicó con Ctrl + rueda,
+  // mueven el zoom con la misma `aplicarZoom` de la rueda.
+  useEffect(() => {
+    interface CargaGestoNativo {
+      ms: number;
+      ventana: string;
+      mensaje: string;
+      detalle?: Record<string, unknown>;
+    }
+    const puntoDelDetalle = (detalle: Record<string, unknown> | undefined) => {
+      const x = Number(detalle?.x);
+      const y = Number(detalle?.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y) || (x === 0 && y === 0)) {
+        return undefined;
+      }
+      // Windows entrega píxeles físicos de pantalla; el visor usa píxeles CSS.
+      const dpr = window.devicePixelRatio || 1;
+      return { x: x / dpr - window.screenX, y: y / dpr - window.screenY };
+    };
+    const manejar = (carga: CargaGestoNativo) => {
+      const { mensaje, detalle, ventana } = carga;
+      const grabacion = grabacionRef.current;
+      if (grabacion && grabacion.eventos.length < 5000) {
+        grabacion.eventos.push({
+          t: performance.now() - grabacion.inicio,
+          tipo: `nativo:${mensaje}`,
+          ctrlKey: Boolean(detalle?.control),
+          shiftKey: false,
+          ventana,
+          detalle,
+        });
+      }
+      const ahora = performance.now();
+      if (mensaje.startsWith("WM_MOUSEWHEEL") || mensaje.startsWith("WM_MOUSEHWHEEL")) {
+        if (detalle?.control) ultimoWheelCtrlRef.current = ahora;
+        return;
+      }
+      if (mensaje === "GID_ZOOM") {
+        const actual = Number(detalle?.ullArguments);
+        const flags = Number(detalle?.flags ?? 0);
+        if (flags & 1) distanciaGestoRef.current = null;
+        const anterior = distanciaGestoRef.current;
+        distanciaGestoRef.current = actual > 0 ? actual : null;
+        if (anterior === null) return;
+        const factor = factorGestoZoom(anterior, actual);
+        if (factor === 1 || debeIgnorarGestoNativo(ultimoWheelCtrlRef.current, ahora)) {
+          return;
+        }
+        aplicarZoom(1 / factor, puntoDelDetalle(detalle));
+        return;
+      }
+      if (!mensaje.startsWith("WM_POINTER")) return;
+      if (mensaje === "WM_POINTERUP") {
+        toquesNativosRef.current.delete(Number(detalle?.pointerId));
+        distanciaGestoRef.current = null;
+        return;
+      }
+      if (detalle?.tipo !== "touchpad") return;
+      const id = Number(detalle?.pointerId);
+      const x = Number(detalle?.x) || 0;
+      const y = Number(detalle?.y) || 0;
+      toquesNativosRef.current.set(id, { x, y });
+      if (toquesNativosRef.current.size !== 2) {
+        distanciaGestoRef.current = null;
+        return;
+      }
+      const [a, b] = [...toquesNativosRef.current.values()];
+      const distancia = Math.hypot(a.x - b.x, a.y - b.y);
+      const anterior = distanciaGestoRef.current;
+      distanciaGestoRef.current = distancia > 0 ? distancia : null;
+      if (anterior === null) return;
+      const factor = factorGestoZoom(anterior, distancia);
+      if (factor === 1 || debeIgnorarGestoNativo(ultimoWheelCtrlRef.current, ahora)) {
+        return;
+      }
+      aplicarZoom(1 / factor, puntoDelDetalle(detalle));
+    };
+    let vivo = true;
+    let quitar: (() => void) | undefined;
+    listen<CargaGestoNativo>("gesto-nativo", (evento) => manejar(evento.payload))
+      .then((desuscribir) => {
+        if (vivo) quitar = desuscribir;
+        else desuscribir();
+      })
+      .catch(() => {
+        /* fuera de Tauri (vitest) no hay bus de eventos */
+      });
+    return () => {
+      vivo = false;
+      quitar?.();
+    };
+  }, [aplicarZoom]);
 
   // Paneo, órbita, selección, toques y puntos del corte.
   useEffect(() => {
@@ -5180,6 +5303,16 @@ export function Visor3D({
                   ))}
                 </tbody>
               </table>
+              <p data-testid="diagnostico-rueda-nativos" className="mt-1">
+                nativo:{" "}
+                {Object.entries(resumenGrabacion.nativos.porMensaje)
+                  .map(([mensaje, cantidad]) => `${mensaje} ${cantidad}`)
+                  .join(" · ") || "—"}{" "}
+                · ventana:{" "}
+                {Object.entries(resumenGrabacion.nativos.porVentana)
+                  .map(([ventana, cantidad]) => `${ventana} ${cantidad}`)
+                  .join(" · ") || "—"}
+              </p>
             </div>
           ) : (
             <p className="text-muted-foreground">
