@@ -5,6 +5,7 @@
 # actualiza latest.json. La versión sale de src-tauri/tauri.conf.json del repositorio;
 # súbela y haz commit antes. La primera publicación la hace el supervisor.
 set -euo pipefail
+export PYTHONUTF8=1 PYTHONIOENCODING=utf-8  # Windows: si no, python escribe latest.json en cp1252
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NOTAS="${1:?uso: publicar-actualizacion.sh \"<notas>\"}"
 # Directo por Tailscale: por Cloudflare las subidas largas fallan con 524.
@@ -25,6 +26,7 @@ export TAURI_SIGNING_PRIVATE_KEY=$(cat ~/.tauri/openrvt-updater.key) TAURI_SIGNI
 npx tauri build --target x86_64-pc-windows-msvc --bundles nsis > /tmp/openrvt-publicar.log 2>&1 || { tail -30 /tmp/openrvt-publicar.log; exit 1; }
 D=$CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/bundle/nsis
 EXE=$(ls -t "$D"/*"_${V}_"*setup.exe | head -1); SIG=$EXE.sig
+command -v cygpath >/dev/null && { EXE=$(cygpath -m "$EXE"); SIG=$EXE.sig; }  # curl de Windows no entiende /c/...
 [ -f "$SIG" ] || { echo "No se generó la firma $SIG"; exit 1; }
 NOMBRE=OPEN-RVT_${V}_x64-setup.exe
 
@@ -50,4 +52,10 @@ print(json.dumps(d))' "$B64" "$V" "$SHA")
 if [ -n "$SHA" ]; then api -X PUT -H "Content-Type: application/json" "$GITEA/repos/$REPO/contents/latest.json" -d "$CUERPO" >/dev/null
 else api -X POST -H "Content-Type: application/json" "$GITEA/repos/$REPO/contents/latest.json" -d "$CUERPO" >/dev/null; fi
 curl -sf -A "$UA" https://gitea.spm.lat/$REPO/raw/branch/main/latest.json | python3 -c "import json,sys; d=json.load(sys.stdin); print('publicado', d['version'], d['platforms']['windows-x86_64']['url'])"
+# Comprobación de lo que ve la app: latest.json en UTF-8, versión, firma y descarga.
+curl -sf -A "$UA" https://gitea.spm.lat/$REPO/raw/branch/main/latest.json -o /tmp/openrvt-latest.json
+python3 -c 'import json,sys; d=json.loads(open(sys.argv[1],"rb").read().decode("utf-8")); w=d["platforms"]["windows-x86_64"]
+assert d["version"]==sys.argv[2], d["version"]; assert w["signature"]==open(sys.argv[3]).read().strip(), "firma distinta"' /tmp/openrvt-latest.json "$V" "$SIG"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -L -I -A "$UA" "$URL")" = 200 ] || { echo "El instalador no se descarga: $URL"; exit 1; }
+echo "VERIFICADO $V"
 echo "Instalador: $URL"
