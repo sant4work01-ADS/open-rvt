@@ -13,6 +13,7 @@ import {
   type Vista,
 } from "./tipos";
 import { globoVisibleEje } from "./ejesVista";
+import { describirEnlace } from "./enlaces";
 
 function formatear(valor: unknown): string {
   if (valor === null || valor === undefined) return "—";
@@ -705,12 +706,13 @@ export function PropiedadesElemento() {
   const editar = useModelo((s) => s.editarElemento);
   const tipos = useModelo((s) => s.tiposMuro);
   const error = useModelo((s) => s.error);
+  const soltarEnlace = useModelo((s) => s.soltarEnlace);
+  const ejes = useModelo((s) => s.referencias.ejes);
   if (!propiedades) {
     return <div className="p-3 text-xs text-muted-foreground">Cargando propiedades…</div>;
   }
   const gid = propiedades.globalid;
   const esMuro = propiedades.clase === "IfcWall" || propiedades.clase === "IfcWallStandardCase";
-  const esColumna = propiedades.clase === "IfcColumn";
   const esLosa = propiedades.clase === "IfcSlab";
   const esAbertura = propiedades.clase === "IfcDoor" || propiedades.clase === "IfcWindow";
   const estructura = propiedades.psets?.OPENRVT_Estructura as
@@ -827,16 +829,34 @@ export function PropiedadesElemento() {
                 onGuardar={(valor) => void editar(gid, { Desfase: valor })}
               />
             )}
-            {esColumna && (
+            {!esMuro && (
               <RestriccionesNivel
                 globalid={gid}
                 testidAltura="elemento-altura-estructura"
-                alturaActual={Number(estructura?.Altura ?? 0)}
+                alturaActual={Number(estructura?.Altura ?? estructura?.H ?? 0)}
               />
             )}
           </>
         )}
       </fieldset>
+      {propiedades.enlace && (
+        <div
+          data-testid="elemento-enlace"
+          className="flex items-center justify-between gap-2 border-b pb-2 text-xs"
+        >
+          <span>
+            Enlazado a: {describirEnlace(propiedades.enlace, ejes)}
+          </span>
+          <button
+            type="button"
+            data-testid="soltar-enlace"
+            className="rounded border px-2 py-1"
+            onClick={() => void soltarEnlace(gid)}
+          >
+            Soltar enlace
+          </button>
+        </div>
+      )}
       {esEstructural && (
         <div className="border-b pb-2">
           <AceroElemento globalid={gid} />

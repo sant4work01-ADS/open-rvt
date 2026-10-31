@@ -430,12 +430,23 @@ class ModeloNucleo(
             "materiales": materiales,
             "psets": psets,
         }
-        # O016: la interpretación tolerante de base/tope también para IFC sin pset.
-        if elemento.is_a("IfcWall") or elemento.is_a("IfcColumn"):
+        # O016/O028: base y tope para todo lo estructural, también sin pset.
+        if (
+            elemento.is_a("IfcWall")
+            or elemento.is_a("IfcColumn")
+            or elemento.is_a("IfcBeam")
+            or elemento.is_a("IfcFooting")
+        ):
             try:
                 salida["restricciones"] = self._restricciones_de(elemento)
             except Exception:
                 LOG.debug("no se pudieron leer las restricciones", exc_info=True)
+            try:
+                enlace = self._enlace_de(elemento)
+                if enlace:
+                    salida["enlace"] = enlace
+            except Exception:
+                LOG.debug("no se pudo leer el enlace a ejes", exc_info=True)
         return salida
 
     # ------------------------------------------------------------------ geometría

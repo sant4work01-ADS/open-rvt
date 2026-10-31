@@ -276,6 +276,7 @@ export function App() {
             niveles.length > 0 ? Math.max(...niveles.map((n) => n.elevacion)) + 3 : 0;
           void estado.crearNivel(`Nivel ${niveles.length}`, siguiente);
         },
+        al: () => estado.activarHerramienta("alinear"),
         mv: () => estado.activarHerramienta("mover"),
         co: () => estado.activarHerramienta("copiar"),
       };
@@ -341,6 +342,7 @@ export function App() {
         herramientaVentana: () => useModelo.getState().activarHerramienta("ventana"),
         herramientaMover: () => useModelo.getState().activarHerramienta("mover"),
         herramientaCopiar: () => useModelo.getState().activarHerramienta("copiar"),
+        herramientaAlinear: () => useModelo.getState().activarHerramienta("alinear"),
         // O007b: herramientas de estructura.
         herramientaZapata: () => useModelo.getState().activarHerramienta("zapata"),
         herramientaZapataCorrida: () =>
@@ -356,6 +358,10 @@ export function App() {
         castillosAutomaticos: () => useModelo.getState().abrirDialogoCastillos(),
         unirZapatas: () => void useModelo.getState().unirZapatas(),
         unirTrabes: () => void useModelo.getState().unirTrabes(),
+        zapatasEnCruces: () => void useModelo.getState().zapatasEnCruces(),
+        contratrabesEntreEjes: () =>
+          void useModelo.getState().contratrabesEntreEjes(),
+        murosEntreEjes: () => void useModelo.getState().murosEntreEjes(),
         // O007a: el editor vive en el módulo Modelo; la cinta cambia de módulo.
         abrirTipos: () => {
           irAModulo("modelo");

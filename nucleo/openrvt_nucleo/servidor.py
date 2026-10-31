@@ -264,6 +264,35 @@ class Servidor:
             return self._exigir().elemento_editar(
                 str(params.get("globalid") or ""), params.get("cambios")
             )
+        if metodo in ("restricciones.alinear", "elementos.alinear"):
+            return self._exigir().alinear(
+                params.get("referencia"),
+                str(params.get("elemento") or params.get("globalid") or ""),
+                str(params.get("cara") or "cercana"),
+                bool(params.get("bloquear", False)),
+            )
+        if metodo in ("restricciones.enlazar_cruce", "elementos.enlazar_cruce"):
+            return self._exigir().enlazar_a_cruce(
+                str(params.get("globalid") or params.get("elemento") or ""),
+                str(params.get("eje_a") or ""),
+                str(params.get("eje_b") or ""),
+                params.get("dx"),
+                params.get("dy"),
+            )
+        if metodo in ("restricciones.enlazar_tramo", "elementos.enlazar_tramo"):
+            return self._exigir().enlazar_tramo(
+                str(params.get("globalid") or params.get("elemento") or ""),
+                str(params.get("eje_guia") or ""),
+                str(params.get("eje_inicio") or ""),
+                str(params.get("eje_fin") or ""),
+                params.get("desfase"),
+                params.get("desfase_inicio"),
+                params.get("desfase_fin"),
+            )
+        if metodo in ("restricciones.soltar_enlace", "elementos.soltar_enlace"):
+            return self._exigir().soltar_enlace(
+                str(params.get("globalid") or params.get("elemento") or "")
+            )
         if metodo in ("restricciones.editar", "elementos.restricciones"):
             return self._exigir().restricciones_editar(
                 str(params.get("globalid") or ""),
@@ -314,6 +343,27 @@ class Servidor:
                 str(params.get("tipo") or ""),
                 str(params.get("nivel") or ""),
                 params.get("ejes"),
+            )
+        if metodo in ("zapatas.en_cruces", "zapatas.en_cruces_de_ejes"):
+            return self._exigir().zapatas_en_cruces(
+                str(params.get("tipo") or ""),
+                str(params.get("nivel") or ""),
+                params.get("ejes"),
+                params.get("desplante", 1.00),
+            )
+        if metodo in ("contratrabes.entre_ejes", "contratrabe.entre_ejes"):
+            return self._exigir().contratrabes_entre_ejes(
+                str(params.get("tipo") or ""),
+                str(params.get("nivel") or ""),
+                str(params.get("eje_guia") or params.get("guia") or ""),
+                params.get("desfase", -0.10),
+            )
+        if metodo in ("muros.entre_ejes", "muro.entre_ejes"):
+            return self._exigir().muros_entre_ejes(
+                str(params.get("tipo") or ""),
+                str(params.get("nivel") or ""),
+                str(params.get("eje_guia") or params.get("guia") or ""),
+                str(params.get("alineacion") or "centro"),
             )
         if metodo in ("zapatas.bajo_columna", "zapata.bajo_columna"):
             return self._exigir().zapata_bajo_columna(
@@ -370,6 +420,8 @@ class Servidor:
                 params.get("y", 0.0),
                 params.get("rotacion", 0.0),
                 params.get("desplante", 1.00),
+                str(params.get("ejeA") or ""),
+                str(params.get("ejeB") or ""),
             )
         if metodo in ("zapatas_corridas.crear", "zapata_corrida.crear"):
             return self._exigir().zapata_corrida_crear(

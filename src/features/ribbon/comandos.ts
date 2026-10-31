@@ -7,6 +7,7 @@
 // 16 px con texto a la derecha. Los tooltips dicen «Nombre (atajo) — qué hace».
 import type { LucideIcon } from "lucide-react";
 import {
+  AlignHorizontalSpaceAround,
   Box,
   BrickWall,
   ChevronDown,
@@ -104,6 +105,7 @@ export interface AccionesRibbon {
   herramientaVentana: () => void;
   herramientaMover: () => void;
   herramientaCopiar: () => void;
+  herramientaAlinear: () => void;
   /** O007b: herramientas de estructura (un clic o dos, según el elemento). */
   herramientaZapata: () => void;
   herramientaZapataCorrida: () => void;
@@ -117,6 +119,10 @@ export interface AccionesRibbon {
   castillosAutomaticos: () => void;
   unirZapatas: () => void;
   unirTrabes: () => void;
+  /** O028: herramientas por lote sobre la retícula. */
+  zapatasEnCruces?: () => void;
+  contratrabesEntreEjes?: () => void;
+  murosEntreEjes?: () => void;
   /** O007a: abre el editor de tipos y materiales. */
   abrirTipos: () => void;
   borrarSeleccion: () => void;
@@ -423,6 +429,39 @@ export function construirComandosRibbon(a: AccionesRibbon): ComandoRibbon[] {
       accion: a.unirZapatas,
     },
     {
+      id: "zapatas-en-ejes",
+      texto: "Zapatas en ejes",
+      icono: Box,
+      grupo: "Estructura",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      descripcion: "Una zapata enlazada en cada cruce de la retícula",
+      accion: () => a.zapatasEnCruces?.(),
+    },
+    {
+      id: "contratrabes-entre-ejes",
+      texto: "Contratrabes entre ejes",
+      icono: Frame,
+      grupo: "Estructura",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      descripcion: "Tramos de contratrabe entre los cruces del eje seleccionado",
+      accion: () => a.contratrabesEntreEjes?.(),
+    },
+    {
+      id: "muros-entre-ejes",
+      texto: "Muros entre ejes",
+      icono: BrickWall,
+      grupo: "Estructura",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      descripcion: "Tramos de muro entre los cruces del eje seleccionado",
+      accion: () => a.murosEntreEjes?.(),
+    },
+    {
       id: "unir-trabes",
       texto: "Unir columnas",
       icono: RectangleHorizontal,
@@ -432,6 +471,19 @@ export function construirComandosRibbon(a: AccionesRibbon): ComandoRibbon[] {
       habilitado: true,
       descripcion: "Trabes entre columnas consecutivas sobre cada eje",
       accion: a.unirTrabes,
+    },
+    {
+      id: "alinear",
+      texto: "Alinear",
+      icono: AlignHorizontalSpaceAround,
+      atajo: "AL",
+      grupo: "Modificar",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      activo: a.herramientaActiva === "alinear",
+      descripcion: "Alinear la cara de un elemento a un eje, nivel o cara de referencia",
+      accion: a.herramientaAlinear,
     },
     {
       id: "mover",

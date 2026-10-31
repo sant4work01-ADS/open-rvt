@@ -163,7 +163,10 @@ class ModeladoMixin:
     def _entidad_por_gid(self, globalid: str, clases: tuple[str, ...] | None = None) -> Any:
         if not globalid:
             raise self._error("Falta el GlobalId.", -32602)
-        candidatas = self.modelo.by_type(clases[0]) if clases else self.modelo.by_type("IfcRoot")
+        if clases:
+            candidatas = [e for clase in clases for e in self.modelo.by_type(clase)]
+        else:
+            candidatas = self.modelo.by_type("IfcRoot")
         for entidad in candidatas:
             if _gid(entidad) == globalid:
                 return entidad
@@ -277,6 +280,22 @@ class ModeladoMixin:
             pset.HasProperties = list(getattr(pset, "HasProperties", ()) or ()) + [nueva]
             existentes[clave] = nueva
 
+    def _quitar_claves_pset(self, entidad: Any, nombre: str, claves: tuple[str, ...]) -> None:
+        """Borra propiedades concretas de un pset (no basta con reescribirlo)."""
+        pset = self._pset(entidad, nombre)
+        if pset is None:
+            return
+        existentes = {_nombre(p): p for p in (getattr(pset, "HasProperties", ()) or ())}
+        for clave in claves:
+            anterior = existentes.get(clave)
+            if anterior is not None:
+                self.modelo.remove(anterior)
+                pset.HasProperties = [
+                    p
+                    for p in (getattr(pset, "HasProperties", ()) or ())
+                    if p != anterior
+                ]
+
     def _nivel_por_gid(self, globalid: str) -> Any:
         return self._entidad_por_gid(globalid, ("IfcBuildingStorey",))
 
@@ -313,20 +332,44 @@ class ModeladoMixin:
                 return estructura
         return None
 
+    def _peralte_de(self, elemento: Any) -> float:
+        """Peralte del tipo o de la instancia de un elemento horizontal."""
+        tipo = self._tipo_entidad(elemento)
+        _alias, seccion, _armado = self._seccion_y_armado(tipo)
+        return float(seccion.get("H") or seccion.get("Peralte") or 0.20)
+
+    def _lecho_bajo(self, elemento: Any) -> bool:
+        """Las dalas y cerramientos se cuelgan del nivel por su lecho inferior."""
+        alias = self._estructura_de_tipo(self._tipo_entidad(elemento))
+        return alias in ("dala", "cerramiento")
+
     def _z_de_elemento(self, elemento: Any) -> float:
+        """Cota de referencia vertical (base del muro/columna, lecho de vigas)."""
         import ifcopenshell.util.placement as placement
 
         if elemento.is_a("IfcColumn"):
             datos = self._leer_pset(elemento, "OPENRVT_Estructura")
             if datos.get("Base") is not None:
                 return float(datos.get("Base") or 0.0)
-        return float(placement.get_local_placement(elemento.ObjectPlacement)[2][3])
+        if elemento.is_a("IfcWall"):
+            return float(placement.get_local_placement(elemento.ObjectPlacement)[2][3])
+        z = float(placement.get_local_placement(elemento.ObjectPlacement)[2][3])
+        if elemento.is_a("IfcFooting"):
+            predef = _texto(getattr(elemento, "PredefinedType", ""))
+            if predef == "STRIP_FOOTING":
+                return z - self._peralte_de(elemento) / 2.0
+            if predef != "FOOTING_BEAM":
+                return z
+        peralte = self._peralte_de(elemento)
+        return z - peralte / 2.0 if self._lecho_bajo(elemento) else z + peralte / 2.0
 
     def _altura_actual(self, elemento: Any) -> float:
         if elemento.is_a("IfcColumn"):
             datos = self._leer_pset(elemento, "OPENRVT_Estructura")
             return float(datos.get("Altura") or 2.60)
-        return float(self._datos_muro(elemento)["altura"])
+        if elemento.is_a("IfcWall"):
+            return float(self._datos_muro(elemento)["altura"])
+        return self._peralte_de(elemento)
 
     def _restricciones_de(self, elemento: Any) -> dict[str, Any]:
         """Lee las restricciones; un modelo viejo se interpreta sin pset (tolerante)."""
@@ -376,6 +419,11 @@ class ModeladoMixin:
 
     def _aplicar_restriccion(self, elemento: Any, restriccion: dict[str, Any]) -> None:
         """Recalcula z y altura de un muro o columna desde sus restricciones."""
+        # O026: conserva los datos de alineación guardados en el mismo pset.
+        restriccion = {
+            **self._leer_pset(elemento, PSET_RESTRICCIONES),
+            **restriccion,
+        }
         nivel_base = self._nivel_por_gid(_texto(restriccion.get("NivelBase")))
         elev_base = float(nivel_base.Elevation or 0.0)
         tope = _texto(restriccion.get("NivelTope"))
@@ -416,11 +464,37 @@ class ModeladoMixin:
             self._guardar_pset(elemento, "OPENRVT_Estructura", datos)
             self._guardar_pset(elemento, PSET_RESTRICCIONES, restriccion)
             self._regenerar_estructura(elemento)
+        elif elemento.is_a("IfcBeam") or elemento.is_a("IfcFooting"):
+            # O028: trabes, cerramientos, dalas, contratrabes y zapatas siguen al
+            # nivel. Para las piezas horizontales el desfase se mide al lecho de
+            # referencia (tope salvo dala/cerramiento) y el peralte sale del tipo.
+            predef = _texto(getattr(elemento, "PredefinedType", ""))
+            datos = dict(self._leer_pset(elemento, "OPENRVT_Estructura"))
+            peralte = self._peralte_de(elemento)
+            if elemento.is_a("IfcFooting") and predef not in ("FOOTING_BEAM", "STRIP_FOOTING"):
+                datos["Z"] = z
+                datos["Desplante"] = float(nivel_base.Elevation or 0.0) - z
+            elif elemento.is_a("IfcFooting") and predef == "STRIP_FOOTING":
+                datos["Z"] = z + peralte / 2.0
+                datos["Desplante"] = float(nivel_base.Elevation or 0.0) - z
+            else:
+                centro = z + peralte / 2.0 if self._lecho_bajo(elemento) else z - peralte / 2.0
+                datos["Z"] = centro
+                datos["Desfase"] = z - float(nivel_base.Elevation or 0.0)
+            self._guardar_pset(elemento, "OPENRVT_Estructura", datos)
+            self._guardar_pset(elemento, PSET_RESTRICCIONES, restriccion)
+            self._regenerar_estructura(elemento)
 
     def _recalcular_restricciones(self, niveles: set[str]) -> list[Any]:
         """Recalcula los elementos ligados a cualquiera de esos niveles."""
         modificados: list[Any] = []
-        for elemento in self.modelo.by_type("IfcWall") + self.modelo.by_type("IfcColumn"):
+        elementos = (
+            self.modelo.by_type("IfcWall")
+            + self.modelo.by_type("IfcColumn")
+            + self.modelo.by_type("IfcBeam")
+            + self.modelo.by_type("IfcFooting")
+        )
+        for elemento in elementos:
             restriccion = self._restricciones_de(elemento)
             if (
                 restriccion["NivelBase"] in niveles
@@ -593,6 +667,258 @@ class ModeladoMixin:
                 should_transform_children=False,
             )
 
+    # ------------------------------------------------------------------ alinear (O026)
+    def _linea_de(self, entidad: Any) -> tuple[float, float, float, float, float]:
+        """Eje medio en planta y medio ancho perpendicular de un elemento."""
+        if entidad.is_a("IfcWall"):
+            datos = self._datos_muro(entidad)
+            largo = math.hypot(datos["dx"], datos["dy"]) or 1.0
+            return (
+                datos["x1"],
+                datos["y1"],
+                datos["dx"] / largo,
+                datos["dy"] / largo,
+                float(datos["espesor"]) / 2.0,
+            )
+        if entidad.is_a("IfcSlab"):
+            contorno = _texto(self._leer_pset(entidad, "OPENRVT_Losa").get("Contorno"))
+            try:
+                from shapely import wkt as shapely_wkt
+
+                poligono = shapely_wkt.loads(contorno)
+                x1, y1, x2, y2 = poligono.bounds
+                anillo = list(poligono.exterior.coords)
+                dx = float(anillo[1][0]) - float(anillo[0][0])
+                dy = float(anillo[1][1]) - float(anillo[0][1])
+                largo = math.hypot(dx, dy) or 1.0
+                return (
+                    (x1 + x2) / 2.0,
+                    (y1 + y2) / 2.0,
+                    dx / largo,
+                    dy / largo,
+                    min(x2 - x1, y2 - y1) / 2.0,
+                )
+            except Exception as exc:  # pragma: no cover - contorno ajeno
+                raise self._error("La losa no tiene un contorno editable.", -32028) from exc
+        datos = self._leer_pset(entidad, "OPENRVT_Estructura")
+        if entidad.is_a("IfcColumn"):
+            x = float(datos.get("X") or 0.0)
+            y = float(datos.get("Y") or 0.0)
+            rotacion = float(datos.get("Rotacion") or 0.0)
+            ux, uy = math.cos(rotacion), math.sin(rotacion)
+            _, seccion, _ = self._seccion_y_armado(self._tipo_entidad(entidad))
+            ancho = float(seccion.get("B") or seccion.get("Ancho") or 0.30)
+            alto = float(seccion.get("H") or seccion.get("Largo") or 0.30)
+            return x, y, ux, uy, alto / 2.0
+        if entidad.is_a("IfcBeam") or entidad.is_a("IfcFooting"):
+            x1 = float(datos.get("X1") or datos.get("X") or 0.0)
+            y1 = float(datos.get("Y1") or datos.get("Y") or 0.0)
+            x2 = float(datos.get("X2") or x1)
+            y2 = float(datos.get("Y2") or y1)
+            dx, dy = x2 - x1, y2 - y1
+            largo = math.hypot(dx, dy)
+            if largo <= TOLERANCIA_CALCULO:
+                rotacion = float(datos.get("Rotacion") or 0.0)
+                dx, dy = math.cos(rotacion), math.sin(rotacion)
+                largo = 1.0
+            _, seccion, _ = self._seccion_y_armado(self._tipo_entidad(entidad))
+            ancho = float(
+                seccion.get("B")
+                or seccion.get("Ancho")
+                or seccion.get("Largo")
+                or 0.30
+            )
+            return x1, y1, dx / largo, dy / largo, ancho / 2.0
+        raise self._error("Ese elemento no se puede alinear.", -32602)
+
+    def _linea_referencia(self, referencia: Any) -> tuple[float, float, float, float, str]:
+        """Punto, dirección y tipo de la línea de referencia de una alineación."""
+        if isinstance(referencia, str):
+            referencia = {"tipo": "eje", "globalid": referencia}
+        if not isinstance(referencia, dict):
+            raise self._error("La referencia de la alineación no es válida.", -32602)
+        tipo = _texto(referencia.get("tipo") or "eje").casefold()
+        gid = _texto(referencia.get("globalid") or referencia.get("id") or "")
+        cara = _texto(referencia.get("cara") or "centro").casefold()
+        if tipo == "eje":
+            _grid, eje = self._eje_por_gid(gid)
+            x1, y1, _x2, _y2, ux, uy, _largo = self._direccion_eje(eje)
+            return x1, y1, ux, uy, "eje"
+        if tipo == "nivel":
+            self._nivel_por_gid(gid)
+            return 0.0, 0.0, 1.0, 0.0, "nivel"
+        entidad = self._entidad_por_gid(gid)
+        x, y, ux, uy, medio = self._linea_de(entidad)
+        if cara in ("cara1", "derecha", "positiva"):
+            nx, ny = uy, -ux
+            x, y = x + nx * medio, y + ny * medio
+        elif cara in ("cara2", "izquierda", "negativa"):
+            nx, ny = uy, -ux
+            x, y = x - nx * medio, y - ny * medio
+        return x, y, ux, uy, "elemento"
+
+    @staticmethod
+    def _alineacion_bloqueada(datos: dict[str, Any]) -> bool:
+        return datos.get("AlinearBloqueada") in (True, "True", "true", 1, "1")
+
+    def _alineados_de(self, referencia_gid: str) -> list[Any]:
+        """Elementos con candado cerrado sobre esa referencia."""
+        salida: list[Any] = []
+        for clase in ("IfcWall", "IfcColumn", "IfcBeam", "IfcFooting", "IfcSlab"):
+            for entidad in self.modelo.by_type(clase):
+                datos = self._leer_pset(entidad, PSET_RESTRICCIONES)
+                if not self._alineacion_bloqueada(datos):
+                    continue
+                if _texto(datos.get("AlinearReferencia")) != referencia_gid:
+                    continue
+                salida.append(entidad)
+        return salida
+
+    def _mover_alineados_de_referencia(
+        self, referencia_gid: str, dx: float, dy: float, excluir: set[str] | None = None
+    ) -> list[Any]:
+        """O026: los elementos con candado siguen a su referencia."""
+        excluir = excluir or set()
+        movidos: list[Any] = []
+        for entidad in self._alineados_de(referencia_gid):
+            gid = _gid(entidad)
+            if gid in excluir:
+                continue
+            for producto in self._productos_de(gid):
+                self._mover_productos([producto], dx, dy, 0.0)
+                self._desplazar_pset_estructura(producto, dx, dy, 0.0)
+            if entidad.is_a("IfcWall"):
+                self._unir_muros(entidad)
+                self._actualizar_dependientes_muro(entidad)
+            movidos.append(entidad)
+        return movidos
+
+    def alinear(
+        self,
+        referencia: Any,
+        elemento: str,
+        cara: str = "cercana",
+        bloquear: bool = False,
+    ) -> dict[str, Any]:
+        """O026: alinea un elemento con un eje, nivel o cara de otro elemento."""
+        self._exigir_modelo()
+        if not elemento:
+            raise self._error("Seleccione el elemento que quiere alinear.", -32602)
+        entidad = self._entidad_por_gid(str(elemento))
+        if not (
+            entidad.is_a("IfcWall")
+            or entidad.is_a("IfcColumn")
+            or entidad.is_a("IfcBeam")
+            or entidad.is_a("IfcFooting")
+            or entidad.is_a("IfcSlab")
+        ):
+            raise self._error("Ese elemento no se puede alinear.", -32602)
+        cara = _texto(cara or "cercana").casefold()
+        rx, ry, rux, ruy, tipo_ref = self._linea_referencia(referencia)
+        datos_ref = referencia if isinstance(referencia, dict) else {}
+        ref_gid = _texto(datos_ref.get("globalid") or datos_ref.get("id") or referencia)
+        if tipo_ref == "nivel":
+            cara_nivel = cara if cara in ("base", "tope") else "base"
+            if cara_nivel == "tope":
+                resultado = self.restricciones_editar(str(elemento), nivel_tope=ref_gid)
+            else:
+                resultado = self.restricciones_editar(str(elemento), nivel_base=ref_gid)
+            datos = self._leer_pset(entidad, PSET_RESTRICCIONES)
+            datos.update(
+                {
+                    "AlinearTipo": "nivel",
+                    "AlinearReferencia": ref_gid,
+                    "AlinearCara": cara_nivel,
+                    "AlinearBloqueada": bool(bloquear),
+                }
+            )
+            self._guardar_pset(entidad, PSET_RESTRICCIONES, datos)
+            salida = dict(resultado)
+            salida["alineacion"] = {
+                "elemento": str(elemento),
+                "referencia": ref_gid,
+                "tipo": "nivel",
+                "cara": cara_nivel,
+                "bloqueada": bool(bloquear),
+            }
+            return salida
+        if ref_gid and ref_gid == str(elemento):
+            raise self._error("La referencia y el elemento deben ser distintos.", -32602)
+        ex, ey, eux, euy, medio = self._linea_de(entidad)
+        if abs(rux * euy - ruy * eux) > 1e-6 and (
+            entidad.is_a("IfcColumn") or entidad.is_a("IfcFooting")
+        ):
+            # Una columna o zapata rectangular tiene dos pares de caras: se usa el
+            # par paralelo a la referencia (el otro eje local).
+            otro_medio = medio
+            if entidad.is_a("IfcColumn"):
+                _s, seccion, _a = self._seccion_y_armado(self._tipo_entidad(entidad))
+                otro_medio = float(seccion.get("B") or seccion.get("Ancho") or 0.30) / 2.0
+            eux, euy = -euy, eux
+            medio = otro_medio
+        if abs(rux * euy - ruy * eux) > 1e-6:
+            raise self._error(
+                "La cara del elemento no es paralela a la referencia; no se movió nada.",
+                -32027,
+            )
+        nx, ny = ruy, -rux
+        s_ref = rx * nx + ry * ny
+        s_elemento = ex * nx + ey * ny
+        if cara in ("centro", "eje"):
+            objetivo = s_ref
+        elif cara in ("cara1", "derecha", "positiva"):
+            objetivo = s_ref + medio
+        elif cara in ("cara2", "izquierda", "negativa"):
+            objetivo = s_ref - medio
+        else:
+            # Cara más cercana: el elemento queda del mismo lado que ya estaba.
+            lado = 1.0 if s_elemento >= s_ref else -1.0
+            objetivo = s_ref + lado * medio
+        delta = objetivo - s_elemento
+        self._instantanea()
+        try:
+            if abs(delta) > TOLERANCIA_CALCULO:
+                for producto in self._productos_de(str(elemento)):
+                    self._mover_productos([producto], nx * delta, ny * delta, 0.0)
+                    self._desplazar_pset_estructura(producto, nx * delta, ny * delta, 0.0)
+                if entidad.is_a("IfcWall"):
+                    self._unir_muros(entidad)
+                    self._actualizar_dependientes_muro(entidad)
+                elif entidad.is_a("IfcColumn"):
+                    for zapata in self._zapatas_de_columna(entidad):
+                        self._mover_productos([zapata], nx * delta, ny * delta, 0.0)
+            self._recalcular_uniones_estructura()
+            datos = self._leer_pset(entidad, PSET_RESTRICCIONES)
+            datos.update(
+                {
+                    "AlinearTipo": tipo_ref,
+                    "AlinearReferencia": ref_gid,
+                    "AlinearCara": cara,
+                    "AlinearBloqueada": bool(bloquear),
+                }
+            )
+            self._guardar_pset(entidad, PSET_RESTRICCIONES, datos)
+        except Exception:
+            self._revertir_instantanea()
+            raise
+        self.con_cambios = True
+        return self._resultado(
+            modificados=[entidad],
+            mensaje=(
+                "Elemento alineado."
+                if abs(delta) > TOLERANCIA_CALCULO
+                else "El elemento ya estaba alineado."
+            ),
+            desplazamiento=delta,
+            alineacion={
+                "elemento": str(elemento),
+                "referencia": ref_gid,
+                "tipo": tipo_ref,
+                "cara": cara,
+                "bloqueada": bool(bloquear),
+            },
+        )
+
     def niveles_separacion(
         self, inferior: str, superior: str, altura: float, cadena: bool = True
     ) -> dict[str, Any]:
@@ -659,7 +985,12 @@ class ModeladoMixin:
             )
         gid_nivel = _gid(nivel)
         ligados = []
-        for elemento in self.modelo.by_type("IfcWall") + self.modelo.by_type("IfcColumn"):
+        for elemento in (
+            self.modelo.by_type("IfcWall")
+            + self.modelo.by_type("IfcColumn")
+            + self.modelo.by_type("IfcBeam")
+            + self.modelo.by_type("IfcFooting")
+        ):
             restriccion = self._restricciones_de(elemento)
             if gid_nivel in (restriccion["NivelBase"], restriccion["NivelTope"]):
                 ligados.append(_nombre(elemento) or elemento.is_a())
@@ -746,6 +1077,367 @@ class ModeladoMixin:
         return self._resultado(
             modificados=[entidad], mensaje="Restricciones actualizadas."
         )
+
+    # --------------------------------------------------- O028: enlaces a ejes
+    CLAVES_ENLACE = (
+        "EnlaceTipo",
+        "EnlaceEjeA",
+        "EnlaceEjeB",
+        "EnlaceDX",
+        "EnlaceDY",
+        "EnlaceEjeGuia",
+        "EnlaceEjeInicio",
+        "EnlaceEjeFin",
+        "EnlaceDesfase",
+        "EnlaceDesfaseInicio",
+        "EnlaceDesfaseFin",
+        "EnlaceRotacion",
+    )
+
+    def _guardar_enlace_punto(
+        self, elemento: Any, eje_a: str, eje_b: str, x: float, y: float
+    ) -> None:
+        """O028: crea el enlace de cruce al colocar el elemento sobre él."""
+        if not (eje_a and eje_b):
+            return
+        try:
+            px, py = self._cruce_de_ejes(_texto(eje_a), _texto(eje_b))
+        except Exception:
+            return
+        datos = self._leer_pset(elemento, PSET_RESTRICCIONES)
+        datos.update(
+            {
+                "EnlaceTipo": "cruce",
+                "EnlaceEjeA": _texto(eje_a),
+                "EnlaceEjeB": _texto(eje_b),
+                "EnlaceDX": float(x) - px,
+                "EnlaceDY": float(y) - py,
+            }
+        )
+        self._guardar_pset(elemento, PSET_RESTRICCIONES, datos)
+
+    def _enlace_de(self, elemento: Any) -> dict[str, Any]:
+        datos = self._leer_pset(elemento, PSET_RESTRICCIONES)
+        tipo = _texto(datos.get("EnlaceTipo"))
+        if tipo not in ("cruce", "tramo"):
+            return {}
+        salida = {"tipo": tipo}
+        for clave in self.CLAVES_ENLACE[1:]:
+            if clave in datos:
+                salida[clave] = datos.get(clave)
+        return salida
+
+    def _limpiar_enlace(self, elemento: Any) -> bool:
+        datos = self._leer_pset(elemento, PSET_RESTRICCIONES)
+        habia = _texto(datos.get("EnlaceTipo")) in ("cruce", "tramo")
+        if not habia:
+            return False
+        self._quitar_claves_pset(elemento, PSET_RESTRICCIONES, self.CLAVES_ENLACE)
+        self._quitar_claves_pset(elemento, "OPENRVT_Liga", ("EjeA", "EjeB"))
+        return True
+
+    def _direccion_de_eje(self, globalid: str) -> tuple[float, float, float, float]:
+        _grid, eje = self._eje_por_gid(globalid)
+        x1, y1, _x2, _y2, ux, uy, _largo = self._direccion_eje(eje)
+        return x1, y1, ux, uy
+
+    def _cruce_de_ejes(self, eje_a: str, eje_b: str) -> tuple[float, float]:
+        xa, ya, ux, uy = self._direccion_de_eje(eje_a)
+        xb, yb, vx, vy = self._direccion_de_eje(eje_b)
+        den = ux * vy - uy * vx
+        if abs(den) <= TOLERANCIA_CALCULO:
+            raise self._error(
+                "Los ejes son paralelos: no tienen un cruce.", -32027
+            )
+        t = ((xb - xa) * vy - (yb - ya) * vx) / den
+        return xa + ux * t, ya + uy * t
+
+    def _posicion_cruce(self, enlace: dict[str, Any]) -> tuple[float, float]:
+        px, py = self._cruce_de_ejes(
+            _texto(enlace.get("EnlaceEjeA")), _texto(enlace.get("EnlaceEjeB"))
+        )
+        return px + float(enlace.get("EnlaceDX") or 0.0), py + float(
+            enlace.get("EnlaceDY") or 0.0
+        )
+
+    def _extremos_tramo(
+        self, enlace: dict[str, Any]
+    ) -> tuple[float, float, float, float]:
+        guia = _texto(enlace.get("EnlaceEjeGuia"))
+        gx, gy, ux, uy = self._direccion_de_eje(guia)
+        nx, ny = -uy, ux
+        desfase = float(enlace.get("EnlaceDesfase") or 0.0)
+        inicio = self._cruce_de_ejes(guia, _texto(enlace.get("EnlaceEjeInicio")))
+        fin = self._cruce_de_ejes(guia, _texto(enlace.get("EnlaceEjeFin")))
+        di = float(enlace.get("EnlaceDesfaseInicio") or 0.0)
+        df = float(enlace.get("EnlaceDesfaseFin") or 0.0)
+        return (
+            inicio[0] + nx * desfase + ux * di,
+            inicio[1] + ny * desfase + uy * di,
+            fin[0] + nx * desfase + ux * df,
+            fin[1] + ny * desfase + uy * df,
+        )
+
+    def _punto_de_elemento(self, elemento: Any) -> tuple[float, float]:
+        datos = self._leer_pset(elemento, "OPENRVT_Estructura")
+        return float(datos.get("X") or 0.0), float(datos.get("Y") or 0.0)
+
+    def _extremos_de_elemento(self, elemento: Any) -> tuple[float, float, float, float]:
+        if elemento.is_a("IfcWall"):
+            datos = self._datos_muro(elemento)
+            return datos["x1"], datos["y1"], datos["x2"], datos["y2"]
+        datos = self._leer_pset(elemento, "OPENRVT_Estructura")
+        x1 = float(datos.get("X1") or datos.get("X") or 0.0)
+        y1 = float(datos.get("Y1") or datos.get("Y") or 0.0)
+        return x1, y1, float(datos.get("X2") or x1), float(datos.get("Y2") or y1)
+
+    def _aplicar_planta(
+        self, elemento: Any, x1: float, y1: float, x2: float, y2: float
+    ) -> None:
+        """Coloca en planta un elemento puntual o lineal y regenera su cuerpo."""
+        largo = math.hypot(x2 - x1, y2 - y1)
+        if elemento.is_a("IfcWall"):
+            if largo <= TOLERANCIA_CALCULO:
+                return
+            datos = self._datos_muro(elemento)
+            ux, uy = (x2 - x1) / largo, (y2 - y1) / largo
+            matriz = np.array(
+                [
+                    [ux, -uy, 0.0, x1],
+                    [uy, ux, 0.0, y1],
+                    [0.0, 0.0, 1.0, datos["z"]],
+                    [0.0, 0.0, 0.0, 1.0],
+                ]
+            )
+            geometry_api.edit_object_placement(
+                self.modelo, product=elemento, matrix=matriz
+            )
+            pset = self._leer_pset(elemento, "OPENRVT_Muro")
+            pset["Longitud"] = largo
+            self._guardar_pset(elemento, "OPENRVT_Muro", pset)
+            self._regenerar_muro(elemento)
+            self._unir_muros(elemento)
+            self._actualizar_dependientes_muro(elemento)
+            return
+        datos = dict(self._leer_pset(elemento, "OPENRVT_Estructura"))
+        if elemento.is_a("IfcColumn") or (
+            elemento.is_a("IfcFooting")
+            and _texto(getattr(elemento, "PredefinedType", ""))
+            not in ("STRIP_FOOTING", "FOOTING_BEAM")
+        ):
+            dx = x1 - float(datos.get("X") or 0.0)
+            dy = y1 - float(datos.get("Y") or 0.0)
+            datos["X"] = x1
+            datos["Y"] = y1
+            self._guardar_pset(elemento, "OPENRVT_Estructura", datos)
+            self._regenerar_estructura(elemento)
+            if elemento.is_a("IfcColumn"):
+                for zapata in self._zapatas_de_columna(elemento):
+                    self._mover_producto(zapata, dx, dy, 0.0)
+            return
+        datos["X1"] = x1
+        datos["Y1"] = y1
+        datos["X2"] = x2
+        datos["Y2"] = y2
+        datos["Longitud"] = largo
+        self._guardar_pset(elemento, "OPENRVT_Estructura", datos)
+        self._regenerar_estructura(elemento)
+
+    def _aplicar_enlace(self, elemento: Any) -> bool:
+        enlace = self._enlace_de(elemento)
+        if not enlace:
+            return False
+        if enlace["tipo"] == "cruce":
+            x, y = self._posicion_cruce(enlace)
+            self._aplicar_planta(elemento, x, y, x, y)
+        else:
+            x1, y1, x2, y2 = self._extremos_tramo(enlace)
+            self._aplicar_planta(elemento, x1, y1, x2, y2)
+        return True
+
+    def _validar_enlace(self, elemento: Any) -> None:
+        if elemento.is_a("IfcWall") or elemento.is_a("IfcBeam") or elemento.is_a("IfcFooting"):
+            return
+        if elemento.is_a("IfcColumn"):
+            return
+        raise self._error("Ese elemento no admite enlace a ejes.", -32602)
+
+    def enlazar_a_cruce(
+        self,
+        globalid: str,
+        eje_a: str,
+        eje_b: str,
+        dx: float | None = None,
+        dy: float | None = None,
+    ) -> dict[str, Any]:
+        """O028: ancla un elemento puntual a un cruce de ejes con desfase global."""
+        self._exigir_modelo()
+        entidad = self._entidad_por_gid(str(globalid), ("IfcColumn", "IfcFooting"))
+        self._validar_enlace(entidad)
+        px, py = self._cruce_de_ejes(str(eje_a), str(eje_b))
+        x, y = self._punto_de_elemento(entidad)
+        dx = float(x - px if dx is None else dx)
+        dy = float(y - py if dy is None else dy)
+        self._instantanea()
+        try:
+            datos = self._leer_pset(entidad, PSET_RESTRICCIONES)
+            datos.update(
+                {
+                    "EnlaceTipo": "cruce",
+                    "EnlaceEjeA": _texto(eje_a),
+                    "EnlaceEjeB": _texto(eje_b),
+                    "EnlaceDX": dx,
+                    "EnlaceDY": dy,
+                }
+            )
+            self._guardar_pset(entidad, PSET_RESTRICCIONES, datos)
+            if entidad.is_a("IfcColumn"):
+                liga = dict(self._leer_pset(entidad, "OPENRVT_Liga"))
+                liga.update({"EjeA": _texto(eje_a), "EjeB": _texto(eje_b)})
+                self._guardar_liga(entidad, liga)
+            self._aplicar_enlace(entidad)
+        except Exception:
+            self._revertir_instantanea()
+            raise
+        self.con_cambios = True
+        return self._resultado(
+            [entidad],
+            mensaje=(
+                f"Enlazado al cruce {_texto(eje_a)}-{_texto(eje_b)} "
+                f"(dx {dx:.2f}, dy {dy:.2f})."
+            ),
+            enlace=self._enlace_de(entidad),
+        )
+
+    def enlazar_tramo(
+        self,
+        globalid: str,
+        eje_guia: str,
+        eje_inicio: str,
+        eje_fin: str,
+        desfase: float | None = None,
+        desfase_inicio: float | None = None,
+        desfase_fin: float | None = None,
+    ) -> dict[str, Any]:
+        """O028: un tramo se apoya en un eje guía y empieza y acaba en cruces."""
+        self._exigir_modelo()
+        entidad = self._entidad_por_gid(
+            str(globalid), ("IfcWall", "IfcBeam", "IfcFooting")
+        )
+        self._validar_enlace(entidad)
+        gx, gy, ux, uy = self._direccion_de_eje(str(eje_guia))
+        nx, ny = -uy, ux
+        inicio = self._cruce_de_ejes(str(eje_guia), str(eje_inicio))
+        fin = self._cruce_de_ejes(str(eje_guia), str(eje_fin))
+        x1, y1, x2, y2 = self._extremos_de_elemento(entidad)
+        if desfase is None:
+            desfase = ((x1 + x2) / 2.0 - gx) * nx + ((y1 + y2) / 2.0 - gy) * ny
+        if desfase_inicio is None:
+            desfase_inicio = (x1 - inicio[0]) * ux + (y1 - inicio[1]) * uy
+        if desfase_fin is None:
+            desfase_fin = (x2 - fin[0]) * ux + (y2 - fin[1]) * uy
+        self._instantanea()
+        try:
+            datos = self._leer_pset(entidad, PSET_RESTRICCIONES)
+            datos.update(
+                {
+                    "EnlaceTipo": "tramo",
+                    "EnlaceEjeGuia": _texto(eje_guia),
+                    "EnlaceEjeInicio": _texto(eje_inicio),
+                    "EnlaceEjeFin": _texto(eje_fin),
+                    "EnlaceDesfase": float(desfase),
+                    "EnlaceDesfaseInicio": float(desfase_inicio),
+                    "EnlaceDesfaseFin": float(desfase_fin),
+                }
+            )
+            self._guardar_pset(entidad, PSET_RESTRICCIONES, datos)
+            self._aplicar_enlace(entidad)
+        except Exception:
+            self._revertir_instantanea()
+            raise
+        self.con_cambios = True
+        return self._resultado(
+            [entidad],
+            mensaje=(
+                f"Tramo enlazado al eje {_texto(eje_guia)} de "
+                f"{_texto(eje_inicio)} a {_texto(eje_fin)}."
+            ),
+            enlace=self._enlace_de(entidad),
+        )
+
+    def soltar_enlace(self, globalid: str) -> dict[str, Any]:
+        """O028: quita el enlace y deja el elemento donde está."""
+        self._exigir_modelo()
+        entidad = self._entidad_por_gid(str(globalid))
+        self._instantanea()
+        self._limpiar_enlace(entidad)
+        self.con_cambios = True
+        return self._resultado([entidad], mensaje="Enlace a ejes eliminado.")
+
+    def _propagar_enlaces_de_eje(self, globalid: str) -> list[Any]:
+        """Recoloca los elementos enlazados al eje movido (posiciones absolutas)."""
+        modificados: list[Any] = []
+        elementos = (
+            self.modelo.by_type("IfcWall")
+            + self.modelo.by_type("IfcColumn")
+            + self.modelo.by_type("IfcBeam")
+            + self.modelo.by_type("IfcFooting")
+        )
+        for entidad in elementos:
+            enlace = self._enlace_de(entidad)
+            if not enlace:
+                continue
+            if enlace["tipo"] == "cruce":
+                involucrados = {
+                    _texto(enlace.get("EnlaceEjeA")),
+                    _texto(enlace.get("EnlaceEjeB")),
+                }
+            else:
+                involucrados = {
+                    _texto(enlace.get("EnlaceEjeGuia")),
+                    _texto(enlace.get("EnlaceEjeInicio")),
+                    _texto(enlace.get("EnlaceEjeFin")),
+                }
+            if globalid not in involucrados:
+                continue
+            self._aplicar_enlace(entidad)
+            modificados.append(entidad)
+        if modificados:
+            self._recalcular_uniones_estructura()
+        return modificados
+
+    def _soltar_enlaces_de_eje(self, globalid: str) -> list[str]:
+        """Al borrar un eje sus enlazados se quedan quietos y sin enlace."""
+        soltados: list[str] = []
+        elementos = (
+            self.modelo.by_type("IfcWall")
+            + self.modelo.by_type("IfcColumn")
+            + self.modelo.by_type("IfcBeam")
+            + self.modelo.by_type("IfcFooting")
+        )
+        for entidad in elementos:
+            enlace = self._enlace_de(entidad)
+            referencias = {
+                _texto(enlace.get("EnlaceEjeA")),
+                _texto(enlace.get("EnlaceEjeB")),
+                _texto(enlace.get("EnlaceEjeGuia")),
+                _texto(enlace.get("EnlaceEjeInicio")),
+                _texto(enlace.get("EnlaceEjeFin")),
+            }
+            if globalid in referencias and self._limpiar_enlace(entidad):
+                soltados.append(_nombre(entidad) or _gid(entidad))
+        # O026: las alineaciones con candado a ese eje también se sueltan.
+        for entidad in elementos:
+            datos = self._leer_pset(entidad, PSET_RESTRICCIONES)
+            if _texto(datos.get("AlinearReferencia")) != globalid:
+                continue
+            self._quitar_claves_pset(
+                entidad,
+                PSET_RESTRICCIONES,
+                ("AlinearTipo", "AlinearReferencia", "AlinearCara", "AlinearBloqueada"),
+            )
+            soltados.append(_nombre(entidad) or _gid(entidad))
+        return soltados
 
     # ------------------------------------------------------------------ ejes
     def _grid(self) -> Any:
@@ -895,9 +1587,13 @@ class ModeladoMixin:
         if eje is None:
             raise self._error(f"No existe el eje {globalid}.", -32005)
         self._instantanea()
+        soltados = self._soltar_enlaces_de_eje(globalid)
         grid_api.remove_grid_axis(self.modelo, axis=eje)
         self.con_cambios = True
-        return self._resultado(borrados=[globalid], mensaje="Eje borrado.")
+        mensaje = "Eje borrado."
+        if soltados:
+            mensaje += " Se soltaron: " + ", ".join(soltados) + "."
+        return self._resultado(borrados=[globalid], mensaje=mensaje, soltados=soltados)
 
     # ------------------------------------------------------- O006a: cotas de ejes
     def _eje_por_gid(self, globalid: str) -> tuple[Any, Any]:
@@ -950,11 +1646,20 @@ class ModeladoMixin:
         self._recalcular_reticula(grid)
         # O007c: las columnas ligadas al eje se mueven con él (y sus zapatas).
         modificados = [globalid]
+        columnas = self._mover_columnas_de_eje(globalid, nx, ny, desplazamiento)
+        modificados.extend(_gid(e) for e in columnas)
+        # O026: los elementos con candado cerrado siguen a su eje de referencia.
         modificados.extend(
-            _gid(e) for e in self._mover_columnas_de_eje(
-                globalid, nx, ny, desplazamiento
+            _gid(e)
+            for e in self._mover_alineados_de_referencia(
+                globalid,
+                nx * desplazamiento,
+                ny * desplazamiento,
+                {_gid(e) for e in columnas},
             )
         )
+        # O028: los enlaces a cruces y tramos se recalculan con la posición nueva.
+        modificados.extend(_gid(e) for e in self._propagar_enlaces_de_eje(globalid))
         self.con_cambios = True
         return self._resultado(
             modificados=modificados,
@@ -1022,6 +1727,21 @@ class ModeladoMixin:
                     )
         # O006d: al cambiar una separación se recalculan los extremos de la otra familia.
         self._recalcular_reticula(grid)
+        # O026: los elementos con candado siguen a cada eje desplazado.
+        movidos = set()
+        for gid_eje in list(dict.fromkeys(modificados)):
+            if gid_eje in movidos:
+                continue
+            movidos.add(gid_eje)
+            modificados.extend(
+                _gid(e)
+                for e in self._mover_alineados_de_referencia(
+                    gid_eje, nx * delta, ny * delta
+                )
+            )
+            modificados.extend(
+                _gid(e) for e in self._propagar_enlaces_de_eje(gid_eje)
+            )
         self.con_cambios = True
         return self._resultado(
             modificados=modificados,
@@ -2519,6 +3239,7 @@ class ModeladoMixin:
                 "AlturaSinConexion": alto,
             },
         )
+        self._guardar_enlace_punto(columna, eje_a, eje_b, x, y)
         self._regenerar_estructura(columna)
         spatial_api.assign_container(
             self.modelo, products=[columna], relating_structure=nivel_entidad
@@ -2590,6 +3311,8 @@ class ModeladoMixin:
         y: float,
         rotacion: float = 0.0,
         desplante: float = 1.00,
+        eje_a: str = "",
+        eje_b: str = "",
     ) -> dict[str, Any]:
         self._exigir_modelo()
         tipo_entidad = self._tipo_estructura(tipo, ("IfcFootingType",))
@@ -2617,6 +3340,7 @@ class ModeladoMixin:
                 "Desplante": desplante, "Nivel": nivel,
             },
         )
+        self._guardar_enlace_punto(zapata, eje_a, eje_b, x, y)
         self._regenerar_estructura(zapata)
         spatial_api.assign_container(
             self.modelo, products=[zapata], relating_structure=nivel_entidad
@@ -3430,6 +4154,13 @@ class ModeladoMixin:
                 # O007c: castillos, cerramientos y dalas siguen al muro.
                 self._actualizar_dependientes_muro(producto)
         self._recalcular_uniones_estructura()
+        # O026: al mover una referencia, los elementos con candado la siguen.
+        movidos = {_gid(p) for p in afectados}
+        for gid in gids:
+            movidos.update(
+                _gid(e)
+                for e in self._mover_alineados_de_referencia(gid, dx, dy, movidos)
+            )
         self.con_cambios = True
         return self._resultado(
             modificados=[g for g in afectados if not g.is_a("IfcOpeningElement")],

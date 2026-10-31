@@ -36,6 +36,11 @@ import {
   type Punto2,
 } from "./herramientas";
 import {
+  caraEnPunto,
+  rectaDeEje,
+  rectaDeMalla,
+} from "./alinear";
+import {
   calcularFamiliasCotas,
   formatearCota,
   parsearCota,
@@ -897,6 +902,11 @@ export function Visor3D({
   } | null>(null);
   // O003b: estado de la herramienta activa.
   const herramienta = useModelo((s) => s.herramienta);
+  const referenciaAlinear = useModelo((s) => s.referenciaAlinear);
+  const alineando = useModelo((s) => s.alineando);
+  const elegirReferenciaAlinear = useModelo((s) => s.elegirReferenciaAlinear);
+  const aplicarAlinear = useModelo((s) => s.aplicarAlinear);
+  const alternarCandadoAlinear = useModelo((s) => s.alternarCandadoAlinear);
   const puntosHerramienta = useModelo((s) => s.puntosHerramienta);
   const ratonHerramienta = useModelo((s) => s.ratonHerramienta);
   const engancheHerramienta = useModelo((s) => s.engancheHerramienta);
@@ -4390,6 +4400,81 @@ export function Visor3D({
       const camera = camara.current;
       if (!camera) return;
       const falso = { clientX, clientY } as PointerEvent;
+      if (herramienta === "alinear") {
+        // O026: primer clic en la referencia; el segundo en la cara a mover.
+        const rectAlinear = nodo.getBoundingClientRect();
+        const ratonAlinear = new THREE.Vector2(
+          ((clientX - rectAlinear.left) / rectAlinear.width) * 2 - 1,
+          -((clientY - rectAlinear.top) / rectAlinear.height) * 2 + 1,
+        );
+        const rayoAlinear = new THREE.Raycaster();
+        rayoAlinear.setFromCamera(ratonAlinear, camera);
+        const linea = lineaEjeEn(clientX, clientY);
+        if (linea) {
+          elegirReferenciaAlinear({ tipo: "eje", globalid: linea });
+          return;
+        }
+        const impactoAlinear = rayoAlinear.intersectObjects(meshes.current, false)[0];
+        const gidAlinear = impactoAlinear?.object.userData.globalid as string | undefined;
+        if (!gidAlinear) return;
+        const mallaAlinear = useModelo.getState().mallas.find(
+          (m) => m.globalid === gidAlinear,
+        );
+        if (!mallaAlinear) return;
+        const puntoAlinear: Punto2 =
+          vista.tipo === "planta"
+            ? (puntoPlanta(falso) ?? [impactoAlinear.point.x, impactoAlinear.point.y])
+            : [impactoAlinear.point.x, impactoAlinear.point.y];
+        const referencia = referenciaAlinear;
+        if (!referencia) {
+          const recta = rectaDeMalla(mallaAlinear);
+          elegirReferenciaAlinear({
+            tipo: "elemento",
+            globalid: gidAlinear,
+            cara: recta ? caraEnPunto(recta, puntoAlinear) : "centro",
+          });
+          return;
+        }
+        if (referencia.tipo === "nivel") {
+          let zMin = Infinity;
+          let zMax = -Infinity;
+          for (let i = 2; i < mallaAlinear.vertices.length; i += 3) {
+            const z = mallaAlinear.vertices[i];
+            if (z < zMin) zMin = z;
+            if (z > zMax) zMax = z;
+          }
+          const caraNivel =
+            impactoAlinear.point.z > (zMin + zMax) / 2 ? "tope" : "base";
+          void aplicarAlinear(gidAlinear, caraNivel, puntoAlinear);
+          return;
+        }
+        let direccion: { ux: number; uy: number } | undefined;
+        if (referencia.tipo === "eje") {
+          const eje = referencias.ejes.find((e) => e.globalid === referencia.globalid);
+          if (eje) {
+            const recta = rectaDeEje(eje);
+            direccion = { ux: recta.ux, uy: recta.uy };
+          }
+        } else if (referencia.tipo === "elemento") {
+          const mallaRef = useModelo
+            .getState()
+            .mallas.find((m) => m.globalid === referencia.globalid);
+          const recta = mallaRef ? rectaDeMalla(mallaRef) : null;
+          if (recta) direccion = { ux: recta.ux, uy: recta.uy };
+        } else {
+          direccion = { ux: 1, uy: 0 };
+        }
+        const recta = rectaDeMalla(mallaAlinear, direccion);
+        // Si se toca la cara del lado positivo, el centro queda del lado negativo
+        // de la referencia (y al revés): el núcleo recibe la cara que coincide.
+        const cara = recta
+          ? caraEnPunto(recta, puntoAlinear) === "cara1"
+            ? "cara2"
+            : "cara1"
+          : "cercana";
+        void aplicarAlinear(gidAlinear, cara, puntoAlinear);
+        return;
+      }
       if (herramienta && vista.tipo === "planta") {
         const punto = puntoPlanta(falso);
         if (punto) {
@@ -5033,6 +5118,9 @@ export function Visor3D({
     vista,
     modoOrbitar,
     herramienta,
+    referenciaAlinear,
+    elegirReferenciaAlinear,
+    aplicarAlinear,
     fijarRaton,
     clicEnPlanta,
     dobleClicEnPlanta,
@@ -5084,6 +5172,11 @@ export function Visor3D({
       if (!asa) return null;
       return pantallaDePunto(asa.punto);
     };
+    // O026: mover un eje desde la E2E por el mismo comando que la interfaz.
+    (nodo as unknown as Record<string, unknown>).__openrvtMoverEje = (
+      globalid: string,
+      desplazamiento: number,
+    ) => useModelo.getState().moverEje(globalid, desplazamiento);
     // O011: posición en pantalla de un globo o extremo de eje (para las E2E).
     (nodo as unknown as Record<string, unknown>).__openrvtEjeAPantalla = (
       etiqueta: string,
@@ -5372,6 +5465,68 @@ export function Visor3D({
     !!ejeSeleccionadoDatos &&
     (vista.tipo === "planta" || vista.tipo === "alzado" || vista.tipo === "corte");
 
+  // O026: guía azul punteada de la referencia y candado de la alineación.
+  // Se proyecta en un efecto: durante el render no se leen refs de cámara.
+  const [guiaAlinear, setGuiaAlinear] = useState<{
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    candado: { x: number; y: number } | null;
+    bloqueada: boolean;
+  } | null>(null);
+  useEffect(() => {
+    if (!referenciaAlinear) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setGuiaAlinear(null);
+      return;
+    }
+    const z = vista.tipo === "planta" ? 0.05 : (vista.alturaPlano ?? 1.2);
+    let a: [number, number, number] | null = null;
+    let b: [number, number, number] | null = null;
+    if (referenciaAlinear.tipo === "eje") {
+      const eje = referencias.ejes.find((e) => e.globalid === referenciaAlinear.globalid);
+      if (eje) {
+        a = [eje.x1, eje.y1, z];
+        b = [eje.x2, eje.y2, z];
+      }
+    } else if (referenciaAlinear.tipo === "elemento") {
+      const malla = mallas.find((m) => m.globalid === referenciaAlinear.globalid);
+      const recta = malla ? rectaDeMalla(malla) : null;
+      if (malla?.eje) {
+        a = [malla.eje[0], malla.eje[1], z];
+        b = [malla.eje[2], malla.eje[3], z];
+      } else if (recta) {
+        a = [recta.x - recta.ux * 1.5, recta.y - recta.uy * 1.5, z];
+        b = [recta.x + recta.ux * 1.5, recta.y + recta.uy * 1.5, z];
+      }
+    }
+    const rectNodo = contenedor.current?.getBoundingClientRect();
+    if (!a || !b || !rectNodo) {
+      setGuiaAlinear(null);
+      return;
+    }
+    const pa = pantallaDePunto(a);
+    const pb = pantallaDePunto(b);
+    if (!pa || !pb) {
+      setGuiaAlinear(null);
+      return;
+    }
+    const candado = alineando
+      ? pantallaDePunto([alineando.punto[0], alineando.punto[1], z])
+      : null;
+    setGuiaAlinear({
+      x1: pa.x - rectNodo.left,
+      y1: pa.y - rectNodo.top,
+      x2: pb.x - rectNodo.left,
+      y2: pb.y - rectNodo.top,
+      candado: candado
+        ? { x: candado.x - rectNodo.left, y: candado.y - rectNodo.top }
+        : null,
+      bloqueada: !!alineando?.bloqueada,
+    });
+  }, [referenciaAlinear, alineando, vista, mallas, referencias.ejes, pantallaDePunto]);
+
   return (
     <div
       ref={contenedor}
@@ -5397,6 +5552,63 @@ export function Visor3D({
             height: Math.abs(ventanaSeleccion.y2 - ventanaSeleccion.y1),
           }}
         />
+      )}
+      {herramienta === "alinear" && vista.tipo !== "planta" && (
+        <div
+          data-testid="alinear-niveles"
+          className="absolute left-2 top-12 z-30 flex max-w-[16rem] flex-wrap gap-1 rounded border bg-background/95 p-1 text-[11px] shadow"
+        >
+          <span className="w-full text-muted-foreground">
+            Referencia: un nivel (base o tope según la mitad que toque)
+          </span>
+          {niveles.map((nivel) => (
+            <button
+              key={nivel.globalid}
+              type="button"
+              data-testid={`alinear-nivel-${nivel.globalid}`}
+              onClick={() =>
+                elegirReferenciaAlinear({ tipo: "nivel", globalid: nivel.globalid })
+              }
+              className="rounded border px-1 py-0.5 hover:bg-muted"
+            >
+              {nivel.nombre}
+            </button>
+          ))}
+        </div>
+      )}
+      {guiaAlinear && (
+        <svg
+          data-testid="guia-alinear"
+          className="pointer-events-none absolute inset-0 z-20 h-full w-full"
+          aria-hidden="true"
+        >
+          <line
+            x1={guiaAlinear.x1}
+            y1={guiaAlinear.y1}
+            x2={guiaAlinear.x2}
+            y2={guiaAlinear.y2}
+            stroke="#1d6feb"
+            strokeWidth={2}
+            strokeDasharray="8 6"
+          />
+        </svg>
+      )}
+      {guiaAlinear?.candado && (
+        <button
+          type="button"
+          data-testid="candado-alinear"
+          data-bloqueada={guiaAlinear.bloqueada ? "si" : "no"}
+          title={
+            guiaAlinear.bloqueada
+              ? "Candado cerrado: quitar la restricción"
+              : "Cerrar el candado y guardar la restricción"
+          }
+          onClick={() => void alternarCandadoAlinear()}
+          className="absolute z-30 -translate-x-1/2 -translate-y-1/2 rounded border bg-background/95 p-1 text-sm shadow"
+          style={{ left: guiaAlinear.candado.x, top: guiaAlinear.candado.y }}
+        >
+          {guiaAlinear.bloqueada ? "\u{1F512}" : "\u{1F513}"}
+        </button>
       )}
       <div className="absolute left-2 top-2 z-10 flex gap-1">
         <button

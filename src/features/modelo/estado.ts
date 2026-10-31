@@ -62,8 +62,26 @@ export type Herramienta =
   | "castillo"
   | "trabe"
   | "cerramiento"
-  | "dala";
+  | "dala"
+  | "alinear";
 export type AlineacionMuro = "centro" | "interior" | "exterior";
+
+/** O026: referencia de la herramienta Alinear (eje, nivel o cara de elemento). */
+export interface ReferenciaAlinear {
+  tipo: "eje" | "elemento" | "nivel";
+  globalid: string;
+  cara?: string;
+}
+
+/** O026: alineación recién hecha, con su candado abierto o cerrado. */
+export interface AlineacionActiva {
+  elemento: string;
+  referencia: string;
+  tipo: "eje" | "elemento" | "nivel";
+  cara: string;
+  bloqueada: boolean;
+  punto: [number, number];
+}
 
 /** O007b: las ocho herramientas estructurales y su alias de tipo. */
 export const ALIAS_HERRAMIENTA: Partial<Record<Herramienta, string>> = {
@@ -175,6 +193,9 @@ interface EstadoModelo {
 
   // O003b: herramientas de modelado.
   herramienta: Herramienta | null;
+  /** O026: referencia elegida y alineación con candado de la herramienta Alinear. */
+  referenciaAlinear: ReferenciaAlinear | null;
+  alineando: AlineacionActiva | null;
   opcionesMuro: OpcionesMuro;
   tiposMuro: Array<{ globalid: string; nombre: string; espesor: number }>;
   /** O007b: tipos estructurales y el tipo elegido por herramienta. */
@@ -208,6 +229,10 @@ interface EstadoModelo {
   etiquetaEje: string;
   activarHerramienta: (herramienta: Herramienta) => void;
   cancelarHerramienta: () => void;
+  /** O026: primer clic elige la referencia; el segundo alinea y deja el candado abierto. */
+  elegirReferenciaAlinear: (referencia: ReferenciaAlinear) => void;
+  aplicarAlinear: (elemento: string, cara: string, punto: [number, number]) => Promise<void>;
+  alternarCandadoAlinear: () => Promise<void>;
   /** O005c: Esc cancela el trazo en curso; devuelve false si no había nada que cancelar. */
   cancelarTrazo: () => boolean;
   fijarOpcionesMuro: (cambios: Partial<OpcionesMuro>) => void;
@@ -237,6 +262,8 @@ interface EstadoModelo {
   borrarNivel: (globalid: string) => Promise<void>;
   crearEje: (etiqueta: string, x1: number, y1: number, x2: number, y2: number) => Promise<void>;
   editarEje: (globalid: string, etiqueta: string) => Promise<void>;
+  /** O026: desplaza un eje entero (lo usa la prueba E2E de la propagación). */
+  moverEje: (globalid: string, desplazamiento: number) => Promise<boolean>;
   borrarEje: (globalid: string) => Promise<void>;
   /** O006a: retícula completa desde separaciones (una sola operación). */
   crearEjesPorSeparaciones: (
@@ -280,6 +307,13 @@ interface EstadoModelo {
   /** O007c: contratrabes entre zapatas consecutivas y trabes entre columnas. */
   unirZapatas: () => Promise<boolean>;
   unirTrabes: () => Promise<boolean>;
+  /** O028: una zapata en cada cruce de la retícula. */
+  zapatasEnCruces: () => Promise<boolean>;
+  /** O028: contratrabes y muros entre los cruces del eje seleccionado. */
+  contratrabesEntreEjes: () => Promise<boolean>;
+  murosEntreEjes: () => Promise<boolean>;
+  /** O028: quita el enlace del elemento sin moverlo. */
+  soltarEnlace: (globalid: string) => Promise<void>;
   editarElemento: (globalid: string, cambios: Record<string, unknown>) => Promise<void>;
   /** O016: cambia base, tope y desfases de un muro o columna. */
   editarRestricciones: (
@@ -508,6 +542,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       rotacionSiguiente: 0,
       referencias,
       herramienta: null,
+      referenciaAlinear: null,
+      alineando: null,
       puntosHerramienta: [],
       ratonHerramienta: null,
       engancheHerramienta: null,
@@ -706,7 +742,10 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     if (!tipo || !nivel) return false;
     const rotacion = (get().rotacionSiguiente * Math.PI) / 180;
     const metodo = herramienta === "zapata" ? "zapatas.crear" : "columnas.crear";
-    const cruce = herramienta === "columna" ? ejesEnPunto(punto) : [];
+    const cruce =
+      herramienta === "columna" || herramienta === "zapata"
+        ? ejesEnPunto(punto)
+        : [];
     const resultado = await ejecutarResultado(metodo, {
       tipo: tipo.nombre,
       nivel,
@@ -864,6 +903,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
   editorTipos: false,
   editorTipoInicial: null,
     herramienta: null,
+    referenciaAlinear: null,
+    alineando: null,
     opcionesMuro: { tipo: "", altura: 2.6, alineacion: "centro" },
     tiposMuro: [],
     tiposHerramienta: [],
@@ -1203,7 +1244,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
     activarHerramienta: (herramienta) => {
       const vista = get().vistas.find((v) => v.id === get().vistaActivaId);
-      if (!vista || vista.tipo !== "planta") {
+      if (!vista || (vista.tipo !== "planta" && herramienta !== "alinear")) {
         set({ aviso: "Las herramientas de modelado solo trabajan en una vista de planta." });
         return;
       }
@@ -1227,11 +1268,14 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         trabe: "Trabe: dos clics entre columnas.",
         cerramiento: "Cerramiento: clic sobre un muro.",
         dala: "Dala de desplante: clic sobre un muro.",
+        alinear: "Alinear: clic en la referencia (eje, nivel o cara) y luego en la cara del elemento.",
       };
       const conservarSeleccion =
         herramienta === "mover" || herramienta === "copiar" || herramienta === "losa";
       set({
         herramienta,
+        referenciaAlinear: null,
+        alineando: null,
         puntosHerramienta: [],
         ratonHerramienta: null,
         engancheHerramienta: null,
@@ -1251,6 +1295,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       const herramienta = get().herramienta;
       set({
         herramienta: null,
+        referenciaAlinear: null,
+        alineando: null,
         puntosHerramienta: [],
         ratonHerramienta: null,
         engancheHerramienta: null,
@@ -1262,34 +1308,71 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       if (herramienta) bitacoraHerramienta(herramienta, "cancelar");
     },
 
+    elegirReferenciaAlinear: (referencia) => {
+      set({
+        referenciaAlinear: referencia,
+        alineando: null,
+        puntosHerramienta: [],
+        aviso:
+          "Alinear: ahora haga clic en la cara del elemento que quiere mover " +
+          "(Ctrl mantiene la referencia para alinear varios; Esc termina).",
+      });
+      bitacoraHerramienta("alinear", "referencia");
+    },
+
+    aplicarAlinear: async (elemento, cara, punto) => {
+      const referencia = get().referenciaAlinear;
+      if (!referencia) return;
+      const resultado = await ejecutarResultado("restricciones.alinear", {
+        referencia,
+        elemento,
+        cara,
+        bloquear: false,
+      });
+      if (!resultado) return;
+      const datos = resultado.alineacion as Omit<AlineacionActiva, "punto"> | undefined;
+      if (!datos) return;
+      await get().seleccionar(elemento);
+      set({
+        alineando: { ...datos, punto },
+        aviso:
+          (resultado.mensaje || "Elemento alineado.") +
+          " El candado está abierto: ciérrelo para guardar la restricción.",
+      });
+      bitacoraHerramienta("alinear", "terminar");
+    },
+
+    alternarCandadoAlinear: async () => {
+      const alineacion = get().alineando;
+      if (!alineacion) return;
+      const bloquear = !alineacion.bloqueada;
+      const resultado = await ejecutarResultado("restricciones.alinear", {
+        referencia: { tipo: alineacion.tipo, globalid: alineacion.referencia },
+        elemento: alineacion.elemento,
+        cara: alineacion.cara,
+        bloquear,
+      });
+      if (!resultado) return;
+      set({
+        alineando: { ...alineacion, bloqueada: bloquear },
+        aviso: bloquear
+          ? "Candado cerrado: el elemento seguirá a su referencia."
+          : "Candado abierto: la restricción se ha quitado.",
+      });
+      bitacoraHerramienta("alinear", bloquear ? "bloquear" : "desbloquear");
+    },
+
     cancelarTrazo: () => {
       const herramienta = get().herramienta;
       if (!herramienta) return false;
       if (get().puntosHerramienta.length === 0 && !get().longitudTecleada) return false;
-      const nombres: Record<Herramienta, string> = {
-        muro: "Muro: primer punto en la planta.",
-        losa: "Losa: clic por vértice y doble clic para cerrar.",
-        puerta: "Puerta: clic sobre un muro. Espacio voltea el lado.",
-        ventana: "Ventana: clic sobre un muro. Espacio voltea el lado.",
-        eje: "Eje: dos clics. La etiqueta se asigna sola.",
-        mover: "Mover: punto base y punto destino.",
-        copiar: "Copiar: punto base y punto destino.",
-        zapata: "Zapata: un clic en un cruce de ejes. R gira 90°.",
-        zapata_corrida: "Zapata corrida: dos clics a lo largo del trazo.",
-        contratrabe: "Contratrabe: dos clics entre zapatas.",
-        columna: "Columna: un clic en un cruce de ejes. R gira 90°.",
-        castillo: "Castillo: clic sobre un muro o en un cruce de ejes. R gira 90°.",
-        trabe: "Trabe: dos clics entre columnas.",
-        cerramiento: "Cerramiento: clic sobre un muro.",
-        dala: "Dala de desplante: clic sobre un muro.",
-      };
       set({
         puntosHerramienta: [],
         ratonHerramienta: null,
         engancheHerramienta: null,
         longitudTecleada: "",
         ejeLibre: false,
-        aviso: nombres[herramienta],
+        etiquetaEje: "",
       });
       bitacoraHerramienta(herramienta, "cancelar_trazo");
       return true;
@@ -1831,6 +1914,10 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       await ejecutar("ejes.editar", { globalid, etiqueta });
     },
 
+    moverEje: async (globalid, desplazamiento) => {
+      return ejecutar("ejes.mover", { globalid, desplazamiento });
+    },
+
     borrarEje: async (globalid) => {
       await ejecutar("ejes.borrar", { globalid });
     },
@@ -1906,6 +1993,56 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         tipo: tipo.nombre,
         nivel,
       });
+    },
+
+    zapatasEnCruces: async () => {
+      const tipo = tipoZapataElegida();
+      const nivel = nivelActivo();
+      if (!tipo || !nivel) {
+        set({ aviso: "No hay tipo de zapata en la biblioteca." });
+        return false;
+      }
+      return ejecutar("zapatas.en_cruces", { tipo: tipo.nombre, nivel });
+    },
+
+    contratrabesEntreEjes: async () => {
+      const tipo = get().tiposHerramienta.find((t) => t.alias === "contratrabe");
+      const nivel = nivelActivo();
+      const guia = get().ejeSeleccionado;
+      if (!tipo || !nivel) {
+        set({ aviso: "No hay tipo de contratrabe en la biblioteca." });
+        return false;
+      }
+      if (!guia) {
+        set({ aviso: "Seleccione el eje guía en planta." });
+        return false;
+      }
+      return ejecutar("contratrabes.entre_ejes", {
+        tipo: tipo.nombre,
+        nivel,
+        eje_guia: guia,
+      });
+    },
+
+    murosEntreEjes: async () => {
+      const tipo = tipoEstructural("muro");
+      const nivel = nivelActivo();
+      const guia = get().ejeSeleccionado;
+      if (!tipo || !nivel) return false;
+      if (!guia) {
+        set({ aviso: "Seleccione el eje guía en planta." });
+        return false;
+      }
+      return ejecutar("muros.entre_ejes", {
+        tipo: tipo.nombre,
+        nivel,
+        eje_guia: guia,
+      });
+    },
+
+    soltarEnlace: async (globalid) => {
+      if (!globalid) return;
+      await ejecutar("restricciones.soltar_enlace", { globalid });
     },
 
     unirTrabes: async () => {
