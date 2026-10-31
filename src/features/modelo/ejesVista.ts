@@ -337,6 +337,15 @@ export function restringirArrastre(
   return direccionEje === "vertical" ? [0, dy] : [dx, 0];
 }
 
+/** O031: el candado de alineación vale para las asas de extremo, incluido el globo
+ *  cuando aún no tiene codo (antes el globo quedaba siempre libre y rompía O021). */
+export function candadoArrastreAsa(
+  tipo: "base" | "globo" | "codo" | "codo-nuevo",
+  candadoCerrado: boolean,
+): boolean {
+  return (tipo === "base" || tipo === "globo") && candadoCerrado;
+}
+
 export interface ResultadoIman {
   valor: number;
   enganchado: boolean;

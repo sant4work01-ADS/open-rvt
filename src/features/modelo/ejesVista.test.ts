@@ -7,6 +7,7 @@ import {
   imanMultiplo,
   restringirArrastre,
   arrastrarExtremoEje,
+  candadoArrastreAsa,
   copiarAjusteEje,
   extremoEje,
   fijarExtremoEje,
@@ -248,6 +249,15 @@ describe("O021: candado de alineación, globos por extremo y copia", () => {
     expect(r.A.extremoFin).toEqual([0, 12]);
     expect(r.B?.extremoFin).toBeUndefined();
     expect(r.C?.extremoFin).toBeUndefined();
+  });
+
+  it("O031: el candado también vale para el globo sin codo (asa fin)", () => {
+    // O021 arrastra el asa «fin», que con el codo por omisión es el globo. Con el
+    // candado cerrado debe mover los tres extremos alineados, no solo el pulsado.
+    expect(candadoArrastreAsa("globo", true)).toBe(true);
+    expect(candadoArrastreAsa("base", true)).toBe(true);
+    expect(candadoArrastreAsa("globo", false)).toBe(false);
+    expect(candadoArrastreAsa("codo", true)).toBe(false);
   });
 
   it("no arrastra ejes paralelos que no comparten la alineación", () => {

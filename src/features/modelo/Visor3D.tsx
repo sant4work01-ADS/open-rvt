@@ -120,6 +120,7 @@ import {
   quitarCodoEje,
   restablecerExtremoEje,
   restringirArrastre,
+  candadoArrastreAsa,
   type DireccionEjeArrastre,
   type LadoEje,
   type TipoAsaArrastre,
@@ -4739,8 +4740,7 @@ export function Visor3D({
               etiqueta: asa.etiqueta,
               lado: asa.lado,
               indice: asa.tipo === "codo" ? asa.indice : null,
-              candado:
-                asa.tipo === "base" ? !candados[asa.lado] : false,
+              candado: candadoArrastreAsa(asa.tipo, !candados[asa.lado]),
               familia:
                 ctx.tipo === "planta"
                   ? eje.vertical

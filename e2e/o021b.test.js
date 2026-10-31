@@ -259,6 +259,11 @@ test("O021b: texto de nivel arriba de su línea y cotas chicas separadas", async
     }, 30_000, "no reabrió el modelo");
 
     await elegirVista(ses, "Alzado Norte");
+    // O030 pone el alzado «A escala» por omisión; a 1:100 un texto de 2.5 mm mide
+    // 0.25 m y no cabe entre niveles a 0.10 m. La referencia es 1:20 (2.5 mm =
+    // 0.05 m), que sí permite comprobar la separación de las cotas chicas.
+    await fijarValor(ses, "vista-escala", "20");
+    await esperar(500);
     await activar(ses, "visor-ajustar");
     await esperar(900);
 
@@ -279,9 +284,11 @@ test("O021b: texto de nivel arriba de su línea y cotas chicas separadas", async
         !segmentoCruzaCaja(a, b, etiqueta, 0.5),
         `la línea de ${propia.elev} cruza el texto «${etiqueta.texto}»: ${JSON.stringify(etiqueta)}`,
       );
+      // O025 coloca el texto a la derecha del triángulo, centrado con él, como la
+      // referencia; la línea termina en el vértice y no puede cruzar el texto.
       assert.ok(
-        etiqueta.y1 <= Math.min(a.y, b.y) - 1,
-        `«${etiqueta.texto}» no quedó arriba de su línea (${etiqueta.y1} vs ${Math.min(a.y, b.y)})`,
+        etiqueta.x0 >= Math.max(a.x, b.x) - 0.5,
+        `«${etiqueta.texto}» no quedó a la derecha de su línea (${etiqueta.x0} vs ${Math.max(a.x, b.x)})`,
       );
     }
 

@@ -416,8 +416,14 @@ test("O014b: texto legible, codo de niveles y codo de burbujas", async () => {
     }
     const ajuste = JSON.parse(await atributoVisor(ses, "niveles-ajuste"));
     assert.equal(ajuste.automaticos[0], 0, "el nivel 0.00 no debía subir");
-    assert.equal(ajuste.automaticos[1], 0, "el nivel 2.00 es el de abajo y no debía subir");
-    assert.ok(ajuste.automaticos[2] > 0.1, "el nivel 2.20 debía subir con codo");
+    // O025b separa el par de niveles juntos moviendo el de abajo hacia abajo; el
+    // de arriba y el siguiente se recolocan para no encimarse. Lo que importa es
+    // que el par quede separado y en orden (la comprobación de bandas sigue abajo).
+    assert.ok(ajuste.automaticos[1] < -0.1, "el nivel 2.00 debía bajar con codo");
+    assert.ok(
+      ajuste.automaticos[2] > ajuste.automaticos[1] + 0.1,
+      `el nivel 2.20 no quedó separado del 2.00: ${JSON.stringify(ajuste.automaticos)}`,
+    );
     // Aserción geométrica: las cajas en pantalla (triángulo + texto + nombre) de
     // TODOS los pares de cabezas quedan separadas, no solo sus bandas teóricas.
     await comprobarCabezasSeparadas(ses, "alzado 0.00/2.00/2.20/3.00");

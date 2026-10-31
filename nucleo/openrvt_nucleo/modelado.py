@@ -653,10 +653,20 @@ class ModeladoMixin:
                     -32022,
                 )
 
-    def _crear_vista_planta(self, nivel: Any) -> dict[str, Any] | None:
-        """O029: la vista de planta del nivel se crea en el mismo paso (y el mismo Deshacer)."""
+    def _crear_vista_planta(
+        self, nivel: Any, vistas_base: Any = None
+    ) -> dict[str, Any] | None:
+        """O029: la vista de planta del nivel se crea en el mismo paso (y el mismo Deshacer).
+
+        O031: si el cliente manda las vistas de la sesión, se guardan junto con la nueva
+        planta en la misma instantánea, para que Deshacer no borre las vistas automáticas.
+        """
         gid = _gid(nivel)
-        vistas = self.leer_vistas()
+        vistas = (
+            [v for v in vistas_base if isinstance(v, dict)]
+            if isinstance(vistas_base, list)
+            else self.leer_vistas()
+        )
         if any(v.get("tipo") == "planta" and v.get("nivel") == gid for v in vistas if isinstance(v, dict)):
             return None
         elevacion = float(nivel.Elevation or 0.0)
@@ -702,6 +712,7 @@ class ModeladoMixin:
         nombre: str,
         elevacion: float,
         crear_planta: bool = True,
+        vistas: Any = None,
     ) -> tuple[Any, dict[str, Any] | None]:
         nombre = (nombre or "").strip()
         if not nombre:
@@ -717,7 +728,7 @@ class ModeladoMixin:
         nivel = root.create_entity(self.modelo, ifc_class="IfcBuildingStorey", name=nombre)
         nivel.Elevation = elevacion
         aggregate.assign_object(self.modelo, products=[nivel], relating_object=self._edificio())
-        vista = self._crear_vista_planta(nivel) if crear_planta else None
+        vista = self._crear_vista_planta(nivel, vistas) if crear_planta else None
         return nivel, vista
 
     def nivel_crear(
@@ -725,12 +736,13 @@ class ModeladoMixin:
         nombre: str,
         elevacion: float,
         crear_planta: bool = True,
+        vistas: Any = None,
     ) -> dict[str, Any]:
         self._exigir_modelo()
         self._instantanea()
         try:
             nivel, vista = self._crear_nivel_sin_instantanea(
-                nombre, elevacion, bool(crear_planta)
+                nombre, elevacion, bool(crear_planta), vistas
             )
         except Exception:
             self._revertir_instantanea()
@@ -748,6 +760,7 @@ class ModeladoMixin:
         globalid: str,
         desfase: float,
         crear_planta: bool = True,
+        vistas: Any = None,
     ) -> dict[str, Any]:
         """O029: Copiar/Desfasar un nivel con un desfase vertical, en un solo paso."""
         self._exigir_modelo()
@@ -762,7 +775,10 @@ class ModeladoMixin:
         self._instantanea()
         try:
             nivel, vista = self._crear_nivel_sin_instantanea(
-                self._nombre_nivel_automatico(elevacion), elevacion, bool(crear_planta)
+                self._nombre_nivel_automatico(elevacion),
+                elevacion,
+                bool(crear_planta),
+                vistas,
             )
         except Exception:
             self._revertir_instantanea()
@@ -781,6 +797,7 @@ class ModeladoMixin:
         cantidad: int,
         separacion: float,
         crear_planta: bool = True,
+        vistas: Any = None,
     ) -> dict[str, Any]:
         """O029: arreglo de N niveles a separación fija sobre un nivel base."""
         self._exigir_modelo()
@@ -804,6 +821,7 @@ class ModeladoMixin:
                     self._nombre_nivel_automatico(base + separacion * i),
                     base + separacion * i,
                     bool(crear_planta),
+                    vistas if i == 1 else None,
                 )
                 creados.append(nivel)
                 if vista is not None:

@@ -43,6 +43,16 @@ function layout(extra: Partial<Parameters<typeof calcularLayoutAlzado>[0]> = {})
 const intersecta = (a: CajaAnotacion, b: CajaAnotacion) =>
   a.t0 < b.t1 - 1e-9 && a.t1 > b.t0 + 1e-9 && a.z0 < b.z1 - 1e-9 && a.z1 > b.z0 + 1e-9;
 
+describe("O025/O031: cotas de nivel opcionales", () => {
+  it("con cotas:false no quedan cadena ni total (solo cabezas)", () => {
+    const e = estilosPorDefecto();
+    const l = layout({ estiloNivel: { ...e.niveles, cotas: false } });
+    expect(l.parciales).toEqual([]);
+    expect(l.total).toBeNull();
+    expect(l.cabezas).toHaveLength(NIVELES.length);
+  });
+});
+
 describe("O025: colocación de niveles con el estilo por omisión", () => {
   it("escribe las cinco cabezas de la referencia, con signo y sin nombre", () => {
     const l = layout();

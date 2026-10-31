@@ -396,30 +396,34 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
   };
 
   const parciales: CotaTramoCalc[] = [];
-  for (let i = 0; i + 1 < niveles.length; i += 1) {
-    parciales.push(cotaDe(niveles[i].elevacion, niveles[i + 1].elevacion, tCadena, "parcial"));
-  }
-  for (const nivel of niveles) {
-    lineas.push({
-      tipo: "extension",
-      elevacion: nivel.elevacion,
-      puntos: [
-        [tExtInicio, nivel.elevacion],
-        [tTotal + prolongacion, nivel.elevacion],
-      ],
-    });
-  }
-  if (parciales.length > 0) {
-    lineas.push({
-      tipo: "cota",
-      puntos: [
-        [tCadena, niveles[0].elevacion],
-        [tCadena, niveles[niveles.length - 1].elevacion],
-      ],
-    });
+  // O031: la casilla «Cotas de nivel» volvía a dibujar la cadena y la total porque
+  // `estiloNivel.cotas` solo se guardaba. Se respeta el estilo guardado.
+  if (estiloNivel.cotas) {
+    for (let i = 0; i + 1 < niveles.length; i += 1) {
+      parciales.push(cotaDe(niveles[i].elevacion, niveles[i + 1].elevacion, tCadena, "parcial"));
+    }
+    for (const nivel of niveles) {
+      lineas.push({
+        tipo: "extension",
+        elevacion: nivel.elevacion,
+        puntos: [
+          [tExtInicio, nivel.elevacion],
+          [tTotal + prolongacion, nivel.elevacion],
+        ],
+      });
+    }
+    if (parciales.length > 0) {
+      lineas.push({
+        tipo: "cota",
+        puntos: [
+          [tCadena, niveles[0].elevacion],
+          [tCadena, niveles[niveles.length - 1].elevacion],
+        ],
+      });
+    }
   }
   let total: CotaTotalCalc | null = null;
-  if (niveles.length >= 2) {
+  if (estiloNivel.cotas && niveles.length >= 2) {
     const base = cotaDe(elevaciones[0], elevaciones[elevaciones.length - 1], tTotal, "total");
     total = { ...base, tipo: "total" };
     lineas.push({

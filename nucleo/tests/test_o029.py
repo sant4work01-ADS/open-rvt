@@ -110,3 +110,30 @@ def test_arreglo_de_tres_niveles_cada_3_00() -> None:
     assert nombres == ["Nivel 1", "Nivel 2", "Nivel 3"]
     assert nucleo.deshacer()["hecho"] is True
     assert all(g not in {n["globalid"] for n in nucleo.niveles()} for g in creados)
+
+
+def test_crear_nivel_guarda_las_vistas_de_la_sesion() -> None:
+    """O031: la planta nueva y las vistas ya abiertas comparten la misma instantánea.
+
+    Si solo se guardara la planta, un Deshacer posterior borraría los alzados y el
+    3D que el usuario tenía abiertos (o015/o027). Se comprueban los identificadores
+    exactos, no solo la cantidad.
+    """
+    nucleo = _nuevo()
+    base = [
+        {"id": "planta-n0", "nombre": "Planta Nivel 0", "tipo": "planta", "nivel": "n0"},
+        {"id": "alzado-norte", "nombre": "Alzado Norte", "tipo": "alzado"},
+        {"id": "iso", "nombre": "3D Isométrica", "tipo": "iso"},
+    ]
+    nucleo.guardar_vistas(base)
+    resultado = nucleo.nivel_crear("Nivel 1", 3.0, vistas=base)
+    vistas = nucleo.leer_vistas()
+    assert [v["id"] for v in vistas if v["id"] in {"planta-n0", "alzado-norte", "iso"}] == [
+        "planta-n0",
+        "alzado-norte",
+        "iso",
+    ]
+    nueva = [v for v in vistas if v.get("nivel") == resultado["nivel"]["globalid"]]
+    assert len(nueva) == 1 and nueva[0]["nombre"] == "Planta Nivel 1"
+    # Las tres vistas de la sesión siguen ahí, además de la planta nueva.
+    assert len(vistas) == 4

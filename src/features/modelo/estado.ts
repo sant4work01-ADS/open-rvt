@@ -2089,6 +2089,9 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         nombre,
         elevacion,
         crear_planta: opciones.crearPlanta ?? true,
+        // O031: se guardan las vistas de la sesión en la misma instantánea; así
+        // Deshacer no deja el modelo sin plantas, alzados ni 3D.
+        vistas: get().vistas,
       });
       if (!resultado) return false;
       // O029: el núcleo crea la planta en el mismo paso (mismo Deshacer); se releen
@@ -2122,6 +2125,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       const resultado = await ejecutarResultado("niveles.copiar", {
         globalid,
         desfase,
+        vistas: get().vistas,
       });
       if (!resultado) return false;
       const crudas = await rpc<unknown>("vistas.leer").catch(() => null);
@@ -2149,6 +2153,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         globalid,
         cantidad,
         separacion,
+        vistas: get().vistas,
       });
       if (!resultado) return false;
       const crudas = await rpc<unknown>("vistas.leer").catch(() => null);

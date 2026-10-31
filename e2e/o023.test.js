@@ -492,10 +492,11 @@ test("O023-4: elevaciones, error junto a la caja, cota Total y ejes ordenados al
       "1,5,3,4,2",
       "el orden de los globos debe seguir la orientación norte",
     );
-    const textos = (await atributoVisor(ses, "niveles-texto")) || "";
-    // Niveles: −3.00, 0.00 y 6.00 → la total dice «Total 9.00».
-    assert.match(textos, /Total 9\.00/, `la cota total debe estar rotulada: ${textos}`);
-    assert.ok(!/(^|\s)9\.00(\s|$)/.test(textos.replace(/Total 9\.00/g, "")), "no debe quedar un 9.00 suelto");
+    // Niveles: −3.00, 0.00 y 6.00 → dos parciales de 3.00 y 6.00, total 9.00.
+    // O025 pone la total en su fila como número solo, sin la palabra «Total».
+    const filas = JSON.parse((await atributoVisor(ses, "niveles-cotas")) || "[]");
+    assert.deepEqual(filas[0].parciales, ["3.00", "6.00"], "la cadena de cotas es 3.00 y 6.00");
+    assert.equal(filas[0].total, "9.00", "la cota total debe ser 9.00");
     await activar(ses, "visor-ajustar");
     await esperar(600);
     await ses.captura(path.join(PROGRESO, "niveles-ejes-norte.png"));
@@ -622,7 +623,9 @@ test("O023-6: la cámara no se mueve al crear y editar cinco elementos", async (
       return Number(await visor.getAttribute("data-mallas")) >= 1;
     }, 15_000, "no se teseló el muro");
     await elegirVista(ses, "Alzado Norte");
-    await dobleClicCota(ses, "3.00", 0);
+    // O025 muestra la elevación del nivel como «Npt +3.00m»; las cotas «3.00» de
+    // la cadena son distancias entre niveles, no elevaciones.
+    await dobleClicCota(ses, "Npt +3.00m", 0);
     const campo = await ses.porTestid("cota-campo");
     await campo.sendKeys(Key.CONTROL, "a");
     await campo.sendKeys("4");
