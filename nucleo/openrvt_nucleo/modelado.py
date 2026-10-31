@@ -44,6 +44,31 @@ TOLERANCIA = 0.01  # unión automática de muros: ±1 cm
 TOLERANCIA_UNION = 0.25
 TOLERANCIA_CALCULO = 1e-6
 
+# O016: restricciones de base y tope por nivel.
+PSET_RESTRICCIONES = "OPENRVT_Restricciones"
+
+
+def altura_restringida(
+    elev_base: float,
+    desf_base: float,
+    elev_tope: float | None,
+    desf_tope: float,
+    altura_sin: float | None,
+) -> tuple[float, float]:
+    """Devuelve ``(z_inferior, altura)`` de un elemento vertical restringido.
+
+    Función pura, sin IFC: la base sale de su nivel más el desfase y el tope de
+    su nivel más su desfase (o de la altura fija si no hay conexión).
+    """
+    z_inferior = float(elev_base) + float(desf_base)
+    if elev_tope is not None:
+        altura = float(elev_tope) + float(desf_tope) - z_inferior
+    else:
+        altura = float(altura_sin or 0.0)
+    if altura <= TOLERANCIA_CALCULO:
+        raise ValueError("La altura restringida debe ser positiva.")
+    return z_inferior, altura
+
 
 def _gid(entidad: Any) -> str:
     return str(getattr(entidad, "GlobalId", "") or "")
@@ -270,6 +295,141 @@ class ModeladoMixin:
                 salida.extend(self._aberturas_de(elemento))
         return salida
 
+    # ------------------------------------------------------------------ restricciones (O016)
+    def _nivel_inmediato_superior(self, elevacion: float) -> Any | None:
+        superiores = [
+            n
+            for n in self.modelo.by_type("IfcBuildingStorey")
+            if float(n.Elevation or 0.0) > float(elevacion) + TOLERANCIA_CALCULO
+        ]
+        if not superiores:
+            return None
+        return min(superiores, key=lambda n: float(n.Elevation or 0.0))
+
+    def _nivel_que_contiene(self, elemento: Any) -> Any | None:
+        for rel in getattr(elemento, "ContainedInStructure", ()) or ():
+            estructura = getattr(rel, "RelatingStructure", None)
+            if estructura is not None and estructura.is_a("IfcBuildingStorey"):
+                return estructura
+        return None
+
+    def _z_de_elemento(self, elemento: Any) -> float:
+        import ifcopenshell.util.placement as placement
+
+        if elemento.is_a("IfcColumn"):
+            datos = self._leer_pset(elemento, "OPENRVT_Estructura")
+            if datos.get("Base") is not None:
+                return float(datos.get("Base") or 0.0)
+        return float(placement.get_local_placement(elemento.ObjectPlacement)[2][3])
+
+    def _altura_actual(self, elemento: Any) -> float:
+        if elemento.is_a("IfcColumn"):
+            datos = self._leer_pset(elemento, "OPENRVT_Estructura")
+            return float(datos.get("Altura") or 2.60)
+        return float(self._datos_muro(elemento)["altura"])
+
+    def _restricciones_de(self, elemento: Any) -> dict[str, Any]:
+        """Lee las restricciones; un modelo viejo se interpreta sin pset (tolerante)."""
+        datos = self._leer_pset(elemento, PSET_RESTRICCIONES)
+        altura_actual = self._altura_actual(elemento)
+        if datos:
+            base = _texto(datos.get("NivelBase"))
+            tope = _texto(datos.get("NivelTope"))
+            if base:
+                return {
+                    "NivelBase": base,
+                    "DesfaseBase": float(datos.get("DesfaseBase") or 0.0),
+                    "NivelTope": tope,
+                    "DesfaseTope": float(datos.get("DesfaseTope") or 0.0),
+                    "AlturaSinConexion": float(
+                        datos.get("AlturaSinConexion") or altura_actual
+                    ),
+                }
+        nivel = self._nivel_que_contiene(elemento)
+        if nivel is None:
+            pset = self._leer_pset(elemento, "OPENRVT_Estructura")
+            if pset.get("Nivel"):
+                nivel = self._nivel_por_gid(_texto(pset["Nivel"]))
+        if nivel is None:
+            niveles = self.modelo.by_type("IfcBuildingStorey")
+            nivel = niveles[0] if niveles else None
+        elevacion = float(getattr(nivel, "Elevation", 0.0) or 0.0) if nivel else 0.0
+        z = self._z_de_elemento(elemento)
+        return {
+            "NivelBase": _gid(nivel) if nivel is not None else "",
+            "DesfaseBase": z - elevacion,
+            "NivelTope": "",
+            "DesfaseTope": 0.0,
+            "AlturaSinConexion": altura_actual,
+        }
+
+    def _validar_altura_muro(self, muro: Any, altura: float) -> None:
+        for _vano, info in self._aberturas_del_muro(muro):
+            if info["antepecho"] + info["alto"] > altura + TOLERANCIA:
+                raise self._error(
+                    "La nueva altura deja una abertura fuera del muro.", -32023
+                )
+
+    def _revertir_instantanea(self) -> None:
+        if self._deshacer:
+            self.modelo = ifcopenshell.file.from_string(self._deshacer.pop())
+
+    def _aplicar_restriccion(self, elemento: Any, restriccion: dict[str, Any]) -> None:
+        """Recalcula z y altura de un muro o columna desde sus restricciones."""
+        nivel_base = self._nivel_por_gid(_texto(restriccion.get("NivelBase")))
+        elev_base = float(nivel_base.Elevation or 0.0)
+        tope = _texto(restriccion.get("NivelTope"))
+        elev_tope = None
+        if tope:
+            nivel_tope = self._nivel_por_gid(tope)
+            elev_tope = float(nivel_tope.Elevation or 0.0)
+        z, altura = altura_restringida(
+            elev_base,
+            float(restriccion.get("DesfaseBase") or 0.0),
+            elev_tope,
+            float(restriccion.get("DesfaseTope") or 0.0),
+            float(restriccion.get("AlturaSinConexion") or 0.0),
+        )
+        if elemento.is_a("IfcWall"):
+            self._validar_altura_muro(elemento, altura)
+            datos = self._datos_muro(elemento)
+            matriz = np.array(
+                [
+                    [datos["dx"], -datos["dy"], 0.0, datos["x1"]],
+                    [datos["dy"], datos["dx"], 0.0, datos["y1"]],
+                    [0.0, 0.0, 1.0, z],
+                    [0.0, 0.0, 0.0, 1.0],
+                ]
+            )
+            geometry_api.edit_object_placement(self.modelo, product=elemento, matrix=matriz)
+            pset = self._leer_pset(elemento, "OPENRVT_Muro")
+            if pset:
+                pset["Altura"] = altura
+                self._guardar_pset(elemento, "OPENRVT_Muro", pset)
+            self._guardar_pset(elemento, PSET_RESTRICCIONES, restriccion)
+            self._regenerar_muro(elemento)
+        elif elemento.is_a("IfcColumn"):
+            datos = dict(self._leer_pset(elemento, "OPENRVT_Estructura"))
+            datos["Base"] = z
+            datos["Altura"] = altura
+            datos["NivelSuperior"] = tope
+            self._guardar_pset(elemento, "OPENRVT_Estructura", datos)
+            self._guardar_pset(elemento, PSET_RESTRICCIONES, restriccion)
+            self._regenerar_estructura(elemento)
+
+    def _recalcular_restricciones(self, niveles: set[str]) -> list[Any]:
+        """Recalcula los elementos ligados a cualquiera de esos niveles."""
+        modificados: list[Any] = []
+        for elemento in self.modelo.by_type("IfcWall") + self.modelo.by_type("IfcColumn"):
+            restriccion = self._restricciones_de(elemento)
+            if (
+                restriccion["NivelBase"] in niveles
+                or restriccion["NivelTope"] in niveles
+            ):
+                self._aplicar_restriccion(elemento, restriccion)
+                modificados.append(elemento)
+        return modificados
+
     # ------------------------------------------------------------------ tipos de muro
     def _crear_tipo_muro(self, nombre: str, espesor: float) -> Any:
         modelo = self.modelo
@@ -383,19 +543,26 @@ class ModeladoMixin:
                 raise self._error("La elevación del nivel no es un número.", -32602) from exc
             delta = elevacion - float(nivel.Elevation or 0.0)
         self._instantanea()
-        if nombre is not None:
-            if not str(nombre).strip():
-                raise self._error("El nivel necesita un nombre.", -32602)
-            nivel.Name = str(nombre).strip()
-        modificados: list[Any] = [nivel]
-        if elevacion is not None:
-            nivel.Elevation = elevacion
-            # O006a: los elementos contenidos acompañan al nivel. En las muestras y en
-            # las casas de O003b las colocaciones son independientes del storey, así que
-            # se desplazan una sola vez (nunca se mueve también el ObjectPlacement del
-            # nivel, que podría duplicar el movimiento).
-            if abs(delta) > TOLERANCIA_CALCULO:
-                modificados.extend(self._mover_elementos_nivel(nivel, delta))
+        try:
+            if nombre is not None:
+                if not str(nombre).strip():
+                    raise self._error("El nivel necesita un nombre.", -32602)
+                nivel.Name = str(nombre).strip()
+            modificados: list[Any] = [nivel]
+            if elevacion is not None:
+                nivel.Elevation = elevacion
+                # O006a: los elementos contenidos acompañan al nivel. En las muestras y en
+                # las casas de O003b las colocaciones son independientes del storey, así que
+                # se desplazan una sola vez (nunca se mueve también el ObjectPlacement del
+                # nivel, que podría duplicar el movimiento).
+                if abs(delta) > TOLERANCIA_CALCULO:
+                    modificados.extend(self._mover_elementos_nivel(nivel, delta))
+                # O016: además de los contenidos, se recalculan los elementos cuya base o
+                # tope apunta a este nivel, en la misma instantánea.
+                modificados.extend(self._recalcular_restricciones({_gid(nivel)}))
+        except Exception:
+            self._revertir_instantanea()
+            raise
         self.con_cambios = True
         return self._resultado(modificados=modificados, mensaje="Nivel actualizado.")
 
@@ -446,23 +613,30 @@ class ModeladoMixin:
         destino = base + altura
         delta = destino - anterior
         self._instantanea()
-        modificados: list[Any] = [nivel_superior]
-        nivel_superior.Elevation = destino
-        if abs(delta) > TOLERANCIA_CALCULO:
-            modificados.extend(self._mover_elementos_nivel(nivel_superior, delta))
-        if cadena:
-            arrastrados = [
-                n
-                for n in self.modelo.by_type("IfcBuildingStorey")
-                if n != nivel_superior
-                and float(n.Elevation or 0.0) > anterior + TOLERANCIA_CALCULO
-            ]
-            arrastrados.sort(key=lambda n: float(n.Elevation or 0.0))
-            for nivel in arrastrados:
-                nivel.Elevation = float(nivel.Elevation or 0.0) + delta
-                modificados.append(nivel)
-                if abs(delta) > TOLERANCIA_CALCULO:
-                    modificados.extend(self._mover_elementos_nivel(nivel, delta))
+        try:
+            modificados: list[Any] = [nivel_superior]
+            nivel_superior.Elevation = destino
+            cambiados = {_gid(nivel_superior)}
+            if abs(delta) > TOLERANCIA_CALCULO:
+                modificados.extend(self._mover_elementos_nivel(nivel_superior, delta))
+            if cadena:
+                arrastrados = [
+                    n
+                    for n in self.modelo.by_type("IfcBuildingStorey")
+                    if n != nivel_superior
+                    and float(n.Elevation or 0.0) > anterior + TOLERANCIA_CALCULO
+                ]
+                arrastrados.sort(key=lambda n: float(n.Elevation or 0.0))
+                for nivel in arrastrados:
+                    nivel.Elevation = float(nivel.Elevation or 0.0) + delta
+                    modificados.append(nivel)
+                    cambiados.add(_gid(nivel))
+                    if abs(delta) > TOLERANCIA_CALCULO:
+                        modificados.extend(self._mover_elementos_nivel(nivel, delta))
+            modificados.extend(self._recalcular_restricciones(cambiados))
+        except Exception:
+            self._revertir_instantanea()
+            raise
         self.con_cambios = True
         return self._resultado(
             modificados=modificados,
@@ -483,11 +657,95 @@ class ModeladoMixin:
                 "bórrelos antes de borrar el nivel.",
                 -32021,
             )
+        gid_nivel = _gid(nivel)
+        ligados = []
+        for elemento in self.modelo.by_type("IfcWall") + self.modelo.by_type("IfcColumn"):
+            restriccion = self._restricciones_de(elemento)
+            if gid_nivel in (restriccion["NivelBase"], restriccion["NivelTope"]):
+                ligados.append(_nombre(elemento) or elemento.is_a())
+        if ligados:
+            raise self._error(
+                f"El nivel «{_nombre(nivel)}» lo usan {len(ligados)} elemento(s) como "
+                "base o tope: " + ", ".join(ligados) + ". Cámbielos antes de borrar el nivel.",
+                -32021,
+            )
         self._instantanea()
         gid = _gid(nivel)
         self.modelo.remove(nivel)
         self.con_cambios = True
         return self._resultado(borrados=[gid], mensaje="Nivel borrado.")
+
+    def restricciones_editar(
+        self,
+        globalid: str,
+        nivel_base: str | None = None,
+        desfase_base: float | None = None,
+        nivel_tope: str | None = None,
+        desfase_tope: float | None = None,
+        altura_sin_conexion: float | None = None,
+    ) -> dict[str, Any]:
+        """O016: cambia base/tope de un muro o columna en una sola instantánea."""
+        self._exigir_modelo()
+        entidad = self._entidad_por_gid(globalid, ("IfcWall", "IfcColumn"))
+        if not (entidad.is_a("IfcWall") or entidad.is_a("IfcColumn")):
+            raise self._error("Solo los muros y las columnas admiten restricciones.", -32602)
+        restriccion = dict(self._restricciones_de(entidad))
+        if nivel_base is not None:
+            nivel = self._nivel_por_gid(str(nivel_base))
+            restriccion["NivelBase"] = _gid(nivel)
+        if desfase_base is not None:
+            try:
+                restriccion["DesfaseBase"] = float(desfase_base)
+            except (TypeError, ValueError) as exc:
+                raise self._error("El desfase de base no es un número.", -32602) from exc
+        if nivel_tope is not None:
+            if _texto(nivel_tope):
+                nivel = self._nivel_por_gid(str(nivel_tope))
+                restriccion["NivelTope"] = _gid(nivel)
+            else:
+                restriccion["NivelTope"] = ""
+        if desfase_tope is not None:
+            try:
+                restriccion["DesfaseTope"] = float(desfase_tope)
+            except (TypeError, ValueError) as exc:
+                raise self._error("El desfase de tope no es un número.", -32602) from exc
+        if altura_sin_conexion is not None:
+            try:
+                restriccion["AlturaSinConexion"] = float(altura_sin_conexion)
+            except (TypeError, ValueError) as exc:
+                raise self._error(
+                    "La altura sin conexión no es un número.", -32602
+                ) from exc
+        nivel_base_entidad = self._nivel_por_gid(restriccion["NivelBase"])
+        elev_base = float(nivel_base_entidad.Elevation or 0.0)
+        elev_tope = None
+        if restriccion["NivelTope"]:
+            elev_tope = float(
+                self._nivel_por_gid(restriccion["NivelTope"]).Elevation or 0.0
+            )
+        try:
+            altura_restringida(
+                elev_base,
+                restriccion["DesfaseBase"],
+                elev_tope,
+                restriccion["DesfaseTope"],
+                restriccion["AlturaSinConexion"],
+            )
+        except ValueError as exc:
+            raise self._error(str(exc), -32602) from exc
+        self._instantanea()
+        try:
+            self._aplicar_restriccion(entidad, restriccion)
+            spatial_api.assign_container(
+                self.modelo, products=[entidad], relating_structure=nivel_base_entidad
+            )
+        except Exception:
+            self._revertir_instantanea()
+            raise
+        self.con_cambios = True
+        return self._resultado(
+            modificados=[entidad], mensaje="Restricciones actualizadas."
+        )
 
     # ------------------------------------------------------------------ ejes
     def _grid(self) -> Any:
@@ -1672,12 +1930,26 @@ class ModeladoMixin:
         if altura <= 0:
             raise self._error("La altura del muro debe ser positiva.", -32602)
 
+        elevacion = float(nivel_entidad.Elevation or 0.0)
+        superior = self._nivel_inmediato_superior(elevacion)
+        restriccion = {
+            "NivelBase": _gid(nivel_entidad),
+            "DesfaseBase": 0.0,
+            "NivelTope": _gid(superior) if superior is not None else "",
+            "DesfaseTope": 0.0,
+            "AlturaSinConexion": altura,
+        }
+        if superior is not None:
+            elev_tope = float(superior.Elevation or 0.0)
+            try:
+                _, altura = altura_restringida(elevacion, 0.0, elev_tope, 0.0, altura)
+            except ValueError as exc:
+                raise self._error(str(exc), -32602) from exc
         self._instantanea()
         espesor = self._espesor_tipo(tipo_entidad)
         muro = root.create_entity(self.modelo, ifc_class="IfcWall")
         muro.Name = f"Muro {_nombre(tipo_entidad)}"
         type_api.assign_type(self.modelo, related_objects=[muro], relating_type=tipo_entidad)
-        elevacion = float(nivel_entidad.Elevation or 0.0)
         self._guardar_pset(
             muro,
             "OPENRVT_Muro",
@@ -1688,6 +1960,7 @@ class ModeladoMixin:
                 "Alineacion": alineacion,
             },
         )
+        self._guardar_pset(muro, PSET_RESTRICCIONES, restriccion)
         cuerpo = self._cuerpo_muro(muro)
         geometry_api.assign_representation(self.modelo, product=muro, representation=cuerpo)
         ux, uy = (x2 - x1) / largo, (y2 - y1) / largo
@@ -2215,6 +2488,10 @@ class ModeladoMixin:
             raise self._error("La posición de la columna no es numérica.", -32602) from exc
         elevacion = float(nivel_entidad.Elevation or 0.0)
         alto = self._altura_columna(elevacion, nivel_superior, altura)
+        tope = _texto(nivel_superior)
+        if not tope:
+            inmediato = self._nivel_inmediato_superior(elevacion)
+            tope = _gid(inmediato) if inmediato is not None else ""
         self._instantanea()
         columna = root.create_entity(self.modelo, ifc_class="IfcColumn")
         alias = self._estructura_de_tipo(tipo_entidad) or "columna"
@@ -2227,8 +2504,19 @@ class ModeladoMixin:
             "OPENRVT_Estructura",
             {
                 "X": x, "Y": y, "Rotacion": rotacion, "Base": elevacion,
-                "Nivel": nivel, "NivelSuperior": _texto(nivel_superior or ""),
+                "Nivel": nivel, "NivelSuperior": tope,
                 "Altura": alto,
+            },
+        )
+        self._guardar_pset(
+            columna,
+            PSET_RESTRICCIONES,
+            {
+                "NivelBase": _gid(nivel_entidad),
+                "DesfaseBase": 0.0,
+                "NivelTope": tope,
+                "DesfaseTope": 0.0,
+                "AlturaSinConexion": alto,
             },
         )
         self._regenerar_estructura(columna)
@@ -3415,6 +3703,11 @@ class ModeladoMixin:
                             "La nueva altura deja una abertura fuera del muro.", -32023
                         )
                 datos["altura"] = altura
+                # O016: editar la altura a mano desconecta el tope y fija la altura.
+                restriccion = self._restricciones_de(entidad)
+                restriccion["NivelTope"] = ""
+                restriccion["AlturaSinConexion"] = altura
+                self._guardar_pset(entidad, PSET_RESTRICCIONES, restriccion)
             if longitud is not None:
                 longitud = float(longitud)
                 if longitud <= 0:
@@ -3536,6 +3829,11 @@ class ModeladoMixin:
             else:
                 datos["Z"] = elevacion - float(datos.get("Desplante") or 1.0)
             self._guardar_pset(entidad, "OPENRVT_Estructura", datos)
+            if entidad.is_a("IfcColumn"):
+                restriccion = self._restricciones_de(entidad)
+                restriccion["NivelTope"] = _texto(datos.get("NivelSuperior"))
+                restriccion["AlturaSinConexion"] = float(datos.get("Altura") or 0.0)
+                self._guardar_pset(entidad, PSET_RESTRICCIONES, restriccion)
             self._regenerar_estructura(entidad)
             if entidad.is_a("IfcColumn"):
                 dx = float(datos.get("X") or 0.0) - antes_x
