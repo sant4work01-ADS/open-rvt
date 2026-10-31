@@ -49,8 +49,8 @@ function CampoNumero({
   ayuda?: string;
 }) {
   return (
-    <label className="flex items-center justify-between gap-2 text-xs" title={ayuda}>
-      <span className="cursor-help text-muted-foreground">{etiqueta}</span>
+    <label className="flex h-7 items-center justify-between gap-2 text-xs" title={ayuda}>
+      <span className="cursor-help truncate text-muted-foreground">{etiqueta}</span>
       <input
         data-testid={testid}
         type="number"

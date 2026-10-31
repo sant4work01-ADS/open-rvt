@@ -250,7 +250,8 @@ export function NavegadorVistas({
         {GRUPOS.map((grupo) => {
           const delGrupo = filtradas.filter((v) => grupo.tipos.includes(v.tipo));
           if (delGrupo.length === 0) return null;
-          const plegado = plegados.includes(grupo.prueba);
+          // Con una búsqueda activa se muestran las coincidencias aunque el grupo esté plegado.
+          const plegado = plegados.includes(grupo.prueba) && !normalizarBusqueda(consulta);
           return (
             <section key={grupo.titulo} data-grupo={grupo.prueba}>
               <button
@@ -329,12 +330,14 @@ export function NavegadorVistas({
           <button
             type="button"
             data-testid="grupo-cantidades-plegar"
-            aria-expanded={!plegados.includes("cantidades")}
+            aria-expanded={
+              !(plegados.includes("cantidades") && !normalizarBusqueda(consulta))
+            }
             onClick={() => alternar("cantidades")}
             title={`${plegados.includes("cantidades") ? "Mostrar" : "Ocultar"} Cantidades`}
             className="flex w-full items-center gap-1 rounded px-1 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground hover:bg-muted"
           >
-            {plegados.includes("cantidades") ? (
+            {plegados.includes("cantidades") && !normalizarBusqueda(consulta) ? (
               <ChevronRight size={12} />
             ) : (
               <ChevronDown size={12} />
@@ -349,7 +352,7 @@ export function NavegadorVistas({
                 : 1}
             </span>
           </button>
-          {!plegados.includes("cantidades") &&
+          {!(plegados.includes("cantidades") && !normalizarBusqueda(consulta)) &&
             (!normalizarBusqueda(consulta) ||
               normalizarBusqueda("Cantidades").includes(normalizarBusqueda(consulta))) && (
               <ul className="flex flex-col">

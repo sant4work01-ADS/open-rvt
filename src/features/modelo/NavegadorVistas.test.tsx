@@ -81,6 +81,16 @@ describe("O022: grupos plegables", () => {
     );
   });
 
+  it("una búsqueda activa muestra las coincidencias aunque el grupo esté plegado", () => {
+    render(<NavegadorVistas vistas={VISTAS} activaId="p0" onElegir={() => {}} />);
+    fireEvent.click(screen.getByTestId("grupo-plantas-plegar"));
+    fireEvent.change(screen.getByTestId("vistas-buscador"), { target: { value: "planta" } });
+    expect(screen.getAllByTestId("vista-item").map((b) => b.dataset.vistaId)).toEqual([
+      "p0",
+      "p1",
+    ]);
+  });
+
   it("un localStorage que falla no rompe el navegador", () => {
     const original = Storage.prototype.getItem;
     Storage.prototype.getItem = () => {
