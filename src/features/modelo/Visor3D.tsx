@@ -2808,6 +2808,12 @@ export function Visor3D({
           desplazamiento: number;
           caja: { t0: number; t1: number; z0: number; z1: number };
         }> = [];
+        // O014b: guías quebradas (horizontal, diagonal, horizontal) de las cabezas
+        // desplazadas, en el plano (t, z), para comprobarlas en el E2E.
+        const guiasCabezas: Array<{
+          elev: number;
+          puntos: Array<[number, number]>;
+        }> = [];
         for (let i = 0; i < ordenados.length; i += 1) {
           const nivel = ordenados[i];
           const z = nivel.elevacion;
@@ -2827,13 +2833,15 @@ export function Visor3D({
           const tresMM = mmAMundo(3, vista.escala);
           const tCabeza = tFinNivel + (Math.abs(desplazamiento) > 1e-9 ? tresMM * 3 : 0);
           if (Math.abs(desplazamiento) > 1e-9) {
+            const guia: Array<[number, number]> = [
+              [tFinNivel, z],
+              [tFinNivel + tresMM, z],
+              [tFinNivel + tresMM * 2, zCabeza],
+              [tCabeza, zCabeza],
+            ];
+            guiasCabezas.push({ elev: z, puntos: guia });
             lineaCerrada(
-              [
-                puntoHZ(tFinNivel, z),
-                puntoHZ(tFinNivel + tresMM, z),
-                puntoHZ(tFinNivel + tresMM * 2, zCabeza),
-                puntoHZ(tCabeza, zCabeza),
-              ],
+              guia.map(([t, zGuia]) => puntoHZ(t, zGuia)),
               materialNivel,
               3,
               grupoLocal,
@@ -3213,6 +3221,7 @@ export function Visor3D({
             desfaseInferior,
             bordeTexto: tFinNivel + inicioTextoNivel + mmAMundo(1, vista.escala),
             haciaCamara,
+            guias: guiasCabezas,
             cabezas: geometriaCabezas.map((cabeza) => ({
               z: cabeza.z,
               t: cabeza.t,

@@ -268,6 +268,25 @@ async function comprobarCabezasSeparadas(ses, contexto) {
   return cajas;
 }
 
+async function comprobarGuiasNivel(ses, contexto) {
+  const datos = JSON.parse(await atributoVisor(ses, "niveles-cabezas"));
+  const desplazadas = datos.cabezas.filter((c) => Math.abs(c.desplazamiento) > 1e-9);
+  assert.ok(desplazadas.length > 0, `ninguna cabeza se desplazó (${contexto})`);
+  for (const cabeza of desplazadas) {
+    const guia = datos.guias.find((g) => Math.abs(g.elev - cabeza.elev) < 1e-9);
+    assert.ok(guia, `la cabeza ${cabeza.elev} no tiene guía quebrada (${contexto})`);
+    assert.equal(guia.puntos.length, 4, `la guía de ${cabeza.elev} no es quebrada`);
+    const [a, b, c, d] = guia.puntos;
+    assert.ok(Math.abs(a[1] - b[1]) < 1e-9, "el primer tramo de la guía no es horizontal");
+    assert.ok(
+      Math.abs(b[0] - c[0]) > 1e-9 && Math.abs(b[1] - c[1]) > 1e-9,
+      "el tramo central de la guía no es diagonal",
+    );
+    assert.ok(Math.abs(c[1] - d[1]) < 1e-9, "el último tramo de la guía no es horizontal");
+    assert.ok(Math.abs(d[1] - a[1]) > 1e-9, "la guía no llega a la altura de la cabeza");
+  }
+}
+
 async function anotaciones(ses) {
   const anotaciones = await ses.driver.executeScript(() =>
     document.querySelector('[data-testid="visor"]').__openrvtAlzadoAnotacionesPantalla(),
@@ -402,6 +421,7 @@ test("O014b: texto legible, codo de niveles y codo de burbujas", async () => {
     // Aserción geométrica: las cajas en pantalla (triángulo + texto + nombre) de
     // TODOS los pares de cabezas quedan separadas, no solo sus bandas teóricas.
     await comprobarCabezasSeparadas(ses, "alzado 0.00/2.00/2.20/3.00");
+    await comprobarGuiasNivel(ses, "alzado 0.00/2.00/2.20/3.00");
 
     const anot = await anotaciones(ses);
     const etiquetasNivel = anot.etiquetas.filter((e) => e.tipo === "nivel");
@@ -516,6 +536,7 @@ test("O014b: texto legible, codo de niveles y codo de burbujas", async () => {
     await activar(ses, "visor-ajustar");
     await esperar(800);
     await comprobarCabezasSeparadas(ses, "alzado 0.00/0.10/0.20/3.00");
+    await comprobarGuiasNivel(ses, "alzado 0.00/0.10/0.20/3.00");
     const ajusteJuntos = JSON.parse(await atributoVisor(ses, "niveles-ajuste"));
     // Cálculo a mano con la banda publicada por el visor (texto + separación +
     // nombre + margen, ya con los mínimos de píxeles de esta cámara): a 0.10 m
@@ -588,6 +609,7 @@ test("O014b: texto legible, codo de niveles y codo de burbujas", async () => {
       );
     }
     await comprobarCabezasSeparadas(ses, "corte (0,1) 0.00/0.10/0.20/3.00");
+    await comprobarGuiasNivel(ses, "corte (0,1) 0.00/0.10/0.20/3.00");
     await ses.captura(path.join(CAPTURAS, "o014b-corte-legible.png"));
   } finally {
     await ses.cerrar();
