@@ -6,9 +6,10 @@ export function textoCabezaNivel(elev: number, estilo: EstiloNivel): string {
   const factor = 10 ** estilo.decimales;
   // Redondear antes de decidir el signo evita el «-0.00» en negativos diminutos.
   const valor = Math.round(Math.abs(elev) * factor) / factor;
+  const signo = elev < 0 ? "-" : estilo.signo ? "+" : "";
   const cuerpo = valor === 0
     ? valor.toFixed(estilo.decimales)
-    : `${elev < 0 ? "-" : "+"}${valor.toFixed(estilo.decimales)}`;
+    : `${signo}${valor.toFixed(estilo.decimales)}`;
   const conUnidad = `${cuerpo}${estilo.unidad}`;
   return estilo.prefijo ? `${estilo.prefijo} ${conUnidad}` : conUnidad;
 }

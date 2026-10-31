@@ -319,6 +319,54 @@ export function PropiedadesVista({ vista }: { vista: Vista }) {
         )}
       </Seccion>
 
+      {(vista.tipo === "alzado" || vista.tipo === "corte") && (
+        <Seccion
+          id="anotacion"
+          titulo="Anotación"
+          plegada={plegada("anotacion")}
+          onAlternar={alternarSeccion}
+        >
+          <label className="prop-fila text-xs" title="Separación del globo sobre el último nivel visible (mm de papel)">
+            <span className="prop-etiqueta cursor-help text-muted-foreground">
+              Separación de globos (mm)
+            </span>
+            <input
+              data-testid="vista-separacion-globos"
+              type="number"
+              min="0"
+              max="200"
+              step="1"
+              value={vista.separacionGlobos ?? ""}
+              placeholder={String(estilos.ejes.separacionGlobos)}
+              onChange={(e) => {
+                if (e.target.value === "") {
+                  cambiar({ separacionGlobos: undefined });
+                  return;
+                }
+                const numero = Number(e.target.value);
+                if (Number.isFinite(numero)) {
+                  cambiar({ separacionGlobos: Math.min(Math.max(numero, 0), 200) });
+                }
+              }}
+              className="w-24 rounded border bg-background px-2 py-1 text-right"
+            />
+          </label>
+          <label className="prop-fila text-xs">
+            <span className="prop-etiqueta text-muted-foreground">Estilo de cota</span>
+            <select
+              data-testid="vista-estilo-cota"
+              value={vista.estiloCota ?? estilos.cotas.porDefecto}
+              onChange={(e) => cambiar({ estiloCota: e.target.value })}
+              className="rounded border bg-background px-2 py-1"
+            >
+              {estilos.cotas.lista.map((c) => (
+                <option key={c.nombre} value={c.nombre}>{c.nombre}</option>
+              ))}
+            </select>
+          </label>
+        </Seccion>
+      )}
+
       <Seccion
         id="niveles"
         titulo="Niveles visibles"

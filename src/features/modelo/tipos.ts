@@ -83,6 +83,10 @@ export interface Vista {
   ejes?: Record<string, AjusteEjeVista>;
   /** O014b: ajustes de cabeza de nivel en esta vista. Clave: GlobalId del nivel. */
   nivelesAjuste?: Record<string, AjusteNivelVista>;
+  /** O024: sobrescritura por vista de la separación de globos (mm de papel). */
+  separacionGlobos?: number;
+  /** O024: nombre del estilo de cota por omisión de esta vista. */
+  estiloCota?: string;
 }
 
 export interface Nivel {

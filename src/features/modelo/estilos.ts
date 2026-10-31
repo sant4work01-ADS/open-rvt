@@ -45,24 +45,96 @@ export interface EstiloMaterial {
   escala: number;
 }
 
-export type CabezaNivel = "triangulo" | "circulo" | "ninguna";
+/** O024: patrones de línea de anotación (mm de papel). */
+export type PatronAnotacion = "continua" | "trazo" | "trazo-punto";
+export type CabezaNivel = "triangulo-relleno" | "triangulo" | "circulo" | "ninguna";
+export type LadoCabezaNivel = "derecha" | "izquierda" | "ambos";
+export type GlobosEje = "inicio" | "fin" | "ambos";
+export type RemateCota =
+  | "flecha-rellena"
+  | "flecha-abierta"
+  | "tick-arquitectonico"
+  | "punto";
 
-/** O014a: estilo de la cabeza y el texto de los niveles. */
+/**
+ * O024: estilo de niveles. Amplía el de O014a con la línea, la cabeza y el texto.
+ * Todas las medidas son mm de papel a la escala de la vista.
+ */
 export interface EstiloNivel {
+  patron: PatronAnotacion;
+  color: string;
+  /** Grosor de la línea en mm de papel. */
+  grosor: number;
+  cabeza: CabezaNivel;
+  /** Ancho de la cabeza en mm de papel. */
+  tamanoCabeza: number;
+  ladoCabeza: LadoCabezaNivel;
   prefijo: string;
   decimales: 0 | 1 | 2 | 3;
   unidad: string;
-  cabeza: CabezaNivel;
-  color: string;
+  /** `true` = signo + en las elevaciones positivas. */
+  signo: boolean;
+  /** Alto del texto en mm de papel. */
+  altoTexto: number;
   cotas: boolean;
   mostrarNombre: boolean;
+  /** Extensión de la línea más allá del último elemento o eje, en mm de papel. */
+  extension: number;
+}
+
+/** O024: estilo de los ejes (globos, línea y separación en alzado/corte). */
+export interface EstiloEje {
+  patron: PatronAnotacion;
+  color: string;
+  grosor: number;
+  /** Diámetro del globo en mm de papel. */
+  diametroGlobo: number;
+  altoTexto: number;
+  globos: GlobosEje;
+  /** En alzado/corte: separación del globo sobre el último nivel visible (mm). */
+  separacionGlobos: number;
+  /** Extensión bajo el primer nivel (mm). */
+  extensionBajoPrimerNivel: number;
+}
+
+/** O024: estilo de cotas; puede haber varias con nombre. */
+export interface EstiloCota {
+  nombre: string;
+  remate: RemateCota;
+  /** Tamaño del remate en mm de papel. */
+  tamanoRemate: number;
+  altoTexto: number;
+  posicionTexto: "sobre-la-linea" | "centrado-cortando-la-linea";
+  /** Separación texto–línea en mm. */
+  separacionTexto: number;
+  /** Separación de la línea de extensión al objeto en mm. */
+  separacionExtension: number;
+  /** Prolongación más allá de la línea de cota en mm. */
+  prolongacion: number;
+  /** Distancia entre filas de cotas (cadena y total) en mm. */
+  distanciaFilas: number;
+  decimales: 0 | 1 | 2 | 3;
+  unidad: string;
+  color: string;
+  textoChico: "fuera-con-flechas-hacia-adentro" | "con-linea-de-referencia";
+  patron: PatronAnotacion;
+  grosor: number;
+}
+
+export interface EstilosCota {
+  lista: EstiloCota[];
+  /** Nombre del estilo por omisión global. */
+  porDefecto: string;
 }
 
 export interface Estilos {
   categorias: Record<CategoriaEstilo, EstiloCategoria>;
   materiales: Record<MaterialNombre, EstiloMaterial>;
-  /** O014a: se guarda en el mismo JSON; los proyectos viejos usan los valores por omisión. */
+  /** O014a/O024: se guarda en el mismo JSON; los proyectos viejos usan las omisiones. */
   niveles: EstiloNivel;
+  /** O024: ejes y cotas. Opcionales al leer JSON viejo. */
+  ejes: EstiloEje;
+  cotas: EstilosCota;
 }
 
 /** Sobrescritura de una categoría dentro de una vista concreta. */
@@ -110,6 +182,61 @@ export function nombreCategoriaEstilo(categoria: CategoriaEstilo): string {
   return NOMBRES[categoria];
 }
 
+/** O024: niveles por omisión, tal como la referencia de O025. */
+export function estiloNivelPorDefecto(color = "#1f2328"): EstiloNivel {
+  return {
+    patron: "trazo-punto",
+    color,
+    grosor: 0.13,
+    cabeza: "triangulo-relleno",
+    tamanoCabeza: 3.5,
+    ladoCabeza: "derecha",
+    prefijo: "Npt",
+    decimales: 2,
+    unidad: "m",
+    signo: true,
+    altoTexto: 2.5,
+    cotas: true,
+    mostrarNombre: false,
+    extension: 12,
+  };
+}
+
+/** O024: ejes por omisión (globo de 8 mm, 10 mm sobre el último nivel). */
+export function estiloEjePorDefecto(color = "#8a5a2b"): EstiloEje {
+  return {
+    patron: "trazo-punto",
+    color,
+    grosor: 0.13,
+    diametroGlobo: 8,
+    altoTexto: 3.5,
+    globos: "fin",
+    separacionGlobos: 10,
+    extensionBajoPrimerNivel: 5,
+  };
+}
+
+/** O024: estilo de cota por omisión «Cota 1:100». */
+export function estiloCotaPorDefecto(nombre = "Cota 1:100"): EstiloCota {
+  return {
+    nombre,
+    remate: "flecha-rellena",
+    tamanoRemate: 2.5,
+    altoTexto: 2.5,
+    posicionTexto: "sobre-la-linea",
+    separacionTexto: 1,
+    separacionExtension: 1.5,
+    prolongacion: 1.5,
+    distanciaFilas: 7,
+    decimales: 2,
+    unidad: "",
+    color: "#1f2328",
+    textoChico: "fuera-con-flechas-hacia-adentro",
+    patron: "continua",
+    grosor: 0.13,
+  };
+}
+
 /** Tabla por defecto de la spec (mm de papel a 1:100). */
 export function estilosPorDefecto(): Estilos {
   const negro = "#1f2328";
@@ -136,14 +263,11 @@ export function estilosPorDefecto(): Estilos {
     };
   return {
     categorias,
-    niveles: {
-      prefijo: "Npt",
-      decimales: 2,
-      unidad: "m",
-      cabeza: "triangulo",
-      color: categorias.niveles.color,
-      cotas: true,
-      mostrarNombre: true,
+    niveles: estiloNivelPorDefecto(categorias.niveles.color),
+    ejes: estiloEjePorDefecto(categorias.ejes.color),
+    cotas: {
+      lista: [estiloCotaPorDefecto("Cota 1:100")],
+      porDefecto: "Cota 1:100",
     },
     materiales: {
       block: { patron: "diagonal", escala: 2 },
@@ -174,7 +298,29 @@ const PATRONES_RELLENO: PatronRelleno[] = [
   "vidrio",
   "generico",
 ];
-const CABEZAS_NIVEL: CabezaNivel[] = ["triangulo", "circulo", "ninguna"];
+const CABEZAS_NIVEL: CabezaNivel[] = [
+  "triangulo-relleno",
+  "triangulo",
+  "circulo",
+  "ninguna",
+];
+const LADOS_CABEZA: LadoCabezaNivel[] = ["derecha", "izquierda", "ambos"];
+const PATRONES_ANOTACION: PatronAnotacion[] = ["continua", "trazo", "trazo-punto"];
+const GLOBOS_EJE: GlobosEje[] = ["inicio", "fin", "ambos"];
+const REMATES_COTA: RemateCota[] = [
+  "flecha-rellena",
+  "flecha-abierta",
+  "tick-arquitectonico",
+  "punto",
+];
+const POSICIONES_TEXTO_COTA: EstiloCota["posicionTexto"][] = [
+  "sobre-la-linea",
+  "centrado-cortando-la-linea",
+];
+const TEXTOS_CHICOS: EstiloCota["textoChico"][] = [
+  "fuera-con-flechas-hacia-adentro",
+  "con-linea-de-referencia",
+];
 
 export const MATERIALES: MaterialNombre[] = [
   "block",
@@ -189,6 +335,118 @@ export const MATERIALES: MaterialNombre[] = [
 
 const numero = (valor: unknown, pordefecto: number | null): number | null =>
   typeof valor === "number" && Number.isFinite(valor) && valor >= 0 ? valor : pordefecto;
+
+/** O024: validación común de medidas de anotación (sin negativos, rango acotado). */
+export function numeroAnotacion(
+  valor: unknown,
+  pordefecto: number,
+  min: number,
+  max: number,
+): number {
+  if (typeof valor !== "number" || !Number.isFinite(valor) || valor < 0) return pordefecto;
+  return Math.min(Math.max(valor, min), max);
+}
+
+const texto = (valor: unknown, pordefecto: string): string =>
+  typeof valor === "string" ? valor.slice(0, 24) : pordefecto;
+
+const booleano = (valor: unknown, pordefecto: boolean): boolean =>
+  typeof valor === "boolean" ? valor : pordefecto;
+
+const color = (valor: unknown, pordefecto: string): string =>
+  typeof valor === "string" && /^#[0-9a-f]{6}$/i.test(valor) ? valor : pordefecto;
+
+const decimalesDe = (valor: unknown, pordefecto: 0 | 1 | 2 | 3): 0 | 1 | 2 | 3 =>
+  [0, 1, 2, 3].includes(valor as number) ? (valor as 0 | 1 | 2 | 3) : pordefecto;
+
+/** Lee un estilo de nivel de JSON viejo (O014a) o nuevo (O024). */
+export function normalizarEstiloNivel(valor: unknown, base: EstiloNivel): EstiloNivel {
+  if (!valor || typeof valor !== "object") return { ...base };
+  const e = valor as Record<string, unknown>;
+  // O014a usaba «triangulo»; ahora la cabeza rellena es la de la referencia.
+  const cabezaCruda = e.cabeza === "triangulo" ? "triangulo-relleno" : e.cabeza;
+  return {
+    patron: PATRONES_ANOTACION.includes(e.patron as PatronAnotacion)
+      ? (e.patron as PatronAnotacion)
+      : base.patron,
+    color: color(e.color, base.color),
+    grosor: numeroAnotacion(e.grosor, base.grosor, 0.05, 5),
+    cabeza: CABEZAS_NIVEL.includes(cabezaCruda as CabezaNivel)
+      ? (cabezaCruda as CabezaNivel)
+      : base.cabeza,
+    tamanoCabeza: numeroAnotacion(e.tamanoCabeza, base.tamanoCabeza, 0.5, 20),
+    ladoCabeza: LADOS_CABEZA.includes(e.ladoCabeza as LadoCabezaNivel)
+      ? (e.ladoCabeza as LadoCabezaNivel)
+      : base.ladoCabeza,
+    prefijo: texto(e.prefijo, base.prefijo),
+    decimales: decimalesDe(e.decimales, base.decimales),
+    unidad: texto(e.unidad, base.unidad),
+    signo: booleano(e.signo, base.signo),
+    altoTexto: numeroAnotacion(e.altoTexto, base.altoTexto, 0.5, 20),
+    cotas: booleano(e.cotas, base.cotas),
+    mostrarNombre: booleano(e.mostrarNombre, base.mostrarNombre),
+    extension: numeroAnotacion(e.extension, base.extension, 0, 200),
+  };
+}
+
+export function normalizarEstiloEje(valor: unknown, base: EstiloEje): EstiloEje {
+  if (!valor || typeof valor !== "object") return { ...base };
+  const e = valor as Record<string, unknown>;
+  return {
+    patron: PATRONES_ANOTACION.includes(e.patron as PatronAnotacion)
+      ? (e.patron as PatronAnotacion)
+      : base.patron,
+    color: color(e.color, base.color),
+    grosor: numeroAnotacion(e.grosor, base.grosor, 0.05, 5),
+    diametroGlobo: numeroAnotacion(e.diametroGlobo, base.diametroGlobo, 1, 50),
+    altoTexto: numeroAnotacion(e.altoTexto, base.altoTexto, 0.5, 20),
+    globos: GLOBOS_EJE.includes(e.globos as GlobosEje)
+      ? (e.globos as GlobosEje)
+      : base.globos,
+    separacionGlobos: numeroAnotacion(e.separacionGlobos, base.separacionGlobos, 0, 200),
+    extensionBajoPrimerNivel: numeroAnotacion(
+      e.extensionBajoPrimerNivel,
+      base.extensionBajoPrimerNivel,
+      0,
+      200,
+    ),
+  };
+}
+
+export function normalizarEstiloCota(valor: unknown, base: EstiloCota): EstiloCota {
+  if (!valor || typeof valor !== "object") return { ...base };
+  const e = valor as Record<string, unknown>;
+  return {
+    nombre: texto(e.nombre, base.nombre) || base.nombre,
+    remate: REMATES_COTA.includes(e.remate as RemateCota)
+      ? (e.remate as RemateCota)
+      : base.remate,
+    tamanoRemate: numeroAnotacion(e.tamanoRemate, base.tamanoRemate, 0.2, 20),
+    altoTexto: numeroAnotacion(e.altoTexto, base.altoTexto, 0.5, 20),
+    posicionTexto: POSICIONES_TEXTO_COTA.includes(e.posicionTexto as EstiloCota["posicionTexto"])
+      ? (e.posicionTexto as EstiloCota["posicionTexto"])
+      : base.posicionTexto,
+    separacionTexto: numeroAnotacion(e.separacionTexto, base.separacionTexto, 0, 50),
+    separacionExtension: numeroAnotacion(
+      e.separacionExtension,
+      base.separacionExtension,
+      0,
+      50,
+    ),
+    prolongacion: numeroAnotacion(e.prolongacion, base.prolongacion, 0, 50),
+    distanciaFilas: numeroAnotacion(e.distanciaFilas, base.distanciaFilas, 0, 100),
+    decimales: decimalesDe(e.decimales, base.decimales),
+    unidad: texto(e.unidad, base.unidad),
+    color: color(e.color, base.color),
+    textoChico: TEXTOS_CHICOS.includes(e.textoChico as EstiloCota["textoChico"])
+      ? (e.textoChico as EstiloCota["textoChico"])
+      : base.textoChico,
+    patron: PATRONES_ANOTACION.includes(e.patron as PatronAnotacion)
+      ? (e.patron as PatronAnotacion)
+      : base.patron,
+    grosor: numeroAnotacion(e.grosor, base.grosor, 0.05, 5),
+  };
+}
 
 /** Completa una tabla leída del IFC con los valores por defecto. */
 export function normalizarEstilos(valor: unknown): Estilos {
@@ -232,28 +490,28 @@ export function normalizarEstilos(valor: unknown): Estilos {
       };
     }
   }
-  // O014a: los proyectos viejos no traen «niveles»; se completan con las omisiones.
-  const niveles = crudo.niveles;
-  if (niveles && typeof niveles === "object") {
-    const e = niveles as Record<string, unknown>;
-    const defecto = base.niveles;
-    const decimales = [0, 1, 2, 3].includes(e.decimales as number)
-      ? (e.decimales as 0 | 1 | 2 | 3)
-      : defecto.decimales;
-    base.niveles = {
-      prefijo: typeof e.prefijo === "string" ? e.prefijo : defecto.prefijo,
-      decimales,
-      unidad: typeof e.unidad === "string" ? e.unidad : defecto.unidad,
-      cabeza: CABEZAS_NIVEL.includes(e.cabeza as CabezaNivel)
-        ? (e.cabeza as CabezaNivel)
-        : defecto.cabeza,
-      color: typeof e.color === "string" && /^#[0-9a-f]{6}$/i.test(e.color)
-        ? e.color
-        : defecto.color,
-      cotas: typeof e.cotas === "boolean" ? e.cotas : defecto.cotas,
-      mostrarNombre:
-        typeof e.mostrarNombre === "boolean" ? e.mostrarNombre : defecto.mostrarNombre,
-    };
+  // O014a/O024: los proyectos viejos no traen todos los campos; se completan.
+  base.niveles = normalizarEstiloNivel(crudo.niveles, base.niveles);
+  base.ejes = normalizarEstiloEje(crudo.ejes, base.ejes);
+  // O024: lista de cotas con nombre; sin lista válida queda «Cota 1:100».
+  const cotas = crudo.cotas;
+  if (cotas && typeof cotas === "object") {
+    const e = cotas as Record<string, unknown>;
+    const listaCruda = Array.isArray(e.lista) ? e.lista : [];
+    const lista: EstiloCota[] = [];
+    const vistos = new Set<string>();
+    for (const entrada of listaCruda) {
+      if (!entrada || typeof entrada !== "object") continue;
+      const nombre = texto((entrada as Record<string, unknown>).nombre, "");
+      if (!nombre || vistos.has(nombre)) continue;
+      vistos.add(nombre);
+      lista.push(normalizarEstiloCota(entrada, estiloCotaPorDefecto(nombre)));
+    }
+    if (lista.length > 0) {
+      base.cotas.lista = lista;
+      const porDefecto = texto(e.porDefecto, "");
+      base.cotas.porDefecto = vistos.has(porDefecto) ? porDefecto : lista[0].nombre;
+    }
   }
   return base;
 }

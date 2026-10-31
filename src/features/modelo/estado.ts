@@ -168,6 +168,8 @@ interface EstadoModelo {
   dialogoEstilos: boolean;
   /** O006a: diálogo «Crear ejes por separaciones». */
   dialogoCotas: boolean;
+  /** O024: editor de estilos de anotación (niveles, ejes y cotas). */
+  dialogoAnotacion: boolean;
   /** O007a: editor de tipos y materiales abierto dentro del área de trabajo. */
   editorTipos: boolean;
   /** O007a: tipo que se abre preseleccionado (doble clic sobre un muro). */
@@ -320,6 +322,8 @@ interface EstadoModelo {
   abrirDialogoEstilos: () => void;
   cerrarDialogoEstilos: () => void;
   abrirDialogoCotas: () => void;
+  abrirDialogoAnotacion: () => void;
+  cerrarDialogoAnotacion: () => void;
   cerrarDialogoCotas: () => void;
   abrirEditorTipos: (tipoGlobalid?: string | null) => void;
   cerrarEditorTipos: () => void;
@@ -861,6 +865,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     vistasPersistidas: false,
     dialogoEstilos: false,
     dialogoCotas: false,
+    dialogoAnotacion: false,
   editorTipos: false,
   editorTipoInicial: null,
     herramienta: null,
@@ -1067,6 +1072,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
     abrirDialogoEstilos: () => set({ dialogoEstilos: true }),
     cerrarDialogoEstilos: () => set({ dialogoEstilos: false }),
+    abrirDialogoAnotacion: () => set({ dialogoAnotacion: true }),
+    cerrarDialogoAnotacion: () => set({ dialogoAnotacion: false }),
     abrirDialogoCotas: () => set({ dialogoCotas: true }),
     cerrarDialogoCotas: () => set({ dialogoCotas: false }),
 
