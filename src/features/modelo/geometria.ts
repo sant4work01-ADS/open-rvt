@@ -19,6 +19,9 @@ interface Triangulo {
 }
 
 const EPS = 1e-9;
+// O019: mismo umbral de 30° que usa la silueta; por debajo de ese quiebre las
+// caras se consideran coplanares (una superficie continua, arista interna).
+const COSENO_QUIEBRE = Math.cos((30 * Math.PI) / 180);
 
 function normalDe(
   a: [number, number, number],
@@ -356,8 +359,22 @@ export function aristasInternasUniones(
         }
         // La arista completa debe caer sobre la superficie del otro elemento;
         // si sólo la cruza en un tramo, el resto sigue siendo silueta y se dibuja.
-        const puntos = [arista.a, raizMedia(arista), arista.b] as const;
-        const sobreSuperficie = (p: [number, number, number]): boolean => {
+        const puntos: Array<[[number, number, number], boolean]> = [
+          [arista.a, false],
+          [raizMedia(arista), true],
+          [arista.b, false],
+        ];
+        // O019: además de estar sobre la cara del otro, la arista sólo es interna
+        // si las caras de ambos elementos que la tocan son coplanares. Una
+        // esquina de muro unido (exterior o interior) sí forma quiebre y se dibuja.
+        // Las normales se toman en el punto medio: en los extremos coinciden tres
+        // caras (aristas y esquinas) que no describen la superficie de la unión.
+        const normalesOtro: Array<[number, number, number]> = [];
+        const sobreSuperficie = (
+          p: [number, number, number],
+          recolectar: boolean,
+        ): boolean => {
+          let encontrada = false;
           for (let i = 0; i + 2 < otro.indices.length; i += 3) {
             const a: [number, number, number] = [
               otro.vertices[otro.indices[i] * 3],
@@ -374,11 +391,33 @@ export function aristasInternasUniones(
               otro.vertices[otro.indices[i + 2] * 3 + 1],
               otro.vertices[otro.indices[i + 2] * 3 + 2],
             ];
-            if (puntoEnTriangulo(p, a, b, c) <= 1e-4) return true;
+            if (puntoEnTriangulo(p, a, b, c) <= 1e-4) {
+              encontrada = true;
+              if (!recolectar) continue;
+              const normal = normalDe(a, b, c);
+              if (Math.hypot(normal[0], normal[1], normal[2]) >= 0.5) {
+                normalesOtro.push(normal);
+              }
+            }
           }
-          return false;
+          return encontrada;
         };
-        if (puntos.every(sobreSuperficie)) {
+        if (!puntos.every(([p, recolectar]) => sobreSuperficie(p, recolectar))) {
+          continue;
+        }
+        // Cada cara propia que toca la arista debe continuar en un plano coplanar
+        // del otro elemento; si alguna no lo hace, la unión tiene quiebre visible.
+        const quiebre = normalesOtro.some((normalOtro) =>
+          !arista.normales.some(
+            (normalPropia) =>
+              Math.abs(
+                normalPropia[0] * normalOtro[0] +
+                  normalPropia[1] * normalOtro[1] +
+                  normalPropia[2] * normalOtro[2],
+              ) >= COSENO_QUIEBRE,
+          ),
+        );
+        if (!quiebre) {
           internas.add(claveSegmento(arista.a, arista.b));
           break;
         }

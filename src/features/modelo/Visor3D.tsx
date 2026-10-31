@@ -4980,6 +4980,37 @@ export function Visor3D({
       });
       return total;
     };
+    // O019: cuenta las aristas verticales únicas dibujadas (E2E de esquinas en 3D).
+    // Deduplica por posición: dos muros ingleteados comparten la misma vertical.
+    (nodo as unknown as Record<string, unknown>).__openrvtAristasVerticales = (
+      detalle = false,
+    ) => {
+      const grupoActual = grupo.current;
+      if (!grupoActual) return 0;
+      const vistas = new Set<string>();
+      grupoActual.traverse((objeto) => {
+        const lineas = objeto as THREE.LineSegments;
+        if (!lineas.isLineSegments || !lineas.userData.globalid) return;
+        const posiciones = lineas.geometry?.getAttribute("position");
+        if (!posiciones) return;
+        for (let i = 0; i + 1 < posiciones.count; i += 2) {
+          const x1 = posiciones.getX(i);
+          const y1 = posiciones.getY(i);
+          const z1 = posiciones.getZ(i);
+          const x2 = posiciones.getX(i + 1);
+          const y2 = posiciones.getY(i + 1);
+          const z2 = posiciones.getZ(i + 1);
+          if (Math.abs(x2 - x1) > 1e-4 || Math.abs(y2 - y1) > 1e-4) continue;
+          if (Math.abs(z2 - z1) < 1e-4) continue;
+          vistas.add(
+            [x1, y1, Math.min(z1, z2), Math.max(z1, z2)]
+              .map((valor) => valor.toFixed(4))
+              .join(","),
+          );
+        }
+      });
+      return detalle ? [...vistas] : vistas.size;
+    };
     // O006a: posición en pantalla de un texto de cota (para el doble clic de las E2E).
     (nodo as unknown as Record<string, unknown>).__openrvtCotaAPantalla = (
       texto: string,

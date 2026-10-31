@@ -137,3 +137,114 @@ describe("aristas internas de uniones (O012)", () => {
     expect(libre).toBe(true);
   });
 });
+
+// O019: prisma vertical de una huella convexa (mismo tipo de malla que usa el visor).
+function prisma(
+  huella: Array<[number, number]>,
+  z0 = 0,
+  z1 = 2.6,
+): { vertices: Float32Array; indices: Uint32Array } {
+  const vertices: number[] = [];
+  for (const [x, y] of huella) vertices.push(x, y, z0);
+  for (const [x, y] of huella) vertices.push(x, y, z1);
+  const indices: number[] = [];
+  const n = huella.length;
+  // Tapa inferior y superior en abanico (las huellas de prueba son convexas).
+  for (let i = 1; i + 1 < n; i += 1) {
+    indices.push(0, i + 1, i);
+    indices.push(n, n + i, n + i + 1);
+  }
+  for (let i = 0; i < n; i += 1) {
+    const j = (i + 1) % n;
+    indices.push(i, j, n + j);
+    indices.push(i, n + j, n + i);
+  }
+  return { vertices: new Float32Array(vertices), indices: new Uint32Array(indices) };
+}
+
+/** Posiciones (x,y) de las aristas verticales únicas de varios elementos. */
+function verticalesUnicas(
+  elementos: Array<{ vertices: Float32Array; indices: Uint32Array }>,
+  internas: Set<string>,
+): string[] {
+  const vistas = new Set<string>();
+  for (const elemento of elementos) {
+    const segmentos = aristasParaElemento(elemento.vertices, elemento.indices, internas);
+    for (let i = 0; i < segmentos.length; i += 6) {
+      const [x1, y1, z1] = [segmentos[i], segmentos[i + 1], segmentos[i + 2]];
+      const [x2, y2, z2] = [segmentos[i + 3], segmentos[i + 4], segmentos[i + 5]];
+      if (Math.abs(x2 - x1) > 1e-6 || Math.abs(y2 - y1) > 1e-6) continue;
+      if (Math.abs(z2 - z1) < 1e-6) continue;
+      vistas.add(`${x1.toFixed(4)},${y1.toFixed(4)}`);
+    }
+  }
+  return [...vistas].sort();
+}
+
+describe("aristas verticales de uniones en 3D (O019)", () => {
+  // Dos muros de 0.20 m en L con inglete en la diagonal (-0.1,-0.1)→(0.1,0.1).
+  const alaX: Array<[number, number]> = [
+    [-0.1, -0.1], [2.1, -0.1], [2.1, 0.1], [0.1, 0.1],
+  ];
+  const alaY: Array<[number, number]> = [
+    [-0.1, -0.1], [0.1, 0.1], [0.1, 2.1], [-0.1, 2.1],
+  ];
+
+  it("conserva las dos esquinas verticales (exterior e interior) de dos muros en L", () => {
+    const muroX = prisma(alaX);
+    const muroY = prisma(alaY);
+    const internas = aristasInternasUniones([
+      { globalid: "muro-x", categoria: "muros", ...muroX },
+      { globalid: "muro-y", categoria: "muros", ...muroY },
+    ]);
+    const verticales = verticalesUnicas([muroX, muroY], internas);
+    // Esquina exterior del inglete y esquina interior (concava).
+    expect(verticales).toContain("-0.1000,-0.1000");
+    expect(verticales).toContain("0.1000,0.1000");
+    expect(
+      verticales.filter((v) => v === "-0.1000,-0.1000" || v === "0.1000,0.1000"),
+    ).toHaveLength(2);
+  });
+
+  it("una caja cerrada de 4 muros deja las 8 esquinas verticales", () => {
+    const muros = [
+      // Muro inferior, derecho, superior e izquierdo con inglete en las cuatro esquinas.
+      prisma([[0, 0], [4, 0], [3.8, 0.2], [0.2, 0.2]]),
+      prisma([[4, 0], [4, 4], [3.8, 3.8], [3.8, 0.2]]),
+      prisma([[4, 4], [0, 4], [0.2, 3.8], [3.8, 3.8]]),
+      prisma([[0, 4], [0, 0], [0.2, 0.2], [0.2, 3.8]]),
+    ];
+    const internas = aristasInternasUniones(
+      muros.map((muro, i) => ({
+        globalid: `muro-${i}`,
+        categoria: "muros",
+        ...muro,
+      })),
+    );
+    const verticales = verticalesUnicas(muros, internas);
+    expect(verticales).toEqual([
+      "0.0000,0.0000",
+      "0.0000,4.0000",
+      "0.2000,0.2000",
+      "0.2000,3.8000",
+      "3.8000,0.2000",
+      "3.8000,3.8000",
+      "4.0000,0.0000",
+      "4.0000,4.0000",
+    ]);
+  });
+
+  it("una losa sola conserva las 4 aristas verticales de canto", () => {
+    const losa = prisma([[0, 0], [4, 0], [4, 3], [0, 3]], -0.25, 0);
+    const internas = aristasInternasUniones([
+      { globalid: "losa", categoria: "losas", ...losa },
+    ]);
+    const verticales = verticalesUnicas([losa], internas);
+    expect(verticales).toEqual([
+      "0.0000,0.0000",
+      "0.0000,3.0000",
+      "4.0000,0.0000",
+      "4.0000,3.0000",
+    ]);
+  });
+});
