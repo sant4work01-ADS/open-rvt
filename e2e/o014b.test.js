@@ -208,6 +208,66 @@ async function guardarYReabrir(ses, nombre) {
   }, 30_000, "no reabrió el modelo");
 }
 
+function seIntersectan(a, b, margen = 0.5) {
+  return (
+    a.x0 < b.x1 - margen &&
+    b.x0 < a.x1 - margen &&
+    a.y0 < b.y1 - margen &&
+    b.y0 < a.y1 - margen
+  );
+}
+
+async function cajasCabezasNivel(ses) {
+  const datos = JSON.parse(await atributoVisor(ses, "niveles-cabezas"));
+  const [h0, h1] = datos.h;
+  const [d0, d1] = datos.d;
+  const cajas = [];
+  for (const cabeza of datos.cabezas) {
+    assert.ok(cabeza.caja, `la cabeza ${cabeza.elev} no publica su caja en mundo`);
+    const { t0, t1, z0, z1 } = cabeza.caja;
+    const esquinas = [
+      [t0, z0],
+      [t1, z0],
+      [t1, z1],
+      [t0, z1],
+    ];
+    const puntos = [];
+    for (const [t, z] of esquinas) {
+      const p = await proyectar(
+        ses,
+        h0 * t + d0 * datos.profundidad,
+        h1 * t + d1 * datos.profundidad,
+        z,
+      );
+      assert.ok(p, "no se pudo proyectar la caja de una cabeza de nivel");
+      puntos.push(p);
+    }
+    cajas.push({
+      elev: cabeza.elev,
+      x0: Math.min(...puntos.map((p) => p.x)),
+      y0: Math.min(...puntos.map((p) => p.y)),
+      x1: Math.max(...puntos.map((p) => p.x)),
+      y1: Math.max(...puntos.map((p) => p.y)),
+    });
+  }
+  return cajas;
+}
+
+async function comprobarCabezasSeparadas(ses, contexto) {
+  const cajas = await cajasCabezasNivel(ses);
+  assert.equal(cajas.length, 4, `faltan cajas de cabeza (${contexto})`);
+  for (let i = 0; i < cajas.length; i += 1) {
+    for (let j = i + 1; j < cajas.length; j += 1) {
+      assert.ok(
+        !seIntersectan(cajas[i], cajas[j]),
+        `las cabezas ${cajas[i].elev} y ${cajas[j].elev} se intersectan en pantalla (${contexto}): ` +
+          `${JSON.stringify(cajas[i])} vs ${JSON.stringify(cajas[j])}`,
+      );
+    }
+  }
+  return cajas;
+}
+
 async function anotaciones(ses) {
   const anotaciones = await ses.driver.executeScript(() =>
     document.querySelector('[data-testid="visor"]').__openrvtAlzadoAnotacionesPantalla(),
@@ -324,7 +384,11 @@ test("O014b: texto legible, codo de niveles y codo de burbujas", async () => {
     const bandas = cabezas.cabezas
       .slice()
       .sort((a, b) => a.z - b.z)
-      .map((c) => ({ z: c.z, elev: c.elev, alto: cabezas.alto }));
+      .map((c) => ({
+        z: c.z + cabezas.desfaseInferior,
+        elev: c.elev,
+        alto: cabezas.altoBanda,
+      }));
     for (let i = 1; i < bandas.length; i += 1) {
       assert.ok(
         bandas[i].z >= bandas[i - 1].z + bandas[i - 1].alto - 1e-6,
@@ -335,6 +399,9 @@ test("O014b: texto legible, codo de niveles y codo de burbujas", async () => {
     assert.equal(ajuste.automaticos[0], 0, "el nivel 0.00 no debía subir");
     assert.equal(ajuste.automaticos[1], 0, "el nivel 2.00 es el de abajo y no debía subir");
     assert.ok(ajuste.automaticos[2] > 0.1, "el nivel 2.20 debía subir con codo");
+    // Aserción geométrica: las cajas en pantalla (triángulo + texto + nombre) de
+    // TODOS los pares de cabezas quedan separadas, no solo sus bandas teóricas.
+    await comprobarCabezasSeparadas(ses, "alzado 0.00/2.00/2.20/3.00");
 
     const anot = await anotaciones(ses);
     const etiquetasNivel = anot.etiquetas.filter((e) => e.tipo === "nivel");
@@ -432,6 +499,42 @@ test("O014b: texto legible, codo de niveles y codo de burbujas", async () => {
     assert.ok(lineaConCodo, "ninguna burbuja desplazada tiene codo");
     await ses.captura(path.join(CAPTURAS, "o014b-ejes-codo.png"));
 
+    // Parte 2c: el mismo alzado con tres niveles muy juntos (0.00/0.10/0.20).
+    const nivelesJuntos = (await invocar(ses, "modelo.niveles")).sort(
+      (a, b) => a.elevacion - b.elevacion,
+    );
+    const elevacionesJuntas = [0, 0.1, 0.2, 3];
+    for (let i = 0; i < 4; i += 1) {
+      await invocar(ses, "niveles.editar", {
+        globalid: nivelesJuntos[i].globalid,
+        nombre: nivelesJuntos[i].nombre,
+        elevacion: elevacionesJuntas[i],
+      });
+    }
+    await guardarYReabrir(ses, "o014b.ifc");
+    await elegirVista(ses, "Alzado Norte");
+    await activar(ses, "visor-ajustar");
+    await esperar(800);
+    await comprobarCabezasSeparadas(ses, "alzado 0.00/0.10/0.20/3.00");
+    const ajusteJuntos = JSON.parse(await atributoVisor(ses, "niveles-ajuste"));
+    // Cálculo a mano con la banda publicada por el visor (texto + separación +
+    // nombre + margen, ya con los mínimos de píxeles de esta cámara): a 0.10 m
+    // de cota la cabeza sube banda − 0.10; a 0.20 m, 2·banda − 0.20.
+    const cabezasJuntos = JSON.parse(await atributoVisor(ses, "niveles-cabezas"));
+    const banda = cabezasJuntos.altoBanda;
+    assert.ok(banda > 0.5, `la banda de la cabeza es demasiado corta: ${banda}`);
+    const esperado1 = banda - 0.1;
+    const esperado2 = 2 * banda - 0.2;
+    assert.ok(
+      Math.abs(ajusteJuntos.automaticos[1] - esperado1) < 1e-6,
+      `el nivel 0.10 debía subir ${esperado1} m: ${ajusteJuntos.automaticos[1]}`,
+    );
+    assert.ok(
+      Math.abs(ajusteJuntos.automaticos[2] - esperado2) < 1e-6,
+      `el nivel 0.20 debía subir ${esperado2} m: ${ajusteJuntos.automaticos[2]}`,
+    );
+    await ses.captura(path.join(CAPTURAS, "o014b-alzado-niveles-juntos.png"));
+
     // Parte 1 en corte: la traza (0,0)→(10,0) mira hacia (0,1). La anotación debe
     // usar la normal contraria y los textos no salen espejados.
     await elegirVista(ses, "Planta Nivel 0");
@@ -484,6 +587,7 @@ test("O014b: texto legible, codo de niveles y codo de burbujas", async () => {
         `en el corte «${etiqueta.texto}» quedó a la izquierda de su triángulo (espejado)`,
       );
     }
+    await comprobarCabezasSeparadas(ses, "corte (0,1) 0.00/0.10/0.20/3.00");
     await ses.captura(path.join(CAPTURAS, "o014b-corte-legible.png"));
   } finally {
     await ses.cerrar();

@@ -22,6 +22,43 @@ export interface CabezaNivel {
   altoCabezaMundo: number;
 }
 
+/**
+ * O014b: alto real de la banda de una cabeza, medido con los mismos tamaños con
+ * que se dibuja: texto principal + separación + nombre (si se muestra) + margen.
+ */
+export interface MedidasBandaCabeza {
+  altoTexto: number;
+  altoNombre: number;
+  mostrarNombre: boolean;
+  separacion: number;
+  margen: number;
+}
+
+export function altoBandaCabeza(medidas: MedidasBandaCabeza): number {
+  const numero = (valor: number) => (Number.isFinite(valor) ? Math.max(0, valor) : 0);
+  return (
+    numero(medidas.altoTexto) +
+    numero(medidas.separacion) +
+    (medidas.mostrarNombre ? numero(medidas.altoNombre) : 0) +
+    numero(medidas.margen)
+  );
+}
+
+/** Distancia del centro del nombre por debajo de la línea del nivel. */
+export const DESFASE_NOMBRE_CABEZA = 1.4;
+
+/**
+ * O014b: el nombre se dibuja por debajo de la línea; su borde inferior es lo que
+ * ocupa la cabeza hacia abajo. La banda de acomodo empieza ahí, no en la línea.
+ */
+export function desfaseInferiorCabeza(
+  altoNombre: number,
+  mostrarNombre: boolean,
+): number {
+  if (!mostrarNombre || !Number.isFinite(altoNombre)) return 0;
+  return -Math.max(0, altoNombre) * (DESFASE_NOMBRE_CABEZA + 0.5);
+}
+
 function separarEtiquetas(
   posiciones: number[],
   tamanos: number[],

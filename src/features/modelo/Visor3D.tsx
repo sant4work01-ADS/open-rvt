@@ -34,7 +34,15 @@ import {
   posicionTextoEntreMarcas,
 } from "./cotas";
 import { altoTextoBurbuja, desplazamientoCentrado } from "./centrado";
-import { acomodarBurbujas, acomodarCabezas, normalizarAjusteNivel, textoCabezaNivel } from "./niveles";
+import {
+  acomodarBurbujas,
+  acomodarCabezas,
+  altoBandaCabeza,
+  DESFASE_NOMBRE_CABEZA,
+  desfaseInferiorCabeza,
+  normalizarAjusteNivel,
+  textoCabezaNivel,
+} from "./niveles";
 import { baseTextoAnotacion } from "./anotacion";
 import {
   categoriaOculta,
@@ -2767,21 +2775,39 @@ export function Visor3D({
         };
 
         const cabezas: string[] = [];
-        // O014b: separación automática de cabezas que se encimarían. La banda de la
-        // cabeza mide lo que sobresale por encima de la línea del nivel.
-        const altoBandaCabeza = Math.max(altoCabeza, altoTexto);
+        // O014b: separación automática de cabezas que se encimarían. La banda mide
+        // texto principal + separación + nombre (si se muestra) + margen de 1 mm,
+        // con los mismos tamaños con que se dibuja, y empieza en el borde inferior
+        // del nombre (que va por debajo de la línea del nivel).
+        const altoBandaCabezaMundo = altoBandaCabeza({
+          altoTexto,
+          altoNombre,
+          mostrarNombre: estiloNivel.mostrarNombre,
+          separacion: separacionTexto,
+          margen: mmAMundo(1, vista.escala),
+        });
+        const desfaseInferior = desfaseInferiorCabeza(
+          altoNombre,
+          estiloNivel.mostrarNombre,
+        );
         const ajustesNivel: Record<string, { desplazamiento: number }> = {
           ...(vista.nivelesAjuste ?? {}),
           ...ajustesNivelEnCurso,
         };
         const desplazamientosAuto = acomodarCabezas(
           ordenados.map((nivel) => ({
-            elev: nivel.elevacion,
-            altoCabezaMundo: altoBandaCabeza,
+            elev: nivel.elevacion + desfaseInferior,
+            altoCabezaMundo: altoBandaCabezaMundo,
           })),
-          mmAMundo(1, vista.escala),
+          0,
         );
-        const geometriaCabezas: Array<{ z: number; t: number; elev: number; desplazamiento: number }> = [];
+        const geometriaCabezas: Array<{
+          z: number;
+          t: number;
+          elev: number;
+          desplazamiento: number;
+          caja: { t0: number; t1: number; z0: number; z1: number };
+        }> = [];
         for (let i = 0; i < ordenados.length; i += 1) {
           const nivel = ordenados[i];
           const z = nivel.elevacion;
@@ -2800,7 +2826,6 @@ export function Visor3D({
           // O014b: guía quebrada 3 mm + diagonal + 3 mm hasta la cabeza desplazada.
           const tresMM = mmAMundo(3, vista.escala);
           const tCabeza = tFinNivel + (Math.abs(desplazamiento) > 1e-9 ? tresMM * 3 : 0);
-          geometriaCabezas.push({ z: zCabeza, t: tCabeza, elev: z, desplazamiento });
           if (Math.abs(desplazamiento) > 1e-9) {
             lineaCerrada(
               [
@@ -2919,12 +2944,34 @@ export function Visor3D({
               haciaCamara,
             );
             if (nombre) {
-              const posNombre = puntoHZ(xTexto, zCabeza - altoNombre * 1.4);
+              const posNombre = puntoHZ(xTexto, zCabeza - altoNombre * DESFASE_NOMBRE_CABEZA);
               nombre.position.set(posNombre[0], posNombre[1], posNombre[2]);
               nombre.renderOrder = 20;
               grupoLocal.add(nombre);
             }
           }
+          // O014b: caja real de la cabeza en el plano (t, z): triángulo, texto y
+          // nombre, con los mismos tamaños con que se dibujan. La usa el E2E para
+          // comprobar en pantalla que dos cabezas nunca se intersectan.
+          const extensionCabeza =
+            estiloNivel.cabeza === "triangulo"
+              ? anchoCabeza / 2
+              : estiloNivel.cabeza === "circulo"
+                ? altoCabeza / 2
+                : 0;
+          const altoForma = estiloNivel.cabeza === "ninguna" ? 0 : altoCabeza;
+          geometriaCabezas.push({
+            z: zCabeza,
+            t: tCabeza,
+            elev: z,
+            desplazamiento,
+            caja: {
+              t0: tCabeza - extensionCabeza,
+              t1: Math.max(tCabeza + extensionCabeza, bordeTexto + anchoTextoCabeza),
+              z0: zCabeza + desfaseInferior,
+              z1: Math.max(zCabeza + altoForma, zTexto + altoTexto / 2),
+            },
+          });
         }
 
         const textos = {
@@ -3162,6 +3209,8 @@ export function Visor3D({
             profundidad,
             ancho: anchoCabeza,
             alto: altoCabeza,
+            altoBanda: altoBandaCabezaMundo,
+            desfaseInferior,
             bordeTexto: tFinNivel + inicioTextoNivel + mmAMundo(1, vista.escala),
             haciaCamara,
             cabezas: geometriaCabezas.map((cabeza) => ({
@@ -3170,6 +3219,7 @@ export function Visor3D({
               elev: cabeza.elev,
               desplazamiento: cabeza.desplazamiento,
               tipo: estiloNivel.cabeza,
+              caja: cabeza.caja,
             })),
           });
           contenedor.current.dataset.nivelesAjuste = JSON.stringify({
