@@ -33,7 +33,7 @@ import {
   parsearElevacion,
   posicionTextoEntreMarcas,
 } from "./cotas";
-import { desplazamientoCentrado } from "./centrado";
+import { altoTextoBurbuja, desplazamientoCentrado } from "./centrado";
 import { textoCabezaNivel } from "./niveles";
 import {
   categoriaOculta,
@@ -445,13 +445,14 @@ function crearTextoAnotacion(
   color: string,
   fondo: string,
   altoMundo: number,
+  alineacion: "centro" | "izquierda" = "centro",
 ): Text {
   const texto3d = new Text();
   texto3d.text = texto;
   texto3d.font = FUENTE_ANOTACION;
   texto3d.fontSize = altoMundo;
   texto3d.color = color;
-  texto3d.anchorX = "center";
+  texto3d.anchorX = alineacion === "izquierda" ? "left" : "center";
   texto3d.anchorY = "middle";
   const materialTexto = texto3d.material as THREE.Material;
   materialTexto.depthTest = false;
@@ -470,6 +471,11 @@ function crearTextoAnotacion(
     };
     const limites = info.textRenderInfo?.visibleBounds;
     if (!limites) return;
+    if (alineacion === "izquierda") {
+      // El origen del grupo queda en el borde izquierdo visible del glifo.
+      texto3d.position.set(-limites[0], -(limites[1] + limites[3]) / 2, 0);
+      return;
+    }
     const [dx, dy] = desplazamientoCentrado(limites);
     texto3d.position.set(dx, dy, 0);
   });
@@ -517,7 +523,9 @@ function burbujaEje(
   );
   anillo.renderOrder = 21;
   grupo.add(anillo);
-  const texto3d = crearTextoAnotacion(texto, color, fondo, 0.52);
+  // O014a: el alto de fuente se achica con la cantidad de caracteres para que el
+  // texto quepa en el 80 % del diámetro interior del globo («A.1» se salía).
+  const texto3d = crearTextoAnotacion(texto, color, fondo, altoTextoBurbuja(texto));
   texto3d.position.z = 0.01;
   grupo.add(texto3d);
   orientarAnotacion(grupo, normal);
@@ -550,10 +558,11 @@ function textoCota(
   fondo: string,
   altoMundo: number,
   normal: [number, number, number] = [0, 0, 1],
+  alineacion: "centro" | "izquierda" = "centro",
 ): THREE.Group | null {
   if (typeof document === "undefined") return null;
   const grupo = new THREE.Group();
-  grupo.add(crearTextoAnotacion(texto, color, fondo, altoMundo));
+  grupo.add(crearTextoAnotacion(texto, color, fondo, altoMundo, alineacion));
   orientarAnotacion(grupo, normal);
   return grupo;
 }
@@ -2655,15 +2664,27 @@ export function Visor3D({
               : estiloNivel.cabeza === "circulo"
                 ? altoCabeza / 2
                 : 0;
-          const xTexto = tFinNivel + inicioTexto + mmAMundo(1, vista.escala);
           const zTexto =
             estiloNivel.cabeza === "ninguna" ? z + altoTexto / 2 : z + altoCabeza / 2;
           const texto = textoCabezaNivel(z, estiloNivel);
+          // O014a: el texto se alinea por su borde izquierdo 1 mm a la derecha de la
+          // cabeza, nunca centrado sobre el eje ni sobre el triángulo.
+          const bordeTexto = tFinNivel + inicioTexto + mmAMundo(1, vista.escala);
+          const anchoTextoCabeza = anchoTextoAprox(texto, altoTexto);
+          const xTexto = bordeTexto + anchoTextoCabeza / 2;
           cabezas.push(texto);
-          const sprite = textoCota(texto, colorNivel, fondo, altoTexto, [d[0], d[1], 0]);
+          const sprite = textoCota(
+            texto,
+            colorNivel,
+            fondo,
+            altoTexto,
+            [d[0], d[1], 0],
+            "izquierda",
+          );
           if (sprite) {
             const pos = puntoHZ(xTexto, zTexto);
-            sprite.position.set(pos[0], pos[1], pos[2]);
+            const posBorde = puntoHZ(bordeTexto, zTexto);
+            sprite.position.set(posBorde[0], posBorde[1], posBorde[2]);
             sprite.renderOrder = 20;
             grupoLocal.add(sprite);
             cotasInteraccion.current.push({
@@ -2678,7 +2699,7 @@ export function Visor3D({
               tipo: "nivel",
               texto,
               centro: pos,
-              ancho: anchoTextoAprox(texto, altoTexto),
+              ancho: anchoTextoCabeza,
               alto: altoTexto,
               h: [h[0], h[1], 0],
             });
@@ -2897,6 +2918,27 @@ export function Visor3D({
           contenedor.current.dataset.nivelesZ = JSON.stringify(
             ordenados.map((nivel) => nivel.elevacion),
           );
+          // O014a: geometría de la cabeza para comprobar en pantalla que el texto no
+          // toca el triángulo ni la línea de ningún eje (prueba E2E geométrica).
+          const inicioTextoNivel =
+            estiloNivel.cabeza === "triangulo"
+              ? anchoCabeza / 2
+              : estiloNivel.cabeza === "circulo"
+                ? altoCabeza / 2
+                : 0;
+          contenedor.current.dataset.nivelesCabezas = JSON.stringify({
+            h: [h[0], h[1]],
+            d: [d[0], d[1]],
+            profundidad,
+            ancho: anchoCabeza,
+            alto: altoCabeza,
+            bordeTexto: tFinNivel + inicioTextoNivel + mmAMundo(1, vista.escala),
+            cabezas: ordenados.map((nivel) => ({
+              z: nivel.elevacion,
+              t: tFinNivel,
+              tipo: estiloNivel.cabeza,
+            })),
+          });
         }
       }
     }

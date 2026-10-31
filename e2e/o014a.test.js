@@ -236,6 +236,120 @@ async function proyectar(ses, x, y, z = 0) {
   );
 }
 
+// O014a: geometría de las comprobaciones de solape en pantalla.
+function rectIntersecaRect(a, b) {
+  return a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+}
+
+function rectIntersecaCirculo(r, c) {
+  const x = Math.max(r.x0, Math.min(c.x, r.x1));
+  const y = Math.max(r.y0, Math.min(c.y, r.y1));
+  return Math.hypot(c.x - x, c.y - y) <= c.radio;
+}
+
+function segmentoIntersecaRect(a, b, r) {
+  let t0 = 0;
+  let t1 = 1;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const pruebas = [
+    [-dx, a.x - r.x0],
+    [dx, r.x1 - a.x],
+    [-dy, a.y - r.y0],
+    [dy, r.y1 - a.y],
+  ];
+  for (const [p, q] of pruebas) {
+    if (Math.abs(p) < 1e-9) {
+      if (q < 0) return false;
+      continue;
+    }
+    const t = q / p;
+    if (p < 0) {
+      if (t > t1) return false;
+      if (t > t0) t0 = t;
+    } else {
+      if (t < t0) return false;
+      if (t < t1) t1 = t;
+    }
+  }
+  return true;
+}
+
+function caja(puntos) {
+  return {
+    x0: Math.min(...puntos.map((p) => p.x)),
+    y0: Math.min(...puntos.map((p) => p.y)),
+    x1: Math.max(...puntos.map((p) => p.x)),
+    y1: Math.max(...puntos.map((p) => p.y)),
+  };
+}
+
+async function cajasCabezas(ses) {
+  const datos = JSON.parse(await atributoVisor(ses, "niveles-cabezas"));
+  const [h0, h1] = datos.h;
+  const [d0, d1] = datos.d;
+  const cajas = [];
+  for (const cabeza of datos.cabezas) {
+    if (cabeza.tipo !== "triangulo") continue;
+    const bx = h0 * cabeza.t + d0 * datos.profundidad;
+    const by = h1 * cabeza.t + d1 * datos.profundidad;
+    const hx = (h0 * datos.ancho) / 2;
+    const hy = (h1 * datos.ancho) / 2;
+    const esquinas = [
+      [bx - hx, by - hy, cabeza.z],
+      [bx + hx, by + hy, cabeza.z],
+      [bx + hx, by + hy, cabeza.z + datos.alto],
+      [bx - hx, by - hy, cabeza.z + datos.alto],
+    ];
+    const puntos = [];
+    for (const [x, y, z] of esquinas) puntos.push(await proyectar(ses, x, y, z));
+    cajas.push({ z: cabeza.z, ...caja(puntos) });
+  }
+  return cajas;
+}
+
+// Exige que el texto de cada cabeza quede a la derecha del último eje y que su caja
+// proyectada no toque el triángulo ni la línea de ningún eje ni una burbuja.
+async function comprobarCabezas(ses, contexto) {
+  const anotaciones = await ses.driver.executeScript(() =>
+    document.querySelector('[data-testid="visor"]').__openrvtAlzadoAnotacionesPantalla(),
+  );
+  assert.ok(anotaciones, "no se pudieron leer las anotaciones del alzado");
+  const textos = anotaciones.etiquetas.filter((e) => e.tipo === "nivel");
+  const triangulos = await cajasCabezas(ses);
+  assert.equal(textos.length, 3, `faltan cabezas de nivel (${contexto})`);
+  assert.equal(triangulos.length, 3, `faltan triángulos de nivel (${contexto})`);
+  const segmentos = anotaciones.lineas.flatMap((linea) =>
+    linea.puntos.slice(1).map((p, i) => [linea.puntos[i], p]),
+  );
+  const maxXeje = Math.max(...segmentos.flatMap(([a, b]) => [a.x, b.x]));
+  for (const texto of textos) {
+    assert.ok(
+      texto.x0 > maxXeje,
+      `«${texto.texto}» no quedó a la derecha del último eje (${contexto}): ${texto.x0} <= ${maxXeje}`,
+    );
+    for (const triangulo of triangulos) {
+      assert.ok(
+        !rectIntersecaRect(texto, triangulo),
+        `«${texto.texto}» se encima con el triángulo del nivel ${triangulo.z} (${contexto})`,
+      );
+    }
+    for (const [a, b] of segmentos) {
+      assert.ok(
+        !segmentoIntersecaRect(a, b, texto),
+        `«${texto.texto}» toca una línea de eje (${contexto})`,
+      );
+    }
+    for (const globo of anotaciones.globos) {
+      assert.ok(
+        !rectIntersecaCirculo(texto, globo),
+        `«${texto.texto}» toca la burbuja ${globo.etiqueta} (${contexto})`,
+      );
+    }
+  }
+  return anotaciones;
+}
+
 async function clicMundo(ses, x, y) {
   const punto = await proyectar(ses, x, y);
   await ses.driver.executeScript(
@@ -428,6 +542,11 @@ test("O014a-1: burbujas centradas, cabeza de nivel y estilo guardado", async () 
     assert.deepEqual(cotasPorDefecto[0].parciales, ["3.00", "3.00"]);
     assert.equal(cotasPorDefecto[0].total, "Total 6.00");
 
+    // Captura con el estilo por omisión (Npt, 2 decimales) y comprobación geométrica
+    // de que el texto de cada cabeza no toca el triángulo ni ninguna línea de eje.
+    await ses.captura(path.join(CAPTURAS, "o014a-alzado-estilo-defecto.png"));
+    await comprobarCabezas(ses, "estilo por omisión");
+
     // Parte 3: el diálogo guarda el estilo de nivel y la vista lo aplica.
     await cambiarPestana(ses, "Vista");
     await activar(ses, "cmd-estilos");
@@ -445,6 +564,7 @@ test("O014a-1: burbujas centradas, cabeza de nivel y estilo guardado", async () 
     const cotasOcultas = JSON.parse(await atributoVisor(ses, "niveles-cotas"));
     assert.deepEqual(cotasOcultas[0].parciales, [], "cotas:false no ocultó la cadena");
     assert.equal(cotasOcultas[0].total, null, "cotas:false no ocultó el total");
+    await comprobarCabezas(ses, "estilo modificado");
     await ses.captura(path.join(CAPTURAS, "o014a-alzado-estilo-niveles.png"));
 
     // Se guardó en el pset y sobrevive a cerrar y reabrir el archivo.
