@@ -1,6 +1,6 @@
 #!/bin/bash
 # Uso: herramientas/publicar-actualizacion.sh "<notas>"
-# Compila el instalador de Windows en local (cargo-xwin), firmado con la llave del
+# Compila el instalador de Windows en local (nativo en Windows), firmado con la llave del
 # updater de OPEN-RVT, lo sube como release al canal de actualizaciones en Gitea y
 # actualiza latest.json. La versión sale de src-tauri/tauri.conf.json del repositorio;
 # súbela y haz commit antes. La primera publicación la hace el supervisor.
@@ -22,7 +22,7 @@ herramientas/preparar_python.sh windows
 echo "== Compilando $V (firmado)"
 export CARGO_TARGET_DIR=$HOME/.cache/pp-target/openrvt-win PATH=$HOME/pp-trabajo/bin:$PATH
 export TAURI_SIGNING_PRIVATE_KEY=$(cat ~/.tauri/openrvt-updater.key) TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
-npx tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis > /tmp/openrvt-publicar.log 2>&1 || { tail -30 /tmp/openrvt-publicar.log; exit 1; }
+npx tauri build --target x86_64-pc-windows-msvc --bundles nsis > /tmp/openrvt-publicar.log 2>&1 || { tail -30 /tmp/openrvt-publicar.log; exit 1; }
 D=$CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/bundle/nsis
 EXE=$(ls -t "$D"/*"_${V}_"*setup.exe | head -1); SIG=$EXE.sig
 [ -f "$SIG" ] || { echo "No se generó la firma $SIG"; exit 1; }

@@ -20,3 +20,9 @@ Referencia: `img/niveles-referencia.jpg`. Al usuario no le gustan los niveles ac
 - Ninguna cabeza ni burbuja se encima con otra en la vista por omisión.
 - Las cotas suman exacto (la total = suma de la cadena) y usan la precisión del proyecto.
 - Configurable por estilo de nivel: prefijo, decimales, unidad, tipo de cabeza, color y si lleva cotas.
+
+## Fallo visto al revisar O015 (2026-10-30)
+- En la vista de **corte** con dirección (0, 1) los textos de nivel y cotas salen **en espejo**
+  («00.E+ I leviN»). Ya pasaba antes de O015 (`docs/capturas/o015-antes-corte.png`). Corregir en O014b:
+  el texto siempre se lee de izquierda a derecha en cualquier dirección de corte/alzado (prueba con
+  direcciones (0,1), (0,-1), (1,0), (-1,0) y una diagonal).

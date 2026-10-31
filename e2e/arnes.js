@@ -34,6 +34,9 @@ function rutaBinario() {
     path.join(RAIZ, "target", "debug", "open-rvt"),
     path.join(RAIZ, "src-tauri", "target", "debug", "open-rvt"),
   ];
+  // En Windows el binario lleva .exe.
+  const ext = process.platform === "win32" ? ".exe" : "";
+  for (const c of candidatos) if (c && fs.existsSync(c + ext)) return c + ext;
   for (const c of candidatos) if (c && fs.existsSync(c)) return c;
   throw new Error(
     "No se encontró el binario debug de la app. Ejecuta: npx tauri build --debug --no-bundle",
