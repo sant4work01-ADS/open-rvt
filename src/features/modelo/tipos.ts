@@ -241,6 +241,14 @@ export interface PropiedadesElemento {
   atributos: Record<string, unknown>;
   materiales: Array<{ nombre: string; capas: Array<Record<string, unknown>> }>;
   psets: Record<string, Record<string, unknown>>;
+  /** O016: base y tope por nivel (también para IFC viejos sin pset). */
+  restricciones?: {
+    NivelBase: string;
+    DesfaseBase: number;
+    NivelTope: string;
+    DesfaseTope: number;
+    AlturaSinConexion: number;
+  };
 }
 
 export interface Caja {

@@ -264,6 +264,15 @@ class Servidor:
             return self._exigir().elemento_editar(
                 str(params.get("globalid") or ""), params.get("cambios")
             )
+        if metodo in ("restricciones.editar", "elementos.restricciones"):
+            return self._exigir().restricciones_editar(
+                str(params.get("globalid") or ""),
+                params.get("nivel_base"),
+                params.get("desfase_base"),
+                params.get("nivel_tope"),
+                params.get("desfase_tope"),
+                params.get("altura_sin_conexion"),
+            )
         if metodo == "acero.varillas":
             return self._exigir().acero_varillas()
         if metodo == "acero.estimar":

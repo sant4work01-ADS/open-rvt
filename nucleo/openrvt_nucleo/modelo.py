@@ -420,7 +420,7 @@ class ModeloNucleo(
         except Exception:
             psets = {}
 
-        return {
+        salida = {
             "globalid": _texto(elemento.GlobalId),
             "clase": elemento.is_a(),
             "nombre": _texto(getattr(elemento, "Name", "")),
@@ -430,6 +430,13 @@ class ModeloNucleo(
             "materiales": materiales,
             "psets": psets,
         }
+        # O016: la interpretación tolerante de base/tope también para IFC sin pset.
+        if elemento.is_a("IfcWall") or elemento.is_a("IfcColumn"):
+            try:
+                salida["restricciones"] = self._restricciones_de(elemento)
+            except Exception:
+                LOG.debug("no se pudieron leer las restricciones", exc_info=True)
+        return salida
 
     # ------------------------------------------------------------------ geometría
     def teselar(self, globalids: Any = None) -> dict[str, Any]:
