@@ -358,6 +358,10 @@ export function App() {
         castillosAutomaticos: () => useModelo.getState().abrirDialogoCastillos(),
         unirZapatas: () => void useModelo.getState().unirZapatas(),
         unirTrabes: () => void useModelo.getState().unirTrabes(),
+        zapatasEnCruces: () => void useModelo.getState().zapatasEnCruces(),
+        contratrabesEntreEjes: () =>
+          void useModelo.getState().contratrabesEntreEjes(),
+        murosEntreEjes: () => void useModelo.getState().murosEntreEjes(),
         // O007a: el editor vive en el módulo Modelo; la cinta cambia de módulo.
         abrirTipos: () => {
           irAModulo("modelo");

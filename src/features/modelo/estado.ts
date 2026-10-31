@@ -307,6 +307,13 @@ interface EstadoModelo {
   /** O007c: contratrabes entre zapatas consecutivas y trabes entre columnas. */
   unirZapatas: () => Promise<boolean>;
   unirTrabes: () => Promise<boolean>;
+  /** O028: una zapata en cada cruce de la retícula. */
+  zapatasEnCruces: () => Promise<boolean>;
+  /** O028: contratrabes y muros entre los cruces del eje seleccionado. */
+  contratrabesEntreEjes: () => Promise<boolean>;
+  murosEntreEjes: () => Promise<boolean>;
+  /** O028: quita el enlace del elemento sin moverlo. */
+  soltarEnlace: (globalid: string) => Promise<void>;
   editarElemento: (globalid: string, cambios: Record<string, unknown>) => Promise<void>;
   /** O016: cambia base, tope y desfases de un muro o columna. */
   editarRestricciones: (
@@ -1983,6 +1990,56 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         tipo: tipo.nombre,
         nivel,
       });
+    },
+
+    zapatasEnCruces: async () => {
+      const tipo = tipoZapataElegida();
+      const nivel = nivelActivo();
+      if (!tipo || !nivel) {
+        set({ aviso: "No hay tipo de zapata en la biblioteca." });
+        return false;
+      }
+      return ejecutar("zapatas.en_cruces", { tipo: tipo.nombre, nivel });
+    },
+
+    contratrabesEntreEjes: async () => {
+      const tipo = get().tiposHerramienta.find((t) => t.alias === "contratrabe");
+      const nivel = nivelActivo();
+      const guia = get().ejeSeleccionado;
+      if (!tipo || !nivel) {
+        set({ aviso: "No hay tipo de contratrabe en la biblioteca." });
+        return false;
+      }
+      if (!guia) {
+        set({ aviso: "Seleccione el eje guía en planta." });
+        return false;
+      }
+      return ejecutar("contratrabes.entre_ejes", {
+        tipo: tipo.nombre,
+        nivel,
+        eje_guia: guia,
+      });
+    },
+
+    murosEntreEjes: async () => {
+      const tipo = tipoEstructural("muro");
+      const nivel = nivelActivo();
+      const guia = get().ejeSeleccionado;
+      if (!tipo || !nivel) return false;
+      if (!guia) {
+        set({ aviso: "Seleccione el eje guía en planta." });
+        return false;
+      }
+      return ejecutar("muros.entre_ejes", {
+        tipo: tipo.nombre,
+        nivel,
+        eje_guia: guia,
+      });
+    },
+
+    soltarEnlace: async (globalid) => {
+      if (!globalid) return;
+      await ejecutar("restricciones.soltar_enlace", { globalid });
     },
 
     unirTrabes: async () => {

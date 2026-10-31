@@ -3,6 +3,7 @@
 // con three.js.
 
 import type { EstiloCategoriaVista } from "./estilos";
+import type { EnlaceEjes } from "./enlaces";
 
 export type TipoVista = "planta" | "alzado" | "corte" | "iso" | "perspectiva";
 export type Orientacion = "norte" | "sur" | "este" | "oeste";
@@ -261,6 +262,8 @@ export interface PropiedadesElemento {
     DesfaseTope: number;
     AlturaSinConexion: number;
   };
+  /** O028: cruce o tramo de ejes al que está anclado. */
+  enlace?: EnlaceEjes;
 }
 
 export interface Caja {

@@ -119,6 +119,10 @@ export interface AccionesRibbon {
   castillosAutomaticos: () => void;
   unirZapatas: () => void;
   unirTrabes: () => void;
+  /** O028: herramientas por lote sobre la retícula. */
+  zapatasEnCruces?: () => void;
+  contratrabesEntreEjes?: () => void;
+  murosEntreEjes?: () => void;
   /** O007a: abre el editor de tipos y materiales. */
   abrirTipos: () => void;
   borrarSeleccion: () => void;
@@ -423,6 +427,39 @@ export function construirComandosRibbon(a: AccionesRibbon): ComandoRibbon[] {
       habilitado: true,
       descripcion: "Contratrabes entre zapatas consecutivas sobre cada eje",
       accion: a.unirZapatas,
+    },
+    {
+      id: "zapatas-en-ejes",
+      texto: "Zapatas en ejes",
+      icono: Box,
+      grupo: "Estructura",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      descripcion: "Una zapata enlazada en cada cruce de la retícula",
+      accion: () => a.zapatasEnCruces?.(),
+    },
+    {
+      id: "contratrabes-entre-ejes",
+      texto: "Contratrabes entre ejes",
+      icono: Frame,
+      grupo: "Estructura",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      descripcion: "Tramos de contratrabe entre los cruces del eje seleccionado",
+      accion: () => a.contratrabesEntreEjes?.(),
+    },
+    {
+      id: "muros-entre-ejes",
+      texto: "Muros entre ejes",
+      icono: BrickWall,
+      grupo: "Estructura",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      descripcion: "Tramos de muro entre los cruces del eje seleccionado",
+      accion: () => a.murosEntreEjes?.(),
     },
     {
       id: "unir-trabes",
