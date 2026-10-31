@@ -9,6 +9,7 @@ import {
   mmAPx,
   mmAMundoConMinimoPx,
   normalizarEstilos,
+  rellenoDeElemento,
   serializarEstilos,
 } from "./estilos";
 import type { Vista } from "./tipos";
@@ -103,6 +104,49 @@ describe("materiales", () => {
     expect(materialPorTipo("Tabique")).toBe("tabique");
     expect(materialPorTipo("Concreto")).toBe("concreto");
     expect(materialPorTipo("Muro genérico")).toBe("generico");
+    // O015: IfcSlab FLOOR (lo que crea la app) es concreto, no genérico.
+    expect(materialPorTipo("FLOOR")).toBe("concreto");
+    expect(materialPorTipo("IfcSlab")).toBe("concreto");
+  });
+});
+
+describe("O015: regla de relleno por categoría y plano de corte", () => {
+  it("la losa cortada usa el patrón del material en ambos estilos", () => {
+    expect(rellenoDeElemento("losas", "cortado", "lineas-ocultas")).toBe("patron");
+    expect(rellenoDeElemento("losas", "cortado", "sombreado")).toBe("patron-sombreado");
+    expect(rellenoDeElemento("losas", "cortado", "aristas")).toBe("patron-sombreado");
+  });
+
+  it("la losa debajo del corte lleva proyección tenue y arriba no lleva nada", () => {
+    expect(rellenoDeElemento("losas", "debajo", "lineas-ocultas")).toBe("proyeccion-tenue");
+    expect(rellenoDeElemento("losas", "debajo", "sombreado")).toBe("proyeccion-tenue");
+    expect(rellenoDeElemento("losas", "arriba", "lineas-ocultas")).toBe("ninguno");
+    expect(rellenoDeElemento("losas", "arriba", "sombreado")).toBe("ninguno");
+  });
+
+  it("el muro cortado se rellena igual que antes (sin regresión)", () => {
+    expect(rellenoDeElemento("muros", "cortado", "lineas-ocultas")).toBe("patron");
+    expect(rellenoDeElemento("muros", "cortado", "sombreado")).toBe("patron-sombreado");
+    // Fuera del corte el muro no inventa relleno: la regla nueva es solo de losas.
+    expect(rellenoDeElemento("muros", "debajo", "lineas-ocultas")).toBe("ninguno");
+    expect(rellenoDeElemento("muros", "arriba", "lineas-ocultas")).toBe("ninguno");
+  });
+
+  it("ninguna otra categoría recibe proyección tenue en planta", () => {
+    const categorias = [
+      "muros",
+      "columnas",
+      "vigas",
+      "puertas",
+      "ventanas",
+      "cubiertas",
+      "escaleras",
+      "otros",
+    ] as const;
+    for (const categoria of categorias) {
+      expect(rellenoDeElemento(categoria, "debajo", "sombreado")).toBe("ninguno");
+      expect(rellenoDeElemento(categoria, "arriba", "sombreado")).toBe("ninguno");
+    }
   });
 });
 
