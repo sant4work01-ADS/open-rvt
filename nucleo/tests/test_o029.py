@@ -87,6 +87,10 @@ def test_copiar_nivel_desfase_3_00_pasa_a_4_50_y_deshace() -> None:
         nucleo.nivel_crear("Nivel 2", 3.0)
     gid = nucleo.nivel_crear("Nivel 1.5", 1.5)["creados"][0]
     copia = nucleo.nivel_copiar(gid, 3.0)["creados"][0]
+    # 4.50 queda sobre Nivel 2 (3.00): el nombre sale de la posición, «Nivel 3»,
+    # no de copiar el del origen («Nivel 1.5»).
+    nombre = next(n["nombre"] for n in nucleo.niveles() if n["globalid"] == copia)
+    assert nombre == "Nivel 3"
     elevaciones = {n["globalid"]: float(n["elevacion"]) for n in nucleo.niveles()}
     assert elevaciones[copia] == pytest.approx(4.5)
     assert any(v.get("nivel") == copia for v in nucleo.leer_vistas())
@@ -100,5 +104,9 @@ def test_arreglo_de_tres_niveles_cada_3_00() -> None:
     creados = nucleo.niveles_arreglo(base, 3, 3.0)["creados"]
     elevaciones = {n["globalid"]: float(n["elevacion"]) for n in nucleo.niveles()}
     assert [elevaciones[g] for g in creados] == pytest.approx([3.0, 6.0, 9.0])
+    nombres = [next(n["nombre"] for n in nucleo.niveles() if n["globalid"] == g) for g in creados]
+    # Sobre Nivel 0 (0.00) los siguientes números libres: 3.00 → Nivel 1,
+    # 6.00 → Nivel 2, 9.00 → Nivel 3.
+    assert nombres == ["Nivel 1", "Nivel 2", "Nivel 3"]
     assert nucleo.deshacer()["hecho"] is True
     assert all(g not in {n["globalid"] for n in nucleo.niveles()} for g in creados)

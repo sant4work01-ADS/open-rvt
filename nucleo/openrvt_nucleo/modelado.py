@@ -597,6 +597,40 @@ class ModeladoMixin:
         niveles.sort(key=lambda n: float(n.Elevation or 0.0))
         return niveles
 
+    def _nombre_nivel_automatico(self, elevacion: float) -> str:
+        """O029: nombre por posición, p. ej. entre «Nivel 1» y «Nivel 2» a 1.50
+        sale «Nivel 1.5»; sobre el nivel más alto, el siguiente número libre."""
+        import re
+
+        def numero(nombre: str):
+            m = re.match(r"^nivel\s+(-?\d+(?:\.\d+)?)(?![0-9.])", nombre.strip(), re.I)
+            return float(m.group(1)) if m else None
+
+        niveles = [
+            n for n in self.modelo.by_type("IfcBuildingStorey") if n.Elevation is not None
+        ]
+        ordenados = sorted(niveles, key=lambda n: float(n.Elevation or 0.0))
+        inferiores = [n for n in ordenados if float(n.Elevation or 0.0) < elevacion - 1e-6]
+        superiores = [n for n in ordenados if float(n.Elevation or 0.0) > elevacion + 1e-6]
+        inferior = inferiores[-1] if inferiores else None
+        superior = superiores[0] if superiores else None
+        usados = {_nombre(n).strip().lower() for n in niveles}
+        if inferior is not None and superior is not None:
+            n_inf = numero(_nombre(inferior))
+            n_sup = numero(_nombre(superior))
+            if n_inf is not None and n_sup is not None and n_sup > n_inf + 1e-9:
+                bajo, alto = n_inf, n_sup
+                for _ in range(12):
+                    medio = round(((bajo + alto) / 2) * 1000) / 1000
+                    nombre = f"Nivel {medio:g}"
+                    if nombre.strip().lower() not in usados:
+                        return nombre
+                    bajo = medio
+        numeros = [v for v in (numero(_nombre(n)) for n in niveles) if v is not None]
+        if numeros:
+            return f"Nivel {max(numeros) + 1:g}"
+        return f"Nivel {len(niveles)}"
+
     def _nombre_nivel_unico(self, nombre: str) -> str:
         """O029: dos niveles no comparten nombre; se añade « (2)», « (3)»…"""
         existentes = {_nombre(n) for n in self.modelo.by_type("IfcBuildingStorey")}
@@ -728,7 +762,7 @@ class ModeladoMixin:
         self._instantanea()
         try:
             nivel, vista = self._crear_nivel_sin_instantanea(
-                _nombre(origen), elevacion, bool(crear_planta)
+                self._nombre_nivel_automatico(elevacion), elevacion, bool(crear_planta)
             )
         except Exception:
             self._revertir_instantanea()
@@ -767,7 +801,9 @@ class ModeladoMixin:
         try:
             for i in range(1, cantidad + 1):
                 nivel, vista = self._crear_nivel_sin_instantanea(
-                    _nombre(origen), base + separacion * i, bool(crear_planta)
+                    self._nombre_nivel_automatico(base + separacion * i),
+                    base + separacion * i,
+                    bool(crear_planta),
                 )
                 creados.append(nivel)
                 if vista is not None:
