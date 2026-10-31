@@ -295,3 +295,50 @@ describe("Esc en dos pasos", () => {
     expect(useModelo.getState().herramienta).toBe("eje");
   });
 });
+describe("O029: nombre automático desde la elevación real", () => {
+  it("al escribir 1.50 entre Nivel 1 y Nivel 2 la barra dice «Nivel 1.5»", () => {
+    useModelo.setState({
+      niveles: [
+        { globalid: "N1", nombre: "Nivel 1", elevacion: 0 },
+        { globalid: "N2", nombre: "Nivel 2", elevacion: 3 },
+      ],
+      herramienta: "nivel",
+      puntosHerramienta: [],
+      ratonHerramienta: null,
+      cotasNivel: null,
+      opcionesNivel: {
+        nombre: "Nivel 1.75",
+        nombreAutomatico: true,
+        crearPlanta: true,
+        elevacionTexto: "",
+      },
+    });
+    useModelo.getState().fijarOpcionesNivel({ elevacionTexto: "1.50" });
+    const estado = useModelo.getState();
+    expect(estado.opcionesNivel.nombre).toBe("Nivel 1.5");
+    expect(estado.cotasNivel?.inferior?.nombre).toBe("Nivel 1");
+    expect(estado.cotasNivel?.inferior?.elevacion).toBe(0);
+    expect(estado.cotasNivel?.superior?.nombre).toBe("Nivel 2");
+    expect(estado.cotasNivel?.superior?.elevacion).toBe(3);
+  });
+
+  it("el nombre escrito a mano no se pisa al teclear la elevación", () => {
+    useModelo.setState({
+      niveles: [
+        { globalid: "N1", nombre: "Nivel 1", elevacion: 0 },
+        { globalid: "N2", nombre: "Nivel 2", elevacion: 3 },
+      ],
+      herramienta: "nivel",
+      puntosHerramienta: [],
+      ratonHerramienta: null,
+      opcionesNivel: {
+        nombre: "Azotea",
+        nombreAutomatico: false,
+        crearPlanta: true,
+        elevacionTexto: "",
+      },
+    });
+    useModelo.getState().fijarOpcionesNivel({ elevacionTexto: "1.50" });
+    expect(useModelo.getState().opcionesNivel.nombre).toBe("Azotea");
+  });
+});

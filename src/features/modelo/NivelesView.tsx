@@ -25,6 +25,8 @@ export function NivelesView() {
   const [cantidadArreglo, setCantidadArreglo] = useState("3");
   const [separacionArreglo, setSeparacionArreglo] = useState("3.00");
   const [errorCopiar, setErrorCopiar] = useState<string | null>(null);
+  // O029: lista y selector ordenados por elevación (no por orden de creación).
+  const ordenados = [...niveles].sort((a, b) => a.elevacion - b.elevacion);
 
   const agregar = async () => {
     const siguiente =
@@ -55,7 +57,7 @@ export function NivelesView() {
           </tr>
         </thead>
         <tbody>
-          {niveles.map((nivel) => (
+          {ordenados.map((nivel) => (
             <tr key={nivel.globalid} className="border-b">
               <td className="py-1 pr-2">
                 <input
@@ -145,7 +147,7 @@ export function NivelesView() {
             className="w-40 rounded border bg-background px-2 py-1"
           >
             <option value="">—</option>
-            {niveles.map((nivel) => (
+            {ordenados.map((nivel) => (
               <option key={nivel.globalid} value={nivel.globalid}>
                 {nivel.nombre} ({nivel.elevacion.toFixed(2)})
               </option>

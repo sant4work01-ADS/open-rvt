@@ -56,7 +56,7 @@ import {
   leerModoOrbitar,
   type AccionArrastre,
 } from "./orbita";
-import { DESFASE_NOMBRE_CABEZA, normalizarAjusteNivel } from "./niveles";
+import { DESFASE_NOMBRE_CABEZA, elevacionDesdeCota, normalizarAjusteNivel } from "./niveles";
 import { baseTextoAnotacion } from "./anotacion";
 import { calcularLayoutAlzado, segmentosTrazoPunto } from "./anotacionVista";
 import {
@@ -1070,6 +1070,8 @@ export function Visor3D({
   // O021: la selección del eje también vive en el estado para que el panel de
   // propiedades pueda editarla; el visor conserva su copia local para los gestos.
   const ejeSeleccionadoStore = useModelo((s) => s.ejeSeleccionado);
+  const nivelSeleccionado = useModelo((s) => s.nivelSeleccionado);
+  const fijarNivelSeleccionado = useModelo((s) => s.fijarNivelSeleccionado);
   const fijarEjeSeleccionadoStore = useModelo((s) => s.fijarEjeSeleccionado);
   const ejeStorePrevio = useRef(ejeSeleccionadoStore);
   useEffect(() => {
@@ -1257,6 +1259,36 @@ export function Visor3D({
     }
     return mejor;
   }, [pantallaDePunto]);
+
+  /** O029: nivel cuya línea horizontal pasa bajo el cursor en alzado/corte. */
+  const lineaNivelEn = useCallback((clientX: number, clientY: number) => {
+    let mejor: string | null = null;
+    let distancia = 8;
+    for (const linea of lineasNivelRef.current) {
+      if (linea.tipo !== "nivel" || linea.elev === undefined) continue;
+      const nivel = niveles.find(
+        (n) => Math.abs(n.elevacion - (linea.elev ?? 0)) < 1e-6,
+      );
+      if (!nivel) continue;
+      for (let i = 0; i + 1 < linea.puntos.length; i += 1) {
+        const a = pantallaDePunto(linea.puntos[i]);
+        const b = pantallaDePunto(linea.puntos[i + 1]);
+        if (!a || !b) continue;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const largo = Math.hypot(dx, dy);
+        const t = largo > 1e-9
+          ? Math.max(0, Math.min(1, ((clientX - a.x) * dx + (clientY - a.y) * dy) / (largo * largo)))
+          : 0;
+        const d = Math.hypot(clientX - (a.x + dx * t), clientY - (a.y + dy * t));
+        if (d < distancia) {
+          distancia = d;
+          mejor = nivel.globalid;
+        }
+      }
+    }
+    return mejor;
+  }, [pantallaDePunto, niveles]);
 
   /** Punto de la vista bajo el cursor; `null` fuera del plano de dibujo. */
   const puntoVistaDesdeEvento = useCallback((clientX: number, clientY: number): Punto2 | null => {
@@ -4558,6 +4590,16 @@ export function Visor3D({
         onSeleccionar(null, agregar);
         return;
       }
+      // O029: elegir un nivel en el alzado para Copiar/Mover desde Modificar.
+      const nivelTocado = lineaNivelEn(clientX, clientY);
+      if (nivelTocado) {
+        fijarNivelSeleccionado(nivelTocado);
+        setEjeSeleccionado(null);
+        setCandados({ inicio: false, fin: false });
+        setMenuEje(null);
+        onSeleccionar(null, agregar);
+        return;
+      }
       setEjeSeleccionado(null);
       const impacto = rayo.intersectObjects(meshes.current, false)[0];
       onSeleccionar(impacto?.object.userData.globalid ?? null, agregar);
@@ -5366,6 +5408,8 @@ export function Visor3D({
     asaEjeEn,
     asaNivelEn,
     lineaEjeEn,
+    lineaNivelEn,
+    fijarNivelSeleccionado,
     puntoVistaDesdeEvento,
     candados,
     ejeSeleccionado,
@@ -5713,7 +5757,7 @@ export function Visor3D({
   } | null>(null);
   useEffect(() => {
     if (!referenciaAlinear) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- la guía depende de la cámara y de la selección
       setGuiaAlinear(null);
       return;
     }
@@ -5763,6 +5807,77 @@ export function Visor3D({
     });
   }, [referenciaAlinear, alineando, vista, mallas, referencias.ejes, pantallaDePunto]);
 
+  // O029: alzado con la herramienta Nivel. La elevación objetivo es la tecleada
+  // (si la hay); con ella se dibujan la línea fantasma y las dos cotas temporales.
+  const esAlzadoOCorte = vista.tipo === "alzado" || vista.tipo === "corte";
+  const zNivelHerramienta =
+    herramienta === "nivel" && ratonHerramienta
+      ? (() => {
+          const texto = (opcionesNivel.elevacionTexto || "").trim();
+          if (texto !== "") {
+            const z = elevacionDesdeCota(cotasNivel?.inferior ?? null, texto);
+            if (z !== null) return z;
+          }
+          return ratonHerramienta[1];
+        })()
+      : null;
+  const [lineaFantasmaNivel, setLineaFantasmaNivel] = useState<{
+    y: number;
+    x1: number;
+    x2: number;
+  } | null>(null);
+  const [cotasFantasma, setCotasFantasma] = useState<
+    Array<{ y1: number; y2: number; texto: string }>
+  >([]);
+  useEffect(() => {
+    if (herramienta !== "nivel" || zNivelHerramienta === null || !esAlzadoOCorte) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- la vista fantasma depende de la cámara, que vive en un ref
+      setLineaFantasmaNivel(null);
+      setCotasFantasma([]);
+      return;
+    }
+    const rect = contenedor.current?.getBoundingClientRect();
+    const centro = centroCaja(caja);
+    const enPantalla = (z: number) => pantallaDePunto([centro[0], centro[1], z]);
+    const cursor = enPantalla(zNivelHerramienta);
+    if (!rect || !cursor) {
+      setLineaFantasmaNivel(null);
+      setCotasFantasma([]);
+      return;
+    }
+    setLineaFantasmaNivel({
+      y: cursor.y - rect.top,
+      x1: 8,
+      x2: Math.max(8, rect.width - 8),
+    });
+    const filas: Array<{ y1: number; y2: number; texto: string }> = [];
+    for (const [lado, cota] of [
+      ["inferior", cotasNivel?.inferior],
+      ["superior", cotasNivel?.superior],
+    ] as const) {
+      if (!cota) continue;
+      const yNivel = enPantalla(cota.elevacion);
+      if (!yNivel) continue;
+      const desfase =
+        lado === "inferior"
+          ? zNivelHerramienta - cota.elevacion
+          : cota.elevacion - zNivelHerramienta;
+      filas.push({
+        y1: yNivel.y - rect.top,
+        y2: cursor.y - rect.top,
+        texto: `${cota.nombre} ${lado === "inferior" ? "+" : "−"} ${desfase.toFixed(2)}`,
+      });
+    }
+    setCotasFantasma(filas);
+  }, [
+    herramienta,
+    zNivelHerramienta,
+    esAlzadoOCorte,
+    cotasNivel,
+    caja,
+    pantallaDePunto,
+  ]);
+
   return (
     <div
       ref={contenedor}
@@ -5771,6 +5886,7 @@ export function Visor3D({
       data-tipo={vista.tipo}
       data-mallas={mallas.length}
       data-herramienta={herramienta ?? undefined}
+      data-nivel-seleccionado={nivelSeleccionado ?? undefined}
       data-enganche={engancheHerramienta?.tipo}
       data-largo-tecleado={longitudTecleada || undefined}
       data-eje-seleccionado={ejeSeleccionado ?? undefined}
@@ -5849,27 +5965,63 @@ export function Visor3D({
       {herramienta === "nivel" && ratonHerramienta && (
         <div
           data-testid="nivel-preview"
-          className="pointer-events-none absolute bottom-12 left-2 z-10 rounded bg-background/95 px-2 py-1 text-[11px] shadow"
+          className="pointer-events-none absolute bottom-12 left-2 z-10 whitespace-nowrap rounded bg-background/95 px-2 py-1 text-[11px] shadow"
         >
           <strong data-testid="nivel-preview-nombre">
             {opcionesNivel.nombre || "Nivel"}
           </strong>{" "}
-          · {ratonHerramienta[1].toFixed(2)} m
+          · {(zNivelHerramienta ?? ratonHerramienta[1]).toFixed(2)} m
           {cotasNivel?.inferior && (
             <span data-testid="nivel-preview-inferior">
               {" "}
               = {cotasNivel.inferior.nombre} +{" "}
-              {(ratonHerramienta[1] - cotasNivel.inferior.elevacion).toFixed(2)}
+              {((zNivelHerramienta ?? ratonHerramienta[1]) - cotasNivel.inferior.elevacion).toFixed(2)}
             </span>
           )}
           {cotasNivel?.superior && (
             <span data-testid="nivel-preview-superior">
               {" "}
               · {cotasNivel.superior.nombre} −{" "}
-              {(cotasNivel.superior.elevacion - ratonHerramienta[1]).toFixed(2)}
+              {(cotasNivel.superior.elevacion - (zNivelHerramienta ?? ratonHerramienta[1])).toFixed(2)}
             </span>
           )}
         </div>
+      )}
+      {herramienta === "nivel" && esAlzadoOCorte && lineaFantasmaNivel && (
+        <svg
+          data-testid="nivel-fantasma"
+          className="pointer-events-none absolute inset-0 z-10 h-full w-full"
+        >
+          <line
+            x1={lineaFantasmaNivel.x1}
+            y1={lineaFantasmaNivel.y}
+            x2={lineaFantasmaNivel.x2}
+            y2={lineaFantasmaNivel.y}
+            stroke="#0891b2"
+            strokeWidth={1.5}
+            strokeDasharray="8 4"
+          />
+          {(cotasFantasma ?? []).map((fila, i) => (
+            <g key={i} data-testid={`nivel-cota-temporal-${i}`}>
+              <line
+                x1={lineaFantasmaNivel.x2 - 70}
+                y1={fila.y1}
+                x2={lineaFantasmaNivel.x2 - 70}
+                y2={fila.y2}
+                stroke="#0e7490"
+                strokeWidth={1}
+              />
+              <text
+                x={lineaFantasmaNivel.x2 - 66}
+                y={(fila.y1 + fila.y2) / 2 + 4}
+                fill="#0e7490"
+                fontSize={11}
+              >
+                {fila.texto}
+              </text>
+            </g>
+          ))}
+        </svg>
       )}
       {guiaArrastre && (
         <>

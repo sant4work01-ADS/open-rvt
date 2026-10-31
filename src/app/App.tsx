@@ -245,7 +245,10 @@ export function App() {
         estado.herramienta &&
         estado.herramienta !== "puerta" &&
         estado.herramienta !== "ventana" &&
-        estado.puntosHerramienta.length > 0
+        (estado.puntosHerramienta.length > 0 ||
+          ((estado.herramienta === "copiar" || estado.herramienta === "mover") &&
+            !!estado.nivelSeleccionado &&
+            estado.seleccionados.length === 0))
       ) {
         if (e.key === "Enter") {
           e.preventDefault();

@@ -20,6 +20,8 @@ import type { Vista } from "./tipos";
 interface Props {
   vistas: Vista[];
   activaId: string | null;
+  /** O029: elevación de cada nivel para ordenar las plantas. */
+  niveles?: Array<{ globalid: string; elevacion: number }>;
   onElegir: (id: string) => void;
   /** O009: la vista Cantidades vive bajo 3D y no es una vista IFC guardada. */
   cantidadesActiva?: boolean;
@@ -104,6 +106,7 @@ interface Menu {
 export function NavegadorVistas({
   vistas,
   activaId,
+  niveles = [],
   onElegir,
   cantidadesActiva = false,
   onCantidades,
@@ -248,7 +251,17 @@ export function NavegadorVistas({
       </div>
       <div ref={contenedor} data-testid="navegador-lista" className="flex flex-col gap-1 p-2">
         {GRUPOS.map((grupo) => {
-          const delGrupo = filtradas.filter((v) => grupo.tipos.includes(v.tipo));
+          const elevacionDe = new Map(niveles.map((n) => [n.globalid, n.elevacion]));
+          const delGrupo = filtradas
+            .filter((v) => grupo.tipos.includes(v.tipo))
+            .slice()
+            .sort((a, b) => {
+              if (grupo.prueba !== "plantas") return 0;
+              const ea = a.nivel ? elevacionDe.get(a.nivel) : undefined;
+              const eb = b.nivel ? elevacionDe.get(b.nivel) : undefined;
+              if (ea === undefined || eb === undefined) return 0;
+              return ea - eb;
+            });
           if (delGrupo.length === 0) return null;
           // Con una búsqueda activa se muestran las coincidencias aunque el grupo esté plegado.
           const plegado = plegados.includes(grupo.prueba) && !normalizarBusqueda(consulta);

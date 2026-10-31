@@ -234,3 +234,29 @@ describe("O022: teclado", () => {
     expect(activa?.getAttribute("aria-current")).toBe("true");
   });
 });
+describe("O029: las plantas se ordenan por elevación", () => {
+  it("Nivel 1, Nivel 1.5 y Nivel 2 aparecen en orden, no por creación", () => {
+    const plantas: Vista[] = [
+      { ...vista("p0", "Planta Nivel 1", "planta"), nivel: "n1" },
+      { ...vista("p2", "Planta Nivel 2", "planta"), nivel: "n2" },
+      { ...vista("p15", "Planta Nivel 1.5", "planta"), nivel: "n15" },
+    ];
+    render(
+      <NavegadorVistas
+        vistas={plantas}
+        niveles={[
+          { globalid: "n1", elevacion: 0 },
+          { globalid: "n2", elevacion: 3 },
+          { globalid: "n15", elevacion: 1.5 },
+        ]}
+        activaId="p0"
+        onElegir={() => {}}
+      />,
+    );
+    const orden = screen
+      .getAllByTestId("vista-item")
+      .filter((b) => b.dataset.vistaId?.startsWith("p"))
+      .map((b) => b.dataset.vistaId);
+    expect(orden).toEqual(["p0", "p15", "p2"]);
+  });
+});

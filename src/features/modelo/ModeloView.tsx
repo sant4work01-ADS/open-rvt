@@ -85,6 +85,7 @@ export function ModeloView() {
         <PanelRedimensionable id="vistas" lado="izquierdo" etiqueta="el panel Vistas">
           <NavegadorVistas
             vistas={vistas}
+            niveles={niveles}
             activaId={vista?.id ?? null}
             onElegir={fijarVista}
             cantidadesActiva={esCantidades}

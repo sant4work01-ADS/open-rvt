@@ -35,7 +35,12 @@ export function BarraHerramienta() {
   const tipoZapata = useModelo((s) => s.tipoZapata);
   const fijarTipoZapata = useModelo((s) => s.fijarTipoZapata);
   const columnasEnCruces = useModelo((s) => s.columnasEnCruces);
+  const vistaActivaId = useModelo((s) => s.vistaActivaId);
+  const vistas = useModelo((s) => s.vistas);
   if (!herramienta) return null;
+  const vistaActiva = vistas.find((v) => v.id === vistaActivaId);
+  const esAlzadoOCorte =
+    vistaActiva?.tipo === "alzado" || vistaActiva?.tipo === "corte";
   const estructura = esHerramientaEstructura(herramienta);
   const opcionesTipo = estructura
     ? tiposEstructura.filter((t) => t.alias === ALIAS_HERRAMIENTA[herramienta])
@@ -47,7 +52,7 @@ export function BarraHerramienta() {
     <div
       data-testid="barra-herramienta"
       data-herramienta={herramienta}
-      className="flex h-9 shrink-0 items-center gap-3 border-b bg-muted/30 px-3 text-xs"
+      className="flex h-9 shrink-0 items-center gap-3 overflow-hidden whitespace-nowrap border-b bg-muted/30 px-3 text-xs"
     >
       <span className="font-semibold capitalize">{herramienta}</span>
       {herramienta === "muro" && (
@@ -225,7 +230,12 @@ export function BarraHerramienta() {
               : "Segundo punto o escriba la longitud"}
         </span>
       )}
-      {herramienta === "nivel" && (
+      {herramienta === "nivel" && !esAlzadoOCorte && (
+        <span className="text-muted-foreground" data-testid="nivel-solo-alzado">
+          Abre un alzado o corte
+        </span>
+      )}
+      {herramienta === "nivel" && esAlzadoOCorte && (
         <>
           <label className="flex items-center gap-1">
             <span className="text-muted-foreground">Nombre</span>
@@ -291,11 +301,11 @@ export function BarraHerramienta() {
               Crear
             </button>
           </label>
-          <span className="text-muted-foreground" data-testid="nivel-herramienta-cotas">
-            {cotasNivel?.inferior
-              ? `${(puntos[puntos.length - 1]?.[1] ?? cotasNivel.inferior.elevacion).toFixed(2)} m = ${cotasNivel.inferior.nombre} + ...`
-              : "Sin nivel inferior"}
-          </span>
+          {cotasNivel?.inferior && (
+            <span className="text-muted-foreground" data-testid="nivel-herramienta-cotas">
+              {`${(puntos[puntos.length - 1]?.[1] ?? cotasNivel.inferior.elevacion).toFixed(2)} m = ${cotasNivel.inferior.nombre} + ...`}
+            </span>
+          )}
         </>
       )}
       {herramienta === "eje" && (

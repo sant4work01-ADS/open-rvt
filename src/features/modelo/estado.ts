@@ -189,6 +189,8 @@ interface EstadoModelo {
   vistaActivaId: string | null;
   /** O021: eje seleccionado en el visor (para el panel de propiedades). */
   ejeSeleccionado: string | null;
+  /** O029: nivel seleccionado en el alzado para copiar/desfasar. */
+  nivelSeleccionado: string | null;
   seleccion: string | null;
   seleccionados: string[];
   propiedades: PropiedadesElemento | null;
@@ -404,6 +406,8 @@ interface EstadoModelo {
   recargarTipos: () => Promise<void>;
   seleccionar: (globalid: string | null, agregar?: boolean) => Promise<void>;
   fijarEjeSeleccionado: (globalid: string | null) => void;
+  /** O029: selecciona el nivel tocado en un alzado/corte. */
+  fijarNivelSeleccionado: (globalid: string | null) => void;
   iniciarCorte: () => void;
   cancelarCorte: () => void;
   anadirPuntoCorte: (punto: [number, number]) => Promise<void>;
@@ -553,7 +557,6 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       crearPlanta: opciones.crearPlanta,
     });
     if (!ok) return false;
-    const siguiente = nombreNivelAutomatico(get().niveles, elevacion + 0.0001);
     set({
       puntosHerramienta: [],
       ratonHerramienta: null,
@@ -562,7 +565,9 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       cotasNivel: null,
       opcionesNivel: {
         ...opciones,
-        nombre: opciones.nombreAutomatico ? siguiente : opciones.nombre,
+        // O029: se conserva el nombre del nivel recién creado; al mover el cursor
+        // o teclear otra elevación, el automático se recalcula desde la posición.
+        nombre: opciones.nombreAutomatico ? nombre : opciones.nombre,
         elevacionTexto: "",
       },
       aviso: `Nivel a ${elevacion.toFixed(2)} m creado.`,
@@ -980,6 +985,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     aberturas: [],
     vistaActivaId: null,
     ejeSeleccionado: null,
+    nivelSeleccionado: null,
     seleccion: null,
     seleccionados: [],
     propiedades: null,
@@ -1091,11 +1097,21 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     },
 
     fijarVista: (id) => {
-      set({ vistaActivaId: id, modoCorte: false, puntoCorte: null, ejeSeleccionado: null });
+      set({
+        vistaActivaId: id,
+        modoCorte: false,
+        puntoCorte: null,
+        ejeSeleccionado: null,
+        nivelSeleccionado: null,
+      });
     },
 
     fijarEjeSeleccionado: (globalid) => {
       set({ ejeSeleccionado: globalid });
+    },
+
+    fijarNivelSeleccionado: (globalid) => {
+      set({ nivelSeleccionado: globalid });
     },
 
     actualizarVista: async (id, cambios) => {
@@ -1347,7 +1363,15 @@ export const useModelo = create<EstadoModelo>((set, get) => {
           set({ aviso: "Abre un alzado o corte" });
           return;
         }
-      } else if (!vista || (vista.tipo !== "planta" && herramienta !== "alinear")) {
+      } else if (
+        !vista ||
+        (vista.tipo !== "planta" &&
+          herramienta !== "alinear" &&
+          !(
+            (herramienta === "mover" || herramienta === "copiar") &&
+            (vista.tipo === "alzado" || vista.tipo === "corte")
+          ))
+      ) {
         set({ aviso: "Las herramientas de modelado solo trabajan en una vista de planta." });
         return;
       }
@@ -1400,6 +1424,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       const herramienta = get().herramienta;
       set({
         herramienta: null,
+        nivelSeleccionado: null,
         referenciaAlinear: null,
         alineando: null,
         puntosHerramienta: [],
@@ -1510,14 +1535,37 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
     fijarEtiquetaEje: (etiqueta) => set({ etiquetaEje: etiqueta }),
 
-    fijarOpcionesNivel: (cambios) =>
-      set({
-        opcionesNivel: {
-          ...get().opcionesNivel,
-          ...cambios,
-          ...(cambios.nombre !== undefined ? { nombreAutomatico: false } : {}),
-        },
-      }),
+    fijarOpcionesNivel: (cambios) => {
+      const estado = get();
+      const siguiente: OpcionesNivel = {
+        ...estado.opcionesNivel,
+        ...cambios,
+        ...(cambios.nombre !== undefined ? { nombreAutomatico: false } : {}),
+      };
+      // O029: al escribir la elevación, el nombre automático y las cotas salen de
+      // esa elevación real, no de la última posición del cursor.
+      if (cambios.elevacionTexto !== undefined) {
+        const referencia =
+          estado.puntosHerramienta[estado.puntosHerramienta.length - 1]?.[1] ??
+          estado.ratonHerramienta?.[1] ??
+          estado.niveles[0]?.elevacion ??
+          0;
+        const cotas = cotasTemporalesNivel(referencia, estado.niveles);
+        const z = elevacionDesdeCota(cotas.inferior, cambios.elevacionTexto);
+        if (z !== null) {
+          const cotasNuevas = cotasTemporalesNivel(z, estado.niveles);
+          if (siguiente.nombreAutomatico) {
+            siguiente.nombre = nombreNivelAutomatico(estado.niveles, z);
+          }
+          set({ opcionesNivel: siguiente, cotasNivel: {
+            inferior: cotasNuevas.inferior,
+            superior: cotasNuevas.superior,
+          } });
+          return;
+        }
+      }
+      set({ opcionesNivel: siguiente });
+    },
 
     clicNivel: async (punto) => {
       const herramienta = get().herramienta;
@@ -1588,6 +1636,25 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     teclearLongitud: (tecla) => {
       const herramienta = get().herramienta;
       if (!herramienta || herramienta === "puerta" || herramienta === "ventana") return;
+      // O029: con un nivel seleccionado en el alzado, Copiar/Mover acepta el
+      // desfase vertical tecleado sin pedir puntos en planta.
+      if (
+        (herramienta === "copiar" || herramienta === "mover") &&
+        get().nivelSeleccionado &&
+        get().seleccionados.length === 0
+      ) {
+        const campo = get().longitudTecleada;
+        let siguiente = campo;
+        if (tecla === "Backspace") siguiente = campo.slice(0, -1);
+        else if ((tecla === "," || tecla === ".") && !campo.includes(".")) {
+          siguiente = `${campo || "0"}.`;
+        } else if (tecla === "-" && campo === "") siguiente = "-";
+        else if (/^\d$/.test(tecla)) {
+          siguiente = `${campo}${tecla}`.replace(/^(-?)0(?=\d)/, "$1");
+        }
+        set({ longitudTecleada: siguiente });
+        return;
+      }
       if (get().puntosHerramienta.length === 0) return;
       if (herramienta === "nivel") {
         // O029: la cota temporal se teclea relativa al nivel inferior.
@@ -1623,6 +1690,35 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     confirmarLongitud: async (shift = false) => {
       const herramienta = get().herramienta;
       const puntos = get().puntosHerramienta;
+      // O029: nivel seleccionado en el alzado + Copiar/Mover + desfase tecleado.
+      if (
+        (herramienta === "copiar" || herramienta === "mover") &&
+        get().nivelSeleccionado &&
+        get().seleccionados.length === 0
+      ) {
+        const texto = get().longitudTecleada.replace(",", ".");
+        const desfase = Number(texto);
+        const nivel = get().niveles.find((n) => n.globalid === get().nivelSeleccionado);
+        if (!nivel) {
+          set({ aviso: "Elija el nivel que se copia." });
+          return;
+        }
+        if (texto === "" || !Number.isFinite(desfase) || Math.abs(desfase) <= 0.001) {
+          set({ aviso: "Escriba un desfase distinto de cero y Enter." });
+          return;
+        }
+        const ok =
+          herramienta === "copiar"
+            ? await get().copiarNivel(nivel.globalid, desfase)
+            : await get().editarNivel(nivel.globalid, nivel.nombre, nivel.elevacion + desfase);
+        if (ok) {
+          set({
+            longitudTecleada: "",
+            aviso: `Nivel «${nivel.nombre}» ${herramienta === "copiar" ? "copiado" : "movido"} ${desfase.toFixed(2)} m.`,
+          });
+        }
+        return;
+      }
       if (!herramienta || puntos.length === 0) return;
       if (herramienta === "nivel") {
         const cotas = cotasTemporalesNivel(
@@ -2013,11 +2109,10 @@ export const useModelo = create<EstadoModelo>((set, get) => {
             if (i >= 0) vistas[i] = candidata;
             else vistas.push(candidata);
           }
-          set({
-            vistas,
-            ...(vista ? { vistaActivaId: vista.id } : {}),
-            conCambios: true,
-          });
+          // O029: se conserva la vista activa (el alzado) al crear el nivel; la
+          // planta nueva solo aparece en el navegador.
+          void vista;
+          set({ vistas, conCambios: true });
         }
       }
       return true;
@@ -2042,7 +2137,9 @@ export const useModelo = create<EstadoModelo>((set, get) => {
           if (i >= 0) vistas[i] = candidata;
           else vistas.push(candidata);
         }
-        set({ vistas, ...(vista ? { vistaActivaId: vista.id } : {}) });
+        // O029: copiar un nivel tampoco cambia la vista activa.
+        void vista;
+        set({ vistas });
       }
       return true;
     },
