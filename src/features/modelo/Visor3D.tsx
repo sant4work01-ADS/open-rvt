@@ -45,6 +45,13 @@ import {
 import { altoTextoBurbuja, desplazamientoCentrado } from "./centrado";
 import { ControlesZoom } from "./ControlesZoom";
 import {
+  accionArrastre,
+  accionRuedaConShift,
+  guardarModoOrbitar,
+  leerModoOrbitar,
+  type AccionArrastre,
+} from "./orbita";
+import {
   acomodarBurbujas,
   acomodarCabezas,
   altoBandaCabeza,
@@ -845,6 +852,8 @@ export function Visor3D({
     boton: number;
     movido: boolean;
     paneable: boolean;
+    /** O020: qué hace el arrastre, decidido al pulsar. */
+    accion: AccionArrastre;
   } | null>(null);
   const [ventanaSeleccion, setVentanaSeleccion] = useState<{
     x1: number;
@@ -958,6 +967,14 @@ export function Visor3D({
   const fijarDetectado = useRueda((s) => s.fijarDetectado);
   const ayudaVisible = useRueda((s) => s.ayudaVisible);
   const cerrarAyuda = useRueda((s) => s.cerrarAyuda);
+  // O020: conmutador «Orbitar», recordado entre sesiones.
+  const [modoOrbitar, setModoOrbitar] = useState(leerModoOrbitar);
+  const alternarOrbitar = useCallback(() => {
+    setModoOrbitar((activo) => {
+      guardarModoOrbitar(!activo);
+      return !activo;
+    });
+  }, []);
   const [diagnosticoRueda, setDiagnosticoRueda] = useState(false);
   const [grabando, setGrabando] = useState(false);
   const [eventosGrabados, setEventosGrabados] = useState<EventoGrabado[]>([]);
@@ -3860,8 +3877,10 @@ export function Visor3D({
         aplicarZoom(factor, { x: evento.clientX, y: evento.clientY });
       } else {
         // O006e: en 3D, Shift + dos dedos orbita; en planta panea en horizontal.
+        // O020: orbita con cualquier dispositivo detectado (el touchpad ELAN se
+        // confunde con ratón y antes solo paneaba).
         const es3d = vista.tipo === "iso" || vista.tipo === "perspectiva";
-        if (dispositivo === "touchpad" && evento.shiftKey && es3d) {
+        if (evento.shiftKey && accionRuedaConShift(es3d) === "orbitar") {
           const yaw = new THREE.Quaternion().setFromAxisAngle(
             new THREE.Vector3(0, 0, 1),
             (evento.deltaX || evento.deltaY) * 0.006,
@@ -4250,7 +4269,10 @@ export function Visor3D({
       }
       const botonMedio = evento.button === 1;
       const izquierdo = evento.button === 0;
-      if (!botonMedio && !izquierdo) return;
+      const es3dVista = vista.tipo === "iso" || vista.tipo === "perspectiva";
+      // O020: el botón derecho orbita en 3D; en 2D no hace nada aquí.
+      if (evento.button === 2 && !es3dVista) return;
+      if (!botonMedio && !izquierdo && evento.button !== 2) return;
       // O006d: doble clic con el botón medio = Ajustar (el `dblclick` del navegador
       // no siempre conserva `button = 1` en WebKitGTK).
       if (botonMedio) {
@@ -4263,7 +4285,14 @@ export function Visor3D({
         }
         ultimoMedio.current = ahora;
       }
-      const paneable = botonMedio || (izquierdo && espacio.current);
+      const accion = accionArrastre({
+        boton: evento.button,
+        shift: evento.shiftKey,
+        espacio: espacio.current,
+        modoOrbitar,
+        es3d: es3dVista,
+      });
+      const paneable = accion !== "seleccionar";
       if (paneable) {
         evento.preventDefault();
         nodo.style.cursor = "grabbing";
@@ -4331,9 +4360,16 @@ export function Visor3D({
         boton: evento.button,
         movido: false,
         paneable,
+        accion,
       };
       if (!paneable) setVentanaSeleccion(null);
-      if (paneable) nodo.setPointerCapture(evento.pointerId);
+      if (paneable) {
+        try {
+          nodo.setPointerCapture(evento.pointerId);
+        } catch {
+          /* los eventos sintéticos de las pruebas no tienen puntero activo */
+        }
+      }
     };
     const alMover = (evento: PointerEvent) => {
       const nav = navegacion.current;
@@ -4474,8 +4510,8 @@ export function Visor3D({
         }
         return;
       }
-      const es3d = nav.tipo === "perspectiva" || vista.tipo === "iso";
-      const panear = !es3d || evento.shiftKey || arr.boton === 0;
+      // O020: la acción se decidió al pulsar (órbita o paneo), no por el botón.
+      const panear = arr.accion === "panear";
       const alto = Math.max(nodo.clientHeight, 1);
       if (panear) {
         const derecha = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
@@ -4665,6 +4701,11 @@ export function Visor3D({
       void dobleClicEnPlanta();
     };
     const alMenuContextual = (evento: MouseEvent) => {
+      // O020: en 3D el botón derecho orbita y no debe abrir el menú del navegador.
+      if (vista.tipo === "iso" || vista.tipo === "perspectiva") {
+        evento.preventDefault();
+        return;
+      }
       const asa = asaEjeEn(evento.clientX, evento.clientY);
       if (!asa) return;
       evento.preventDefault();
@@ -4759,6 +4800,7 @@ export function Visor3D({
     onSeleccionarVarios,
     onEscape,
     vista,
+    modoOrbitar,
     herramienta,
     fijarRaton,
     clicEnPlanta,
@@ -5187,6 +5229,8 @@ export function Visor3D({
         onAcercar={() => zoomEnCentro(0.8)}
         onAlejar={() => zoomEnCentro(1.25)}
         onAjustar={ajustar}
+        orbitar={modoOrbitar}
+        onAlternarOrbitar={alternarOrbitar}
       />
       {ayudaVisible && (
         <div
@@ -5195,7 +5239,8 @@ export function Visor3D({
         >
           <span>
             Pellizca para zoom · Ctrl + dos dedos también hace zoom · botones +/− abajo a la
-            derecha
+            derecha · Shift + dos dedos o arrastre con botón derecho = orbitar; botón
+            Orbitar para usar un dedo
           </span>
           <button
             type="button"
