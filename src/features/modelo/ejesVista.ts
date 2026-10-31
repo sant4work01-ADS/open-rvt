@@ -309,3 +309,70 @@ export function restablecerExtremoEje(
   delete salida[lado === "inicio" ? "codosInicio" : "codosFin"];
   return normalizarAjusteEje(salida);
 }
+
+// O027: restricciones del arrastre de asas. `direccion` es la dirección del eje en
+// la vista: en planta la de la línea y en alzado/corte siempre «vertical».
+export type TipoAsaArrastre = "extremo" | "globo" | "codo" | "nivel-cabeza" | "nivel-extremo";
+export type DireccionEjeArrastre = "vertical" | "horizontal";
+
+/**
+ * O027: devuelve el delta permitido para cada asa. El extremo y el quiebre del codo
+ * solo avanzan a lo largo del eje; el globo desplazado solo se separa perpendicular
+ * al eje; la cabeza de nivel solo sube/baja y el extremo de su línea solo se corre.
+ * Con `libre` (Shift) no se restringe nada.
+ */
+export function restringirArrastre(
+  tipoAsa: TipoAsaArrastre,
+  direccionEje: DireccionEjeArrastre,
+  delta: Punto2,
+  libre = false,
+): Punto2 {
+  const [dx, dy] = delta;
+  if (libre) return [dx, dy];
+  if (tipoAsa === "nivel-cabeza") return [0, dy];
+  if (tipoAsa === "nivel-extremo") return [dx, 0];
+  if (tipoAsa === "globo") {
+    return direccionEje === "vertical" ? [dx, 0] : [0, dy];
+  }
+  return direccionEje === "vertical" ? [0, dy] : [dx, 0];
+}
+
+export interface ResultadoIman {
+  valor: number;
+  enganchado: boolean;
+}
+
+/** O027: engancha un valor a la alineación más cercana dentro de la tolerancia. */
+export function imanAlineacion(
+  valor: number,
+  candidatos: number[],
+  tolerancia: number,
+): ResultadoIman {
+  let mejor = valor;
+  let distancia = Math.abs(tolerancia);
+  let enganchado = false;
+  for (const candidato of candidatos) {
+    if (!Number.isFinite(candidato)) continue;
+    const d = Math.abs(candidato - valor);
+    if (d <= distancia) {
+      distancia = d;
+      mejor = candidato;
+      enganchado = true;
+    }
+  }
+  return { valor: mejor, enganchado };
+}
+
+/** O027: engancha un desplazamiento a múltiplos del paso (un diámetro de globo). */
+export function imanMultiplo(
+  valor: number,
+  base: number,
+  paso: number,
+  tolerancia: number,
+): ResultadoIman {
+  if (!(paso > 1e-9)) return { valor, enganchado: false };
+  const multiplo = base + Math.round((valor - base) / paso) * paso;
+  const d = Math.abs(multiplo - valor);
+  if (d <= Math.abs(tolerancia)) return { valor: multiplo, enganchado: true };
+  return { valor, enganchado: false };
+}
