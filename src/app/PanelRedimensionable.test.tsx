@@ -72,4 +72,37 @@ describe("paneles redimensionables (O010)", () => {
     expect(limitarAnchoPanel(9999, LIMITES_PANELES.vistas)).toBe(420);
     expect(limitarAnchoPanel(Number.NaN, LIMITES_PANELES.vistas)).toBe(210);
   });
+
+  it("O022b: el panel de propiedades nunca baja de 260 px", () => {
+    expect(LIMITES_PANELES.propiedades.minimo).toBeGreaterThanOrEqual(260);
+    expect(limitarAnchoPanel(10, LIMITES_PANELES.propiedades)).toBe(
+      LIMITES_PANELES.propiedades.minimo,
+    );
+  });
+});
+
+describe("O022: ancho recordado en ambos lados", () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(cleanup);
+
+  it("vistas y propiedades guardan cada uno su propio ancho", () => {
+    montar("vistas");
+    fireEvent.keyDown(screen.getByRole("separator", { name: "Redimensionar prueba" }), {
+      key: "ArrowRight",
+    });
+    cleanup();
+    montar("propiedades");
+    fireEvent.keyDown(screen.getByRole("separator", { name: "Redimensionar prueba" }), {
+      key: "ArrowLeft",
+    });
+    expect(localStorage.getItem("openrvt.ancho-panel.vistas")).toBe(
+      String(LIMITES_PANELES.vistas.defecto + 16),
+    );
+    expect(localStorage.getItem("openrvt.ancho-panel.propiedades")).toBe(
+      String(LIMITES_PANELES.propiedades.defecto + 16),
+    );
+    cleanup();
+    montar("propiedades");
+    expect(anchoDe("propiedades")).toBe(LIMITES_PANELES.propiedades.defecto + 16);
+  });
 });

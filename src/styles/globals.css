@@ -130,3 +130,116 @@
     -webkit-user-select: text;
   }
 }
+
+/* O022b: panel de propiedades adaptable al ancho (consulta de contenedor nativa).
+   A ancho mínimo las etiquetas pasan arriba del campo, los títulos de sección no se
+   cortan, las categorías van en una columna y los estilos muestran el nombre completo
+   del objeto con sus dos grosores debajo. Sin desbordes ni elipsis. */
+.propiedades-adaptable {
+  container-type: inline-size;
+  container-name: propvista;
+}
+
+.prop-seccion-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 1.75rem;
+}
+.prop-seccion-titulo {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.prop-fila {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 1.75rem;
+}
+.prop-fila > .prop-etiqueta {
+  flex: 0 0 6rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.prop-fila > input,
+.prop-fila > select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.prop-categorias {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 0.5rem;
+}
+
+.prop-estilos {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 3.5rem 3.5rem;
+  align-items: center;
+  column-gap: 0.25rem;
+}
+.prop-estilo-fila {
+  display: contents;
+}
+.prop-estilo-campo {
+  display: contents;
+}
+.prop-estilo-campo-etiqueta {
+  display: none;
+}
+
+@container propvista (max-width: 260px) {
+  .prop-fila {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.125rem;
+    padding-block: 0.125rem;
+  }
+  .prop-fila > .prop-etiqueta {
+    flex-basis: auto;
+  }
+  .prop-seccion-acciones {
+    justify-content: flex-end;
+    width: 100%;
+  }
+  .prop-truncar {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
+  }
+  .prop-categorias {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .prop-estilos {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .prop-estilos-encabezado {
+    display: none;
+  }
+  .prop-estilo-fila {
+    display: block;
+    padding-block: 0.25rem;
+  }
+  .prop-estilo-nombre {
+    min-height: 1.75rem;
+  }
+  .prop-estilo-campo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    min-height: 1.75rem;
+  }
+  .prop-estilo-campo-etiqueta {
+    display: inline;
+  }
+  .prop-estilo-campo > input {
+    flex: 0 0 5rem;
+    width: 5rem;
+  }
+}
