@@ -264,6 +264,13 @@ class Servidor:
             return self._exigir().elemento_editar(
                 str(params.get("globalid") or ""), params.get("cambios")
             )
+        if metodo in ("restricciones.alinear", "elementos.alinear"):
+            return self._exigir().alinear(
+                params.get("referencia"),
+                str(params.get("elemento") or params.get("globalid") or ""),
+                str(params.get("cara") or "cercana"),
+                bool(params.get("bloquear", False)),
+            )
         if metodo in ("restricciones.editar", "elementos.restricciones"):
             return self._exigir().restricciones_editar(
                 str(params.get("globalid") or ""),
