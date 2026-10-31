@@ -129,3 +129,45 @@ describe("serialización de OPENRVT_Estilos", () => {
     expect(leerEstilos("{roto")).toEqual(estilosPorDefecto());
   });
 });
+
+describe("O014a: estilo de nivel", () => {
+  it("trae los valores por omisión de la spec", () => {
+    const e = estilosPorDefecto();
+    expect(e.niveles).toEqual({
+      prefijo: "Npt",
+      decimales: 2,
+      unidad: "m",
+      cabeza: "triangulo",
+      color: e.categorias.niveles.color,
+      cotas: true,
+      mostrarNombre: true,
+    });
+  });
+
+  it("un proyecto viejo sin «niveles» usa las omisiones", () => {
+    // JSON real de la 0.5.7: solo categorías y materiales.
+    const viejo = {
+      categorias: { muros: { corte: 0.5, proyeccion: 0.18, color: "#1f2328", patron: "continua" } },
+      materiales: { block: { patron: "diagonal", escala: 2 } },
+    };
+    expect(normalizarEstilos(viejo).niveles).toEqual(estilosPorDefecto().niveles);
+  });
+
+  it("hace round-trip y tolera campos inválidos", () => {
+    const e = estilosPorDefecto();
+    e.niveles = {
+      prefijo: "N",
+      decimales: 3,
+      unidad: "cm",
+      cabeza: "circulo",
+      color: "#123456",
+      cotas: false,
+      mostrarNombre: false,
+    };
+    expect(leerEstilos(serializarEstilos(e)).niveles).toEqual(e.niveles);
+    const roto = normalizarEstilos({
+      niveles: { prefijo: 7, decimales: 9, unidad: null, cabeza: "rombo", color: "rojo", cotas: "sí" },
+    });
+    expect(roto.niveles).toEqual(estilosPorDefecto().niveles);
+  });
+});

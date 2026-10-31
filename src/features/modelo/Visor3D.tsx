@@ -33,6 +33,8 @@ import {
   parsearElevacion,
   posicionTextoEntreMarcas,
 } from "./cotas";
+import { desplazamientoCentrado } from "./centrado";
+import { textoCabezaNivel } from "./niveles";
 import {
   categoriaOculta,
   factorEscala,
@@ -443,7 +445,8 @@ function crearTextoAnotacion(
   color: string,
   fondo: string,
   altoMundo: number,
-): Text {
+): THREE.Group {
+  const grupo = new THREE.Group();
   const texto3d = new Text();
   texto3d.text = texto;
   texto3d.font = FUENTE_ANOTACION;
@@ -460,8 +463,19 @@ function crearTextoAnotacion(
   texto3d.outlineColor = fondo;
   texto3d.frustumCulled = false;
   texto3d.renderOrder = 22;
-  texto3d.sync();
-  return texto3d;
+  // O014a: centrar el glifo visible (no la caja del renglón) en el origen del grupo.
+  // `sync` es asíncrono, por eso el ajuste se aplica en su callback.
+  const centrar = (info: {
+    textRenderInfo?: { visibleBounds?: [number, number, number, number] | null };
+  }) => {
+    const limites = info?.textRenderInfo?.visibleBounds;
+    if (!limites) return;
+    const [dx, dy] = desplazamientoCentrado(limites);
+    texto3d.position.set(dx, dy, 0);
+  };
+  texto3d.sync(centrar as unknown as () => void);
+  grupo.add(texto3d);
+  return grupo;
 }
 
 /** O011: ancho aproximado del texto para colocarlo entre marcas (sin medir píxeles). */
@@ -2448,7 +2462,8 @@ export function Visor3D({
         const planoPunto = vista.puntoA
           ? new THREE.Vector2(vista.puntoA[0], vista.puntoA[1])
           : new THREE.Vector2(centro[0], centro[1]);
-        const colorNivel = oscuro ? "#e8eaed" : estilos.categorias.niveles.color;
+        // O014a: el color del nivel sale de su propio estilo (por omisión, el de la categoría).
+        const colorNivel = oscuro ? "#e8eaed" : estilos.niveles.color;
         const colorEje = oscuro ? "#e0b07a" : estilos.categorias.ejes.color;
         const materialNivel = crearMaterialLinea({
           mm: mmNiveles,
@@ -2516,14 +2531,18 @@ export function Visor3D({
         const zGlobo = nivelMax + margenEtiqueta + mmAMundo(8, vista.escala) / 2;
         const marca = mmAMundoConMinimoPx(2, vista.escala, mundoPorPx, 6);
         const altoTexto = mmAMundoConMinimoPx(2.5, vista.escala, mundoPorPx, 11);
+        // O014a: cabeza de nivel configurable (triángulo relleno, círculo o ninguna).
+        const estiloNivel = estilos.niveles;
+        const anchoCabeza = mmAMundo(3, vista.escala);
+        const altoCabeza = mmAMundo(2.6, vista.escala);
+        const altoNombre = mmAMundoConMinimoPx(2, vista.escala, mundoPorPx, 8);
         // O011b: etiqueta de nivel fuera del último eje; las cotas van más afuera.
-        const textoNivel = (nivel: Nivel) =>
-          `${nivel.nombre}  ${nivel.elevacion >= 0 ? "+" : ""}${nivel.elevacion.toFixed(2)}`;
         const anchoNivel = Math.max(
-          ...ordenados.map((nivel) => anchoTextoAprox(textoNivel(nivel), altoTexto)),
+          ...ordenados.map((nivel) =>
+            anchoTextoAprox(textoCabezaNivel(nivel.elevacion, estiloNivel), altoTexto),
+          ),
           mmAMundo(4, vista.escala),
         );
-        const xEtiquetaNivel = tFinNivel + separacionTexto + anchoNivel / 2;
         const tParcial =
           tFinNivel + separacionTexto + anchoNivel + separacionTexto;
         const anchoParcial = Math.max(
@@ -2591,23 +2610,61 @@ export function Visor3D({
             3,
             grupoLocal,
           );
-          // Cabeza de nivel: triángulo en el extremo.
-          lineaCerrada(
-            [
-              puntoHZ(tFinNivel, z - 0.15),
-              puntoHZ(tFinNivel, z + 0.15),
-              puntoHZ(tFinNivel - 0.3, z),
-              puntoHZ(tFinNivel, z - 0.15),
-            ],
-            materialNivel,
-            3,
-            grupoLocal,
-          );
-          const texto = textoNivel(nivel);
+          // O014a: cabeza rellena en el extremo, con el vértice tocando la línea.
+          const cabeza = new THREE.Group();
+          if (estiloNivel.cabeza === "triangulo") {
+            const forma = new THREE.Shape();
+            forma.moveTo(0, 0);
+            forma.lineTo(anchoCabeza / 2, altoCabeza);
+            forma.lineTo(-anchoCabeza / 2, altoCabeza);
+            forma.closePath();
+            const malla = new THREE.Mesh(
+              new THREE.ShapeGeometry(forma),
+              new THREE.MeshBasicMaterial({
+                color: new THREE.Color(colorNivel),
+                side: THREE.DoubleSide,
+                transparent: true,
+                depthTest: false,
+                depthWrite: false,
+              }),
+            );
+            malla.renderOrder = 21;
+            cabeza.add(malla);
+          } else if (estiloNivel.cabeza === "circulo") {
+            const malla = new THREE.Mesh(
+              new THREE.CircleGeometry(altoCabeza / 2, 48),
+              new THREE.MeshBasicMaterial({
+                color: new THREE.Color(colorNivel),
+                side: THREE.DoubleSide,
+                transparent: true,
+                depthTest: false,
+                depthWrite: false,
+              }),
+            );
+            malla.position.y = altoCabeza / 2;
+            malla.renderOrder = 21;
+            cabeza.add(malla);
+          }
+          if (cabeza.children.length > 0) {
+            const base = puntoHZ(tFinNivel, z);
+            cabeza.position.set(base[0], base[1], base[2]);
+            orientarAnotacion(cabeza, [d[0], d[1], 0]);
+            grupoLocal.add(cabeza);
+          }
+          const inicioTexto =
+            estiloNivel.cabeza === "triangulo"
+              ? anchoCabeza / 2
+              : estiloNivel.cabeza === "circulo"
+                ? altoCabeza / 2
+                : 0;
+          const xTexto = tFinNivel + inicioTexto + mmAMundo(1, vista.escala);
+          const zTexto =
+            estiloNivel.cabeza === "ninguna" ? z + altoTexto / 2 : z + altoCabeza / 2;
+          const texto = textoCabezaNivel(z, estiloNivel);
           cabezas.push(texto);
           const sprite = textoCota(texto, colorNivel, fondo, altoTexto, [d[0], d[1], 0]);
           if (sprite) {
-            const pos = puntoHZ(xEtiquetaNivel, z + altoTexto * 0.95);
+            const pos = puntoHZ(xTexto, zTexto);
             sprite.position.set(pos[0], pos[1], pos[2]);
             sprite.renderOrder = 20;
             grupoLocal.add(sprite);
@@ -2628,6 +2685,22 @@ export function Visor3D({
               h: [h[0], h[1], 0],
             });
           }
+          // O014a: el nombre del nivel, más chico y debajo de la cabeza.
+          if (estiloNivel.mostrarNombre) {
+            const nombre = textoCota(
+              nivel.nombre,
+              colorNivel,
+              fondo,
+              altoNombre,
+              [d[0], d[1], 0],
+            );
+            if (nombre) {
+              const posNombre = puntoHZ(xTexto, z - altoNombre * 1.4);
+              nombre.position.set(posNombre[0], posNombre[1], posNombre[2]);
+              nombre.renderOrder = 20;
+              grupoLocal.add(nombre);
+            }
+          }
         }
 
         const textos = {
@@ -2637,7 +2710,8 @@ export function Visor3D({
           parciales: [] as string[],
           total: null as string | null,
         };
-        if (ordenados.length >= 2) {
+        // O014a: `cotas: false` oculta la cadena y el total, no las líneas ni las cabezas.
+        if (estiloNivel.cotas && ordenados.length >= 2) {
           for (const nivel of ordenados) {
             lineaCerrada(
               [puntoHZ(tFinNivel, nivel.elevacion), puntoHZ(tParcial + 0.15, nivel.elevacion)],
@@ -2818,7 +2892,7 @@ export function Visor3D({
             desde: tInicioNivel,
             hasta: tFinNivel,
             ejes: cruces.map(({ s }) => s),
-            etiquetaX: xEtiquetaNivel - anchoNivel / 2,
+            etiquetaX: tFinNivel + separacionTexto,
             parcialX: tParcial,
             totalX: tTotal,
           });
