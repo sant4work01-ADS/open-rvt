@@ -7,6 +7,10 @@ interface Props {
   onAjustar: () => void;
   orbitar: boolean;
   onAlternarOrbitar: () => void;
+  /** O030: modo «A escala» de la anotación (mm de papel). */
+  aEscala?: boolean;
+  onAlternarAEscala?: () => void;
+  onZoom100?: () => void;
 }
 
 export function ControlesZoom({
@@ -15,6 +19,9 @@ export function ControlesZoom({
   onAjustar,
   orbitar,
   onAlternarOrbitar,
+  aEscala,
+  onAlternarAEscala,
+  onZoom100,
 }: Props) {
   return (
     <div
@@ -50,6 +57,33 @@ export function ControlesZoom({
       >
         Ajustar
       </button>
+      {onZoom100 && (
+        <button
+          type="button"
+          data-testid="visor-zoom-100"
+          title="100 % de papel: 1 mm de papel = 1 mm en pantalla"
+          onClick={onZoom100}
+          className="h-7 rounded border bg-background/90 px-2 text-xs shadow-sm hover:bg-muted"
+        >
+          100 %
+        </button>
+      )}
+      {onAlternarAEscala && (
+        <button
+          type="button"
+          data-testid="visor-a-escala"
+          title="Anotación a escala de papel: crece y mengua con el zoom"
+          aria-pressed={Boolean(aEscala)}
+          onClick={onAlternarAEscala}
+          className={
+            aEscala
+              ? "h-7 rounded border bg-accent px-2 text-xs font-medium text-accent-foreground shadow-sm"
+              : "h-7 rounded border bg-background/90 px-2 text-xs shadow-sm hover:bg-muted"
+          }
+        >
+          A escala
+        </button>
+      )}
       <button
         type="button"
         data-testid="visor-orbitar"

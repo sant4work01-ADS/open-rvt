@@ -66,6 +66,8 @@ export interface Vista {
   categorias: CategoriasVisibles;
   estilo: EstiloVista;
   escala: EscalaVista;
+  /** O030: anotación a escala de papel (crece con el zoom) o tamaño de pantalla. */
+  anotacionEscala?: "papel" | "pantalla";
   /** Alzados: desde qué lado mira la cámara. */
   orientacion?: Orientacion;
   /** Cortes: traza en planta (coordenadas XY del IFC). */

@@ -59,6 +59,7 @@ import {
   factorEscala,
   grosorMm,
   materialPorCapa,
+  altoAnotacionMundo,
   mmAMundo,
   mmAMundoConMinimoPx,
   mmAPx,
@@ -129,6 +130,8 @@ interface Props {
   onSeleccionarVarios: (globalids: string[]) => void;
   onPuntoCorte: (punto: [number, number]) => void;
   onEscape: () => void;
+  /** O030: cambia el modo de anotación de la vista. */
+  onCambiarAnotacion?: (modo: "papel" | "pantalla") => void;
 }
 
 interface Navegacion {
@@ -856,6 +859,7 @@ export function Visor3D({
   onSeleccionarVarios,
   onPuntoCorte,
   onEscape,
+  onCambiarAnotacion,
 }: Props) {
   const contenedor = useRef<HTMLDivElement>(null);
   const escena = useRef<THREE.Scene | null>(null);
@@ -2956,8 +2960,21 @@ export function Visor3D({
         }
         // Tamaños reales de texto (con el mínimo en píxeles del visor): la
         // colocación y las cajas de las pruebas usan exactamente lo dibujado.
-        const altoTexto = mmAMundoConMinimoPx(estiloNivel.altoTexto, vista.escala, mundoPorPx, 11);
-        const altoTextoCota = mmAMundoConMinimoPx(estiloCota.altoTexto, vista.escala, mundoPorPx, 11);
+        const modoAnotacion =
+          vista.anotacionEscala ??
+          (vista.tipo === "alzado" || vista.tipo === "corte" ? "papel" : "pantalla");
+        const altoTexto = altoAnotacionMundo(
+          estiloNivel.altoTexto,
+          vista.escala,
+          mundoPorPx,
+          modoAnotacion,
+        );
+        const altoTextoCota = altoAnotacionMundo(
+          estiloCota.altoTexto,
+          vista.escala,
+          mundoPorPx,
+          modoAnotacion,
+        );
         const layout = calcularLayoutAlzado({
           niveles: ordenados,
           ejes: cruces.map(({ eje, s }) => ({ globalid: eje.globalid, etiqueta: eje.etiqueta, s })),
@@ -3799,6 +3816,19 @@ export function Visor3D({
     },
     [aplicarCamara],
   );
+
+  // O030: 100 % de papel: 1 mm de papel mide 1 mm en pantalla (96 px/pulgada CSS).
+  const zoomAl100 = useCallback(() => {
+    const camera = camara.current;
+    const nodo = contenedor.current;
+    if (!(camera instanceof THREE.OrthographicCamera) || !nodo) return;
+    const altoPx = Math.max(nodo.clientHeight, 1);
+    const mundoPorPx = (vista.escala / 1000) * (25.4 / 96);
+    const altoActual = camera.top - camera.bottom;
+    if (!(altoActual > 0)) return;
+    const factor = (mundoPorPx * altoPx) / altoActual;
+    zoomEnCentro(factor);
+  }, [vista.escala, zoomEnCentro]);
 
   const restablecerIso = useCallback(() => {    const nav = navegacion.current;
     if (!nav) return;
@@ -5506,6 +5536,19 @@ export function Visor3D({
         onAjustar={ajustar}
         orbitar={modoOrbitar}
         onAlternarOrbitar={alternarOrbitar}
+        aEscala={
+          (vista.anotacionEscala ??
+            (vista.tipo === "alzado" || vista.tipo === "corte" ? "papel" : "pantalla")) === "papel"
+        }
+        onAlternarAEscala={() =>
+          onCambiarAnotacion?.(
+            (vista.anotacionEscala ??
+              (vista.tipo === "alzado" || vista.tipo === "corte" ? "papel" : "pantalla")) === "papel"
+              ? "pantalla"
+              : "papel",
+          )
+        }
+        onZoom100={zoomAl100}
       />
       {ayudaVisible && (
         <div

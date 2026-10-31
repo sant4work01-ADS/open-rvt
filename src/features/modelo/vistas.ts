@@ -469,6 +469,12 @@ export function normalizarVista(valor: unknown): Vista | null {
         ? v.alturaArriba
         : undefined,
     cotasEjes: v.cotasEjes !== false,
+    anotacionEscala:
+      v.anotacionEscala === "papel" || v.anotacionEscala === "pantalla"
+        ? v.anotacionEscala
+        : tipo === "alzado" || tipo === "corte"
+          ? "papel"
+          : "pantalla",
     ejes: Object.keys(ejes).length > 0 ? ejes : undefined,
     nivelesAjuste: Object.keys(nivelesAjuste).length > 0 ? nivelesAjuste : undefined,
   };

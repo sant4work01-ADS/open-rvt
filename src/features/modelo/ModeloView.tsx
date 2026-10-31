@@ -169,6 +169,7 @@ export function ModeloView() {
                   }
                 });
               }}
+              onCambiarAnotacion={(modo) => void actualizarVista(vista.id, { anotacionEscala: modo })}
               onPuntoCorte={(punto) => void anadirPuntoCorte(punto)}
               onEscape={() => {
                 const estado = useModelo.getState();

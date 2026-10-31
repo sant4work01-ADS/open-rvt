@@ -351,6 +351,23 @@ export function PropiedadesVista({ vista }: { vista: Vista }) {
               className="w-24 rounded border bg-background px-2 py-1 text-right"
             />
           </label>
+          <label className="prop-fila text-xs" title="A escala: los textos miden sus mm de papel y crecen con el zoom; Pantalla: tamaño legible fijo">
+            <span className="prop-etiqueta text-muted-foreground">Escala de anotación</span>
+            <select
+              data-testid="vista-anotacion-escala"
+              value={
+                vista.anotacionEscala ??
+                (vista.tipo === "alzado" || vista.tipo === "corte" ? "papel" : "pantalla")
+              }
+              onChange={(e) =>
+                cambiar({ anotacionEscala: e.target.value === "papel" ? "papel" : "pantalla" })
+              }
+              className="rounded border bg-background px-2 py-1"
+            >
+              <option value="papel">A escala</option>
+              <option value="pantalla">Pantalla</option>
+            </select>
+          </label>
           <label className="prop-fila text-xs">
             <span className="prop-etiqueta text-muted-foreground">Estilo de cota</span>
             <select

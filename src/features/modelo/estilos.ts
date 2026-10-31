@@ -559,6 +559,23 @@ export function mmAMundo(mm: number, escala: EscalaVista): number {
 }
 
 /**
+ * O030: alto en mundo de un texto de anotación. En «papel» mide sus mm de papel
+ * por la escala de la vista (crece y mengua con el zoom, como lo impreso); en
+ * «pantalla» conserva el mínimo en píxeles de siempre.
+ */
+export function altoAnotacionMundo(
+  mm: number,
+  escala: EscalaVista,
+  mundoPorPx: number,
+  modo: "papel" | "pantalla",
+  minimoPx = 11,
+): number {
+  if (modo === "papel") return mmAMundo(mm, escala);
+  // En pantalla el alto es constante en píxeles, sin importar el zoom.
+  return minimoPx * Math.max(mundoPorPx, 0);
+}
+
+/**
  * O006b: tamaño en mundo de un texto o marca de cota. Conserva su medida de papel,
  * pero en pantalla nunca baja del mínimo en píxeles (así sigue legible al alejar).
  */
