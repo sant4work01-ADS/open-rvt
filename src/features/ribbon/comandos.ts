@@ -7,6 +7,7 @@
 // 16 px con texto a la derecha. Los tooltips dicen «Nombre (atajo) — qué hace».
 import type { LucideIcon } from "lucide-react";
 import {
+  AlignHorizontalSpaceAround,
   Box,
   BrickWall,
   ChevronDown,
@@ -104,6 +105,7 @@ export interface AccionesRibbon {
   herramientaVentana: () => void;
   herramientaMover: () => void;
   herramientaCopiar: () => void;
+  herramientaAlinear: () => void;
   /** O007b: herramientas de estructura (un clic o dos, según el elemento). */
   herramientaZapata: () => void;
   herramientaZapataCorrida: () => void;
@@ -432,6 +434,19 @@ export function construirComandosRibbon(a: AccionesRibbon): ComandoRibbon[] {
       habilitado: true,
       descripcion: "Trabes entre columnas consecutivas sobre cada eje",
       accion: a.unirTrabes,
+    },
+    {
+      id: "alinear",
+      texto: "Alinear",
+      icono: AlignHorizontalSpaceAround,
+      atajo: "AL",
+      grupo: "Modificar",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      activo: a.herramientaActiva === "alinear",
+      descripcion: "Alinear la cara de un elemento a un eje, nivel o cara de referencia",
+      accion: a.herramientaAlinear,
     },
     {
       id: "mover",

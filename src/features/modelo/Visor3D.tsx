@@ -36,6 +36,11 @@ import {
   type Punto2,
 } from "./herramientas";
 import {
+  caraEnPunto,
+  rectaDeEje,
+  rectaDeMalla,
+} from "./alinear";
+import {
   calcularFamiliasCotas,
   formatearCota,
   parsearCota,
@@ -897,6 +902,11 @@ export function Visor3D({
   } | null>(null);
   // O003b: estado de la herramienta activa.
   const herramienta = useModelo((s) => s.herramienta);
+  const referenciaAlinear = useModelo((s) => s.referenciaAlinear);
+  const alineando = useModelo((s) => s.alineando);
+  const elegirReferenciaAlinear = useModelo((s) => s.elegirReferenciaAlinear);
+  const aplicarAlinear = useModelo((s) => s.aplicarAlinear);
+  const alternarCandadoAlinear = useModelo((s) => s.alternarCandadoAlinear);
   const puntosHerramienta = useModelo((s) => s.puntosHerramienta);
   const ratonHerramienta = useModelo((s) => s.ratonHerramienta);
   const engancheHerramienta = useModelo((s) => s.engancheHerramienta);
@@ -4390,6 +4400,62 @@ export function Visor3D({
       const camera = camara.current;
       if (!camera) return;
       const falso = { clientX, clientY } as PointerEvent;
+      if (herramienta === "alinear") {
+        // O026: primer clic en la referencia; el segundo en la cara a mover.
+        const rectAlinear = nodo.getBoundingClientRect();
+        const ratonAlinear = new THREE.Vector2(
+          ((clientX - rectAlinear.left) / rectAlinear.width) * 2 - 1,
+          -((clientY - rectAlinear.top) / rectAlinear.height) * 2 + 1,
+        );
+        const rayoAlinear = new THREE.Raycaster();
+        rayoAlinear.setFromCamera(ratonAlinear, camera);
+        const linea = lineaEjeEn(clientX, clientY);
+        if (linea) {
+          elegirReferenciaAlinear({ tipo: "eje", globalid: linea });
+          return;
+        }
+        const impactoAlinear = rayoAlinear.intersectObjects(meshes.current, false)[0];
+        const gidAlinear = impactoAlinear?.object.userData.globalid as string | undefined;
+        if (!gidAlinear) return;
+        const mallaAlinear = useModelo.getState().mallas.find(
+          (m) => m.globalid === gidAlinear,
+        );
+        if (!mallaAlinear) return;
+        const puntoAlinear: Punto2 =
+          vista.tipo === "planta"
+            ? (puntoPlanta(falso) ?? [impactoAlinear.point.x, impactoAlinear.point.y])
+            : [impactoAlinear.point.x, impactoAlinear.point.y];
+        const referencia = referenciaAlinear;
+        if (!referencia) {
+          const recta = rectaDeMalla(mallaAlinear);
+          elegirReferenciaAlinear({
+            tipo: "elemento",
+            globalid: gidAlinear,
+            cara: recta ? caraEnPunto(recta, puntoAlinear) : "centro",
+          });
+          return;
+        }
+        let direccion: { ux: number; uy: number } | undefined;
+        if (referencia.tipo === "eje") {
+          const eje = referencias.ejes.find((e) => e.globalid === referencia.globalid);
+          if (eje) {
+            const recta = rectaDeEje(eje);
+            direccion = { ux: recta.ux, uy: recta.uy };
+          }
+        } else if (referencia.tipo === "elemento") {
+          const mallaRef = useModelo
+            .getState()
+            .mallas.find((m) => m.globalid === referencia.globalid);
+          const recta = mallaRef ? rectaDeMalla(mallaRef) : null;
+          if (recta) direccion = { ux: recta.ux, uy: recta.uy };
+        } else {
+          direccion = { ux: 1, uy: 0 };
+        }
+        const recta = rectaDeMalla(mallaAlinear, direccion);
+        const cara = recta ? caraEnPunto(recta, puntoAlinear) : "cercana";
+        void aplicarAlinear(gidAlinear, cara, puntoAlinear);
+        return;
+      }
       if (herramienta && vista.tipo === "planta") {
         const punto = puntoPlanta(falso);
         if (punto) {
@@ -5033,6 +5099,9 @@ export function Visor3D({
     vista,
     modoOrbitar,
     herramienta,
+    referenciaAlinear,
+    elegirReferenciaAlinear,
+    aplicarAlinear,
     fijarRaton,
     clicEnPlanta,
     dobleClicEnPlanta,
@@ -5372,6 +5441,50 @@ export function Visor3D({
     !!ejeSeleccionadoDatos &&
     (vista.tipo === "planta" || vista.tipo === "alzado" || vista.tipo === "corte");
 
+  // O026: guía azul punteada de la referencia y candado de la alineación.
+  const guiaAlinear = (() => {
+    if (!referenciaAlinear) return null;
+    const z = vista.tipo === "planta" ? 0.05 : (vista.alturaPlano ?? 1.2);
+    let a: [number, number, number] | null = null;
+    let b: [number, number, number] | null = null;
+    if (referenciaAlinear.tipo === "eje") {
+      const eje = referencias.ejes.find((e) => e.globalid === referenciaAlinear.globalid);
+      if (eje) {
+        a = [eje.x1, eje.y1, z];
+        b = [eje.x2, eje.y2, z];
+      }
+    } else if (referenciaAlinear.tipo === "elemento") {
+      const malla = mallas.find((m) => m.globalid === referenciaAlinear.globalid);
+      const recta = malla ? rectaDeMalla(malla) : null;
+      if (malla?.eje) {
+        a = [malla.eje[0], malla.eje[1], z];
+        b = [malla.eje[2], malla.eje[3], z];
+      } else if (recta) {
+        a = [recta.x - recta.ux * 1.5, recta.y - recta.uy * 1.5, z];
+        b = [recta.x + recta.ux * 1.5, recta.y + recta.uy * 1.5, z];
+      }
+    }
+    if (!a || !b) return null;
+    const rectNodo = contenedor.current?.getBoundingClientRect();
+    if (!rectNodo) return null;
+    const pa = pantallaDePunto(a);
+    const pb = pantallaDePunto(b);
+    if (!pa || !pb) return null;
+    const candado = alineando
+      ? pantallaDePunto([alineando.punto[0], alineando.punto[1], z])
+      : null;
+    return {
+      x1: pa.x - rectNodo.left,
+      y1: pa.y - rectNodo.top,
+      x2: pb.x - rectNodo.left,
+      y2: pb.y - rectNodo.top,
+      candado: candado
+        ? { x: candado.x - rectNodo.left, y: candado.y - rectNodo.top }
+        : null,
+      bloqueada: !!alineando?.bloqueada,
+    };
+  })();
+
   return (
     <div
       ref={contenedor}
@@ -5397,6 +5510,40 @@ export function Visor3D({
             height: Math.abs(ventanaSeleccion.y2 - ventanaSeleccion.y1),
           }}
         />
+      )}
+      {guiaAlinear && (
+        <svg
+          data-testid="guia-alinear"
+          className="pointer-events-none absolute inset-0 z-20 h-full w-full"
+          aria-hidden="true"
+        >
+          <line
+            x1={guiaAlinear.x1}
+            y1={guiaAlinear.y1}
+            x2={guiaAlinear.x2}
+            y2={guiaAlinear.y2}
+            stroke="#1d6feb"
+            strokeWidth={2}
+            strokeDasharray="8 6"
+          />
+        </svg>
+      )}
+      {guiaAlinear?.candado && (
+        <button
+          type="button"
+          data-testid="candado-alinear"
+          data-bloqueada={guiaAlinear.bloqueada ? "si" : "no"}
+          title={
+            guiaAlinear.bloqueada
+              ? "Candado cerrado: quitar la restricción"
+              : "Cerrar el candado y guardar la restricción"
+          }
+          onClick={() => void alternarCandadoAlinear()}
+          className="absolute z-30 -translate-x-1/2 -translate-y-1/2 rounded border bg-background/95 p-1 text-sm shadow"
+          style={{ left: guiaAlinear.candado.x, top: guiaAlinear.candado.y }}
+        >
+          {guiaAlinear.bloqueada ? "\u{1F512}" : "\u{1F513}"}
+        </button>
       )}
       <div className="absolute left-2 top-2 z-10 flex gap-1">
         <button

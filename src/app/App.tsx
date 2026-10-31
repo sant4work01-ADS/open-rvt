@@ -276,6 +276,7 @@ export function App() {
             niveles.length > 0 ? Math.max(...niveles.map((n) => n.elevacion)) + 3 : 0;
           void estado.crearNivel(`Nivel ${niveles.length}`, siguiente);
         },
+        al: () => estado.activarHerramienta("alinear"),
         mv: () => estado.activarHerramienta("mover"),
         co: () => estado.activarHerramienta("copiar"),
       };
@@ -341,6 +342,7 @@ export function App() {
         herramientaVentana: () => useModelo.getState().activarHerramienta("ventana"),
         herramientaMover: () => useModelo.getState().activarHerramienta("mover"),
         herramientaCopiar: () => useModelo.getState().activarHerramienta("copiar"),
+        herramientaAlinear: () => useModelo.getState().activarHerramienta("alinear"),
         // O007b: herramientas de estructura.
         herramientaZapata: () => useModelo.getState().activarHerramienta("zapata"),
         herramientaZapataCorrida: () =>
