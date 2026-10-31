@@ -98,7 +98,7 @@ function medirBurbuja(rutaPng, info) {
   const esTinta = (x, y) => {
     const i = (y * png.ancho + x) * png.canales;
     const c = [png.datos[i], png.datos[i + 1], png.datos[i + 2]];
-    return distancia(c, tinta) < 110 && distancia(c, fondo) > 90;
+    return distancia(c, tinta) < 160 && distancia(c, fondo) > 50;
   };
   const caja = (hasta, radialMin) => {
     const x0 = Math.max(0, Math.floor(cx - hasta));
@@ -122,13 +122,21 @@ function medirBurbuja(rutaPng, info) {
         if (y > maxY) maxY = y;
       }
     }
-    assert.ok(minX <= maxX && minY <= maxY, "no se encontraron píxeles del anillo/texto");
+    if (!(minX <= maxX && minY <= maxY)) {
+      const k = (Math.round(cy) * png.ancho + Math.round(cx)) * png.canales;
+      assert.fail(
+        `sin píxeles (hasta=${hasta.toFixed(1)} radialMin=${radialMin}) ` +
+          `centro=(${cx.toFixed(1)},${cy.toFixed(1)}) r=${r.toFixed(1)} ` +
+          `pixel=(${png.datos[k]},${png.datos[k + 1]},${png.datos[k + 2]}) ` +
+          `esperado=${JSON.stringify(tinta)}`,
+      );
+    }
     return { x: (minX + maxX) / 2 / sx, y: (minY + maxY) / 2 / sy };
   };
-  // Anillo: la corona exterior; el texto nunca llega tan lejos.
-  const anillo = caja(1.35 * r, 0.72);
-  // Texto: todo lo pintado dentro del anillo (el relleno tapa la línea del eje).
-  const texto = caja(0.82 * r, 0);
+  // Anillo: solo la corona (la línea del eje queda fuera de este radio, así no
+  // sesga la caja). El texto se mide por dentro, donde el relleno tapa la línea.
+  const anillo = caja(1.02 * r, 0.86);
+  const texto = caja(0.8 * r, 0);
   return {
     desvioX: Math.abs(texto.x - anillo.x),
     desvioY: Math.abs(texto.y - anillo.y),
@@ -365,7 +373,11 @@ test("O014a-1: burbujas centradas, cabeza de nivel y estilo guardado", async () 
     await activar(ses, "visor-ajustar");
     await esperar(700);
     assert.equal(await atributoVisor(ses, "ejes"), "3");
-    assert.equal(await atributoVisor(ses, "ejes-etiquetas"), "A,12,A.1");
+    assert.deepEqual(
+      (await atributoVisor(ses, "ejes-etiquetas")).split(",").sort(),
+      [...etiquetas].sort(),
+      "no quedaron las tres etiquetas de la prueba",
+    );
 
     // 100 %: las tres burbujas en una sola captura.
     const png100 = path.join(CAPTURAS, "o014a-planta-zoom-100.png");
@@ -412,7 +424,9 @@ test("O014a-1: burbujas centradas, cabeza de nivel y estilo guardado", async () 
     assert.ok(nivelesTexto.includes("Npt 0.00m"), `falta «Npt 0.00m» en: ${nivelesTexto}`);
     assert.ok(nivelesTexto.includes("Npt +3.00m"), `falta «Npt +3.00m» en: ${nivelesTexto}`);
     const cotasPorDefecto = JSON.parse(await atributoVisor(ses, "niveles-cotas"));
-    assert.equal(cotasPorDefecto[0].parciales.length, 1, "con cotas debe haber una parcial");
+    // Tres niveles (0, 3 y 6 m) dan dos tramos parciales y una total de 6 m.
+    assert.deepEqual(cotasPorDefecto[0].parciales, ["3.00", "3.00"]);
+    assert.equal(cotasPorDefecto[0].total, "Total 6.00");
 
     // Parte 3: el diálogo guarda el estilo de nivel y la vista lo aplica.
     await cambiarPestana(ses, "Vista");

@@ -445,8 +445,7 @@ function crearTextoAnotacion(
   color: string,
   fondo: string,
   altoMundo: number,
-): THREE.Group {
-  const grupo = new THREE.Group();
+): Text {
   const texto3d = new Text();
   texto3d.text = texto;
   texto3d.font = FUENTE_ANOTACION;
@@ -465,17 +464,16 @@ function crearTextoAnotacion(
   texto3d.renderOrder = 22;
   // O014a: centrar el glifo visible (no la caja del renglón) en el origen del grupo.
   // `sync` es asíncrono, por eso el ajuste se aplica en su callback.
-  const centrar = (info: {
-    textRenderInfo?: { visibleBounds?: [number, number, number, number] | null };
-  }) => {
-    const limites = info?.textRenderInfo?.visibleBounds;
+  texto3d.sync(() => {
+    const info = texto3d as unknown as {
+      textRenderInfo?: { visibleBounds?: [number, number, number, number] };
+    };
+    const limites = info.textRenderInfo?.visibleBounds;
     if (!limites) return;
     const [dx, dy] = desplazamientoCentrado(limites);
     texto3d.position.set(dx, dy, 0);
-  };
-  texto3d.sync(centrar as unknown as () => void);
-  grupo.add(texto3d);
-  return grupo;
+  });
+  return texto3d;
 }
 
 /** O011: ancho aproximado del texto para colocarlo entre marcas (sin medir píxeles). */
@@ -3513,6 +3511,9 @@ export function Visor3D({
       } else if (camera instanceof THREE.PerspectiveCamera) {
         nav.distancia = Math.max(0.5, nav.distancia * factor);
       }
+      // Recolocar la cámara sobre el objetivo nuevo: con el objetivo ya desplazado
+      // hacia el punto bajo el cursor, el zoom queda anclado en ese punto.
+      aplicarCamara();
     };
 
     const panearPixeles = (dx: number, dy: number) => {
