@@ -23,6 +23,28 @@ async function atributoVisor(ses, nombre) {
   return (await ses.porTestid("visor")).getAttribute(`data-${nombre}`);
 }
 
+async function crearNivelLista(ses) {
+  const niveles = await invocar(ses, "modelo.niveles");
+  const elevacion =
+    niveles.length > 0 ? Math.max(...niveles.map((n) => n.elevacion)) + 3 : 0;
+  const modulo = await ses.driver.wait(
+    until.elementLocated(By.css('[data-modulo="niveles"]')),
+    10_000,
+  );
+  await modulo.click();
+  await esperar(300);
+  await fijarValor(ses, "nivel-nuevo-nombre", `Nivel ${niveles.length}`);
+  await fijarValor(ses, "nivel-nuevo-elevacion", String(elevacion));
+  await activar(ses, "nivel-agregar");
+  await esperar(700);
+  const modelo = await ses.driver.wait(
+    until.elementLocated(By.css('[data-modulo="modelo"]')),
+    10_000,
+  );
+  await modelo.click();
+  await esperar(300);
+}
+
 async function cambiarPestana(ses, nombre) {
   const pestana = await ses.driver.wait(
     until.elementLocated(By.xpath(`//*[@role="tab"][normalize-space(.)="${nombre}"]`)),
@@ -316,7 +338,7 @@ test("O010-1: la cámara conserva zoom y paneo en las 5 vistas tras crear y edit
 
     // Cambios que antes reencuadraban la cámara: nivel, eje, muro, cota y propiedad.
     await elegirVista(ses, "Planta Nivel 0");
-    await activar(ses, "cmd-nivel");
+    await crearNivelLista(ses);
     // Deja visibles todos los niveles para que el muro se vea en las capturas.
     const visibles = await ses.driver.findElements(By.css('[data-testid^="nivel-visible-"]'));
     for (const check of visibles) {
@@ -387,8 +409,8 @@ test("O010-2: niveles, cotas, ejes ordenados, paneles y rango de vista", async (
     }, 20_000, "el modelo nuevo no cargó");
 
     await cambiarPestana(ses, "Modelar");
-    await activar(ses, "cmd-nivel");
-    await activar(ses, "cmd-nivel");
+    await crearNivelLista(ses);
+    await crearNivelLista(ses);
     const niveles = await invocar(ses, "modelo.niveles");
     assert.equal(niveles.length, 3);
 
@@ -518,7 +540,7 @@ test("O010-4: las cotas azules de la retícula son del rebase, no residuos", asy
       }
     }, 20_000, "el modelo nuevo no cargó");
     await cambiarPestana(ses, "Modelar");
-    for (let i = 0; i < 3; i += 1) await activar(ses, "cmd-nivel");
+    for (let i = 0; i < 3; i += 1) await crearNivelLista(ses);
     await activar(ses, "cmd-ejes-separaciones");
     await ses.driver.wait(
       until.elementLocated(By.css('[data-testid="dialogo-ejes-separaciones"]')),

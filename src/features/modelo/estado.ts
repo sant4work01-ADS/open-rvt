@@ -44,7 +44,15 @@ import {
 import { estilosPorDefecto, normalizarEstilos, type Estilos } from "./estilos";
 import { construirAberturas } from "./aberturas";
 import { normalizarAjusteEje } from "./ejesVista";
-import { normalizarAjusteNivel } from "./niveles";
+import {
+  cotasTemporalesNivel,
+  elevacionDesdeCota,
+  engancheElevacionNivel,
+  nivelEnElevacion,
+  nombreNivelAutomatico,
+  normalizarAjusteNivel,
+  type NivelRef,
+} from "./niveles";
 
 export type RespuestaGuardar = "guardar" | "descartar" | "cancelar";
 export type Herramienta =
@@ -63,7 +71,8 @@ export type Herramienta =
   | "trabe"
   | "cerramiento"
   | "dala"
-  | "alinear";
+  | "alinear"
+  | "nivel";
 export type AlineacionMuro = "centro" | "interior" | "exterior";
 
 /** O026: referencia de la herramienta Alinear (eje, nivel o cara de elemento). */
@@ -129,6 +138,15 @@ export interface OpcionesMuro {
   tipo: string;
   altura: number;
   alineacion: AlineacionMuro;
+}
+
+/** O029: opciones de la herramienta «Nivel» (alzado/corte). */
+export interface OpcionesNivel {
+  nombre: string;
+  /** Mientras no se edite, el nombre sigue a la elevación del cursor. */
+  nombreAutomatico: boolean;
+  crearPlanta: boolean;
+  elevacionTexto: string;
 }
 
 /** O006d: un bloque de la retícula (vertical u horizontal). */
@@ -199,6 +217,13 @@ interface EstadoModelo {
   referenciaAlinear: ReferenciaAlinear | null;
   alineando: AlineacionActiva | null;
   opcionesMuro: OpcionesMuro;
+  /** O029: nombre automático, vista de planta y elevación exacta del nivel nuevo. */
+  opcionesNivel: OpcionesNivel;
+  fijarOpcionesNivel: (cambios: Partial<OpcionesNivel>) => void;
+  /** O029: cotas temporales del nivel bajo el cursor. */
+  cotasNivel: { inferior: NivelRef | null; superior: NivelRef | null } | null;
+  /** O029: clic en alzado/corte: [posición horizontal, elevación]. */
+  clicNivel: (punto: Punto2) => Promise<void>;
   tiposMuro: Array<{ globalid: string; nombre: string; espesor: number }>;
   /** O007b: tipos estructurales y el tipo elegido por herramienta. */
   tiposHerramienta: TipoHerramienta[];
@@ -259,7 +284,17 @@ interface EstadoModelo {
   deshacer: () => Promise<void>;
   rehacer: () => Promise<void>;
   validar: () => Promise<void>;
-  crearNivel: (nombre: string, elevacion: number) => Promise<boolean>;
+  crearNivel: (
+    nombre: string,
+    elevacion: number,
+    opciones?: { crearPlanta?: boolean },
+  ) => Promise<boolean>;
+  copiarNivel: (globalid: string, desfase: number) => Promise<boolean>;
+  arregloNiveles: (
+    globalid: string,
+    cantidad: number,
+    separacion: number,
+  ) => Promise<boolean>;
   editarNivel: (globalid: string, nombre: string, elevacion: number) => Promise<void>;
   borrarNivel: (globalid: string) => Promise<void>;
   crearEje: (etiqueta: string, x1: number, y1: number, x2: number, y2: number) => Promise<void>;
@@ -480,6 +515,60 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     const alias = ALIAS_HERRAMIENTA[herramienta];
     const candidatos = tipos.filter((t) => t.alias === alias);
     return candidatos.find((t) => t.nombre === elegidos[herramienta]) ?? candidatos[0];
+  };
+
+  /** O029: niveles y caras horizontales de losas/vigas como candidatos del imán. */
+  const candidatosElevacionNivel = (): number[] => {
+    const valores = get().niveles.map((n) => n.elevacion);
+    for (const malla of get().mallas) {
+      let zMin = Infinity;
+      let zMax = -Infinity;
+      for (let i = 2; i < malla.vertices.length; i += 3) {
+        const z = malla.vertices[i];
+        if (z < zMin) zMin = z;
+        if (z > zMax) zMax = z;
+      }
+      if (Number.isFinite(zMin)) valores.push(zMin);
+      if (Number.isFinite(zMax)) valores.push(zMax);
+    }
+    return valores;
+  };
+
+  const crearNivelDesdeHerramienta = async (punto: Punto2): Promise<boolean> => {
+    const estado = get();
+    const elevacion = punto[1];
+    const opciones = estado.opcionesNivel;
+    const nombre =
+      opciones.nombreAutomatico || !opciones.nombre.trim()
+        ? nombreNivelAutomatico(estado.niveles, elevacion)
+        : opciones.nombre.trim();
+    const repetido = nivelEnElevacion(estado.niveles, elevacion);
+    if (repetido) {
+      set({
+        aviso: `Ya existe «${repetido.nombre}» a ${elevacion.toFixed(2)} m; no se crea.`,
+      });
+      return false;
+    }
+    const ok = await get().crearNivel(nombre, elevacion, {
+      crearPlanta: opciones.crearPlanta,
+    });
+    if (!ok) return false;
+    const siguiente = nombreNivelAutomatico(get().niveles, elevacion + 0.0001);
+    set({
+      puntosHerramienta: [],
+      ratonHerramienta: null,
+      engancheHerramienta: null,
+      longitudTecleada: "",
+      cotasNivel: null,
+      opcionesNivel: {
+        ...opciones,
+        nombre: opciones.nombreAutomatico ? siguiente : opciones.nombre,
+        elevacionTexto: "",
+      },
+      aviso: `Nivel a ${elevacion.toFixed(2)} m creado.`,
+    });
+    bitacoraHerramienta("nivel", "terminar", { x: punto[0], y: elevacion });
+    return true;
   };
 
   const cargar = async (info: RespuestaInfo) => {
@@ -911,6 +1000,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     referenciaAlinear: null,
     alineando: null,
     opcionesMuro: { tipo: "", altura: 2.6, alineacion: "centro" },
+    opcionesNivel: { nombre: "", nombreAutomatico: true, crearPlanta: true, elevacionTexto: "" },
+    cotasNivel: null,
     tiposMuro: [],
     tiposHerramienta: [],
     tipoHerramienta: {},
@@ -1251,7 +1342,12 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
     activarHerramienta: (herramienta) => {
       const vista = get().vistas.find((v) => v.id === get().vistaActivaId);
-      if (!vista || (vista.tipo !== "planta" && herramienta !== "alinear")) {
+      if (herramienta === "nivel") {
+        if (!vista || (vista.tipo !== "alzado" && vista.tipo !== "corte")) {
+          set({ aviso: "Abre un alzado o corte" });
+          return;
+        }
+      } else if (!vista || (vista.tipo !== "planta" && herramienta !== "alinear")) {
         set({ aviso: "Las herramientas de modelado solo trabajan en una vista de planta." });
         return;
       }
@@ -1276,6 +1372,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         cerramiento: "Cerramiento: clic sobre un muro.",
         dala: "Dala de desplante: clic sobre un muro.",
         alinear: "Alinear: clic en la referencia (eje, nivel o cara) y luego en la cara del elemento.",
+        nivel: "Nivel: dos clics horizontales; la elevación se engancha o se teclea.",
       };
       const conservarSeleccion =
         herramienta === "mover" || herramienta === "copiar" || herramienta === "losa";
@@ -1290,6 +1387,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         ejeLibre: false,
         modoCorte: false,
         puntoCorte: null,
+        cotasNivel: null,
         ...(conservarSeleccion
           ? {}
           : { seleccion: null, seleccionados: [], propiedades: null }),
@@ -1310,6 +1408,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         longitudTecleada: "",
         ejeLibre: false,
         etiquetaEje: "",
+        opcionesNivel: { ...get().opcionesNivel, elevacionTexto: "" },
+        cotasNivel: null,
         aviso: null,
       });
       if (herramienta) bitacoraHerramienta(herramienta, "cancelar");
@@ -1380,6 +1480,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         longitudTecleada: "",
         ejeLibre: false,
         etiquetaEje: "",
+        opcionesNivel: { ...get().opcionesNivel, elevacionTexto: "" },
+        cotasNivel: null,
       });
       bitacoraHerramienta(herramienta, "cancelar_trazo");
       return true;
@@ -1408,6 +1510,45 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
     fijarEtiquetaEje: (etiqueta) => set({ etiquetaEje: etiqueta }),
 
+    fijarOpcionesNivel: (cambios) =>
+      set({
+        opcionesNivel: {
+          ...get().opcionesNivel,
+          ...cambios,
+          ...(cambios.nombre !== undefined ? { nombreAutomatico: false } : {}),
+        },
+      }),
+
+    clicNivel: async (punto) => {
+      const herramienta = get().herramienta;
+      if (herramienta !== "nivel") return;
+      const vista = get().vistas.find((v) => v.id === get().vistaActivaId);
+      if (!vista || (vista.tipo !== "alzado" && vista.tipo !== "corte")) {
+        set({ aviso: "Abre un alzado o corte" });
+        return;
+      }
+      const z = engancheElevacionNivel(punto[1], candidatosElevacionNivel());
+      const p: Punto2 = [punto[0], z];
+      bitacoraHerramienta("nivel", "punto", { x: p[0], y: p[1] });
+      const puntos = get().puntosHerramienta;
+      if (puntos.length === 0) {
+        const cotas = cotasTemporalesNivel(z, get().niveles);
+        const nombre = get().opcionesNivel.nombreAutomatico
+          ? nombreNivelAutomatico(get().niveles, z)
+          : get().opcionesNivel.nombre;
+        set({
+          puntosHerramienta: [p],
+          ratonHerramienta: p,
+          engancheHerramienta: { punto: p, tipo: "cuadricula" },
+          cotasNivel: { inferior: cotas.inferior, superior: cotas.superior },
+          opcionesNivel: { ...get().opcionesNivel, nombre },
+          aviso: "Nivel: segundo clic, o escriba la cota y Enter.",
+        });
+        return;
+      }
+      await crearNivelDesdeHerramienta(p);
+    },
+
     fijarRatonHerramienta: (punto, shift = false, metrosPorPixel) => {
       const herramienta = get().herramienta;
       if (!herramienta || !punto) {
@@ -1415,6 +1556,21 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         return;
       }
       const puntos = get().puntosHerramienta;
+      if (herramienta === "nivel") {
+        const z = engancheElevacionNivel(punto[1], candidatosElevacionNivel());
+        const p: Punto2 = [punto[0], z];
+        const cotas = cotasTemporalesNivel(z, get().niveles);
+        const opciones = get().opcionesNivel;
+        set({
+          ratonHerramienta: p,
+          engancheHerramienta: { punto: p, tipo: "cuadricula" },
+          cotasNivel: { inferior: cotas.inferior, superior: cotas.superior },
+          opcionesNivel: opciones.nombreAutomatico
+            ? { ...opciones, nombre: nombreNivelAutomatico(get().niveles, z) }
+            : opciones,
+        });
+        return;
+      }
       if (herramienta === "puerta" || herramienta === "ventana") {
         set({ ratonHerramienta: punto, engancheHerramienta: null });
         return;
@@ -1433,6 +1589,22 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       const herramienta = get().herramienta;
       if (!herramienta || herramienta === "puerta" || herramienta === "ventana") return;
       if (get().puntosHerramienta.length === 0) return;
+      if (herramienta === "nivel") {
+        // O029: la cota temporal se teclea relativa al nivel inferior.
+        const campo = get().opcionesNivel.elevacionTexto;
+        let siguiente = campo;
+        if (tecla === "Backspace") siguiente = campo.slice(0, -1);
+        else if (tecla === "," || tecla === ".") {
+          if (!campo.includes(".")) siguiente = `${campo || "0"}.`;
+        } else if (/^\d$/.test(tecla)) {
+          siguiente = `${campo}${tecla}`.replace(/^0(?=\d)/, "");
+        }
+        set({
+          opcionesNivel: { ...get().opcionesNivel, elevacionTexto: siguiente },
+          longitudTecleada: siguiente,
+        });
+        return;
+      }
       if (tecla === "Backspace") {
         set({ longitudTecleada: get().longitudTecleada.slice(0, -1) });
         return;
@@ -1452,6 +1624,26 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       const herramienta = get().herramienta;
       const puntos = get().puntosHerramienta;
       if (!herramienta || puntos.length === 0) return;
+      if (herramienta === "nivel") {
+        const cotas = cotasTemporalesNivel(
+          get().ratonHerramienta?.[1] ?? puntos[puntos.length - 1][1],
+          get().niveles,
+        );
+        const texto = get().opcionesNivel.elevacionTexto || get().longitudTecleada;
+        let z: number | null;
+        if (texto.trim() === "") {
+          z = get().ratonHerramienta?.[1] ?? puntos[puntos.length - 1][1];
+        } else {
+          z = elevacionDesdeCota(cotas.inferior, texto);
+          if (z === null) {
+            set({ aviso: "Cota no válida: escriba un número, por ejemplo 0.50." });
+            return;
+          }
+        }
+        const x = get().ratonHerramienta?.[0] ?? puntos[puntos.length - 1][0];
+        await crearNivelDesdeHerramienta([x, z]);
+        return;
+      }
       if (herramienta === "losa") {
         await get().dobleClicEnPlanta();
         return;
@@ -1796,35 +1988,81 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       }
     },
 
-    crearNivel: async (nombre, elevacion) => {
-      const ok = await ejecutar("niveles.crear", { nombre, elevacion });
-      if (!ok) return false;
-      const niveles = get().niveles;
-      const nivel = niveles.find((n) => n.nombre === nombre && n.elevacion === elevacion);
-      if (!nivel) return true;
-      const inferiores = niveles.filter((n) => n.elevacion < elevacion);
-      const inferior =
-        inferiores.length > 0
-          ? Math.max(...inferiores.map((n) => n.elevacion))
-          : elevacion - 1;
-      const existente = get().vistas.some((v) => v.tipo === "planta" && v.nivel === nivel.globalid);
-      if (!existente) {
-        const vista: Vista = {
-          id: `planta-${nivel.globalid}`,
-          nombre: `Planta ${nivel.nombre}`,
-          tipo: "planta",
-          nivel: nivel.globalid,
-          alturaPlano: nivel.elevacion + 1.2,
-          profundidad: inferior,
-          nivelesVisibles: [nivel.globalid],
-          categorias: CATEGORIAS_TODAS(),
-          estilo: "sombreado",
-          escala: 100,
-          cotasEjes: true,
-        };
-        const vistas = [...get().vistas, vista];
-        set({ vistas, vistaActivaId: vista.id });
-        await persistirVistas(vistas);
+    crearNivel: async (nombre, elevacion, opciones = {}) => {
+      const resultado = await ejecutarResultado("niveles.crear", {
+        nombre,
+        elevacion,
+        crear_planta: opciones.crearPlanta ?? true,
+      });
+      if (!resultado) return false;
+      // O029: el núcleo crea la planta en el mismo paso (mismo Deshacer); se releen
+      // las vistas para que el navegador y el visor las vean ya guardadas.
+      if (opciones.crearPlanta ?? true) {
+        const crudas = await rpc<unknown>("vistas.leer").catch(() => null);
+        if (crudas) {
+          const delNucleo = normalizarVistas(crudas);
+          const nivel = (resultado.nivel as { globalid?: string } | null)?.globalid;
+          const vista = nivel
+            ? delNucleo.find((v) => v.tipo === "planta" && v.nivel === nivel)
+            : undefined;
+          // Se conservan las vistas automáticas de la sesión (alzados, cortes y 3D)
+          // que aún no se habían guardado; del núcleo solo llega la planta nueva.
+          const vistas = [...get().vistas];
+          for (const candidata of delNucleo) {
+            const i = vistas.findIndex((v) => v.id === candidata.id);
+            if (i >= 0) vistas[i] = candidata;
+            else vistas.push(candidata);
+          }
+          set({
+            vistas,
+            ...(vista ? { vistaActivaId: vista.id } : {}),
+            conCambios: true,
+          });
+        }
+      }
+      return true;
+    },
+
+    copiarNivel: async (globalid, desfase) => {
+      const resultado = await ejecutarResultado("niveles.copiar", {
+        globalid,
+        desfase,
+      });
+      if (!resultado) return false;
+      const crudas = await rpc<unknown>("vistas.leer").catch(() => null);
+      if (crudas) {
+        const delNucleo = normalizarVistas(crudas);
+        const nivel = (resultado.nivel as { globalid?: string } | null)?.globalid;
+        const vista = nivel
+          ? delNucleo.find((v) => v.tipo === "planta" && v.nivel === nivel)
+          : undefined;
+        const vistas = [...get().vistas];
+        for (const candidata of delNucleo) {
+          const i = vistas.findIndex((v) => v.id === candidata.id);
+          if (i >= 0) vistas[i] = candidata;
+          else vistas.push(candidata);
+        }
+        set({ vistas, ...(vista ? { vistaActivaId: vista.id } : {}) });
+      }
+      return true;
+    },
+
+    arregloNiveles: async (globalid, cantidad, separacion) => {
+      const resultado = await ejecutarResultado("niveles.arreglo", {
+        globalid,
+        cantidad,
+        separacion,
+      });
+      if (!resultado) return false;
+      const crudas = await rpc<unknown>("vistas.leer").catch(() => null);
+      if (crudas) {
+        const vistas = [...get().vistas];
+        for (const candidata of normalizarVistas(crudas)) {
+          const i = vistas.findIndex((v) => v.id === candidata.id);
+          if (i >= 0) vistas[i] = candidata;
+          else vistas.push(candidata);
+        }
+        set({ vistas });
       }
       return true;
     },

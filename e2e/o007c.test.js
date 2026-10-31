@@ -31,6 +31,28 @@ async function activar(ses, testid) {
   await esperar(250);
 }
 
+async function crearNivelLista(ses) {
+  const niveles = await invocar(ses, "modelo.niveles");
+  const elevacion =
+    niveles.length > 0 ? Math.max(...niveles.map((n) => n.elevacion)) + 3 : 0;
+  const modulo = await ses.driver.wait(
+    until.elementLocated(By.css('[data-modulo="niveles"]')),
+    10_000,
+  );
+  await modulo.click();
+  await esperar(300);
+  await fijarValor(ses, "nivel-nuevo-nombre", `Nivel ${niveles.length}`);
+  await fijarValor(ses, "nivel-nuevo-elevacion", String(elevacion));
+  await activar(ses, "nivel-agregar");
+  await esperar(700);
+  const modelo = await ses.driver.wait(
+    until.elementLocated(By.css('[data-modulo="modelo"]')),
+    10_000,
+  );
+  await modelo.click();
+  await esperar(300);
+}
+
 async function cambiarPestana(ses, nombre) {
   const pestana = await ses.driver.wait(
     until.elementLocated(By.xpath(`//*[@role="tab"][normalize-space(.)="${nombre}"]`)),
@@ -257,7 +279,7 @@ test("O007c: castillos en muros, cerramientos, retícula con zapatas y trabes", 
 
     // 4. Nivel superior y retícula 3 × 3; columnas en todos los cruces con zapata.
     await cambiarPestana(ses, "Modelar");
-    await activar(ses, "cmd-nivel");
+    await crearNivelLista(ses);
     await esperar(500);
     await elegirVista(ses, "Planta Nivel 0");
     await activar(ses, "cmd-ejes-separaciones");

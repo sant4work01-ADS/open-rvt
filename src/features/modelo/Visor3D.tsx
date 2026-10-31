@@ -961,6 +961,9 @@ export function Visor3D({
   const ejeLibre = useModelo((s) => s.ejeLibre);
   const fijarRaton = useModelo((s) => s.fijarRatonHerramienta);
   const clicEnPlanta = useModelo((s) => s.clicEnPlanta);
+  const clicNivel = useModelo((s) => s.clicNivel);
+  const opcionesNivel = useModelo((s) => s.opcionesNivel);
+  const cotasNivel = useModelo((s) => s.cotasNivel);
   const dobleClicEnPlanta = useModelo((s) => s.dobleClicEnPlanta);
   const espacio = useRef(false);
   const ultimaZ = useRef(0);
@@ -4510,6 +4513,11 @@ export function Visor3D({
         void aplicarAlinear(gidAlinear, cara, puntoAlinear);
         return;
       }
+      if (herramienta === "nivel" && (vista.tipo === "alzado" || vista.tipo === "corte")) {
+        const punto = puntoVistaDesdeEvento(clientX, clientY);
+        if (punto) void clicNivel(punto);
+        return;
+      }
       if (herramienta && vista.tipo === "planta") {
         const punto = puntoPlanta(falso);
         if (punto) {
@@ -4999,7 +5007,10 @@ export function Visor3D({
         aplicarCamara();
         return;
       }
-      if (herramienta && vista.tipo === "planta") {
+      if (herramienta === "nivel" && (vista.tipo === "alzado" || vista.tipo === "corte")) {
+        const punto = puntoVistaDesdeEvento(evento.clientX, evento.clientY);
+        if (punto) fijarRaton(punto, evento.shiftKey, metrosPorPixelActual());
+      } else if (herramienta && vista.tipo === "planta") {
         const punto = puntoPlanta(evento);
         if (punto) fijarRaton(punto, evento.shiftKey, metrosPorPixelActual());
       }
@@ -5347,6 +5358,7 @@ export function Visor3D({
     aplicarAlinear,
     fijarRaton,
     clicEnPlanta,
+    clicNivel,
     dobleClicEnPlanta,
     ventanaSeleccion,
     fijarAviso,
@@ -5833,6 +5845,31 @@ export function Visor3D({
         >
           {guiaAlinear.bloqueada ? "\u{1F512}" : "\u{1F513}"}
         </button>
+      )}
+      {herramienta === "nivel" && ratonHerramienta && (
+        <div
+          data-testid="nivel-preview"
+          className="pointer-events-none absolute bottom-12 left-2 z-10 rounded bg-background/95 px-2 py-1 text-[11px] shadow"
+        >
+          <strong data-testid="nivel-preview-nombre">
+            {opcionesNivel.nombre || "Nivel"}
+          </strong>{" "}
+          · {ratonHerramienta[1].toFixed(2)} m
+          {cotasNivel?.inferior && (
+            <span data-testid="nivel-preview-inferior">
+              {" "}
+              = {cotasNivel.inferior.nombre} +{" "}
+              {(ratonHerramienta[1] - cotasNivel.inferior.elevacion).toFixed(2)}
+            </span>
+          )}
+          {cotasNivel?.superior && (
+            <span data-testid="nivel-preview-superior">
+              {" "}
+              · {cotasNivel.superior.nombre} −{" "}
+              {(cotasNivel.superior.elevacion - ratonHerramienta[1]).toFixed(2)}
+            </span>
+          )}
+        </div>
       )}
       {guiaArrastre && (
         <>

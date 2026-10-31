@@ -132,3 +132,153 @@ export function normalizarAjusteNivel(
   if (!Number.isFinite(desplazamiento)) return undefined;
   return { desplazamiento };
 }
+
+// O029: herramienta «Nivel» en alzado/corte. La elevación se engancha a 5 cm, a
+// niveles existentes y a caras horizontales; el nombre sale solo y las cotas
+// temporales al nivel inferior/superior se pueden teclear (0.50 sobre Nivel 1).
+export const PASO_NIVEL = 0.05;
+/** Tolerancia del imán de nivel: 3 mm, por debajo de la validación de 1 mm. */
+export const TOLERANCIA_NIVEL = 0.003;
+
+export interface NivelRef {
+  globalid: string;
+  nombre: string;
+  elevacion: number;
+}
+
+function numeroDeNombreNivel(nombre: string): number | null {
+  const coincidencia = /^nivel\s+(-?\d+(?:\.\d+)?)\b/i.exec(nombre.trim());
+  if (!coincidencia) return null;
+  const valor = Number(coincidencia[1]);
+  return Number.isFinite(valor) ? valor : null;
+}
+
+function formatearNumeroNivel(valor: number): string {
+  return String(Number(valor.toFixed(3)));
+}
+
+/**
+ * O029: nombre automático del nivel que se está dibujando. Entre «Nivel 1» (0.00)
+ * y «Nivel 2» (3.00), a 1.50 sale «Nivel 1.5». Si no hay hueco con número, sigue
+ * la numeración más alta; si los nombres no numeran, usa el número de niveles.
+ */
+export function nombreNivelAutomatico(
+  niveles: NivelRef[],
+  elevacion: number,
+): string {
+  const ordenados = [...niveles].sort((a, b) => a.elevacion - b.elevacion);
+  const inferiores = ordenados.filter((n) => n.elevacion < elevacion - 1e-6);
+  const superiores = ordenados.filter((n) => n.elevacion > elevacion + 1e-6);
+  const inferior = inferiores[inferiores.length - 1];
+  const superior = superiores[0];
+  const numeros = niveles
+    .map((n) => numeroDeNombreNivel(n.nombre))
+    .filter((v): v is number => v !== null);
+  if (inferior && superior) {
+    const nInferior = numeroDeNombreNivel(inferior.nombre);
+    const nSuperior = numeroDeNombreNivel(superior.nombre);
+    if (
+      nInferior !== null &&
+      nSuperior !== null &&
+      nSuperior > nInferior + 1e-9
+    ) {
+      const usados = new Set(niveles.map((n) => n.nombre.toLowerCase()));
+      let bajo = nInferior;
+      const alto = nSuperior;
+      for (let i = 0; i < 12; i += 1) {
+        const medio = Math.round(((bajo + alto) / 2) * 1000) / 1000;
+        const nombre = `Nivel ${formatearNumeroNivel(medio)}`;
+        if (!usados.has(nombre.toLowerCase())) return nombre;
+        bajo = medio;
+      }
+    }
+  }
+  if (numeros.length > 0) {
+    return `Nivel ${formatearNumeroNivel(Math.max(...numeros) + 1)}`;
+  }
+  return `Nivel ${niveles.length}`;
+}
+
+/** O029: dos niveles a ±1 mm es error; el segundo no se crea. */
+export function nivelEnElevacion(
+  niveles: NivelRef[],
+  elevacion: number,
+  globalidExcluido?: string,
+): NivelRef | null {
+  return (
+    niveles.find(
+      (n) =>
+        n.globalid !== globalidExcluido &&
+        Math.abs(n.elevacion - elevacion) <= 0.001,
+    ) ?? null
+  );
+}
+
+/**
+ * O029: imán de elevación: primero los candidatos (niveles y caras horizontales)
+ * dentro de 3 mm; si no, se redondea a la cuadrícula de 5 cm.
+ */
+export function engancheElevacionNivel(
+  elevacion: number,
+  candidatos: number[],
+  paso = PASO_NIVEL,
+  tolerancia = TOLERANCIA_NIVEL,
+): number {
+  if (!Number.isFinite(elevacion)) return 0;
+  let mejor: number | null = null;
+  for (const candidato of candidatos) {
+    if (!Number.isFinite(candidato)) continue;
+    const distancia = Math.abs(candidato - elevacion);
+    if (distancia <= tolerancia && (mejor === null || distancia < Math.abs(mejor - elevacion))) {
+      mejor = candidato;
+    }
+  }
+  if (mejor !== null) return Math.round(mejor * 1e6) / 1e6;
+  return Math.round(Math.round(elevacion / paso) * paso * 1e6) / 1e6;
+}
+
+export interface CotaTemporalNivel {
+  inferior: NivelRef | null;
+  superior: NivelRef | null;
+  /** Distancia de la elevación a cada nivel vecino (positiva). */
+  desfaseInferior: number;
+  desfaseSuperior: number;
+}
+
+/** O029: cotas temporales al nivel de abajo y al de arriba más cercanos. */
+export function cotasTemporalesNivel(
+  elevacion: number,
+  niveles: NivelRef[],
+): CotaTemporalNivel {
+  let inferior: NivelRef | null = null;
+  let superior: NivelRef | null = null;
+  for (const nivel of niveles) {
+    if (nivel.elevacion < elevacion - 1e-6) {
+      if (!inferior || nivel.elevacion > inferior.elevacion) inferior = nivel;
+    } else if (nivel.elevacion > elevacion + 1e-6) {
+      if (!superior || nivel.elevacion < superior.elevacion) superior = nivel;
+    }
+  }
+  return {
+    inferior,
+    superior,
+    desfaseInferior: inferior ? elevacion - inferior.elevacion : 0,
+    desfaseSuperior: superior ? superior.elevacion - elevacion : 0,
+  };
+}
+
+/**
+ * O029: cota temporal tecleada, relativa al nivel inferior. «0.50» sobre Nivel 1
+ * (0.00) da 0.50 m; acepta coma decimal y rechaza vacío o texto no numérico.
+ */
+export function elevacionDesdeCota(
+  inferior: NivelRef | null,
+  texto: string,
+): number | null {
+  const limpio = (texto || "").trim().replace(",", ".");
+  if (limpio === "") return null;
+  const valor = Number(limpio);
+  if (!Number.isFinite(valor)) return null;
+  const base = inferior?.elevacion ?? 0;
+  return Math.round((base + valor) * 1e6) / 1e6;
+}

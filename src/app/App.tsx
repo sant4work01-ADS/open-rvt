@@ -270,12 +270,7 @@ export function App() {
         dr: () => estado.activarHerramienta("puerta"),
         wn: () => estado.activarHerramienta("ventana"),
         gr: () => estado.activarHerramienta("eje"),
-        ll: () => {
-          const niveles = estado.niveles;
-          const siguiente =
-            niveles.length > 0 ? Math.max(...niveles.map((n) => n.elevacion)) + 3 : 0;
-          void estado.crearNivel(`Nivel ${niveles.length}`, siguiente);
-        },
+        ll: () => estado.activarHerramienta("nivel"),
         al: () => estado.activarHerramienta("alinear"),
         mv: () => estado.activarHerramienta("mover"),
         co: () => estado.activarHerramienta("copiar"),
@@ -326,14 +321,7 @@ export function App() {
         estilosObjeto: () => useModelo.getState().abrirDialogoEstilos(),
         estilosAnotacion: () => useModelo.getState().abrirDialogoAnotacion(),
         // OPEN-RVT: herramientas de modelado (spec O003b).
-        nuevoNivel: () => {
-          const estado = useModelo.getState();
-          const siguiente =
-            estado.niveles.length > 0
-              ? Math.max(...estado.niveles.map((n) => n.elevacion)) + 3
-              : 0;
-          void estado.crearNivel(`Nivel ${estado.niveles.length}`, siguiente);
-        },
+        nuevoNivel: () => useModelo.getState().activarHerramienta("nivel"),
         nuevoEje: () => useModelo.getState().activarHerramienta("eje"),
         nuevosEjesPorSeparaciones: () => useModelo.getState().abrirDialogoCotas(),
         herramientaMuro: () => useModelo.getState().activarHerramienta("muro"),

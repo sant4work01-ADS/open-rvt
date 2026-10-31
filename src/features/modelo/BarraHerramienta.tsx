@@ -26,6 +26,10 @@ export function BarraHerramienta() {
   const doble = useModelo((s) => s.dobleClicEnPlanta);
   const losaDesdeMuros = useModelo((s) => s.losaDesdeMuros);
   const etiquetaEje = useModelo((s) => s.etiquetaEje);
+  const opcionesNivel = useModelo((s) => s.opcionesNivel);
+  const fijarOpcionesNivel = useModelo((s) => s.fijarOpcionesNivel);
+  const cotasNivel = useModelo((s) => s.cotasNivel);
+  const crearNivel = useModelo((s) => s.crearNivel);
   const conZapata = useModelo((s) => s.columnaConZapata);
   const fijarConZapata = useModelo((s) => s.fijarColumnaConZapata);
   const tipoZapata = useModelo((s) => s.tipoZapata);
@@ -220,6 +224,79 @@ export function BarraHerramienta() {
               ? `Longitud: ${longitud} m · Enter`
               : "Segundo punto o escriba la longitud"}
         </span>
+      )}
+      {herramienta === "nivel" && (
+        <>
+          <label className="flex items-center gap-1">
+            <span className="text-muted-foreground">Nombre</span>
+            <input
+              data-testid="nivel-herramienta-nombre"
+              value={opcionesNivel.nombre}
+              onChange={(e) => fijarOpcionesNivel({ nombre: e.target.value })}
+              className="w-28 rounded border bg-background px-1 py-0.5"
+            />
+            <button
+              type="button"
+              data-testid="nivel-herramienta-auto"
+              data-automatico={opcionesNivel.nombreAutomatico ? "si" : "no"}
+              title="Volver al nombre automático"
+              onClick={() =>
+                fijarOpcionesNivel({ nombre: "", nombreAutomatico: true })
+              }
+              className="rounded border px-1 py-0.5 text-muted-foreground hover:bg-muted"
+            >
+              Auto
+            </button>
+          </label>
+          <label className="flex items-center gap-1">
+            <input
+              data-testid="nivel-herramienta-crear-planta"
+              type="checkbox"
+              checked={opcionesNivel.crearPlanta}
+              onChange={(e) => fijarOpcionesNivel({ crearPlanta: e.target.checked })}
+            />
+            <span className="text-muted-foreground">Crear vista de planta</span>
+          </label>
+          <label className="flex items-center gap-1">
+            <span className="text-muted-foreground">Elevación</span>
+            <input
+              data-testid="nivel-herramienta-elevacion"
+              type="text"
+              inputMode="decimal"
+              value={opcionesNivel.elevacionTexto}
+              onChange={(e) => fijarOpcionesNivel({ elevacionTexto: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.preventDefault();
+              }}
+              placeholder="1.50"
+              className="w-16 rounded border bg-background px-1 py-0.5 text-right"
+            />
+            <span>m</span>
+            <button
+              type="button"
+              data-testid="nivel-herramienta-crear"
+              onClick={() => {
+                const valor = Number(
+                  (opcionesNivel.elevacionTexto || "").replace(",", "."),
+                );
+                if (!Number.isFinite(valor)) return;
+                void crearNivel(
+                  opcionesNivel.nombre || "Nivel",
+                  valor,
+                  { crearPlanta: opcionesNivel.crearPlanta },
+                );
+              }}
+              className="rounded border px-2 py-0.5 hover:bg-muted"
+            >
+              Crear
+            </button>
+          </label>
+          <span className="text-muted-foreground" data-testid="nivel-herramienta-cotas">
+            {cotasNivel?.inferior
+              ? `${(puntos[puntos.length - 1]?.[1] ?? cotasNivel.inferior.elevacion).toFixed(2)} m = ${cotasNivel.inferior.nombre} + ...`
+              : "Sin nivel inferior"}
+          </span>
+        </>
       )}
       {herramienta === "eje" && (
         <span className="text-muted-foreground" data-testid="eje-etiqueta">

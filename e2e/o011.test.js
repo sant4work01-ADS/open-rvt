@@ -60,6 +60,28 @@ async function atributoVisor(ses, nombre) {
   return (await ses.porTestid("visor")).getAttribute(`data-${nombre}`);
 }
 
+async function crearNivelLista(ses) {
+  const niveles = await invocar(ses, "modelo.niveles");
+  const elevacion =
+    niveles.length > 0 ? Math.max(...niveles.map((n) => n.elevacion)) + 3 : 0;
+  const modulo = await ses.driver.wait(
+    until.elementLocated(By.css('[data-modulo="niveles"]')),
+    10_000,
+  );
+  await modulo.click();
+  await esperar(300);
+  await fijarValor(ses, "nivel-nuevo-nombre", `Nivel ${niveles.length}`);
+  await fijarValor(ses, "nivel-nuevo-elevacion", String(elevacion));
+  await activar(ses, "nivel-agregar");
+  await esperar(700);
+  const modelo = await ses.driver.wait(
+    until.elementLocated(By.css('[data-modulo="modelo"]')),
+    10_000,
+  );
+  await modelo.click();
+  await esperar(300);
+}
+
 async function cambiarPestana(ses, nombre) {
   const pestana = await ses.driver.wait(
     until.elementLocated(By.xpath(`//*[@role="tab"][normalize-space(.)="${nombre}"]`)),
@@ -203,7 +225,7 @@ async function crearModelo(ses) {
 }
 
 async function crearNiveles(ses, cantidad) {
-  for (let i = 0; i < cantidad; i += 1) await activar(ses, "cmd-nivel");
+  for (let i = 0; i < cantidad; i += 1) await crearNivelLista(ses);
 }
 
 async function dibujarEjes(ses, xs) {

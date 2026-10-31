@@ -103,7 +103,22 @@ class Servidor:
             )
         if metodo == "niveles.crear":
             return self._exigir().nivel_crear(
-                str(params.get("nombre") or ""), params.get("elevacion", 0.0)
+                str(params.get("nombre") or ""),
+                params.get("elevacion", 0.0),
+                params.get("crear_planta", True),
+            )
+        if metodo == "niveles.copiar":
+            return self._exigir().nivel_copiar(
+                str(params.get("globalid") or ""),
+                params.get("desfase", 0.0),
+                params.get("crear_planta", True),
+            )
+        if metodo == "niveles.arreglo":
+            return self._exigir().niveles_arreglo(
+                str(params.get("globalid") or ""),
+                params.get("cantidad", 1),
+                params.get("separacion", 0.0),
+                params.get("crear_planta", True),
             )
         if metodo == "niveles.editar":
             return self._exigir().nivel_editar(

@@ -235,7 +235,8 @@ export function construirComandosRibbon(a: AccionesRibbon): ComandoRibbon[] {
       pestana: "modelar",
       tamano: "grande",
       habilitado: true,
-      descripcion: "Crear un nivel y su vista de planta",
+      activo: a.herramientaActiva === "nivel",
+      descripcion: "Dibujar un nivel en alzado o corte con dos clics",
       accion: a.nuevoNivel,
     },
     {

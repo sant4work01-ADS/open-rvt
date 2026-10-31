@@ -592,8 +592,83 @@ class ModeladoMixin:
         return salida
 
     # ------------------------------------------------------------------ niveles
-    def nivel_crear(self, nombre: str, elevacion: float) -> dict[str, Any]:
-        self._exigir_modelo()
+    def _niveles_ordenados(self) -> list[Any]:
+        niveles = [n for n in self.modelo.by_type("IfcBuildingStorey") if n.Elevation is not None]
+        niveles.sort(key=lambda n: float(n.Elevation or 0.0))
+        return niveles
+
+    def _nombre_nivel_unico(self, nombre: str) -> str:
+        """O029: dos niveles no comparten nombre; se añade « (2)», « (3)»…"""
+        existentes = {_nombre(n) for n in self.modelo.by_type("IfcBuildingStorey")}
+        if nombre not in existentes:
+            return nombre
+        i = 2
+        while f"{nombre} ({i})" in existentes:
+            i += 1
+        return f"{nombre} ({i})"
+
+    def _validar_elevacion_nivel(self, elevacion: float, excluir: str = "") -> None:
+        """O029: dos niveles a la misma elevación (±1 mm) no se permiten."""
+        for nivel in self.modelo.by_type("IfcBuildingStorey"):
+            if _gid(nivel) == excluir or nivel.Elevation is None:
+                continue
+            if abs(float(nivel.Elevation) - elevacion) <= 0.001:
+                raise self._error(
+                    f"Ya existe el nivel «{_nombre(nivel)}» a la misma elevación "
+                    f"({elevacion:.3f} m).",
+                    -32022,
+                )
+
+    def _crear_vista_planta(self, nivel: Any) -> dict[str, Any] | None:
+        """O029: la vista de planta del nivel se crea en el mismo paso (y el mismo Deshacer)."""
+        gid = _gid(nivel)
+        vistas = self.leer_vistas()
+        if any(v.get("tipo") == "planta" and v.get("nivel") == gid for v in vistas if isinstance(v, dict)):
+            return None
+        elevacion = float(nivel.Elevation or 0.0)
+        inferiores = [
+            float(n.Elevation)
+            for n in self.modelo.by_type("IfcBuildingStorey")
+            if n.Elevation is not None and float(n.Elevation) < elevacion - 1e-9
+        ]
+        inferior = max(inferiores) if inferiores else elevacion - 1.0
+        vista = {
+            "id": f"planta-{gid}",
+            "nombre": f"Planta {_nombre(nivel)}",
+            "tipo": "planta",
+            "nivel": gid,
+            "alturaPlano": elevacion + 1.2,
+            "profundidad": inferior,
+            "nivelesVisibles": [gid],
+            "categorias": {
+                "muros": True,
+                "losas": True,
+                "columnas": True,
+                "vigas": True,
+                "puertas": True,
+                "ventanas": True,
+                "cubiertas": True,
+                "escaleras": True,
+                "otros": True,
+            },
+            "estilo": "lineas-ocultas",
+            "escala": 100,
+            "alturaArriba": 3,
+            "cotasEjes": True,
+        }
+        self._guardar_datos_pset(
+            self._pset_vistas(crear=True),
+            [*vistas, vista],
+            "JSON de las vistas",
+        )
+        return vista
+
+    def _crear_nivel_sin_instantanea(
+        self,
+        nombre: str,
+        elevacion: float,
+        crear_planta: bool = True,
+    ) -> tuple[Any, dict[str, Any] | None]:
         nombre = (nombre or "").strip()
         if not nombre:
             raise self._error("El nivel necesita un nombre.", -32602)
@@ -601,12 +676,111 @@ class ModeladoMixin:
             elevacion = float(elevacion)
         except (TypeError, ValueError) as exc:
             raise self._error("La elevación del nivel no es un número.", -32602) from exc
-        self._instantanea()
+        if not math.isfinite(elevacion):
+            raise self._error("La elevación del nivel no es un número.", -32602)
+        self._validar_elevacion_nivel(elevacion)
+        nombre = self._nombre_nivel_unico(nombre)
         nivel = root.create_entity(self.modelo, ifc_class="IfcBuildingStorey", name=nombre)
         nivel.Elevation = elevacion
         aggregate.assign_object(self.modelo, products=[nivel], relating_object=self._edificio())
+        vista = self._crear_vista_planta(nivel) if crear_planta else None
+        return nivel, vista
+
+    def nivel_crear(
+        self,
+        nombre: str,
+        elevacion: float,
+        crear_planta: bool = True,
+    ) -> dict[str, Any]:
+        self._exigir_modelo()
+        self._instantanea()
+        try:
+            nivel, vista = self._crear_nivel_sin_instantanea(
+                nombre, elevacion, bool(crear_planta)
+            )
+        except Exception:
+            self._revertir_instantanea()
+            raise
         self.con_cambios = True
-        return self._resultado([nivel], mensaje=f"Nivel «{nombre}» creado.")
+        return self._resultado(
+            [nivel],
+            mensaje=f"Nivel «{_nombre(nivel)}» creado.",
+            nivel={"globalid": _gid(nivel), "nombre": _nombre(nivel), "elevacion": nivel.Elevation},
+            vista=vista,
+        )
+
+    def nivel_copiar(
+        self,
+        globalid: str,
+        desfase: float,
+        crear_planta: bool = True,
+    ) -> dict[str, Any]:
+        """O029: Copiar/Desfasar un nivel con un desfase vertical, en un solo paso."""
+        self._exigir_modelo()
+        origen = self._nivel_por_gid(globalid)
+        try:
+            desfase = float(desfase)
+        except (TypeError, ValueError) as exc:
+            raise self._error("El desfase del nivel no es un número.", -32602) from exc
+        if not math.isfinite(desfase) or abs(desfase) <= 0.001:
+            raise self._error("El desfase del nivel debe ser distinto de cero.", -32602)
+        elevacion = float(origen.Elevation or 0.0) + desfase
+        self._instantanea()
+        try:
+            nivel, vista = self._crear_nivel_sin_instantanea(
+                _nombre(origen), elevacion, bool(crear_planta)
+            )
+        except Exception:
+            self._revertir_instantanea()
+            raise
+        self.con_cambios = True
+        return self._resultado(
+            [nivel],
+            mensaje=f"Nivel «{_nombre(nivel)}» copiado a {elevacion:.3f} m.",
+            nivel={"globalid": _gid(nivel), "nombre": _nombre(nivel), "elevacion": nivel.Elevation},
+            vista=vista,
+        )
+
+    def niveles_arreglo(
+        self,
+        globalid: str,
+        cantidad: int,
+        separacion: float,
+        crear_planta: bool = True,
+    ) -> dict[str, Any]:
+        """O029: arreglo de N niveles a separación fija sobre un nivel base."""
+        self._exigir_modelo()
+        origen = self._nivel_por_gid(globalid)
+        try:
+            cantidad = int(cantidad)
+            separacion = float(separacion)
+        except (TypeError, ValueError) as exc:
+            raise self._error("El arreglo de niveles necesita números.", -32602) from exc
+        if cantidad < 1 or cantidad > 50:
+            raise self._error("El arreglo debe tener entre 1 y 50 niveles.", -32602)
+        if not math.isfinite(separacion) or abs(separacion) <= 0.001:
+            raise self._error("La separación del arreglo debe ser distinta de cero.", -32602)
+        base = float(origen.Elevation or 0.0)
+        self._instantanea()
+        creados: list[Any] = []
+        vistas: list[dict[str, Any]] = []
+        try:
+            for i in range(1, cantidad + 1):
+                nivel, vista = self._crear_nivel_sin_instantanea(
+                    _nombre(origen), base + separacion * i, bool(crear_planta)
+                )
+                creados.append(nivel)
+                if vista is not None:
+                    vistas.append(vista)
+        except Exception:
+            self._revertir_instantanea()
+            raise
+        self.con_cambios = True
+        return self._resultado(
+            creados,
+            mensaje=f"{cantidad} nivel(es) creados cada {separacion:.2f} m.",
+            vista=vistas or None,
+        )
 
     def nivel_editar(
         self, globalid: str, nombre: str | None = None, elevacion: float | None = None

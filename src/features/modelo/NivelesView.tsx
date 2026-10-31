@@ -11,6 +11,8 @@ export function NivelesView() {
   const crearNivel = useModelo((s) => s.crearNivel);
   const editarNivel = useModelo((s) => s.editarNivel);
   const borrarNivel = useModelo((s) => s.borrarNivel);
+  const copiarNivel = useModelo((s) => s.copiarNivel);
+  const arregloNiveles = useModelo((s) => s.arregloNiveles);
   const borrarEje = useModelo((s) => s.borrarEje);
   const editarEje = useModelo((s) => s.editarEje);
   const error = useModelo((s) => s.error);
@@ -18,6 +20,11 @@ export function NivelesView() {
   const [elevacion, setElevacion] = useState("");
   const [errores, setErrores] = useState<Record<string, string>>({});
   const [errorNuevo, setErrorNuevo] = useState<string | null>(null);
+  const [nivelBase, setNivelBase] = useState("");
+  const [desfase, setDesfase] = useState("3.00");
+  const [cantidadArreglo, setCantidadArreglo] = useState("3");
+  const [separacionArreglo, setSeparacionArreglo] = useState("3.00");
+  const [errorCopiar, setErrorCopiar] = useState<string | null>(null);
 
   const agregar = async () => {
     const siguiente =
@@ -124,6 +131,112 @@ export function NivelesView() {
           ))}
         </tbody>
       </table>
+
+      <div
+        data-testid="nivel-copiar-panel"
+        className="mt-4 flex max-w-2xl flex-wrap items-end gap-2 border-t pt-3 text-xs"
+      >
+        <label className="flex flex-col gap-1">
+          <span className="text-muted-foreground">Nivel base</span>
+          <select
+            data-testid="nivel-copiar-base"
+            value={nivelBase}
+            onChange={(e) => setNivelBase(e.target.value)}
+            className="w-40 rounded border bg-background px-2 py-1"
+          >
+            <option value="">—</option>
+            {niveles.map((nivel) => (
+              <option key={nivel.globalid} value={nivel.globalid}>
+                {nivel.nombre} ({nivel.elevacion.toFixed(2)})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-muted-foreground">Desfase vertical</span>
+          <input
+            data-testid="nivel-copiar-desfase"
+            type="text"
+            inputMode="decimal"
+            value={desfase}
+            onChange={(e) => setDesfase(e.target.value)}
+            className="w-24 rounded border bg-background px-2 py-1 text-right"
+          />
+        </label>
+        <button
+          type="button"
+          data-testid="nivel-copiar"
+          onClick={async () => {
+            const valor = parsearElevacion(desfase);
+            if (!nivelBase) {
+              setErrorCopiar("Elija el nivel que se copia.");
+              return;
+            }
+            if (valor === null || Math.abs(valor) <= 0.001) {
+              setErrorCopiar("El desfase debe ser un número distinto de cero.");
+              return;
+            }
+            setErrorCopiar(null);
+            if (await copiarNivel(nivelBase, valor)) setDesfase("3.00");
+          }}
+          className="rounded border px-2 py-1 hover:bg-muted"
+        >
+          Copiar/Desfasar
+        </button>
+        <label className="flex flex-col gap-1">
+          <span className="text-muted-foreground">Arreglo: cantidad</span>
+          <input
+            data-testid="nivel-arreglo-cantidad"
+            type="number"
+            min={1}
+            max={50}
+            value={cantidadArreglo}
+            onChange={(e) => setCantidadArreglo(e.target.value)}
+            className="w-16 rounded border bg-background px-2 py-1 text-right"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-muted-foreground">Separación</span>
+          <input
+            data-testid="nivel-arreglo-separacion"
+            type="text"
+            inputMode="decimal"
+            value={separacionArreglo}
+            onChange={(e) => setSeparacionArreglo(e.target.value)}
+            className="w-24 rounded border bg-background px-2 py-1 text-right"
+          />
+        </label>
+        <button
+          type="button"
+          data-testid="nivel-arreglo"
+          onClick={async () => {
+            const cantidad = Number(cantidadArreglo);
+            const valor = parsearElevacion(separacionArreglo);
+            if (!nivelBase) {
+              setErrorCopiar("Elija el nivel base del arreglo.");
+              return;
+            }
+            if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > 50) {
+              setErrorCopiar("El arreglo debe tener entre 1 y 50 niveles.");
+              return;
+            }
+            if (valor === null || Math.abs(valor) <= 0.001) {
+              setErrorCopiar("La separación debe ser un número distinto de cero.");
+              return;
+            }
+            setErrorCopiar(null);
+            await arregloNiveles(nivelBase, cantidad, valor);
+          }}
+          className="rounded border px-2 py-1 hover:bg-muted"
+        >
+          Arreglo
+        </button>
+        {errorCopiar && (
+          <span data-testid="nivel-copiar-error" className="text-red-600">
+            {errorCopiar}
+          </span>
+        )}
+      </div>
 
       <div className="mt-3 flex max-w-2xl items-end gap-2 text-xs">
         <label className="flex flex-col gap-1">
