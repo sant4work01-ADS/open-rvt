@@ -377,7 +377,7 @@ const CATEGORIAS_VALIDAS = new Set<Categoria>([
 
 const TIPOS: TipoVista[] = ["planta", "alzado", "corte", "iso", "perspectiva"];
 const ESTILOS_VALIDOS: EstiloVista[] = ["sombreado", "aristas", "lineas-ocultas"];
-const ESCALAS_VALIDAS: EscalaVista[] = [50, 100, 200];
+const ESCALAS_VALIDAS: EscalaVista[] = [20, 50, 100, 200];
 
 /** Completa y valida una vista leída del pset. Devuelve `null` si no es utilizable. */
 export function normalizarVista(valor: unknown): Vista | null {
@@ -469,6 +469,12 @@ export function normalizarVista(valor: unknown): Vista | null {
         ? v.alturaArriba
         : undefined,
     cotasEjes: v.cotasEjes !== false,
+    anotacionEscala:
+      v.anotacionEscala === "papel" || v.anotacionEscala === "pantalla"
+        ? v.anotacionEscala
+        : tipo === "alzado" || tipo === "corte"
+          ? "papel"
+          : "pantalla",
     ejes: Object.keys(ejes).length > 0 ? ejes : undefined,
     nivelesAjuste: Object.keys(nivelesAjuste).length > 0 ? nivelesAjuste : undefined,
   };

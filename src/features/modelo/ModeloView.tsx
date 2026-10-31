@@ -9,6 +9,7 @@ import { NavegadorVistas } from "./NavegadorVistas";
 import { PanelPropiedades } from "./PanelPropiedades";
 import { BarraHerramienta } from "./BarraHerramienta";
 import { DialogoEstilos } from "./DialogoEstilos";
+import { DialogoAnotacion } from "./DialogoAnotacion";
 import { DialogoCotas } from "./DialogoCotas";
 import { DialogoCastillos } from "./DialogoCastillos";
 import { CantidadesView } from "./CantidadesView";
@@ -37,6 +38,7 @@ export function ModeloView() {
   const duplicarVista = useModelo((s) => s.duplicarVista);
   const eliminarVista = useModelo((s) => s.eliminarVista);
   const dialogoEstilos = useModelo((s) => s.dialogoEstilos);
+  const dialogoAnotacion = useModelo((s) => s.dialogoAnotacion);
   const dialogoCotas = useModelo((s) => s.dialogoCotas);
   const dialogoCastillos = useModelo((s) => s.dialogoCastillos);
   const editorTipos = useModelo((s) => s.editorTipos);
@@ -167,6 +169,7 @@ export function ModeloView() {
                   }
                 });
               }}
+              onCambiarAnotacion={(modo) => void actualizarVista(vista.id, { anotacionEscala: modo })}
               onPuntoCorte={(punto) => void anadirPuntoCorte(punto)}
               onEscape={() => {
                 const estado = useModelo.getState();
@@ -194,6 +197,7 @@ export function ModeloView() {
         </PanelRedimensionable>
       )}
       {dialogoEstilos && <DialogoEstilos />}
+      {dialogoAnotacion && <DialogoAnotacion />}
       {dialogoCotas && <DialogoCotas />}
       {dialogoCastillos && <DialogoCastillos />}
     </div>

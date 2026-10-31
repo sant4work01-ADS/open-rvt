@@ -8,7 +8,7 @@ import type { EnlaceEjes } from "./enlaces";
 export type TipoVista = "planta" | "alzado" | "corte" | "iso" | "perspectiva";
 export type Orientacion = "norte" | "sur" | "este" | "oeste";
 export type EstiloVista = "sombreado" | "aristas" | "lineas-ocultas";
-export type EscalaVista = 50 | 100 | 200;
+export type EscalaVista = 20 | 50 | 100 | 200;
 export type Categoria =
   | "muros"
   | "losas"
@@ -67,6 +67,8 @@ export interface Vista {
   categorias: CategoriasVisibles;
   estilo: EstiloVista;
   escala: EscalaVista;
+  /** O030: anotación a escala de papel (crece con el zoom) o tamaño de pantalla. */
+  anotacionEscala?: "papel" | "pantalla";
   /** Alzados: desde qué lado mira la cámara. */
   orientacion?: Orientacion;
   /** Cortes: traza en planta (coordenadas XY del IFC). */
@@ -84,6 +86,10 @@ export interface Vista {
   ejes?: Record<string, AjusteEjeVista>;
   /** O014b: ajustes de cabeza de nivel en esta vista. Clave: GlobalId del nivel. */
   nivelesAjuste?: Record<string, AjusteNivelVista>;
+  /** O024: sobrescritura por vista de la separación de globos (mm de papel). */
+  separacionGlobos?: number;
+  /** O024: nombre del estilo de cota por omisión de esta vista. */
+  estiloCota?: string;
 }
 
 export interface Nivel {
@@ -301,7 +307,7 @@ export const ESTILOS: ReadonlyArray<{ id: EstiloVista; nombre: string }> = [
   { id: "lineas-ocultas", nombre: "Líneas ocultas" },
 ];
 
-export const ESCALAS: readonly EscalaVista[] = [50, 100, 200];
+export const ESCALAS: readonly EscalaVista[] = [20, 50, 100, 200];
 
 /** Etiqueta legible del tipo de vista. */
 export function nombreTipo(tipo: TipoVista): string {

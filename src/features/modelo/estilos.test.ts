@@ -6,9 +6,9 @@ import {
   grosorMm,
   leerEstilos,
   materialPorTipo,
+  normalizarEstilos,
   mmAPx,
   mmAMundoConMinimoPx,
-  normalizarEstilos,
   rellenoDeElemento,
   serializarEstilos,
 } from "./estilos";
@@ -174,20 +174,7 @@ describe("serialización de OPENRVT_Estilos", () => {
   });
 });
 
-describe("O014a: estilo de nivel", () => {
-  it("trae los valores por omisión de la spec", () => {
-    const e = estilosPorDefecto();
-    expect(e.niveles).toEqual({
-      prefijo: "Npt",
-      decimales: 2,
-      unidad: "m",
-      cabeza: "triangulo",
-      color: e.categorias.niveles.color,
-      cotas: true,
-      mostrarNombre: true,
-    });
-  });
-
+describe("O014a: estilo de nivel (ampliado en O024)", () => {
   it("un proyecto viejo sin «niveles» usa las omisiones", () => {
     // JSON real de la 0.5.7: solo categorías y materiales.
     const viejo = {
@@ -200,6 +187,7 @@ describe("O014a: estilo de nivel", () => {
   it("hace round-trip y tolera campos inválidos", () => {
     const e = estilosPorDefecto();
     e.niveles = {
+      ...e.niveles,
       prefijo: "N",
       decimales: 3,
       unidad: "cm",
@@ -213,5 +201,108 @@ describe("O014a: estilo de nivel", () => {
       niveles: { prefijo: 7, decimales: 9, unidad: null, cabeza: "rombo", color: "rojo", cotas: "sí" },
     });
     expect(roto.niveles).toEqual(estilosPorDefecto().niveles);
+  });
+});
+
+describe("O024: estilos de anotación", () => {
+  it("trae los valores por omisión de la spec", () => {
+    const e = estilosPorDefecto();
+    expect(e.niveles).toEqual({
+      patron: "trazo-punto",
+      color: "#1f2328",
+      grosor: 0.13,
+      cabeza: "triangulo-relleno",
+      tamanoCabeza: 3.5,
+      ladoCabeza: "derecha",
+      prefijo: "Npt",
+      decimales: 2,
+      unidad: "m",
+      signo: true,
+      altoTexto: 2.5,
+      cotas: true,
+      mostrarNombre: false,
+      extension: 12,
+    });
+    expect(e.ejes).toEqual({
+      patron: "trazo-punto",
+      color: "#8a5a2b",
+      grosor: 0.13,
+      diametroGlobo: 8,
+      altoTexto: 3.5,
+      globos: "fin",
+      separacionGlobos: 10,
+      extensionBajoPrimerNivel: 5,
+    });
+    expect(e.cotas.porDefecto).toBe("Cota 1:100");
+    expect(e.cotas.lista).toHaveLength(1);
+    expect(e.cotas.lista[0]).toMatchObject({
+      nombre: "Cota 1:100",
+      remate: "flecha-rellena",
+      tamanoRemate: 2.5,
+      altoTexto: 2.5,
+      posicionTexto: "sobre-la-linea",
+      separacionTexto: 1,
+      separacionExtension: 1.5,
+      prolongacion: 1.5,
+      distanciaFilas: 7,
+      decimales: 2,
+      unidad: "",
+      textoChico: "fuera-con-flechas-hacia-adentro",
+    });
+  });
+
+  it("lee JSON viejo (O014a) y completa los campos nuevos con las omisiones", () => {
+    const viejo = {
+      niveles: {
+        prefijo: "Nivel",
+        decimales: 1,
+        unidad: "",
+        cabeza: "triangulo",
+        color: "#112233",
+        cotas: false,
+      },
+    };
+    const e = normalizarEstilos(viejo);
+    expect(e.niveles).toMatchObject({
+      prefijo: "Nivel",
+      decimales: 1,
+      unidad: "",
+      cabeza: "triangulo-relleno",
+      color: "#112233",
+      cotas: false,
+      patron: "trazo-punto",
+      signo: true,
+      altoTexto: 2.5,
+      mostrarNombre: false,
+      extension: 12,
+    });
+    expect(e.ejes.separacionGlobos).toBe(10);
+    expect(e.cotas.porDefecto).toBe("Cota 1:100");
+  });
+
+  it("rechaza negativos y fuera de rango, y no duplica nombres de cota", () => {
+    const e = normalizarEstilos({
+      niveles: { grosor: -1, altoTexto: 999, tamanoCabeza: 0, decimales: 9 },
+      ejes: { diametroGlobo: -8, separacionGlobos: 1e9 },
+      cotas: {
+        lista: [
+          { nombre: "Cota A", tamanoRemate: -3, distanciaFilas: 9 },
+          { nombre: "Cota A", tamanoRemate: 4 },
+          { nombre: "Cota B", remate: "inventado" },
+        ],
+        porDefecto: "No existe",
+      },
+    });
+    expect(e.niveles.grosor).toBe(0.13);
+    expect(e.niveles.altoTexto).toBe(20);
+    expect(e.niveles.tamanoCabeza).toBe(0.5);
+    expect(e.niveles.decimales).toBe(2);
+    expect(e.ejes.diametroGlobo).toBe(8);
+    expect(e.ejes.separacionGlobos).toBe(200);
+    expect(e.cotas.lista.map((c) => c.nombre)).toEqual(["Cota A", "Cota B"]);
+    expect(e.cotas.lista[0].tamanoRemate).toBe(2.5);
+    expect(e.cotas.lista[0].distanciaFilas).toBe(9);
+    expect(e.cotas.lista[1].remate).toBe("flecha-rellena");
+    expect(e.cotas.porDefecto).toBe("Cota A");
   });
 });

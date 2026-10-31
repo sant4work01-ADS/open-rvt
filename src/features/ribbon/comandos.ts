@@ -24,6 +24,7 @@ import {
   Moon,
   Move,
   PanelTop,
+  Ruler,
   RectangleHorizontal,
   Redo2,
   Save,
@@ -93,6 +94,8 @@ export interface AccionesRibbon {
   nuevaVistaCorte: () => void;
   /** O005: diálogo de estilos de objeto (pestaña Vista). */
   estilosObjeto: () => void;
+  /** O024: editor de estilos de anotación (niveles, ejes y cotas). */
+  estilosAnotacion: () => void;
   // OPEN-RVT: herramientas de modelado (spec O003b).
   nuevoNivel: () => void;
   nuevoEje: () => void;
@@ -198,6 +201,17 @@ export function construirComandosRibbon(a: AccionesRibbon): ComandoRibbon[] {
       habilitado: true,
       descripcion: "Editar plumillas, rellenos y materiales del dibujo",
       accion: a.estilosObjeto,
+    },
+    {
+      id: "estilos-anotacion",
+      texto: "Estilos de anotación",
+      icono: Ruler,
+      grupo: "Anotación",
+      pestana: "vista",
+      tamano: "grande",
+      habilitado: true,
+      descripcion: "Editar niveles, ejes y cotas del dibujo",
+      accion: a.estilosAnotacion,
     },
     {
       id: "nuevo-corte",
