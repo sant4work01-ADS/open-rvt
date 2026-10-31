@@ -34,7 +34,16 @@ import {
   posicionTextoEntreMarcas,
 } from "./cotas";
 import { altoTextoBurbuja, desplazamientoCentrado } from "./centrado";
-import { textoCabezaNivel } from "./niveles";
+import {
+  acomodarBurbujas,
+  acomodarCabezas,
+  altoBandaCabeza,
+  DESFASE_NOMBRE_CABEZA,
+  desfaseInferiorCabeza,
+  normalizarAjusteNivel,
+  textoCabezaNivel,
+} from "./niveles";
+import { baseTextoAnotacion } from "./anotacion";
 import {
   categoriaOculta,
   factorEscala,
@@ -429,16 +438,15 @@ const CACHE_TEXTURAS = new Map<string, THREE.Texture>();
 configureTextBuilder({ useWorker: false });
 const FUENTE_ANOTACION = "/fonts/DejaVuSans-Bold.ttf";
 
-function orientarAnotacion(grupo: THREE.Object3D, normal: [number, number, number]): void {
-  const n = new THREE.Vector3(normal[0], normal[1], normal[2]).normalize();
-  // Base derecha: el «arriba» del papel es +Y en planta y +Z en alzados. Así el
-  // texto no sale espejado al mirar desde el norte o el sur.
-  const arribaBase = Math.abs(n.z) > 0.9
-    ? new THREE.Vector3(0, 1, 0)
-    : new THREE.Vector3(0, 0, 1);
-  const derecha = new THREE.Vector3().crossVectors(arribaBase, n).normalize();
-  const arriba = new THREE.Vector3().crossVectors(n, derecha).normalize();
-  const matriz = new THREE.Matrix4().makeBasis(derecha, arriba, n);
+function orientarAnotacion(grupo: THREE.Object3D, haciaCamara: [number, number, number]): void {
+  // O014b: la base pura garantiza que +X del texto sea la derecha de la pantalla
+  // (y +Y su arriba), sin espejos en cortes con cualquier dirección.
+  const base = baseTextoAnotacion(haciaCamara);
+  const matriz = new THREE.Matrix4().makeBasis(
+    new THREE.Vector3(...base.derecha),
+    new THREE.Vector3(...base.arriba),
+    new THREE.Vector3(...base.normal),
+  );
   grupo.quaternion.setFromRotationMatrix(matriz);
 }
 
@@ -898,6 +906,26 @@ export function Visor3D({
     }>
   >([]);
   const lineasEje = useRef<Array<{ globalid: string; etiqueta: string; puntos: Array<[number, number, number]> }>>([]);
+  // O014b: asas de las cabezas de nivel para arrastrarlas y devolverlas a automático.
+  const asasNivel = useRef<
+    Array<{
+      globalid: string;
+      nombre: string;
+      elev: number;
+      desplazamiento: number;
+      punto: [number, number, number];
+    }>
+  >([]);
+  const arrastreNivel = useRef<{
+    globalid: string;
+    elev: number;
+    desplazamiento: number;
+    inicio: Punto2;
+    movido: boolean;
+  } | null>(null);
+  const [ajustesNivelEnCurso, setAjustesNivelEnCurso] = useState<
+    Record<string, { desplazamiento: number }>
+  >({});
   const ajusteEnCursoRef = useRef<Record<string, AjusteEjeVista> | null>(null);
   const contextoEje = useRef<{
     tipo: "planta" | "alzado" | "corte";
@@ -913,6 +941,7 @@ export function Visor3D({
   const editarRebase = useModelo((s) => s.editarRebase);
   const separarNiveles = useModelo((s) => s.separarNiveles);
   const fijarAjustesEjes = useModelo((s) => s.fijarAjustesEjes);
+  const fijarAjustesNiveles = useModelo((s) => s.fijarAjustesNiveles);
   const editarNivel = useModelo((s) => s.editarNivel);
   const fijarAviso = useModelo((s) => s.fijarAviso);
   const preferenciaRueda = useRueda((s) => s.preferencia);
@@ -952,6 +981,21 @@ export function Visor3D({
     let mejor: (typeof ejesInteraccion.current)[number] | null = null;
     let distancia = 16;
     for (const asa of ejesInteraccion.current) {
+      const p = pantallaDePunto(asa.punto);
+      if (!p) continue;
+      const d = Math.hypot(p.x - clientX, p.y - clientY);
+      if (d < distancia) {
+        distancia = d;
+        mejor = asa;
+      }
+    }
+    return mejor;
+  }, [pantallaDePunto]);
+
+  const asaNivelEn = useCallback((clientX: number, clientY: number) => {
+    let mejor: (typeof asasNivel.current)[number] | null = null;
+    let distancia = 14;
+    for (const asa of asasNivel.current) {
       const p = pantallaDePunto(asa.punto);
       if (!p) continue;
       const d = Math.hypot(p.x - clientX, p.y - clientY);
@@ -1360,6 +1404,7 @@ export function Visor3D({
     if (!grupoLocal) return;
     ejesInteraccion.current = [];
     lineasEje.current = [];
+    asasNivel.current = [];
     while (grupoLocal.children.length) {
       const hijo = grupoLocal.children.pop()!;
       hijo.traverse((objeto) => {
@@ -2577,6 +2622,11 @@ export function Visor3D({
           const largo = Math.hypot(dx, dy);
           if (largo > 1e-9) h = [dx / largo, dy / largo];
         }
+        // O014b: la normal de la anotación va del modelo a la cámara. En el corte,
+        // `d` es la normal de la traza (mirada), así que se invierte; si no, el
+        // texto saldría espejado.
+        const haciaCamara: [number, number, number] =
+          vista.tipo === "corte" ? [-d[0], -d[1], 0] : [d[0], d[1], 0];
         const centro = centroCaja(caja);
         const profundidad = centro[0] * d[0] + centro[1] * d[1];
         const planoPunto = vista.puntoA
@@ -2657,12 +2707,15 @@ export function Visor3D({
         const altoCabeza = mmAMundo(2.6, vista.escala);
         const altoNombre = mmAMundoConMinimoPx(2, vista.escala, mundoPorPx, 8);
         // O011b: etiqueta de nivel fuera del último eje; las cotas van más afuera.
-        const anchoNivel = Math.max(
-          ...ordenados.map((nivel) =>
-            anchoTextoAprox(textoCabezaNivel(nivel.elevacion, estiloNivel), altoTexto),
-          ),
-          mmAMundo(4, vista.escala),
-        );
+        // O014b: reserva los 9 mm del codo (3 + diagonal + 3) para que una cabeza
+        // desplazada no invada la columna de cotas.
+        const anchoNivel =
+          Math.max(
+            ...ordenados.map((nivel) =>
+              anchoTextoAprox(textoCabezaNivel(nivel.elevacion, estiloNivel), altoTexto),
+            ),
+            mmAMundo(4, vista.escala),
+          ) + mmAMundo(9, vista.escala);
         const tParcial =
           tFinNivel + separacionTexto + anchoNivel + separacionTexto;
         const anchoParcial = Math.max(
@@ -2722,7 +2775,47 @@ export function Visor3D({
         };
 
         const cabezas: string[] = [];
-        for (const nivel of ordenados) {
+        // O014b: separación automática de cabezas que se encimarían. La banda mide
+        // texto principal + separación + nombre (si se muestra) + margen de 1 mm,
+        // con los mismos tamaños con que se dibuja, y empieza en el borde inferior
+        // del nombre (que va por debajo de la línea del nivel).
+        const altoBandaCabezaMundo = altoBandaCabeza({
+          altoTexto,
+          altoNombre,
+          mostrarNombre: estiloNivel.mostrarNombre,
+          separacion: separacionTexto,
+          margen: mmAMundo(1, vista.escala),
+        });
+        const desfaseInferior = desfaseInferiorCabeza(
+          altoNombre,
+          estiloNivel.mostrarNombre,
+        );
+        const ajustesNivel: Record<string, { desplazamiento: number }> = {
+          ...(vista.nivelesAjuste ?? {}),
+          ...ajustesNivelEnCurso,
+        };
+        const desplazamientosAuto = acomodarCabezas(
+          ordenados.map((nivel) => ({
+            elev: nivel.elevacion + desfaseInferior,
+            altoCabezaMundo: altoBandaCabezaMundo,
+          })),
+          0,
+        );
+        const geometriaCabezas: Array<{
+          z: number;
+          t: number;
+          elev: number;
+          desplazamiento: number;
+          caja: { t0: number; t1: number; z0: number; z1: number };
+        }> = [];
+        // O014b: guías quebradas (horizontal, diagonal, horizontal) de las cabezas
+        // desplazadas, en el plano (t, z), para comprobarlas en el E2E.
+        const guiasCabezas: Array<{
+          elev: number;
+          puntos: Array<[number, number]>;
+        }> = [];
+        for (let i = 0; i < ordenados.length; i += 1) {
+          const nivel = ordenados[i];
           const z = nivel.elevacion;
           lineaCerrada(
             [puntoHZ(tInicioNivel, z), puntoHZ(tFinNivel, z)],
@@ -2730,6 +2823,30 @@ export function Visor3D({
             3,
             grupoLocal,
           );
+          const manual = ajustesNivel[nivel.globalid]?.desplazamiento;
+          const desplazamiento =
+            manual !== undefined && Number.isFinite(manual)
+              ? manual
+              : desplazamientosAuto[i];
+          const zCabeza = z + desplazamiento;
+          // O014b: guía quebrada 3 mm + diagonal + 3 mm hasta la cabeza desplazada.
+          const tresMM = mmAMundo(3, vista.escala);
+          const tCabeza = tFinNivel + (Math.abs(desplazamiento) > 1e-9 ? tresMM * 3 : 0);
+          if (Math.abs(desplazamiento) > 1e-9) {
+            const guia: Array<[number, number]> = [
+              [tFinNivel, z],
+              [tFinNivel + tresMM, z],
+              [tFinNivel + tresMM * 2, zCabeza],
+              [tCabeza, zCabeza],
+            ];
+            guiasCabezas.push({ elev: z, puntos: guia });
+            lineaCerrada(
+              guia.map(([t, zGuia]) => puntoHZ(t, zGuia)),
+              materialNivel,
+              3,
+              grupoLocal,
+            );
+          }
           // O014a: cabeza rellena en el extremo, con el vértice tocando la línea.
           const cabeza = new THREE.Group();
           if (estiloNivel.cabeza === "triangulo") {
@@ -2766,11 +2883,19 @@ export function Visor3D({
             cabeza.add(malla);
           }
           if (cabeza.children.length > 0) {
-            const base = puntoHZ(tFinNivel, z);
+            const base = puntoHZ(tCabeza, zCabeza);
             cabeza.position.set(base[0], base[1], base[2]);
-            orientarAnotacion(cabeza, [d[0], d[1], 0]);
+            orientarAnotacion(cabeza, haciaCamara);
             grupoLocal.add(cabeza);
           }
+          // O014b: asa de la cabeza para arrastrarla (doble clic = automático).
+          asasNivel.current.push({
+            globalid: nivel.globalid,
+            nombre: nivel.nombre,
+            elev: z,
+            desplazamiento,
+            punto: puntoHZ(tCabeza, zCabeza + altoCabeza / 2),
+          });
           const inicioTexto =
             estiloNivel.cabeza === "triangulo"
               ? anchoCabeza / 2
@@ -2778,11 +2903,11 @@ export function Visor3D({
                 ? altoCabeza / 2
                 : 0;
           const zTexto =
-            estiloNivel.cabeza === "ninguna" ? z + altoTexto / 2 : z + altoCabeza / 2;
+            estiloNivel.cabeza === "ninguna" ? zCabeza + altoTexto / 2 : zCabeza + altoCabeza / 2;
           const texto = textoCabezaNivel(z, estiloNivel);
           // O014a: el texto se alinea por su borde izquierdo 1 mm a la derecha de la
           // cabeza, nunca centrado sobre el eje ni sobre el triángulo.
-          const bordeTexto = tFinNivel + inicioTexto + mmAMundo(1, vista.escala);
+          const bordeTexto = tCabeza + inicioTexto + mmAMundo(1, vista.escala);
           const anchoTextoCabeza = anchoTextoAprox(texto, altoTexto);
           const xTexto = bordeTexto + anchoTextoCabeza / 2;
           cabezas.push(texto);
@@ -2791,7 +2916,7 @@ export function Visor3D({
             colorNivel,
             fondo,
             altoTexto,
-            [d[0], d[1], 0],
+            haciaCamara,
             "izquierda",
           );
           if (sprite) {
@@ -2824,15 +2949,37 @@ export function Visor3D({
               colorNivel,
               fondo,
               altoNombre,
-              [d[0], d[1], 0],
+              haciaCamara,
             );
             if (nombre) {
-              const posNombre = puntoHZ(xTexto, z - altoNombre * 1.4);
+              const posNombre = puntoHZ(xTexto, zCabeza - altoNombre * DESFASE_NOMBRE_CABEZA);
               nombre.position.set(posNombre[0], posNombre[1], posNombre[2]);
               nombre.renderOrder = 20;
               grupoLocal.add(nombre);
             }
           }
+          // O014b: caja real de la cabeza en el plano (t, z): triángulo, texto y
+          // nombre, con los mismos tamaños con que se dibujan. La usa el E2E para
+          // comprobar en pantalla que dos cabezas nunca se intersectan.
+          const extensionCabeza =
+            estiloNivel.cabeza === "triangulo"
+              ? anchoCabeza / 2
+              : estiloNivel.cabeza === "circulo"
+                ? altoCabeza / 2
+                : 0;
+          const altoForma = estiloNivel.cabeza === "ninguna" ? 0 : altoCabeza;
+          geometriaCabezas.push({
+            z: zCabeza,
+            t: tCabeza,
+            elev: z,
+            desplazamiento,
+            caja: {
+              t0: tCabeza - extensionCabeza,
+              t1: Math.max(tCabeza + extensionCabeza, bordeTexto + anchoTextoCabeza),
+              z0: zCabeza + desfaseInferior,
+              z1: Math.max(zCabeza + altoForma, zTexto + altoTexto / 2),
+            },
+          });
         }
 
         const textos = {
@@ -2864,7 +3011,7 @@ export function Visor3D({
               grupoLocal,
             );
             const etiqueta = formatearCota(valor);
-            const sprite = textoCota(etiqueta, colorNivel, fondo, altoTexto, [d[0], d[1], 0]);
+            const sprite = textoCota(etiqueta, colorNivel, fondo, altoTexto, haciaCamara);
             if (sprite) {
               const pos = puntoHZ(
                 xEtiquetaParcial,
@@ -2915,7 +3062,7 @@ export function Visor3D({
             );
             // O010: la cota total lleva su rótulo para no confundirse con una parcial.
             const etiquetaTotal = `Total ${formatearCota(total)}`;
-            const spriteTotal = textoCota(etiquetaTotal, colorNivel, fondo, altoTexto, [d[0], d[1], 0]);
+            const spriteTotal = textoCota(etiquetaTotal, colorNivel, fondo, altoTexto, haciaCamara);
             if (spriteTotal) {
               const pos = puntoHZ(
                 xEtiquetaTotal,
@@ -2947,9 +3094,31 @@ export function Visor3D({
         // O011: en alzados y cortes el globo va arriba, sobre el nivel más alto más
         // 3 mm de papel; la línea del eje baja hasta debajo del nivel más bajo.
         const altoBurbuja = mmAMundo(8, vista.escala);
-        for (const { eje, s } of cruces) {
+        // O014b: si dos burbujas se enciman en pantalla (ejes a menos de un
+        // diámetro), la de la derecha se lleva con un codo, como en planta.
+        const desplazamientosBurbuja = acomodarBurbujas(
+          cruces.map(({ s }) => s),
+          altoBurbuja,
+          mmAMundo(0.5, vista.escala),
+        );
+        for (let indiceEje = 0; indiceEje < cruces.length; indiceEje += 1) {
+          const { eje, s } = cruces[indiceEje];
           const ajuste = ajusteEnCurso?.[eje.globalid] ?? vista.ejes?.[eje.globalid];
-          const g = geometriaEje(ajuste, [s, zInferiorEje], [s, zGlobo]);
+          const desplazamientoBurbuja = desplazamientosBurbuja[indiceEje];
+          const ajusteDibujo =
+            desplazamientoBurbuja > 1e-9 &&
+            !ajuste?.extremoFin &&
+            !(ajuste?.codosFin && ajuste.codosFin.length > 0)
+              ? agregarCodoEje(
+                  ajuste,
+                  "fin",
+                  [s, zGlobo],
+                  [0, 1],
+                  mmPapelAMetros(3, vista.escala),
+                  desplazamientoBurbuja,
+                )
+              : ajuste;
+          const g = geometriaEje(ajusteDibujo, [s, zInferiorEje], [s, zGlobo]);
           const puntos = g.puntos.map(([ts, z]) => puntoHZ(ts, z));
           lineaCerrada(puntos, materialEjeNivel, 2.9, grupoLocal);
           lineasEje.current.push({ globalid: eje.globalid, etiqueta: eje.etiqueta, puntos });
@@ -2957,7 +3126,7 @@ export function Visor3D({
             eje.etiqueta,
             colorEje,
             oscuro ? "#1f2328" : "#ffffff",
-            [d[0], d[1], 0],
+            haciaCamara,
           );
           if (burbuja) {
             const pos = puntoHZ(g.globoFin[0], g.globoFin[1]);
@@ -3020,6 +3189,9 @@ export function Visor3D({
           contenedor.current.dataset.ejesNivelMin = String(nivelMin);
           contenedor.current.dataset.ejesNivelMax = String(nivelMax);
           contenedor.current.dataset.ejesGloboZ = String(zGlobo);
+          contenedor.current.dataset.ejesAlzadoDesplazamientos = JSON.stringify(
+            desplazamientosBurbuja,
+          );
           contenedor.current.dataset.nivelesX = JSON.stringify({
             desde: tInicioNivel,
             hasta: tFinNivel,
@@ -3045,12 +3217,23 @@ export function Visor3D({
             profundidad,
             ancho: anchoCabeza,
             alto: altoCabeza,
+            altoBanda: altoBandaCabezaMundo,
+            desfaseInferior,
             bordeTexto: tFinNivel + inicioTextoNivel + mmAMundo(1, vista.escala),
-            cabezas: ordenados.map((nivel) => ({
-              z: nivel.elevacion,
-              t: tFinNivel,
+            haciaCamara,
+            guias: guiasCabezas,
+            cabezas: geometriaCabezas.map((cabeza) => ({
+              z: cabeza.z,
+              t: cabeza.t,
+              elev: cabeza.elev,
+              desplazamiento: cabeza.desplazamiento,
               tipo: estiloNivel.cabeza,
+              caja: cabeza.caja,
             })),
+          });
+          contenedor.current.dataset.nivelesAjuste = JSON.stringify({
+            automaticos: desplazamientosAuto,
+            manuales: ajustesNivel,
           });
         }
       }
@@ -3182,6 +3365,7 @@ export function Visor3D({
     dimensiones.alto,
     niveles,
     ajusteEnCurso,
+    ajustesNivelEnCurso,
   ]);
 
   // O003b: marcadores de la herramienta de dibujo (puntos, snap y vista previa).
@@ -3818,6 +4002,25 @@ export function Visor3D({
         evento.preventDefault();
         nodo.style.cursor = "grabbing";
       }
+      // O014b: arrastrar una cabeza de nivel para colocarla a mano.
+      if (izquierdo && !paneable && !herramienta && !modoCorte) {
+        const asaNivel = asaNivelEn(evento.clientX, evento.clientY);
+        const puntoNivel = asaNivel
+          ? puntoVistaDesdeEvento(evento.clientX, evento.clientY)
+          : null;
+        if (asaNivel && puntoNivel) {
+          arrastreNivel.current = {
+            globalid: asaNivel.globalid,
+            elev: asaNivel.elev,
+            desplazamiento: asaNivel.desplazamiento,
+            inicio: puntoNivel,
+            movido: false,
+          };
+          setAjustesNivelEnCurso({});
+          evento.preventDefault();
+          return;
+        }
+      }
       // O011: arrastrar un globo, un extremo libre o un codo de eje.
       if (izquierdo && !paneable && !herramienta && !modoCorte) {
         const asa = asaEjeEn(evento.clientX, evento.clientY);
@@ -3870,6 +4073,21 @@ export function Visor3D({
       const nav = navegacion.current;
       const camera = camara.current;
       if (!nav || !camera) return;
+      // O014b: la cabeza de nivel sigue al puntero en vertical.
+      const arrNivel = arrastreNivel.current;
+      if (arrNivel) {
+        const punto = puntoVistaDesdeEvento(evento.clientX, evento.clientY);
+        if (punto) {
+          arrNivel.movido = true;
+          const desplazamiento = punto[1] - arrNivel.elev;
+          arrNivel.desplazamiento = desplazamiento;
+          setAjustesNivelEnCurso({
+            [arrNivel.globalid]: { desplazamiento },
+          });
+          evento.preventDefault();
+          return;
+        }
+      }
       // O011: movimiento de un extremo, candado o codo de eje.
       const arrEje = arrastreEje.current;
       if (arrEje) {
@@ -4050,6 +4268,18 @@ export function Visor3D({
         }
         return;
       }
+      const arrNivel = arrastreNivel.current;
+      if (arrNivel) {
+        arrastreNivel.current = null;
+        if (arrNivel.movido) {
+          void fijarAjustesNiveles(vista.id, {
+            [arrNivel.globalid]:
+              normalizarAjusteNivel({ desplazamiento: arrNivel.desplazamiento }) ?? null,
+          });
+        }
+        setAjustesNivelEnCurso({});
+        return;
+      }
       const arrEje = arrastreEje.current;
       if (arrEje) {
         arrastreEje.current = null;
@@ -4112,6 +4342,13 @@ export function Visor3D({
       if (evento.button === 1) {
         evento.preventDefault();
         ajustar();
+        return;
+      }
+      // O014b: doble clic en el asa de una cabeza nivel = volver al acomodo automático.
+      const asaNivel = asaNivelEn(evento.clientX, evento.clientY);
+      if (asaNivel) {
+        evento.preventDefault();
+        void fijarAjustesNiveles(vista.id, { [asaNivel.globalid]: null });
         return;
       }
       const camera = camara.current;
@@ -4265,12 +4502,14 @@ export function Visor3D({
     fijarAviso,
     metrosPorPixelActual,
     asaEjeEn,
+    asaNivelEn,
     lineaEjeEn,
     puntoVistaDesdeEvento,
     candados,
     ejeSeleccionado,
     menuEje,
     fijarAjustesEjes,
+    fijarAjustesNiveles,
     referencias.ejes,
     vista.ejes,
   ]);
@@ -4298,6 +4537,14 @@ export function Visor3D({
         x: rect.left + ((punto.x + 1) / 2) * rect.width,
         y: rect.top + ((1 - punto.y) / 2) * rect.height,
       };
+    };
+    // O014b: asa en pantalla de la cabeza de un nivel (para arrastrarla en E2E).
+    (nodo as unknown as Record<string, unknown>).__openrvtNivelAPantalla = (
+      globalid: string,
+    ) => {
+      const asa = asasNivel.current.find((a) => a.globalid === globalid);
+      if (!asa) return null;
+      return pantallaDePunto(asa.punto);
     };
     // O011: posición en pantalla de un globo o extremo de eje (para las E2E).
     (nodo as unknown as Record<string, unknown>).__openrvtEjeAPantalla = (
