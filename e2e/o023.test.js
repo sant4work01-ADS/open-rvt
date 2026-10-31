@@ -555,7 +555,7 @@ test("O023-5: la planta no tiene cotas sueltas; todas salen de los ejes o del re
         `las parciales ${familia.vertical ? "verticales" : "horizontales"} deben ser las separaciones entre ejes`,
       );
       // Toda cota vertical/horizontal se rotula si es rebase; ninguna «2.00» suelta.
-      assert.equal(familia.rebase, "2.00", "el rebase debe medir 2.00 y estar rotulado");
+      assert.equal(familia.rebase, "2.00", "el rebase debe medir 2.00");
       const valores = (familia.vertical ? verticales : horizontales);
       assert.equal(
         familia.total,
@@ -563,6 +563,12 @@ test("O023-5: la planta no tiene cotas sueltas; todas salen de los ejes o del re
         "la total debe ser la distancia entre los ejes extremos",
       );
     }
+    // El «2.00» azul ya no es una cota suelta: el texto dibujado lleva «Rebase».
+    assert.equal(
+      await atributoVisor(ses, "cotas-rebases"),
+      "Rebase 2.00,Rebase 2.00",
+      "los rebases deben estar rotulados en el dibujo",
+    );
     // Las etiquetas dibujadas son exactamente parciales + total + «Rebase».
     const visuales = await ses.driver.executeScript(() => {
       const texto = document.querySelector('[data-testid="visor"]')?.dataset.nivelesTexto ?? "";

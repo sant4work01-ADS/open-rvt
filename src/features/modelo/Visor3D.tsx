@@ -3584,6 +3584,11 @@ export function Visor3D({
         .map((f) => f.total ?? "")
         .filter(Boolean)
         .join(",");
+      // O023: el rebase se rotula en el dibujo; la prueba comprueba la etiqueta real.
+      nodoVisor.dataset.cotasRebases = datosCotas
+        .map((f) => (f.rebase ? `Rebase ${f.rebase}` : ""))
+        .filter(Boolean)
+        .join(",");
       nodoVisor.dataset.nivelesCotas = JSON.stringify(datosNiveles);
       nodoVisor.dataset.nivelesTexto = datosNiveles
         .flatMap((n) => [n.nombre, n.elevacion, ...n.cabezas, ...n.parciales, n.total ?? ""])
