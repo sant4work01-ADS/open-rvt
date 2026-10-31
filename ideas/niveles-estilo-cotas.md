@@ -26,3 +26,7 @@ Referencia: `img/niveles-referencia.jpg`. Al usuario no le gustan los niveles ac
   («00.E+ I leviN»). Ya pasaba antes de O015 (`docs/capturas/o015-antes-corte.png`). Corregir en O014b:
   el texto siempre se lee de izquierda a derecha en cualquier dirección de corte/alzado (prueba con
   direcciones (0,1), (0,-1), (1,0), (-1,0) y una diagonal).
+
+## Pendiente tras O014b (31-oct)
+- El texto «Npt +2.00m» queda tachado por la propia línea de nivel: ponerlo ARRIBA de la línea con un margen.
+- Cotas pequeñas (0.10, 0.20) se montan sobre líneas de extensión: texto fuera o con línea de referencia.

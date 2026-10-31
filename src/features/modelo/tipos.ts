@@ -41,6 +41,12 @@ export interface AjusteEjeVista {
   codosFin?: [number, number][];
 }
 
+/** O014b: desplazamiento manual de la cabeza de un nivel dentro de una vista. */
+export interface AjusteNivelVista {
+  /** Metros que sube la cabeza respecto de la línea del nivel. */
+  desplazamiento: number;
+}
+
 export interface Vista {
   id: string;
   nombre: string;
@@ -71,6 +77,8 @@ export interface Vista {
   cotasEjes?: boolean;
   /** O011: ajustes de eje en esta vista. Clave: GlobalId del eje. */
   ejes?: Record<string, AjusteEjeVista>;
+  /** O014b: ajustes de cabeza de nivel en esta vista. Clave: GlobalId del nivel. */
+  nivelesAjuste?: Record<string, AjusteNivelVista>;
 }
 
 export interface Nivel {

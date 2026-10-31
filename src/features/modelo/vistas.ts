@@ -18,6 +18,7 @@ import {
 import type { EstiloCategoriaVista } from "./estilos";
 import type { EjeReferencia } from "./herramientas";
 import { normalizarAjusteEje } from "./ejesVista";
+import { normalizarAjusteNivel } from "./niveles";
 
 export type Vector3 = [number, number, number];
 
@@ -436,6 +437,15 @@ export function normalizarVista(valor: unknown): Vista | null {
       if (ajuste) ejes[globalid] = ajuste;
     }
   }
+  // O014b: desplazamientos manuales de las cabezas de nivel de esta vista.
+  const nivelesAjuste: Record<string, { desplazamiento: number }> = {};
+  if (v.nivelesAjuste && typeof v.nivelesAjuste === "object") {
+    for (const [globalid, crudo] of Object.entries(v.nivelesAjuste as Record<string, unknown>)) {
+      if (!globalid) continue;
+      const ajuste = normalizarAjusteNivel(crudo);
+      if (ajuste) nivelesAjuste[globalid] = ajuste;
+    }
+  }
   return {
     id: typeof v.id === "string" && v.id ? v.id : `vista-${Math.random().toString(36).slice(2)}`,
     nombre: typeof v.nombre === "string" && v.nombre ? v.nombre : "Vista",
@@ -460,6 +470,7 @@ export function normalizarVista(valor: unknown): Vista | null {
         : undefined,
     cotasEjes: v.cotasEjes !== false,
     ejes: Object.keys(ejes).length > 0 ? ejes : undefined,
+    nivelesAjuste: Object.keys(nivelesAjuste).length > 0 ? nivelesAjuste : undefined,
   };
 }
 
