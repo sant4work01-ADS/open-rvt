@@ -495,6 +495,12 @@ class ModeladoMixin:
             + self.modelo.by_type("IfcFooting")
         )
         for elemento in elementos:
+            # O028: vigas y zapatas importadas (sin datos de OPEN-RVT) no se
+            # regeneran; las mueve el desplazamiento genérico del nivel.
+            if (elemento.is_a("IfcBeam") or elemento.is_a("IfcFooting")) and not self._leer_pset(
+                elemento, "OPENRVT_Estructura"
+            ):
+                continue
             restriccion = self._restricciones_de(elemento)
             if (
                 restriccion["NivelBase"] in niveles
