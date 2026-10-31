@@ -461,6 +461,28 @@ test("O014b: texto legible, codo de niveles y codo de burbujas", async () => {
         etiqueta.x1 > etiqueta.x0 + 10,
         `«${etiqueta.texto}» no se dibujó con ancho legible en el corte`,
       );
+      const cy = (etiqueta.y0 + etiqueta.y1) / 2;
+      let mejor = null;
+      let distancia = Infinity;
+      for (const t of cabezasCorte.cabezas) {
+        const p = await proyectar(
+          ses,
+          cabezasCorte.h[0] * t.t + cabezasCorte.d[0] * cabezasCorte.profundidad,
+          cabezasCorte.h[1] * t.t + cabezasCorte.d[1] * cabezasCorte.profundidad,
+          t.z,
+        );
+        if (!p) continue;
+        const d = Math.abs(p.y - cy);
+        if (d < distancia) {
+          distancia = d;
+          mejor = p;
+        }
+      }
+      assert.ok(mejor, "no se pudo proyectar el triángulo del corte");
+      assert.ok(
+        mejor.x < (etiqueta.x0 + etiqueta.x1) / 2,
+        `en el corte «${etiqueta.texto}» quedó a la izquierda de su triángulo (espejado)`,
+      );
     }
     await ses.captura(path.join(CAPTURAS, "o014b-corte-legible.png"));
   } finally {
