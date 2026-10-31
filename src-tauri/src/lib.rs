@@ -443,9 +443,12 @@ fn diagnostico_webview(app: tauri::AppHandle) -> Option<serde_json::Value> {
         };
         use windows_core::{Interface, BOOL};
 
+        use std::sync::{Arc, Mutex};
+
         let ventana = tauri::Manager::get_webview_window(&app, "main")?;
-        let mut resultado = None;
-        let _ = ventana.with_webview(|w| unsafe {
+        let resultado = Arc::new(Mutex::new(None));
+        let guardado = Arc::clone(&resultado);
+        let _ = ventana.with_webview(move |w| unsafe {
             let Ok(nucleo) = w.controller().CoreWebView2() else {
                 return;
             };
@@ -464,13 +467,14 @@ fn diagnostico_webview(app: tauri::AppHandle) -> Option<serde_json::Value> {
                 .cast::<ICoreWebView2Settings3>()
                 .and_then(|s| s.AreBrowserAcceleratorKeysEnabled(&mut atajos))
                 .is_ok();
-            resultado = Some(serde_json::json!({
+            *guardado.lock().unwrap() = Some(serde_json::json!({
                 "zoom_control": zoom_ok.then(|| zoom_control.as_bool()),
                 "pinch_zoom": pinch_ok.then(|| pinch.as_bool()),
                 "atajos_navegador": atajos_ok.then(|| atajos.as_bool()),
             }));
         });
-        resultado
+        let salida = resultado.lock().unwrap().take();
+        salida
     }
     #[cfg(not(windows))]
     {
