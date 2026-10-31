@@ -39,7 +39,8 @@ const CLAVE_AYUDA = "openrvt.ayudaNavegacion";
 const CLAVE_DETECTADO = "openrvt.rueda.dispositivo";
 const VENTANA_TOUCHPAD_MS = 60_000;
 const RAFAGA_MS = 40;
-const MAX_REGISTROS = 20;
+/** O017: el diagnóstico copia los últimos 50 eventos. */
+const MAX_REGISTROS = 50;
 
 function leerPreferencia(): PreferenciaRueda {
   try {
@@ -184,6 +185,64 @@ export function clasificarRueda(
 /** Factor de zoom de un `wheel`; el signo positivo acerca en la convención del visor. */
 export function factorRueda(deltaY: number): number {
   return Math.pow(1.0018, deltaY);
+}
+
+/**
+ * O017: factor del pellizco de touchpad. Windows manda `deltaY` fraccionario y
+ * pequeño (±1–10), donde `factorRueda` apenas cambia; aquí cada unidad pesa más
+ * y el evento se acota a [0,8; 1,25] para que un gesto brusco no salte.
+ */
+export function factorPellizco(deltaY: number): number {
+  const factor = Math.pow(1.01, deltaY);
+  return Math.min(1.25, Math.max(0.8, factor));
+}
+
+/**
+ * O017: elige el factor del evento. Es pellizco cuando llega con Ctrl y el
+ * dispositivo es touchpad, el delta no es entero o es menor que un salto de
+ * rueda; una rueda real con Ctrl conserva el factor fino de siempre.
+ */
+export function factorZoomRueda(
+  evento: EventoRueda,
+  dispositivo: DispositivoRueda | null,
+): number {
+  const pellizco =
+    evento.ctrlKey &&
+    (dispositivo === "touchpad" ||
+      !Number.isInteger(evento.deltaY) ||
+      Math.abs(evento.deltaY) < 50);
+  return pellizco ? factorPellizco(evento.deltaY) : factorRueda(evento.deltaY);
+}
+
+/** O017: texto plano (TSV) de los eventos para el botón «Copiar» del diagnóstico. */
+export function textoDiagnosticoRueda(registros: RegistroRueda[]): string {
+  const cabecera = [
+    "#",
+    "deltaX",
+    "deltaY",
+    "modo",
+    "ctrl",
+    "shift",
+    "ms",
+    "intervaloMs",
+    "dispositivo",
+    "accion",
+  ].join("\t");
+  const filas = registros.map((registro, indice) =>
+    [
+      indice + 1,
+      registro.deltaX,
+      registro.deltaY,
+      registro.deltaMode,
+      registro.ctrlKey ? "si" : "no",
+      registro.shiftKey ? "si" : "no",
+      registro.ms,
+      registro.intervaloMs ?? "",
+      registro.dispositivo,
+      registro.accion,
+    ].join("\t"),
+  );
+  return [cabecera, ...filas].join("\n");
 }
 
 interface EstadoRueda {
