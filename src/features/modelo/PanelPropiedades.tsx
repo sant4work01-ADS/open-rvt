@@ -397,15 +397,110 @@ function AceroElemento({ globalid }: { globalid: string }) {
   );
 }
 
-function PropiedadesElemento() {
+function RestriccionesNivel({
+  globalid,
+  alturaActual,
+  testidAltura,
+}: {
+  globalid: string;
+  alturaActual: number;
+  testidAltura: string;
+}) {
+  const niveles = useModelo((s) => s.niveles);
+  const restricciones = useModelo((s) => s.propiedades?.restricciones);
+  const editarRestricciones = useModelo((s) => s.editarRestricciones);
+  if (!restricciones) return null;
+  const sinConexion = !restricciones.NivelTope;
+  const cambiar = (cambios: Parameters<typeof editarRestricciones>[1]) =>
+    void editarRestricciones(globalid, cambios);
+  return (
+    <>
+      <label className="flex items-center justify-between gap-2 text-xs">
+        <span className="text-muted-foreground">Restricción de base</span>
+        <select
+          key={restricciones.NivelBase}
+          data-testid="restriccion-base"
+          defaultValue={restricciones.NivelBase}
+          onChange={(e) => cambiar({ nivel_base: e.target.value })}
+          className="w-32 rounded border bg-background px-2 py-1"
+        >
+          {niveles.map((nivel) => (
+            <option key={nivel.globalid} value={nivel.globalid}>
+              {nivel.nombre}
+            </option>
+          ))}
+          {!niveles.some((n) => n.globalid === restricciones.NivelBase) && (
+            <option value={restricciones.NivelBase}>(nivel actual)</option>
+          )}
+        </select>
+      </label>
+      <CampoEditable
+        etiqueta="Desfase de base (m)"
+        testid="desfase-base"
+        numerico
+        paso={0.05}
+        valor={restricciones.DesfaseBase}
+        onGuardar={(desfase_base) => cambiar({ desfase_base: Number(desfase_base) })}
+      />
+      <label className="flex items-center justify-between gap-2 text-xs">
+        <span className="text-muted-foreground">Restricción de tope</span>
+        <select
+          key={restricciones.NivelTope}
+          data-testid="restriccion-tope"
+          defaultValue={restricciones.NivelTope}
+          onChange={(e) => cambiar({ nivel_tope: e.target.value })}
+          className="w-32 rounded border bg-background px-2 py-1"
+        >
+          <option value="">Sin conexión</option>
+          {niveles.map((nivel) => (
+            <option key={nivel.globalid} value={nivel.globalid}>
+              {nivel.nombre}
+            </option>
+          ))}
+        </select>
+      </label>
+      {!sinConexion && (
+        <CampoEditable
+          etiqueta="Desfase de tope (m)"
+          testid="desfase-tope"
+          numerico
+          paso={0.05}
+          valor={restricciones.DesfaseTope}
+          onGuardar={(desfase_tope) => cambiar({ desfase_tope: Number(desfase_tope) })}
+        />
+      )}
+      {sinConexion ? (
+        <CampoEditable
+          etiqueta="Altura (m)"
+          testid={testidAltura}
+          numerico
+          paso={0.05}
+          valor={restricciones.AlturaSinConexion}
+          onGuardar={(altura) => cambiar({ altura_sin_conexion: Number(altura) })}
+        />
+      ) : (
+        <label className="flex items-center justify-between gap-2 text-xs">
+          <span className="text-muted-foreground">Altura (m)</span>
+          <span data-testid={testidAltura} className="w-28 text-right">
+            {alturaActual.toFixed(2)}
+          </span>
+        </label>
+      )}
+    </>
+  );
+}
+
+export function PropiedadesElemento() {
   const propiedades = useModelo((s) => s.propiedades);
   const editar = useModelo((s) => s.editarElemento);
   const tipos = useModelo((s) => s.tiposMuro);
+  const error = useModelo((s) => s.error);
   if (!propiedades) {
     return <div className="p-3 text-xs text-muted-foreground">Cargando propiedades…</div>;
   }
   const gid = propiedades.globalid;
   const esMuro = propiedades.clase === "IfcWall" || propiedades.clase === "IfcWallStandardCase";
+  const esColumna = propiedades.clase === "IfcColumn";
   const esLosa = propiedades.clase === "IfcSlab";
   const esAbertura = propiedades.clase === "IfcDoor" || propiedades.clase === "IfcWindow";
   const estructura = propiedades.psets?.OPENRVT_Estructura as
@@ -426,6 +521,11 @@ function PropiedadesElemento() {
           {propiedades.nivel || "Sin nivel"}
           {propiedades.tipo ? ` · ${propiedades.tipo}` : ""}
         </div>
+        {error && (
+          <div data-testid="elemento-error" className="mt-1 text-red-600">
+            {error}
+          </div>
+        )}
       </div>
       <fieldset className="flex flex-col gap-2 border-y py-2">
         <legend className="font-semibold">Propiedades editables</legend>
@@ -456,13 +556,12 @@ function PropiedadesElemento() {
                 )}
               </select>
             </label>
-            <CampoEditable
-              etiqueta="Altura (m)"
-              testid="elemento-altura"
-              numerico
-              paso={0.05}
-              valor={Number((propiedades.psets?.OPENRVT_Muro as Record<string, unknown>)?.Altura ?? 2.6)}
-              onGuardar={(altura) => void editar(gid, { altura })}
+            <RestriccionesNivel
+              globalid={gid}
+              testidAltura="elemento-altura"
+              alturaActual={Number(
+                (propiedades.psets?.OPENRVT_Muro as Record<string, unknown>)?.Altura ?? 2.6,
+              )}
             />
           </>
         )}
@@ -518,22 +617,11 @@ function PropiedadesElemento() {
                 onGuardar={(valor) => void editar(gid, { Desfase: valor })}
               />
             )}
-            {estructura?.Altura !== undefined && (
-              <CampoEditable
-                etiqueta="Altura (m)"
-                testid="elemento-altura-estructura"
-                numerico
-                paso={0.05}
-                valor={Number(estructura.Altura)}
-                onGuardar={(valor) => void editar(gid, { Altura: valor })}
-              />
-            )}
-            {estructura?.NivelSuperior !== undefined && (
-              <CampoEditable
-                etiqueta="Nivel superior (GlobalId)"
-                testid="elemento-nivel-superior"
-                valor={String(estructura.NivelSuperior ?? "")}
-                onGuardar={(valor) => void editar(gid, { NivelSuperior: valor })}
+            {esColumna && (
+              <RestriccionesNivel
+                globalid={gid}
+                testidAltura="elemento-altura-estructura"
+                alturaActual={Number(estructura?.Altura ?? 0)}
               />
             )}
           </>

@@ -278,6 +278,17 @@ interface EstadoModelo {
   unirZapatas: () => Promise<boolean>;
   unirTrabes: () => Promise<boolean>;
   editarElemento: (globalid: string, cambios: Record<string, unknown>) => Promise<void>;
+  /** O016: cambia base, tope y desfases de un muro o columna. */
+  editarRestricciones: (
+    globalid: string,
+    cambios: {
+      nivel_base?: string;
+      desfase_base?: number;
+      nivel_tope?: string;
+      desfase_tope?: number;
+      altura_sin_conexion?: number;
+    },
+  ) => Promise<void>;
 
   nuevo: () => Promise<boolean>;
   abrir: (ruta?: string) => Promise<boolean>;
@@ -1823,6 +1834,11 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
     editarElemento: async (globalid, cambios) => {
       const ok = await ejecutar("elementos.editar", { globalid, cambios });
+      if (ok) await get().seleccionar(globalid);
+    },
+
+    editarRestricciones: async (globalid, cambios) => {
+      const ok = await ejecutar("restricciones.editar", { globalid, ...cambios });
       if (ok) await get().seleccionar(globalid);
     },
 
