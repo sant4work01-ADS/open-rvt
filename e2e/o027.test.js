@@ -322,7 +322,7 @@ test("O027: asas de ejes y niveles con movimiento restringido", async () => {
     assert.equal(ajustes[eje2.globalid]?.extremoFin, undefined, "Deshacer no revirtió el grupo");
 
     // 3) Globo con codo: al arrastrarlo en diagonal solo se mueve en horizontal.
-    await seleccionarEjeEn(ses, 2);
+    await seleccionarEjeEn(ses, 4);
     await activar(ses, "eje-codo-fin-agregar");
     ajustes = (await ajustesVista(ses)).ejes;
     assert.equal(ajustes[eje2.globalid].codosFin?.length, 1, "no se creó el codo");
