@@ -16,11 +16,16 @@ import { calcularPlantaMuros, type MuroPlanta } from "./planta";
 import {
   detectorRueda,
   factorZoomRueda,
-  textoDiagnosticoRueda,
+  resumirGrabacion,
+  textoResumenGrabacion,
   useRueda,
-  type RegistroRueda,
+  type EventoGrabado,
+  type ResumenGrabacion,
+  type TipoEventoGrabado,
 } from "@/lib/rueda";
 import { copiarTexto } from "@/lib/portapapeles";
+import { elegirDestinoDiagnostico } from "@/lib/dialogos";
+import { commands } from "@/lib/bindings";
 import {
   colocarAbertura,
   describirEnganche,
@@ -923,7 +928,64 @@ export function Visor3D({
   const ayudaVisible = useRueda((s) => s.ayudaVisible);
   const cerrarAyuda = useRueda((s) => s.cerrarAyuda);
   const [diagnosticoRueda, setDiagnosticoRueda] = useState(false);
-  const [registrosRueda, setRegistrosRueda] = useState<RegistroRueda[]>([]);
+  const [grabando, setGrabando] = useState(false);
+  const [eventosGrabados, setEventosGrabados] = useState<EventoGrabado[]>([]);
+  const [resumenGrabacion, setResumenGrabacion] = useState<ResumenGrabacion | null>(null);
+  const grabacionRef = useRef<{ inicio: number; eventos: EventoGrabado[] } | null>(null);
+  const temporizadorGrabacion = useRef<number | null>(null);
+
+  const detenerGrabacion = useCallback(() => {
+    const grabacion = grabacionRef.current;
+    if (!grabacion) return;
+    if (temporizadorGrabacion.current !== null) {
+      window.clearTimeout(temporizadorGrabacion.current);
+      temporizadorGrabacion.current = null;
+    }
+    const eventos = [...grabacion.eventos].sort((a, b) => a.t - b.t);
+    grabacionRef.current = null;
+    setGrabando(false);
+    setEventosGrabados(eventos);
+    setResumenGrabacion(resumirGrabacion(eventos));
+  }, []);
+
+  const iniciarGrabacion = useCallback(() => {
+    if (grabacionRef.current) {
+      detenerGrabacion();
+      return;
+    }
+    grabacionRef.current = { inicio: performance.now(), eventos: [] };
+    setEventosGrabados([]);
+    setResumenGrabacion(null);
+    setGrabando(true);
+  }, [detenerGrabacion]);
+
+  // O017b: exporta la grabación con los ajustes reales de WebView2.
+  const exportarDiagnostico = useCallback(async () => {
+    const ahora = new Date();
+    const dos = (n: number) => String(n).padStart(2, "0");
+    const nombre =
+      `diagnostico-rueda-${ahora.getFullYear()}${dos(ahora.getMonth() + 1)}` +
+      `${dos(ahora.getDate())}-${dos(ahora.getHours())}${dos(ahora.getMinutes())}`;
+    const destino = await elegirDestinoDiagnostico(nombre);
+    if (!destino) return;
+    const version = await commands.versionApp();
+    const ajustes = await commands.diagnosticoWebview();
+    const datos = {
+      version_app: version.status === "ok" ? version.data : null,
+      fecha: ahora.toISOString(),
+      userAgent: navigator.userAgent,
+      devicePixelRatio: window.devicePixelRatio,
+      preferencia_rueda: preferenciaRueda,
+      dispositivo_detectado: detectorRueda.ultimoDispositivo(),
+      ajustes_webview: ajustes.status === "ok" ? ajustes.data : null,
+      resumen: resumenGrabacion ?? resumirGrabacion(eventosGrabados),
+      eventos: eventosGrabados,
+    };
+    const respuesta = await commands.guardarTexto(destino, JSON.stringify(datos, null, 2));
+    if (respuesta.status === "error") {
+      fijarAviso(`No se pudo guardar el diagnóstico: ${respuesta.error.mensaje}`);
+    }
+  }, [eventosGrabados, fijarAviso, preferenciaRueda, resumenGrabacion]);
 
   const nivelGlobalidPorNombre = useMemo(() => {
     const mapa = new Map<string, string>();
@@ -3538,6 +3600,14 @@ export function Visor3D({
         entrada.material.resolution.set(ancho, alto);
       }
     };
+    const escalaActual = () => {
+      const camera = camara.current;
+      const nav = navegacion.current;
+      if (!camera || !nav) return undefined;
+      if (camera instanceof THREE.OrthographicCamera) return camera.top - camera.bottom;
+      if (camera instanceof THREE.PerspectiveCamera) return nav.distancia;
+      return undefined;
+    };
     const alRodar = (evento: WheelEvent) => {
       evento.preventDefault();
       const camera = camara.current;
@@ -3546,9 +3616,9 @@ export function Visor3D({
       const accion = detectorRueda.clasificar(evento, preferenciaRueda);
       const dispositivo = detectorRueda.ultimoDispositivo();
       if (dispositivo) fijarDetectado(dispositivo);
-      if (diagnosticoRueda) setRegistrosRueda(detectorRueda.ultimos());
-      if (accion === "zoom") {
-        const factor = factorZoomRueda(evento, dispositivo);
+      const escalaAntes = escalaActual();
+      const factor = accion === "zoom" ? factorZoomRueda(evento, dispositivo) : undefined;
+      if (accion === "zoom" && factor !== undefined) {
         if (camera instanceof THREE.OrthographicCamera) {
           const rect = nodo.getBoundingClientRect();
           const raton = new THREE.Vector2(
@@ -3618,6 +3688,24 @@ export function Visor3D({
       }
       aplicarCamara();
       actualizarGrosores();
+      // O017b: el diagnóstico guarda la escala real antes y después de este zoom.
+      const grabacion = grabacionRef.current;
+      if (grabacion && grabacion.eventos.length < 5000) {
+        grabacion.eventos.push({
+          t: performance.now() - grabacion.inicio,
+          tipo: "wheel",
+          ctrlKey: evento.ctrlKey,
+          shiftKey: evento.shiftKey,
+          deltaX: evento.deltaX,
+          deltaY: evento.deltaY,
+          deltaMode: evento.deltaMode,
+          accion,
+          dispositivo: dispositivo ?? undefined,
+          factor,
+          escalaAntes: accion === "zoom" ? escalaAntes : undefined,
+          escalaDespues: accion === "zoom" ? escalaActual() : undefined,
+        });
+      }
     };
     nodo.addEventListener("wheel", alRodar, { passive: false });
     return () => nodo.removeEventListener("wheel", alRodar);
@@ -3626,9 +3714,61 @@ export function Visor3D({
     cajaVista,
     preferenciaRueda,
     fijarDetectado,
-    diagnosticoRueda,
     vista.tipo,
   ]);
+
+  // O017b: grabación de 10 s con puntero, toques y Control. Los `wheel` los
+  // registra `alRodar` para poder anotar la escala antes y después del zoom.
+  useEffect(() => {
+    if (!grabando) return;
+    const grabacion = grabacionRef.current ?? { inicio: performance.now(), eventos: [] };
+    grabacionRef.current = grabacion;
+    const registrar = (tipo: TipoEventoGrabado, evento: Event) => {
+      if (grabacion.eventos.length >= 5000) return;
+      const base: EventoGrabado = {
+        t: performance.now() - grabacion.inicio,
+        tipo,
+        ctrlKey: Boolean((evento as MouseEvent).ctrlKey),
+        shiftKey: Boolean((evento as MouseEvent).shiftKey),
+      };
+      if (tipo.startsWith("pointer")) {
+        base.pointerType = (evento as PointerEvent).pointerType;
+      } else if (tipo.startsWith("touch")) {
+        base.toques = (evento as TouchEvent).touches?.length ?? 0;
+      } else if (tipo.startsWith("key")) {
+        base.key = (evento as KeyboardEvent).key;
+      }
+      grabacion.eventos.push(base);
+    };
+    const opciones: AddEventListenerOptions = { capture: true, passive: true };
+    const tipos: TipoEventoGrabado[] = [
+      "pointerdown",
+      "pointermove",
+      "pointerup",
+      "touchstart",
+      "touchmove",
+      "touchend",
+    ];
+    const alPuntero = (evento: Event) => registrar(evento.type as TipoEventoGrabado, evento);
+    for (const tipo of tipos) window.addEventListener(tipo, alPuntero, opciones);
+    const alTecla = (evento: Event) => {
+      const tecla = evento as KeyboardEvent;
+      if (tecla.key !== "Control") return;
+      registrar(tecla.type === "keydown" ? "keydown" : "keyup", tecla);
+    };
+    window.addEventListener("keydown", alTecla, opciones);
+    window.addEventListener("keyup", alTecla, opciones);
+    temporizadorGrabacion.current = window.setTimeout(() => detenerGrabacion(), 10_000);
+    return () => {
+      if (temporizadorGrabacion.current !== null) {
+        window.clearTimeout(temporizadorGrabacion.current);
+        temporizadorGrabacion.current = null;
+      }
+      for (const tipo of tipos) window.removeEventListener(tipo, alPuntero, opciones);
+      window.removeEventListener("keydown", alTecla, opciones);
+      window.removeEventListener("keyup", alTecla, opciones);
+    };
+  }, [grabando, detenerGrabacion]);
 
   // Paneo, órbita, selección, toques y puntos del corte.
   useEffect(() => {
@@ -4197,7 +4337,6 @@ export function Visor3D({
       if (evento.ctrlKey && evento.shiftKey && tecla === "d") {
         evento.preventDefault();
         setDiagnosticoRueda((visible) => !visible);
-        setRegistrosRueda(detectorRueda.ultimos());
         return;
       }
       if (evento.ctrlKey || evento.metaKey || evento.altKey) return;
@@ -4672,19 +4811,43 @@ export function Visor3D({
       {diagnosticoRueda && (
         <div
           data-testid="diagnostico-rueda"
-          className="absolute right-2 top-12 z-30 max-h-[60vh] w-[min(680px,92vw)] overflow-auto rounded border bg-background/95 p-2 text-[10px] shadow-lg"
+          className="absolute right-2 top-12 z-30 max-h-[60vh] w-[min(720px,92vw)] overflow-auto rounded border bg-background/95 p-2 text-[10px] shadow-lg"
         >
           <div className="mb-1 flex items-center justify-between gap-2">
             <strong>Diagnóstico de rueda/touchpad</strong>
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                data-testid="diagnostico-rueda-copiar"
-                onClick={() => copiarTexto(textoDiagnosticoRueda(registrosRueda))}
-                title="Copia los últimos 50 eventos al portapapeles"
+                data-testid="diagnostico-rueda-grabar"
+                onClick={grabando ? detenerGrabacion : iniciarGrabacion}
+                title="Graba 10 s de rueda, puntero, toques y Control"
                 className="rounded border px-1.5 py-0.5 hover:bg-muted"
               >
-                Copiar
+                {grabando ? "Detener" : "Grabar 10 s"}
+              </button>
+              <button
+                type="button"
+                data-testid="diagnostico-rueda-copiar-resumen"
+                onClick={() =>
+                  copiarTexto(
+                    resumenGrabacion
+                      ? textoResumenGrabacion(resumenGrabacion)
+                      : "Sin grabación: pulsa «Grabar 10 s».",
+                  )
+                }
+                title="Copia el resumen en texto para pegarlo"
+                className="rounded border px-1.5 py-0.5 hover:bg-muted"
+              >
+                Copiar resumen
+              </button>
+              <button
+                type="button"
+                data-testid="diagnostico-rueda-exportar"
+                onClick={() => void exportarDiagnostico()}
+                title="Guarda el diagnóstico completo en JSON"
+                className="rounded border px-1.5 py-0.5 hover:bg-muted"
+              >
+                Exportar…
               </button>
               <button
                 type="button"
@@ -4698,36 +4861,123 @@ export function Visor3D({
             </div>
           </div>
           <p className="mb-1 text-muted-foreground">
-            Últimos 50 eventos «wheel» · detectado: {detectorRueda.ultimoDispositivo() ?? "—"}
+            {grabando ? "Grabando… " : ""}detectado: {detectorRueda.ultimoDispositivo() ?? "—"}
           </p>
-          <table className="w-full border-collapse text-left">
-            <thead>
-              <tr className="border-b">
-                <th className="px-1">#</th>
-                <th className="px-1">ΔX</th>
-                <th className="px-1">ΔY</th>
-                <th className="px-1">modo</th>
-                <th className="px-1">ctrl</th>
-                <th className="px-1">ms</th>
-                <th className="px-1">dispositivo</th>
-                <th className="px-1">acción</th>
-              </tr>
-            </thead>
-            <tbody>
-              {registrosRueda.map((registro, indice) => (
-                <tr key={`${registro.ms}-${indice}`} className="border-b border-border/40">
-                  <td className="px-1">{indice + 1}</td>
-                  <td className="px-1">{registro.deltaX.toFixed(2)}</td>
-                  <td className="px-1">{registro.deltaY.toFixed(2)}</td>
-                  <td className="px-1">{registro.deltaMode}</td>
-                  <td className="px-1">{registro.ctrlKey ? "sí" : "no"}</td>
-                  <td className="px-1">{registro.intervaloMs ?? "—"}</td>
-                  <td className="px-1">{registro.dispositivo}</td>
-                  <td className="px-1">{registro.accion}</td>
+          {resumenGrabacion ? (
+            <div data-testid="diagnostico-rueda-resumen">
+              <p className="mb-1">
+                {resumenGrabacion.total} eventos · {Math.round(resumenGrabacion.duracionMs)} ms ·
+                zoom {resumenGrabacion.zoom.eventos} · producto{" "}
+                {Number(resumenGrabacion.zoom.productoFactores.toFixed(6))} · escala{" "}
+                {resumenGrabacion.zoom.escalaInicial ?? "—"} →{" "}
+                {resumenGrabacion.zoom.escalaFinal ?? "—"}
+              </p>
+              <table className="w-full border-collapse text-left">
+                <thead>
+                  <tr className="border-b">
+                    <th className="px-1">grupo</th>
+                    <th className="px-1">n</th>
+                    <th className="px-1">ctrl %</th>
+                    <th className="px-1">modo</th>
+                    <th className="px-1">ΔY mín/máx/media</th>
+                    <th className="px-1">fracc. %</th>
+                    <th className="px-1">intervalo ms</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(resumenGrabacion.porTipo).map(([tipo, grupo]) => (
+                    <tr key={`tipo-${tipo}`} className="border-b border-border/40">
+                      <td className="px-1">tipo {tipo}</td>
+                      <td className="px-1">{grupo.cantidad}</td>
+                      <td className="px-1">{grupo.pctCtrl.toFixed(1)}</td>
+                      <td className="px-1">{grupo.deltaMode ?? "—"}</td>
+                      <td className="px-1">
+                        {grupo.deltaYMin === null
+                          ? "—"
+                          : `${grupo.deltaYMin} / ${grupo.deltaYMax} / ${grupo.deltaYMedia}`}
+                      </td>
+                      <td className="px-1">
+                        {grupo.pctFraccionarios === null
+                          ? "—"
+                          : grupo.pctFraccionarios.toFixed(1)}
+                      </td>
+                      <td className="px-1">
+                        {grupo.intervaloMedioMs === null
+                          ? "—"
+                          : grupo.intervaloMedioMs.toFixed(1)}
+                      </td>
+                    </tr>
+                  ))}
+                  {Object.entries(resumenGrabacion.porAccion).map(([accion, grupo]) => (
+                    <tr key={`accion-${accion}`} className="border-b border-border/40">
+                      <td className="px-1">acción {accion}</td>
+                      <td className="px-1">{grupo.cantidad}</td>
+                      <td className="px-1">{grupo.pctCtrl.toFixed(1)}</td>
+                      <td className="px-1">{grupo.deltaMode ?? "—"}</td>
+                      <td className="px-1">
+                        {grupo.deltaYMin === null
+                          ? "—"
+                          : `${grupo.deltaYMin} / ${grupo.deltaYMax} / ${grupo.deltaYMedia}`}
+                      </td>
+                      <td className="px-1">
+                        {grupo.pctFraccionarios === null
+                          ? "—"
+                          : grupo.pctFraccionarios.toFixed(1)}
+                      </td>
+                      <td className="px-1">
+                        {grupo.intervaloMedioMs === null
+                          ? "—"
+                          : grupo.intervaloMedioMs.toFixed(1)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-muted-foreground">
+              Sin grabación. Pulsa «Grabar 10 s», reproduce el gesto y vuelve a pulsar «Detener».
+            </p>
+          )}
+          <details data-testid="diagnostico-rueda-eventos" className="mt-1">
+            <summary className="cursor-pointer">
+              Últimos {Math.min(20, eventosGrabados.length)} de {eventosGrabados.length} eventos
+            </summary>
+            <table className="w-full border-collapse text-left">
+              <thead>
+                <tr className="border-b">
+                  <th className="px-1">ms</th>
+                  <th className="px-1">tipo</th>
+                  <th className="px-1">ctrl</th>
+                  <th className="px-1">ΔX</th>
+                  <th className="px-1">ΔY</th>
+                  <th className="px-1">acción</th>
+                  <th className="px-1">escala</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {eventosGrabados.slice(-20).map((registro, indice) => (
+                  <tr key={`${registro.t}-${indice}`} className="border-b border-border/40">
+                    <td className="px-1">{Math.round(registro.t)}</td>
+                    <td className="px-1">
+                      {registro.tipo}
+                      {registro.pointerType ? ` (${registro.pointerType})` : ""}
+                      {registro.toques !== undefined ? ` (${registro.toques} toques)` : ""}
+                    </td>
+                    <td className="px-1">{registro.ctrlKey ? "sí" : "no"}</td>
+                    <td className="px-1">{registro.deltaX ?? "—"}</td>
+                    <td className="px-1">{registro.deltaY ?? "—"}</td>
+                    <td className="px-1">{registro.accion ?? "—"}</td>
+                    <td className="px-1">
+                      {registro.escalaAntes === undefined
+                        ? "—"
+                        : `${registro.escalaAntes} → ${registro.escalaDespues}`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </details>
         </div>
       )}
       {cotaEditando && (

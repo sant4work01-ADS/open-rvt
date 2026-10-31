@@ -123,4 +123,16 @@ export const commands = {
     envolver(
       invoke<string>("bitacora_exportar", { destino, todas, incluirIfc, rutaIfc }),
     ),
+  // O017b: ajustes reales de WebView2 (null fuera de Windows) y escritura del
+  // diagnóstico exportado.
+  diagnosticoWebview: () =>
+    envolver(
+      invoke<{
+        zoom_control: boolean | null;
+        pinch_zoom: boolean | null;
+        atajos_navegador: boolean | null;
+      } | null>("diagnostico_webview"),
+    ),
+  guardarTexto: (ruta: string, contenido: string) =>
+    envolver(invoke<void>("guardar_texto", { ruta, contenido })),
 };
