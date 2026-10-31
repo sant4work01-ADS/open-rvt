@@ -47,7 +47,7 @@ export function DialogoEstilos() {
   const estilos = useModelo((s) => s.estilos);
   const guardar = useModelo((s) => s.guardarEstilos);
   const cerrar = useModelo((s) => s.cerrarDialogoEstilos);
-  const [pestana, setPestana] = useState<"categorias" | "materiales">("categorias");
+  const [pestana, setPestana] = useState<"categorias" | "materiales" | "niveles">("categorias");
   const [borrador, setBorrador] = useState<Estilos>(estilos);
 
   const cambiarCategoria = (id: (typeof CATEGORIAS_ESTILO)[number], cambio: Partial<EstiloCategoria>) => {
@@ -64,7 +64,7 @@ export function DialogoEstilos() {
     <Modal titulo="Estilos de objeto" onCerrar={cerrar} conCabecera className="w-[min(900px,94vw)]">
       <div data-testid="dialogo-estilos" className="flex max-h-[75vh] flex-col">
         <div role="tablist" className="flex gap-1 border-b px-3 pt-2">
-          {(["categorias", "materiales"] as const).map((id) => (
+          {(["categorias", "materiales", "niveles"] as const).map((id) => (
             <button
               key={id}
               type="button"
@@ -76,7 +76,7 @@ export function DialogoEstilos() {
                 pestana === id ? "border-b-background bg-background font-semibold" : "bg-muted/40"
               }`}
             >
-              {id === "categorias" ? "Categorías" : "Materiales"}
+              {id === "categorias" ? "Categorías" : id === "materiales" ? "Materiales" : "Niveles"}
             </button>
           ))}
         </div>
@@ -162,7 +162,7 @@ export function DialogoEstilos() {
                 })}
               </tbody>
             </table>
-          ) : (
+          ) : pestana === "materiales" ? (
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="border-b text-left text-muted-foreground">
@@ -233,6 +233,122 @@ export function DialogoEstilos() {
                 ))}
               </tbody>
             </table>
+          ) : (
+            <section data-testid="estilos-niveles" className="space-y-3 text-xs">
+              <h3 className="font-semibold">Niveles</h3>
+              <div className="grid grid-cols-[160px_1fr] items-center gap-2">
+                <label htmlFor="nivel-prefijo">Prefijo</label>
+                <input
+                  id="nivel-prefijo"
+                  data-testid="nivel-prefijo"
+                  value={borrador.niveles.prefijo}
+                  onChange={(e) =>
+                    setBorrador((previo) => ({
+                      ...previo,
+                      niveles: { ...previo.niveles, prefijo: e.target.value },
+                    }))
+                  }
+                  className="w-40 rounded border bg-background px-2 py-1"
+                />
+                <label htmlFor="nivel-decimales">Decimales</label>
+                <select
+                  id="nivel-decimales"
+                  data-testid="nivel-decimales"
+                  value={borrador.niveles.decimales}
+                  onChange={(e) =>
+                    setBorrador((previo) => ({
+                      ...previo,
+                      niveles: {
+                        ...previo.niveles,
+                        decimales: Number(e.target.value) as 0 | 1 | 2 | 3,
+                      },
+                    }))
+                  }
+                  className="w-20 rounded border bg-background px-2 py-1"
+                >
+                  {[0, 1, 2, 3].map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+                <label htmlFor="nivel-unidad">Unidad</label>
+                <input
+                  id="nivel-unidad"
+                  data-testid="nivel-unidad"
+                  value={borrador.niveles.unidad}
+                  onChange={(e) =>
+                    setBorrador((previo) => ({
+                      ...previo,
+                      niveles: { ...previo.niveles, unidad: e.target.value },
+                    }))
+                  }
+                  className="w-20 rounded border bg-background px-2 py-1"
+                />
+                <label htmlFor="nivel-cabeza">Cabeza</label>
+                <select
+                  id="nivel-cabeza"
+                  data-testid="nivel-cabeza"
+                  value={borrador.niveles.cabeza}
+                  onChange={(e) =>
+                    setBorrador((previo) => ({
+                      ...previo,
+                      niveles: {
+                        ...previo.niveles,
+                        cabeza: e.target.value as "triangulo" | "circulo" | "ninguna",
+                      },
+                    }))
+                  }
+                  className="w-40 rounded border bg-background px-2 py-1"
+                >
+                  <option value="triangulo">Triángulo</option>
+                  <option value="circulo">Círculo</option>
+                  <option value="ninguna">Ninguna</option>
+                </select>
+                <label htmlFor="nivel-color">Color</label>
+                <input
+                  id="nivel-color"
+                  type="color"
+                  data-testid="nivel-color"
+                  value={borrador.niveles.color}
+                  onChange={(e) =>
+                    setBorrador((previo) => ({
+                      ...previo,
+                      niveles: { ...previo.niveles, color: e.target.value },
+                    }))
+                  }
+                  className="h-6 w-10 rounded border bg-background"
+                />
+                <label htmlFor="nivel-cotas">Cotas de nivel</label>
+                <input
+                  id="nivel-cotas"
+                  type="checkbox"
+                  data-testid="nivel-cotas"
+                  checked={borrador.niveles.cotas}
+                  onChange={(e) =>
+                    setBorrador((previo) => ({
+                      ...previo,
+                      niveles: { ...previo.niveles, cotas: e.target.checked },
+                    }))
+                  }
+                  className="h-4 w-4"
+                />
+                <label htmlFor="nivel-mostrar-nombre">Mostrar nombre</label>
+                <input
+                  id="nivel-mostrar-nombre"
+                  type="checkbox"
+                  data-testid="nivel-mostrar-nombre"
+                  checked={borrador.niveles.mostrarNombre}
+                  onChange={(e) =>
+                    setBorrador((previo) => ({
+                      ...previo,
+                      niveles: { ...previo.niveles, mostrarNombre: e.target.checked },
+                    }))
+                  }
+                  className="h-4 w-4"
+                />
+              </div>
+            </section>
           )}
         </div>
 

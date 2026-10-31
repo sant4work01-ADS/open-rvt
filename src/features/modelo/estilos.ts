@@ -45,9 +45,24 @@ export interface EstiloMaterial {
   escala: number;
 }
 
+export type CabezaNivel = "triangulo" | "circulo" | "ninguna";
+
+/** O014a: estilo de la cabeza y el texto de los niveles. */
+export interface EstiloNivel {
+  prefijo: string;
+  decimales: 0 | 1 | 2 | 3;
+  unidad: string;
+  cabeza: CabezaNivel;
+  color: string;
+  cotas: boolean;
+  mostrarNombre: boolean;
+}
+
 export interface Estilos {
   categorias: Record<CategoriaEstilo, EstiloCategoria>;
   materiales: Record<MaterialNombre, EstiloMaterial>;
+  /** O014a: se guarda en el mismo JSON; los proyectos viejos usan los valores por omisión. */
+  niveles: EstiloNivel;
 }
 
 /** Sobrescritura de una categoría dentro de una vista concreta. */
@@ -98,8 +113,7 @@ export function nombreCategoriaEstilo(categoria: CategoriaEstilo): string {
 /** Tabla por defecto de la spec (mm de papel a 1:100). */
 export function estilosPorDefecto(): Estilos {
   const negro = "#1f2328";
-  return {
-    categorias: {
+  const categorias: Record<CategoriaEstilo, EstiloCategoria> = {
       muros: { corte: 0.5, proyeccion: 0.18, color: negro, patron: "continua" },
       losas: { corte: 0.35, proyeccion: 0.18, color: negro, patron: "continua" },
       columnas: { corte: 0.5, proyeccion: 0.18, color: negro, patron: "continua" },
@@ -119,6 +133,17 @@ export function estilosPorDefecto(): Estilos {
         color: "#4b5563",
         patron: "discontinua-larga",
       },
+    };
+  return {
+    categorias,
+    niveles: {
+      prefijo: "Npt",
+      decimales: 2,
+      unidad: "m",
+      cabeza: "triangulo",
+      color: categorias.niveles.color,
+      cotas: true,
+      mostrarNombre: true,
     },
     materiales: {
       block: { patron: "diagonal", escala: 2 },
@@ -149,6 +174,8 @@ const PATRONES_RELLENO: PatronRelleno[] = [
   "vidrio",
   "generico",
 ];
+const CABEZAS_NIVEL: CabezaNivel[] = ["triangulo", "circulo", "ninguna"];
+
 export const MATERIALES: MaterialNombre[] = [
   "block",
   "tabique",
@@ -204,6 +231,29 @@ export function normalizarEstilos(valor: unknown): Estilos {
         escala: Math.min(Math.max(numero(e.escala, defecto.escala) ?? defecto.escala, 0.5), 20),
       };
     }
+  }
+  // O014a: los proyectos viejos no traen «niveles»; se completan con las omisiones.
+  const niveles = crudo.niveles;
+  if (niveles && typeof niveles === "object") {
+    const e = niveles as Record<string, unknown>;
+    const defecto = base.niveles;
+    const decimales = [0, 1, 2, 3].includes(e.decimales as number)
+      ? (e.decimales as 0 | 1 | 2 | 3)
+      : defecto.decimales;
+    base.niveles = {
+      prefijo: typeof e.prefijo === "string" ? e.prefijo : defecto.prefijo,
+      decimales,
+      unidad: typeof e.unidad === "string" ? e.unidad : defecto.unidad,
+      cabeza: CABEZAS_NIVEL.includes(e.cabeza as CabezaNivel)
+        ? (e.cabeza as CabezaNivel)
+        : defecto.cabeza,
+      color: typeof e.color === "string" && /^#[0-9a-f]{6}$/i.test(e.color)
+        ? e.color
+        : defecto.color,
+      cotas: typeof e.cotas === "boolean" ? e.cotas : defecto.cotas,
+      mostrarNombre:
+        typeof e.mostrarNombre === "boolean" ? e.mostrarNombre : defecto.mostrarNombre,
+    };
   }
   return base;
 }
