@@ -15,10 +15,12 @@ import { useModelo } from "./estado";
 import { calcularPlantaMuros, type MuroPlanta } from "./planta";
 import {
   detectorRueda,
-  factorRueda,
+  factorZoomRueda,
+  textoDiagnosticoRueda,
   useRueda,
   type RegistroRueda,
 } from "@/lib/rueda";
+import { copiarTexto } from "@/lib/portapapeles";
 import {
   colocarAbertura,
   describirEnganche,
@@ -34,6 +36,7 @@ import {
   posicionTextoEntreMarcas,
 } from "./cotas";
 import { altoTextoBurbuja, desplazamientoCentrado } from "./centrado";
+import { ControlesZoom } from "./ControlesZoom";
 import { textoCabezaNivel } from "./niveles";
 import {
   categoriaOculta,
@@ -3545,7 +3548,7 @@ export function Visor3D({
       if (dispositivo) fijarDetectado(dispositivo);
       if (diagnosticoRueda) setRegistrosRueda(detectorRueda.ultimos());
       if (accion === "zoom") {
-        const factor = factorRueda(evento.deltaY);
+        const factor = factorZoomRueda(evento, dispositivo);
         if (camera instanceof THREE.OrthographicCamera) {
           const rect = nodo.getBoundingClientRect();
           const raton = new THREE.Vector2(
@@ -4640,12 +4643,20 @@ export function Visor3D({
           </button>
         </div>
       )}
+      <ControlesZoom
+        onAcercar={() => zoomEnCentro(0.8)}
+        onAlejar={() => zoomEnCentro(1.25)}
+        onAjustar={ajustar}
+      />
       {ayudaVisible && (
         <div
           data-testid="ayuda-navegacion"
-          className="absolute bottom-3 right-3 z-10 flex max-w-[min(520px,60vw)] items-center gap-2 rounded border bg-background/90 px-2 py-1 text-[11px] text-muted-foreground shadow-sm"
+          className="absolute bottom-12 right-3 z-10 flex max-w-[min(520px,60vw)] items-center gap-2 rounded border bg-background/90 px-2 py-1 text-[11px] text-muted-foreground shadow-sm"
         >
-          <span>Rueda: zoom · Botón medio/Espacio+arrastrar: mover · F: ajustar</span>
+          <span>
+            Pellizca para zoom · Ctrl + dos dedos también hace zoom · botones +/− abajo a la
+            derecha
+          </span>
           <button
             type="button"
             data-testid="ayuda-navegacion-cerrar"
@@ -4665,18 +4676,29 @@ export function Visor3D({
         >
           <div className="mb-1 flex items-center justify-between gap-2">
             <strong>Diagnóstico de rueda/touchpad</strong>
-            <button
-              type="button"
-              data-testid="diagnostico-rueda-cerrar"
-              onClick={() => setDiagnosticoRueda(false)}
-              className="rounded px-1 text-sm leading-none hover:bg-muted"
-              aria-label="Cerrar el diagnóstico"
-            >
-              ×
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                data-testid="diagnostico-rueda-copiar"
+                onClick={() => copiarTexto(textoDiagnosticoRueda(registrosRueda))}
+                title="Copia los últimos 50 eventos al portapapeles"
+                className="rounded border px-1.5 py-0.5 hover:bg-muted"
+              >
+                Copiar
+              </button>
+              <button
+                type="button"
+                data-testid="diagnostico-rueda-cerrar"
+                onClick={() => setDiagnosticoRueda(false)}
+                className="rounded px-1 text-sm leading-none hover:bg-muted"
+                aria-label="Cerrar el diagnóstico"
+              >
+                ×
+              </button>
+            </div>
           </div>
           <p className="mb-1 text-muted-foreground">
-            Últimos 20 eventos «wheel» · detectado: {detectorRueda.ultimoDispositivo() ?? "—"}
+            Últimos 50 eventos «wheel» · detectado: {detectorRueda.ultimoDispositivo() ?? "—"}
           </p>
           <table className="w-full border-collapse text-left">
             <thead>
