@@ -149,6 +149,7 @@ export function ModeloView() {
           ) : vista ? (
             <Visor3D
               vista={vista}
+              claveModelo={ruta ?? ""}
               vistas={vistas}
               niveles={niveles}
               mallas={mallas}

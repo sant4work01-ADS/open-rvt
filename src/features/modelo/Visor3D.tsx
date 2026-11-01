@@ -145,6 +145,8 @@ interface Props {
   onEscape: () => void;
   /** O030: cambia el modo de anotación de la vista. */
   onCambiarAnotacion?: (modo: "papel" | "pantalla") => void;
+  /** O031: identifica el archivo abierto para no heredar cámaras de otro modelo. */
+  claveModelo?: string;
 }
 
 interface Navegacion {
@@ -177,6 +179,12 @@ interface CamaraGuardada {
   abajo?: number;
   fov?: number;
 }
+
+// O031: el encuadre de cada vista se guarda fuera del componente para que viaje
+// entre módulos (al volver de «Niveles» el visor se vuelve a montar). Se vacía al
+// cambiar de modelo para no heredar el encuadre de otro archivo.
+const camarasPorVista = new Map<string, CamaraGuardada>();
+let claveCamaras = "";
 
 /** Dirección y arriba con los que se encuadra una vista (sin tocar el modelo). */
 function direccionDeVista(vista: Vista): {
@@ -917,6 +925,7 @@ export function Visor3D({
   onPuntoCorte,
   onEscape,
   onCambiarAnotacion,
+  claveModelo = "",
 }: Props) {
   const contenedor = useRef<HTMLDivElement>(null);
   const escena = useRef<THREE.Scene | null>(null);
@@ -927,8 +936,9 @@ export function Visor3D({
   const meshes = useRef<THREE.Mesh[]>([]);
   const grosores = useRef<EntradaGrosor[]>([]);
   const navegacion = useRef<Navegacion | null>(null);
-  // O010: la cámara de cada vista se conserva al cambiar de vista y entre redibujos.
-  const camarasGuardadas = useRef(new Map<string, CamaraGuardada>());
+  // O010/O031: la cámara de cada vista se conserva al cambiar de vista, entre
+  // redibujos y al volver de otro módulo (mapa a nivel de módulo).
+  const camarasGuardadas = useRef(camarasPorVista);
   const vistaDeCamara = useRef<string | null>(null);
   const arrastre = useRef<{
     x: number;
@@ -1676,6 +1686,14 @@ export function Visor3D({
     return 0.02;
   }, []);
 
+
+  // O031: al abrir otro modelo se descartan los encuadres guardados del anterior.
+  useEffect(() => {
+    if (claveCamaras !== claveModelo) {
+      camarasGuardadas.current.clear();
+      claveCamaras = claveModelo;
+    }
+  }, [claveModelo, camarasGuardadas]);
 
   // O010: la cámara se crea/restaura solo al abrir una vista. Los cambios del modelo
   // (cajaVista) NO la reencuadran: solo actualizan near/far más abajo.
