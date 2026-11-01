@@ -1244,6 +1244,78 @@ export function Visor3D({
     return mejor;
   }, [pantallaDePunto]);
 
+  // Cota bajo el puntero: caja generosa alrededor del texto (antes ±18 px y solo con
+  // doble clic; el usuario tenía que atinarle muchas veces).
+  const cotaEn = useCallback((clientX: number, clientY: number): CotaInteractiva | null => {
+    let mejor: CotaInteractiva | null = null;
+    let mejorDistancia = Infinity;
+    for (const cota of cotasInteraccion.current) {
+      const p = pantallaDePunto(cota.punto);
+      if (!p) continue;
+      const medioAncho = Math.max(30, cota.texto.length * 8 + 12);
+      const dx = Math.abs(clientX - p.x);
+      const dy = Math.abs(clientY - p.y);
+      if (dx <= medioAncho && dy <= 24) {
+        const distancia = Math.hypot(dx, dy);
+        if (distancia < mejorDistancia) {
+          mejorDistancia = distancia;
+          mejor = cota;
+        }
+      }
+    }
+    return mejor;
+  }, [pantallaDePunto]);
+
+  const abrirEditorCota = useCallback(
+    (cota: CotaInteractiva, clientX: number, clientY: number) => {
+      const nodo = contenedor.current;
+      if (!nodo) return;
+      if (cota.tipo === "total") {
+        fijarAviso("La cota total es de lectura; edite una cota parcial.");
+        return;
+      }
+      const rect = nodo.getBoundingClientRect();
+      setCotaEditando({
+        tipo: cota.tipo,
+        referencia: cota.referencia,
+        mover: cota.mover,
+        nivel: cota.nivel,
+        nombre: cota.nombre,
+        valor: cota.valor,
+        izquierda: Math.max(90, Math.min(rect.width - 90, clientX - rect.left)),
+        arriba: Math.max(8, Math.min(rect.height - 90, clientY - rect.top - 70)),
+      });
+      setTextoCotaEditando(cota.valor.toFixed(2));
+      setErrorCota(null);
+    },
+    [fijarAviso],
+  );
+
+  // Esc cierra el editor de cota aunque el campo haya perdido el foco, y un clic
+  // fuera de él también lo cierra.
+  const editorCota = useRef<HTMLDivElement | null>(null);
+  const hayCotaEditando = cotaEditando !== null;
+  useEffect(() => {
+    if (!hayCotaEditando) return;
+    const alTecla = (evento: KeyboardEvent) => {
+      if (evento.key !== "Escape") return;
+      evento.preventDefault();
+      evento.stopPropagation();
+      setCotaEditando(null);
+    };
+    const alPresionar = (evento: PointerEvent) => {
+      const caja = editorCota.current;
+      if (caja && evento.target instanceof Node && caja.contains(evento.target)) return;
+      setCotaEditando(null);
+    };
+    window.addEventListener("keydown", alTecla, true);
+    window.addEventListener("pointerdown", alPresionar, true);
+    return () => {
+      window.removeEventListener("keydown", alTecla, true);
+      window.removeEventListener("pointerdown", alPresionar, true);
+    };
+  }, [hayCotaEditando]);
+
   const asaNivelEn = useCallback((clientX: number, clientY: number) => {
     let mejor: (typeof asasNivel.current)[number] | null = null;
     let distancia = 14;
@@ -4645,6 +4717,12 @@ export function Visor3D({
         }
         return;
       }
+      // Un solo clic en el texto de una cota la edita (como en Revit).
+      const cotaClic = cotaEn(clientX, clientY);
+      if (cotaClic && cotaClic.tipo !== "total") {
+        abrirEditorCota(cotaClic, clientX, clientY);
+        return;
+      }
       // O011: primero las asas y las líneas de eje; después las mallas.
       const asa = asaEjeEn(clientX, clientY);
       if (asa) {
@@ -5368,47 +5446,11 @@ export function Visor3D({
         void fijarAjustesNiveles(vista.id, { [asaNivel.globalid]: null });
         return;
       }
-      const camera = camara.current;
-      if (camera && cotasInteraccion.current.length > 0) {
-        const rect = nodo.getBoundingClientRect();
-        let mejor: CotaInteractiva | null = null;
-        let mejorDistancia = Infinity;
-        for (const cota of cotasInteraccion.current) {
-          const proyectado = new THREE.Vector3(...cota.punto).project(camera);
-          const x = rect.left + ((proyectado.x + 1) / 2) * rect.width;
-          const y = rect.top + ((1 - proyectado.y) / 2) * rect.height;
-          const medioAncho = Math.max(18, cota.texto.length * 7);
-          if (
-            Math.abs(evento.clientX - x) <= medioAncho &&
-            Math.abs(evento.clientY - y) <= 18
-          ) {
-            const distancia = Math.hypot(evento.clientX - x, evento.clientY - y);
-            if (distancia < mejorDistancia) {
-              mejorDistancia = distancia;
-              mejor = cota;
-            }
-          }
-        }
-        if (mejor) {
-          evento.preventDefault();
-          if (mejor.tipo === "total") {
-            fijarAviso("La cota total es de lectura; edite una cota parcial.");
-            return;
-          }
-          setCotaEditando({
-            tipo: mejor.tipo,
-            referencia: mejor.referencia,
-            mover: mejor.mover,
-            nivel: mejor.nivel,
-            nombre: mejor.nombre,
-            valor: mejor.valor,
-            izquierda: Math.max(90, Math.min(rect.width - 90, evento.clientX - rect.left)),
-            arriba: Math.max(8, Math.min(rect.height - 90, evento.clientY - rect.top - 70)),
-          });
-          setTextoCotaEditando(mejor.valor.toFixed(2));
-          setErrorCota(null);
-          return;
-        }
+      const cotaDoble = cotaEn(evento.clientX, evento.clientY);
+      if (cotaDoble) {
+        evento.preventDefault();
+        abrirEditorCota(cotaDoble, evento.clientX, evento.clientY);
+        return;
       }
       // O007a: sin herramienta, el doble clic puede abrir «Editar tipo» del muro
       // seleccionado; la decisión final vive en el estado del modelo.
@@ -6703,6 +6745,7 @@ export function Visor3D({
       )}
       {cotaEditando && (
         <div
+          ref={editorCota}
           data-testid="cota-editor"
           className="absolute z-30 flex -translate-x-1/2 flex-col gap-1 rounded border bg-background p-2 text-xs shadow-lg"
           style={{ left: cotaEditando.izquierda, top: cotaEditando.arriba }}
