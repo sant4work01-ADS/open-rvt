@@ -663,23 +663,19 @@ class BibliotecaMixin:
             borde_exterior -= float(capa["espesor"])
         return salida
 
-    def _desfase_de_muro(self, muro: Any, espesor: float) -> float:
-        """Inicio del cuerpo en el eje local Y, fijando la línea de ubicación del tipo."""
-        datos = self._leer_pset(muro, "OPENRVT_Muro")
-        alineacion = _texto(datos.get("Alineacion") or "centro")
-        # La alineación propia de la instancia manda si el usuario la eligió; «centro»
-        # deja que el tipo decida con su línea de ubicación.
-        if alineacion == "exterior":
-            return -espesor
-        if alineacion == "interior":
-            return 0.0
-        tipo = self._tipo_entidad(muro)
-        linea = self._linea_tipo(tipo)
+    def _offset_de_linea(self, tipo: Any, espesor: float, linea: str) -> float:
+        """Inicio del cuerpo en el eje local Y para una línea de ubicación.
+
+        El eje local +Y es el lado exterior del muro. El valor devuelto es la
+        coordenada local del paño interior (borde de menor Y) del cuerpo.
+        """
         if linea == "cara_exterior":
             return -espesor
         if linea == "cara_interior":
             return 0.0
         if linea == "centro":
+            return -espesor / 2.0
+        if linea != "eje_nucleo":
             return -espesor / 2.0
         capas = self.capas_de_tipo(tipo) if tipo is not None else []
         if not capas:
@@ -695,6 +691,37 @@ class BibliotecaMixin:
             return -espesor / 2.0
         # Eje del núcleo en 0: la cara exterior queda en +centro_nucleo.
         return centro_nucleo - espesor
+
+    def _linea_de_muro(self, muro: Any, datos: dict[str, Any] | None = None) -> str:
+        """O032: línea de ubicación del ejemplar, con compatibilidad con O003b."""
+        datos = datos if datos is not None else self._leer_pset(muro, "OPENRVT_Muro")
+        linea = _texto(datos.get("LineaUbicacion") or "")
+        if linea in LINEAS_UBICACION:
+            return linea
+        alineacion = _texto(datos.get("Alineacion") or "centro")
+        # La alineación propia de la instancia manda si el usuario la eligió; «centro»
+        # deja que el tipo decida con su línea de ubicación.
+        if alineacion == "exterior":
+            return "cara_exterior"
+        if alineacion == "interior":
+            return "cara_interior"
+        return self._linea_tipo(self._tipo_entidad(muro))
+
+    def _desfase_de_muro(self, muro: Any, espesor: float) -> float:
+        """Inicio del cuerpo en el eje local Y, fijando la línea de ubicación."""
+        datos = self._leer_pset(muro, "OPENRVT_Muro")
+        linea = self._linea_de_muro(muro, datos)
+        offset = self._offset_de_linea(self._tipo_entidad(muro), espesor, linea)
+        volteado = datos.get("Volteado") in (True, "True", "true", 1, "1")
+        if volteado:
+            # Voltear refleja el cuerpo respecto a la línea de ubicación.
+            offset = -offset - espesor
+        try:
+            desfase = float(datos.get("DesfaseUbicacion") or 0.0)
+        except (TypeError, ValueError):
+            desfase = 0.0
+        # Positivo hacia el exterior (+Y, o −Y si el muro está volteado).
+        return offset if not desfase else offset + (-desfase if volteado else desfase)
 
     # ------------------------------------------------------------ tipos
     def _tipo_por_gid(self, globalid: str) -> Any:

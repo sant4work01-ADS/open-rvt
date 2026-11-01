@@ -16,6 +16,7 @@ import {
   type RespuestaTeselado,
   type Vista,
   type AjusteEjeVista,
+  type LineaUbicacion,
 } from "./tipos";
 import {
   cajaDeMallas,
@@ -139,6 +140,16 @@ export interface OpcionesMuro {
   tipo: string;
   altura: number;
   alineacion: AlineacionMuro;
+  /** O032: línea de ubicación del ejemplar; manda sobre `alineacion`. */
+  lineaUbicacion: LineaUbicacion;
+  /** O032: desfase de la línea respecto al eje dibujado, positivo al exterior. */
+  desfaseUbicacion: number;
+}
+
+/** O032: borde de losa al crear desde muros. */
+export interface OpcionesLosa {
+  lado: "exterior" | "eje" | "interior";
+  desfase: number;
 }
 
 /** O029: opciones de la herramienta «Nivel» (alzado/corte). */
@@ -340,6 +351,10 @@ interface EstadoModelo {
   cotasMoverSiguientes: boolean;
   fijarCotasMoverSiguientes: (valor: boolean) => void;
   losaDesdeMuros: () => Promise<void>;
+  opcionesLosa: OpcionesLosa;
+  fijarOpcionesLosa: (cambios: Partial<OpcionesLosa>) => void;
+  /** O032: voltea los lados exterior/interior del muro sin mover su línea. */
+  voltearMuro: (globalid: string) => Promise<void>;
   /** O007c: castillos en esquinas, remates e intermedios de los muros elegidos. */
   castillosAutomaticos: (separacion: number) => Promise<boolean>;
   /** O007c: columna en todos los cruces de la retícula (con zapata opcional). */
@@ -656,6 +671,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         tipo: tipos.find((t) => t.nombre === "Block 15")?.nombre ?? tipos[0]?.nombre ?? "",
         altura: 2.6,
         alineacion: "centro",
+        lineaUbicacion: "eje_nucleo",
+        desfaseUbicacion: 0,
       },
       tiempoCargaMs: Math.round(performance.now() - inicio),
     });
@@ -809,6 +826,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       y2: destino[1],
       altura: opciones.altura,
       alineacion: opciones.alineacion,
+    linea_ubicacion: opciones.lineaUbicacion,
+    desfase_ubicacion: opciones.desfaseUbicacion,
     });
     if (ok) {
       set({ puntosHerramienta: [destino], ...limpiarTrazoExtra() });
@@ -1024,7 +1043,14 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     herramienta: null,
     referenciaAlinear: null,
     alineando: null,
-    opcionesMuro: { tipo: "", altura: 2.6, alineacion: "centro" },
+    opcionesMuro: {
+      tipo: "",
+      altura: 2.6,
+      alineacion: "centro",
+      lineaUbicacion: "eje_nucleo",
+      desfaseUbicacion: 0,
+    },
+    opcionesLosa: { lado: "exterior", desfase: 0 },
     opcionesNivel: { nombre: "", nombreAutomatico: true, crearPlanta: true, elevacionTexto: "" },
     cotasNivel: null,
     tiposMuro: [],
@@ -1533,6 +1559,12 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
     fijarOpcionesMuro: (cambios) =>
       set({ opcionesMuro: { ...get().opcionesMuro, ...cambios } }),
+    fijarOpcionesLosa: (cambios) =>
+      set({ opcionesLosa: { ...get().opcionesLosa, ...cambios } }),
+    voltearMuro: async (globalid) => {
+      const ok = await ejecutar("muros.voltear", { globalid });
+      if (ok) await get().seleccionar(globalid);
+    },
 
     fijarTipoHerramienta: (herramienta, nombre) =>
       set({ tipoHerramienta: { ...get().tipoHerramienta, [herramienta]: nombre } }),
@@ -2296,7 +2328,13 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         set({ aviso: "Seleccione el circuito cerrado de muros (tres o más)." });
         return;
       }
-      await ejecutar("losas.desde_muros", { nivel, globalids: gids });
+      const opciones = get().opcionesLosa;
+      await ejecutar("losas.desde_muros", {
+        nivel,
+        globalids: gids,
+        lado: opciones.lado,
+        desfase: opciones.desfase,
+      });
     },
 
     castillosAutomaticos: async (separacion) => {

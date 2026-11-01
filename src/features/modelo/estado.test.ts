@@ -114,7 +114,13 @@ beforeEach(() => {
     longitudTecleada: "",
     etiquetaEje: "",
     referencias: { muros: [], extremos: [], medios: [], ejes: [], intersecciones: [] },
-    opcionesMuro: { tipo: "Block 15", altura: 2.6, alineacion: "centro" },
+    opcionesMuro: {
+        tipo: "Block 15",
+        altura: 2.6,
+        alineacion: "centro",
+        lineaUbicacion: "eje_nucleo",
+        desfaseUbicacion: 0,
+      },
     aviso: null,
     error: null,
   });

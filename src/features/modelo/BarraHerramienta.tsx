@@ -7,6 +7,7 @@ import {
   esHerramientaPuntual,
   useModelo,
 } from "./estado";
+import type { LineaUbicacion } from "./tipos";
 
 export function BarraHerramienta() {
   const herramienta = useModelo((s) => s.herramienta);
@@ -25,6 +26,8 @@ export function BarraHerramienta() {
   const cancelar = useModelo((s) => s.cancelarHerramienta);
   const doble = useModelo((s) => s.dobleClicEnPlanta);
   const losaDesdeMuros = useModelo((s) => s.losaDesdeMuros);
+  const opcionesLosa = useModelo((s) => s.opcionesLosa);
+  const fijarOpcionesLosa = useModelo((s) => s.fijarOpcionesLosa);
   const etiquetaEje = useModelo((s) => s.etiquetaEje);
   const opcionesNivel = useModelo((s) => s.opcionesNivel);
   const fijarOpcionesNivel = useModelo((s) => s.fijarOpcionesNivel);
@@ -88,19 +91,35 @@ export function BarraHerramienta() {
             <span>m</span>
           </label>
           <label className="flex items-center gap-1">
-            <span className="text-muted-foreground">Alineación</span>
+            <span className="text-muted-foreground">Línea de ubicación</span>
             <select
-              data-testid="muro-alineacion"
-              value={opciones.alineacion}
+              data-testid="muro-linea-ubicacion"
+              value={opciones.lineaUbicacion}
               onChange={(e) =>
-                fijar({ alineacion: e.target.value as "centro" | "interior" | "exterior" })
+                fijar({ lineaUbicacion: e.target.value as LineaUbicacion })
               }
               className="rounded border bg-background px-1 py-0.5"
             >
-              <option value="centro">Centro</option>
-              <option value="interior">Interior</option>
-              <option value="exterior">Exterior</option>
+              <option value="eje_nucleo">Eje del muro</option>
+              <option value="cara_exterior">Paño exterior</option>
+              <option value="cara_interior">Paño interior</option>
+              <option value="centro">Eje del núcleo</option>
             </select>
+          </label>
+          <label className="flex items-center gap-1">
+            <span className="text-muted-foreground">Desfase</span>
+            <input
+              data-testid="muro-desfase-ubicacion"
+              type="number"
+              step={0.005}
+              value={opciones.desfaseUbicacion}
+              onChange={(e) => {
+                const valor = Number(e.target.value);
+                if (Number.isFinite(valor)) fijar({ desfaseUbicacion: valor });
+              }}
+              className="w-16 rounded border bg-background px-1 py-0.5 text-right"
+            />
+            <span>m</span>
           </label>
         </>
       )}
@@ -209,6 +228,38 @@ export function BarraHerramienta() {
           >
             Desde muros ({seleccionados.length})
           </button>
+          <label className="flex items-center gap-1">
+            <span className="text-muted-foreground">Borde a</span>
+            <select
+              data-testid="losa-borde-a"
+              value={opcionesLosa.lado}
+              onChange={(e) =>
+                fijarOpcionesLosa({
+                  lado: e.target.value as "exterior" | "eje" | "interior",
+                })
+              }
+              className="rounded border bg-background px-1 py-0.5"
+            >
+              <option value="exterior">Paño exterior</option>
+              <option value="eje">Eje</option>
+              <option value="interior">Paño interior</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-1">
+            <span className="text-muted-foreground">Desfase</span>
+            <input
+              data-testid="losa-desfase"
+              type="number"
+              step={0.005}
+              value={opcionesLosa.desfase}
+              onChange={(e) => {
+                const valor = Number(e.target.value);
+                if (Number.isFinite(valor)) fijarOpcionesLosa({ desfase: valor });
+              }}
+              className="w-16 rounded border bg-background px-1 py-0.5 text-right"
+            />
+            <span>m</span>
+          </label>
         </>
       )}
       {(herramienta === "puerta" || herramienta === "ventana") && (

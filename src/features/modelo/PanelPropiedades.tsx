@@ -14,6 +14,12 @@ import {
 } from "./tipos";
 import { globoVisibleEje } from "./ejesVista";
 import { describirEnlace } from "./enlaces";
+import {
+  bordesDePset,
+  desfaseConSigno,
+  etiquetaBorde,
+  valorComunDesfase,
+} from "./bordesLosa";
 
 function formatear(valor: unknown): string {
   if (valor === null || valor === undefined) return "—";
@@ -846,12 +852,90 @@ function RestriccionesZapata({
   );
 }
 
+function BordesLosaElemento({
+  globalid,
+  pset,
+  editar,
+}: {
+  globalid: string;
+  pset: Record<string, unknown> | undefined;
+  editar: (globalid: string, cambios: Record<string, unknown>) => Promise<void>;
+}) {
+  const bordes = bordesDePset(pset);
+  if (bordes.length === 0) {
+    return (
+      <div className="text-muted-foreground" data-testid="elemento-sin-bordes">
+        Losa sin bordes referenciados.
+      </div>
+    );
+  }
+  const comun = valorComunDesfase(bordes);
+  return (
+    <div className="flex flex-col gap-2" data-testid="elemento-bordes-losa">
+      <label className="flex items-center justify-between gap-2 text-xs">
+        <span className="text-muted-foreground">Desfase de bordes (m)</span>
+        <input
+          key={String(comun)}
+          data-testid="elemento-desfase-bordes"
+          type={comun === "Varios" ? "text" : "number"}
+          step={0.005}
+          defaultValue={comun === "Varios" ? "Varios" : comun}
+          onBlur={(e) => {
+            const valor = Number(e.target.value);
+            if (Number.isFinite(valor)) {
+              void editar(globalid, { desfase_bordes: valor });
+            }
+          }}
+          className="w-28 rounded border bg-background px-2 py-1 text-right"
+        />
+      </label>
+      <table className="w-full text-left text-[11px]" data-testid="tabla-bordes-losa">
+        <thead>
+          <tr className="text-muted-foreground">
+            <th className="font-normal">Borde</th>
+            <th className="font-normal">Desfase</th>
+          </tr>
+        </thead>
+        <tbody>
+          {bordes.map((borde, indice) => (
+            <tr key={indice} data-testid={`elemento-borde-${indice}`}>
+              <td>{etiquetaBorde(indice, borde)}</td>
+              <td>
+                <input
+                  key={`${indice}-${borde.desfase}`}
+                  data-testid={`elemento-borde-${indice}-desfase`}
+                  type="number"
+                  step={0.005}
+                  defaultValue={Number(borde.desfase) || 0}
+                  onBlur={(e) => {
+                    const valor = Number(e.target.value);
+                    if (Number.isFinite(valor)) {
+                      void editar(globalid, {
+                        cambio_borde: { indice, desfase: valor },
+                      });
+                    }
+                  }}
+                  className="w-20 rounded border bg-background px-1 py-0.5 text-right"
+                />
+                <span className="ml-1 text-muted-foreground">
+                  {desfaseConSigno(borde)}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function PropiedadesElemento() {
   const propiedades = useModelo((s) => s.propiedades);
   const editar = useModelo((s) => s.editarElemento);
   const tipos = useModelo((s) => s.tiposMuro);
   const error = useModelo((s) => s.error);
   const soltarEnlace = useModelo((s) => s.soltarEnlace);
+  const voltearMuro = useModelo((s) => s.voltearMuro);
   const ejes = useModelo((s) => s.referencias.ejes);
   if (!propiedades) {
     return <div className="p-3 text-xs text-muted-foreground">Cargando propiedades…</div>;
@@ -917,6 +1001,47 @@ export function PropiedadesElemento() {
                 )}
               </select>
             </label>
+            <label className="flex items-center justify-between gap-2 text-xs">
+              <span className="text-muted-foreground">Línea de ubicación</span>
+              <select
+                data-testid="elemento-linea-ubicacion"
+                value={String(
+                  (propiedades.psets?.OPENRVT_Muro as Record<string, unknown>)
+                    ?.LineaUbicacion ?? "eje_nucleo",
+                )}
+                onChange={(e) =>
+                  void editar(gid, { linea_ubicacion: e.target.value })
+                }
+                className="w-36 rounded border bg-background px-2 py-1"
+              >
+                <option value="eje_nucleo">Eje del muro</option>
+                <option value="cara_exterior">Paño exterior</option>
+                <option value="cara_interior">Paño interior</option>
+                <option value="centro">Eje del núcleo</option>
+              </select>
+            </label>
+            <CampoEditable
+              etiqueta="Desfase de ubicación (m)"
+              testid="elemento-desfase-ubicacion"
+              numerico
+              paso={0.005}
+              valor={Number(
+                (propiedades.psets?.OPENRVT_Muro as Record<string, unknown>)
+                  ?.DesfaseUbicacion ?? 0,
+              )}
+              onGuardar={(valor) =>
+                void editar(gid, { desfase_ubicacion: Number(valor) })
+              }
+            />
+            <button
+              type="button"
+              data-testid="elemento-voltear-muro"
+              onClick={() => void voltearMuro(gid)}
+              className="self-start rounded border px-2 py-0.5 hover:bg-muted"
+              title="Voltea los lados exterior e interior sin mover la línea de ubicación"
+            >
+              ⇄ Voltear lados
+            </button>
             <RestriccionesNivel
               globalid={gid}
               testidAltura="elemento-altura"
@@ -927,14 +1052,21 @@ export function PropiedadesElemento() {
           </>
         )}
         {esLosa && (
-          <CampoEditable
-            etiqueta="Espesor (m)"
-            testid="elemento-espesor"
-            numerico
-            paso={0.01}
-            valor={Number((propiedades.psets?.OPENRVT_Losa as Record<string, unknown>)?.Espesor ?? 0.12)}
-            onGuardar={(espesor) => void editar(gid, { espesor })}
-          />
+          <>
+            <CampoEditable
+              etiqueta="Espesor (m)"
+              testid="elemento-espesor"
+              numerico
+              paso={0.01}
+              valor={Number((propiedades.psets?.OPENRVT_Losa as Record<string, unknown>)?.Espesor ?? 0.12)}
+              onGuardar={(espesor) => void editar(gid, { espesor })}
+            />
+            <BordesLosaElemento
+              globalid={gid}
+              pset={propiedades.psets?.OPENRVT_Losa as Record<string, unknown> | undefined}
+              editar={editar}
+            />
+          </>
         )}
         {esAbertura && (
           <>

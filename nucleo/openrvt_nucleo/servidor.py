@@ -238,17 +238,26 @@ class Servidor:
                 params.get("y2", 0.0),
                 params.get("altura", 2.60),
                 str(params.get("alineacion") or "centro"),
+                params.get("linea_ubicacion", params.get("LineaUbicacion")),
+                params.get("desfase_ubicacion", params.get("DesfaseUbicacion", 0.0)),
+                bool(params.get("volteado", params.get("Volteado", False))),
             )
+        if metodo in ("muros.voltear", "elementos.voltear"):
+            return self._exigir().muro_voltear(str(params.get("globalid") or ""))
         if metodo == "losas.crear":
             return self._exigir().losa_crear(
                 str(params.get("nivel") or ""),
                 params.get("puntos"),
                 params.get("espesor", 0.12),
                 params.get("desfase", 0.0),
+                params.get("bordes"),
             )
         if metodo == "losas.desde_muros":
             return self._exigir().losa_desde_muros(
-                str(params.get("nivel") or ""), params.get("globalids")
+                str(params.get("nivel") or ""),
+                params.get("globalids"),
+                str(params.get("lado") or "exterior"),
+                params.get("desfase", 0.0),
             )
         if metodo == "aberturas.crear":
             return self._exigir().abertura_crear(
