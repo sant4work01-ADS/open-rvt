@@ -571,8 +571,9 @@ export function altoAnotacionMundo(
   minimoPx = 11,
 ): number {
   if (modo === "papel") return mmAMundo(mm, escala);
-  // En pantalla el alto es constante en píxeles, sin importar el zoom.
-  return minimoPx * Math.max(mundoPorPx, 0);
+  // En pantalla el alto es constante en píxeles, sin importar el zoom; el estilo
+  // sigue mandando: 2,5 mm de papel equivalen a los 11 px de referencia.
+  return minimoPx * (mm / 2.5) * Math.max(mundoPorPx, 0);
 }
 
 /**

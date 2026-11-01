@@ -219,6 +219,11 @@ test("Cota: un clic abre el campo, Esc y clic fuera lo cierran", async () => {
     const ejes = await invocar(ses, "ejes.listar");
     const cuatro = ejes.find((e) => e.etiqueta === "4");
     assert.equal(Math.round(cuatro.x1 * 1000) / 1000, 16);
+    // Captura de la planta: las cotas usan el estilo de la vista (flecha rellena
+    // por omisión). Se lee como imagen al revisar.
+    await activar(ses, "visor-zoom-ajustar");
+    await esperar(500);
+    await ses.captura(require("node:path").join(__dirname, "..", "docs", "progreso", "cota-planta.png"));
   } finally {
     await ses.cerrar();
   }

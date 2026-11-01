@@ -42,7 +42,6 @@ import {
 } from "./alinear";
 import {
   calcularFamiliasCotas,
-  formatearCota,
   parsearCota,
   parsearElevacion,
   posicionTextoEntreMarcas,
@@ -58,7 +57,7 @@ import {
 } from "./orbita";
 import { DESFASE_NOMBRE_CABEZA, elevacionDesdeCota, normalizarAjusteNivel } from "./niveles";
 import { baseTextoAnotacion } from "./anotacion";
-import { calcularLayoutAlzado, enlazarTramosCota, segmentosTrazoPunto } from "./anotacionVista";
+import { calcularLayoutAlzado, enlazarTramosCota, formatearNumero, segmentosTrazoPunto } from "./anotacionVista";
 import {
   categoriaOculta,
   factorEscala,
@@ -2969,7 +2968,11 @@ export function Visor3D({
       const familias = calcularFamiliasCotas(referencias.ejes, referencias.reticula);
       const mmCota = grosorDe("cotas", "proyeccion");
       if (mmCota !== null) {
-        const colorCota = oscuro ? "#e8eaed" : estilos.categorias.cotas.color;
+        const estiloColorCota =
+          estilos.cotas.lista.find(
+            (c) => c.nombre === (vista.estiloCota ?? estilos.cotas.porDefecto),
+          )?.color ?? estilos.categorias.cotas.color;
+        const colorCota = oscuro ? "#e8eaed" : estiloColorCota;
         const materialCota = crearMaterialLinea({
           mm: mmCota,
           escala: vista.escala,
@@ -2982,8 +2985,26 @@ export function Visor3D({
         const separacion = mmAMundo(1, vista.escala);
         // O006b: el texto conserva 2,5 mm de papel, pero en pantalla nunca baja de
         // 11 px (y las marcas oblicuas, de 6 px) para que se lea al alejar la vista.
-        const marca = mmAMundoConMinimoPx(2, vista.escala, mundoPorPx, 6);
-        const altoTexto = mmAMundoConMinimoPx(2.5, vista.escala, mundoPorPx, 11);
+        // El estilo de cota de la vista (Vista → Estilos de anotación) manda también
+        // en planta: alto de texto, remate, tamaño de remate, color y decimales.
+        const estiloCotaPlanta =
+          estilos.cotas.lista.find(
+            (c) => c.nombre === (vista.estiloCota ?? estilos.cotas.porDefecto),
+          ) ?? estilos.cotas.lista[0];
+        const marca = mmAMundoConMinimoPx(
+          estiloCotaPlanta.tamanoRemate,
+          vista.escala,
+          mundoPorPx,
+          6 * (estiloCotaPlanta.tamanoRemate / 2),
+        );
+        const altoTexto = mmAMundoConMinimoPx(
+          estiloCotaPlanta.altoTexto,
+          vista.escala,
+          mundoPorPx,
+          11 * (estiloCotaPlanta.altoTexto / 2.5),
+        );
+        const textoValorCota = (valor: number) =>
+          formatearNumero(valor, estiloCotaPlanta.decimales, estiloCotaPlanta.unidad);
         const sepParcial = altoBurbuja / 2 + Math.max(mmAMundo(5, vista.escala), altoTexto * 0.6);
         // La total se separa de la cadena de parciales al menos 1,5 veces el texto.
         const sepTotal = sepParcial + Math.max(mmAMundo(6, vista.escala), altoTexto * 1.5);
@@ -3055,7 +3076,7 @@ export function Visor3D({
                 grupoLocal,
               );
             }
-            const etiqueta = formatearCota(familia.rebase.valor);
+            const etiqueta = textoValorCota(familia.rebase.valor);
             // O010: el valor del rebase se rotula para que no parezca una cota suelta.
             const sprite = textoCota(`Rebase ${etiqueta}`, colorRebase, fondo, altoTextoRebase);
             if (sprite) {
@@ -3089,9 +3110,56 @@ export function Visor3D({
               grupoLocal,
             );
           }
-          const marcar = (s: number, t: number) => {
+          // hacia: +1 si el interior del tramo queda hacia +s, −1 si hacia −s.
+          const marcar = (s: number, t: number, hacia: 1 | -1 = 1) => {
             const bx = nx * s + ux * t;
             const by = ny * s + uy * t;
+            if (estiloCotaPlanta.remate === "punto") {
+              const disco = new THREE.Mesh(
+                new THREE.CircleGeometry(marca / 3, 24),
+                new THREE.MeshBasicMaterial({
+                  color: new THREE.Color(colorCota),
+                  side: THREE.DoubleSide,
+                  depthTest: false,
+                  depthWrite: false,
+                }),
+              );
+              disco.position.set(bx, by, zCota);
+              disco.renderOrder = 22;
+              grupoLocal.add(disco);
+              return;
+            }
+            if (estiloCotaPlanta.remate !== "tick-arquitectonico") {
+              // Flecha: punta en la marca, alas hacia el interior del tramo.
+              const largo = marca;
+              const ala = (signo: number): [number, number, number] => [
+                bx + nx * hacia * largo + ux * signo * largo * 0.25,
+                by + ny * hacia * largo + uy * signo * largo * 0.25,
+                zCota,
+              ];
+              const punta: [number, number, number] = [bx, by, zCota];
+              if (estiloCotaPlanta.remate === "flecha-rellena") {
+                const geometria = new THREE.BufferGeometry();
+                geometria.setAttribute(
+                  "position",
+                  new THREE.Float32BufferAttribute([...punta, ...ala(1), ...ala(-1)], 3),
+                );
+                const malla = new THREE.Mesh(
+                  geometria,
+                  new THREE.MeshBasicMaterial({
+                    color: new THREE.Color(colorCota),
+                    side: THREE.DoubleSide,
+                    depthTest: false,
+                    depthWrite: false,
+                  }),
+                );
+                malla.renderOrder = 22;
+                grupoLocal.add(malla);
+              } else {
+                lineaCerrada([ala(1), punta, ala(-1)], materialCota, 3.1, grupoLocal);
+              }
+              return;
+            }
             const dx = (nx + ux) / Math.SQRT2;
             const dy = (ny + uy) / Math.SQRT2;
             lineaCerrada(
@@ -3146,9 +3214,9 @@ export function Visor3D({
               3,
               grupoLocal,
             );
-            marcar(cota.desde, t);
-            marcar(cota.hasta, t);
-            const etiqueta = formatearCota(cota.valor);
+            marcar(cota.desde, t, cota.hasta >= cota.desde ? 1 : -1);
+            marcar(cota.hasta, t, cota.hasta >= cota.desde ? -1 : 1);
+            const etiqueta = textoValorCota(cota.valor);
             colocarTextoCota(etiqueta, cota.desde, cota.hasta, t, {
               tipo: "parcial",
               valor: cota.valor,
@@ -3165,9 +3233,10 @@ export function Visor3D({
             3,
             grupoLocal,
           );
-          marcar(familia.total.desde, tTotal);
-          marcar(familia.total.hasta, tTotal);
-          const etiquetaTotal = formatearCota(familia.total.valor);
+          const sentidoTotal = familia.total.hasta >= familia.total.desde ? 1 : -1;
+          marcar(familia.total.desde, tTotal, sentidoTotal);
+          marcar(familia.total.hasta, tTotal, sentidoTotal === 1 ? -1 : 1);
+          const etiquetaTotal = textoValorCota(familia.total.valor);
           colocarTextoCota(
             etiquetaTotal,
             familia.total.desde,

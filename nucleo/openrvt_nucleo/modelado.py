@@ -132,6 +132,20 @@ class ModeladoMixin:
             "borrados": [_gid(e) if not isinstance(e, str) else e for e in (borrados or [])],
             "mensaje": mensaje,
         }
+        # Vecinos regenerados de rebote (muros unidos, losas con bordes en muros):
+        # la app solo vuelve a teselar lo que se reporta, así que se agregan aquí.
+        extra_regenerados = getattr(self, "_regenerados_de_rebote", None) or []
+        self._regenerados_de_rebote = []
+        ya = set(salida["creados"]) | set(salida["modificados"]) | set(salida["borrados"])
+        for gid in extra_regenerados:
+            if gid in ya:
+                continue
+            try:
+                self.modelo.by_guid(gid)
+            except Exception:
+                continue
+            salida["modificados"].append(gid)
+            ya.add(gid)
         salida.update(extra)
         return salida
 
@@ -3971,8 +3985,16 @@ class ModeladoMixin:
         except Exception:
             LOG.warning("no se pudieron descontar los vanos al regenerar la unión", exc_info=True)
 
+    def _anotar_rebote(self, elemento: Any) -> None:
+        if not hasattr(self, "_regenerados_de_rebote") or self._regenerados_de_rebote is None:
+            self._regenerados_de_rebote = []
+        gid = _gid(elemento)
+        if gid and gid not in self._regenerados_de_rebote:
+            self._regenerados_de_rebote.append(gid)
+
     def _regenerar_representacion_unida(self, muro: Any) -> bool:
         """O010: reconstruye el cuerpo con el inglete/recorte de sus uniones."""
+        self._anotar_rebote(muro)
         try:
             self._quitar_representaciones(muro, "Body")
             cuerpo = self._cuerpo_muro(muro)
@@ -4284,6 +4306,7 @@ class ModeladoMixin:
 
     def _regenerar_losa(self, losa: Any) -> None:
         """O012b: recorta la losa en planta contra trabes y columnas."""
+        self._anotar_rebote(losa)
         from shapely import wkt
         from shapely.geometry import Polygon
 
