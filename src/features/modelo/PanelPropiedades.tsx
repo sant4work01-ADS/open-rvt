@@ -603,13 +603,16 @@ function CampoEditable({
   paso?: number;
   onGuardar: (valor: string | number) => void;
 }) {
-  const guardar = (texto: string) => {
+  const [texto, setTexto] = useState(String(valor ?? ""));
+  const guardar = (entrada: string) => {
     if (numerico) {
-      const numero = Number(texto);
+      const numero = Number(entrada);
       if (Number.isFinite(numero)) onGuardar(numero);
-    } else if (texto.trim()) {
-      onGuardar(texto.trim());
+    } else if (entrada.trim()) {
+      onGuardar(entrada.trim());
     }
+    // O033: si el núcleo rechaza el valor, el campo vuelve al valor guardado.
+    setTexto(String(valor ?? ""));
   };
   return (
     <label className="flex items-center justify-between gap-2 text-xs">
@@ -619,7 +622,8 @@ function CampoEditable({
         data-testid={testid}
         type={numerico ? "number" : "text"}
         step={paso}
-        defaultValue={valor ?? ""}
+        value={texto}
+        onChange={(e) => setTexto(e.target.value)}
         onBlur={(e) => guardar(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
@@ -766,6 +770,82 @@ function RestriccionesNivel({
   );
 }
 
+/** O033: las zapatas solo cuelgan de un nivel con su desplante. */
+function RestriccionesZapata({
+  globalid,
+  desplante,
+  esCorrida,
+  prolongacionInicio,
+  prolongacionFin,
+}: {
+  globalid: string;
+  desplante: number;
+  esCorrida: boolean;
+  prolongacionInicio: number;
+  prolongacionFin: number;
+}) {
+  const niveles = useModelo((s) => s.niveles);
+  const restricciones = useModelo((s) => s.propiedades?.restricciones);
+  const editarRestricciones = useModelo((s) => s.editarRestricciones);
+  const editar = useModelo((s) => s.editarElemento);
+  if (!restricciones) return null;
+  const nivelBase = restricciones.NivelBase;
+  const valorDesplante = "Desplante" in restricciones ? restricciones.Desplante : desplante;
+  return (
+    <>
+      <label className="flex items-center justify-between gap-2 text-xs">
+        <span className="text-muted-foreground">Nivel de base</span>
+        <select
+          key={nivelBase}
+          data-testid="restriccion-base"
+          defaultValue={nivelBase}
+          onChange={(e) =>
+            void editarRestricciones(globalid, { nivel_base: e.target.value })
+          }
+          className="w-32 rounded border bg-background px-2 py-1"
+        >
+          {niveles.map((nivel) => (
+            <option key={nivel.globalid} value={nivel.globalid}>
+              {nivel.nombre}
+            </option>
+          ))}
+          {!niveles.some((n) => n.globalid === nivelBase) && (
+            <option value={nivelBase}>(nivel actual)</option>
+          )}
+        </select>
+      </label>
+      <CampoEditable
+        etiqueta="Desplante (m)"
+        testid="elemento-desplante"
+        numerico
+        paso={0.05}
+        valor={valorDesplante}
+        onGuardar={(valor) => void editarRestricciones(globalid, { desplante: Number(valor) })}
+      />
+      {esCorrida && (
+        <>
+          <CampoEditable
+            etiqueta="Prolongación inicio (m)"
+            testid="elemento-prolongacion-inicio"
+            numerico
+            paso={0.05}
+            valor={prolongacionInicio}
+            onGuardar={(valor) => void editar(globalid, { ProlongacionInicio: valor })}
+          />
+          <CampoEditable
+            etiqueta="Prolongación fin (m)"
+            testid="elemento-prolongacion-fin"
+            numerico
+            paso={0.05}
+            valor={prolongacionFin}
+            onGuardar={(valor) => void editar(globalid, { ProlongacionFin: valor })}
+          />
+        </>
+      )}
+    </>
+  );
+}
+
 export function PropiedadesElemento() {
   const propiedades = useModelo((s) => s.propiedades);
   const editar = useModelo((s) => s.editarElemento);
@@ -784,6 +864,10 @@ export function PropiedadesElemento() {
     | Record<string, unknown>
     | undefined;
   const esEstructural = !!estructura;
+  const predefinido = String(propiedades.atributos.PredefinedType ?? "");
+  // O033: zapata aislada o corrida (el contratrabe es una viga de cimentación).
+  const esZapata = propiedades.clase === "IfcFooting" && predefinido !== "FOOTING_BEAM";
+  const esZapataCorrida = esZapata && predefinido === "STRIP_FOOTING";
   const atributos = propiedades.atributos;
   const ancho = Number(atributos.OverallWidth ?? 0);
   const alto = Number(atributos.OverallHeight ?? 0);
@@ -872,18 +956,19 @@ export function PropiedadesElemento() {
             />
           </>
         )}
-        {esEstructural && (
+        {esEstructural && esZapata && (
           <>
-            {estructura?.Desplante !== undefined && (
-              <CampoEditable
-                etiqueta="Desplante (m)"
-                testid="elemento-desplante"
-                numerico
-                paso={0.05}
-                valor={Number(estructura.Desplante)}
-                onGuardar={(valor) => void editar(gid, { Desplante: valor })}
-              />
-            )}
+            <RestriccionesZapata
+              globalid={gid}
+              desplante={Number(estructura?.Desplante ?? 0.8)}
+              esCorrida={esZapataCorrida}
+              prolongacionInicio={Number(estructura?.ProlongacionInicio ?? 0)}
+              prolongacionFin={Number(estructura?.ProlongacionFin ?? 0)}
+            />
+          </>
+        )}
+        {esEstructural && !esZapata && (
+          <>
             {estructura?.Desfase !== undefined && (
               <CampoEditable
                 etiqueta="Desfase (m)"

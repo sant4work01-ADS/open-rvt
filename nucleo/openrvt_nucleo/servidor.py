@@ -319,6 +319,7 @@ class Servidor:
                 params.get("nivel_tope"),
                 params.get("desfase_tope"),
                 params.get("altura_sin_conexion"),
+                params.get("desplante"),
             )
         if metodo == "acero.varillas":
             return self._exigir().acero_varillas()

@@ -263,10 +263,12 @@ export interface PropiedadesElemento {
   /** O016: base y tope por nivel (también para IFC viejos sin pset). */
   restricciones?: {
     NivelBase: string;
-    DesfaseBase: number;
-    NivelTope: string;
-    DesfaseTope: number;
-    AlturaSinConexion: number;
+    DesfaseBase?: number;
+    NivelTope?: string;
+    DesfaseTope?: number;
+    AlturaSinConexion?: number;
+    /** O033: único dato vertical de una zapata. */
+    Desplante?: number;
   };
   /** O028: cruce o tramo de ejes al que está anclado. */
   enlace?: EnlaceEjes;

@@ -364,6 +364,8 @@ interface EstadoModelo {
       nivel_tope?: string;
       desfase_tope?: number;
       altura_sin_conexion?: number;
+      /** O033: solo zapatas. */
+      desplante?: number;
     },
   ) => Promise<void>;
 
@@ -770,6 +772,19 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
   const ejecutar = async (metodo: string, params: Record<string, unknown> = {}) => {
     return (await ejecutarResultado(metodo, params)) !== null;
+  };
+
+  /** O033: tras un rechazo, recarga las propiedades sin borrar el aviso. */
+  const refrescarPropiedades = async (globalid: string) => {
+    const error = get().error;
+    try {
+      const propiedades = await rpc<PropiedadesElemento>("modelo.propiedades", {
+        globalid,
+      });
+      set({ propiedades, error });
+    } catch {
+      /* si falla la recarga, se conserva el aviso original */
+    }
   };
 
   const nivelActivo = () => {
@@ -2412,11 +2427,13 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     editarElemento: async (globalid, cambios) => {
       const ok = await ejecutar("elementos.editar", { globalid, cambios });
       if (ok) await get().seleccionar(globalid);
+      else await refrescarPropiedades(globalid);
     },
 
     editarRestricciones: async (globalid, cambios) => {
       const ok = await ejecutar("restricciones.editar", { globalid, ...cambios });
       if (ok) await get().seleccionar(globalid);
+      else await refrescarPropiedades(globalid);
     },
 
     comprobarNucleo: async () => {

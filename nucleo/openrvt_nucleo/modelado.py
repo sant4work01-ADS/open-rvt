@@ -375,6 +375,33 @@ class ModeladoMixin:
         """Lee las restricciones; un modelo viejo se interpreta sin pset (tolerante)."""
         datos = self._leer_pset(elemento, PSET_RESTRICCIONES)
         altura_actual = self._altura_actual(elemento)
+        # O033: las zapatas aisladas y corridas solo cuelgan de un nivel con su
+        # desplante. Los archivos viejos guardaban además un DesfaseBase que ya no
+        # interviene: manda el Desplante guardado (o la geometría si falta).
+        predef = _texto(getattr(elemento, "PredefinedType", ""))
+        if elemento.is_a("IfcFooting") and predef != "FOOTING_BEAM":
+            nivel = self._nivel_que_contiene(elemento)
+            if nivel is None:
+                pset = self._leer_pset(elemento, "OPENRVT_Estructura")
+                if pset.get("Nivel"):
+                    nivel = self._nivel_por_gid(_texto(pset["Nivel"]))
+            if nivel is None:
+                niveles = self.modelo.by_type("IfcBuildingStorey")
+                nivel = niveles[0] if niveles else None
+            elevacion = float(getattr(nivel, "Elevation", 0.0) or 0.0) if nivel else 0.0
+            colocacion = self._leer_pset(elemento, "OPENRVT_Estructura")
+            desplante: float | None = None
+            if colocacion.get("Desplante") is not None:
+                try:
+                    desplante = float(colocacion.get("Desplante"))
+                except (TypeError, ValueError):
+                    desplante = None
+            if desplante is None:
+                desplante = elevacion - self._z_de_elemento(elemento)
+            return {
+                "NivelBase": _gid(nivel) if nivel is not None else "",
+                "Desplante": float(desplante),
+            }
         if datos:
             base = _texto(datos.get("NivelBase"))
             tope = _texto(datos.get("NivelTope"))
@@ -431,13 +458,19 @@ class ModeladoMixin:
         if tope:
             nivel_tope = self._nivel_por_gid(tope)
             elev_tope = float(nivel_tope.Elevation or 0.0)
-        z, altura = altura_restringida(
-            elev_base,
-            float(restriccion.get("DesfaseBase") or 0.0),
-            elev_tope,
-            float(restriccion.get("DesfaseTope") or 0.0),
-            float(restriccion.get("AlturaSinConexion") or 0.0),
-        )
+        es_zapata = elemento.is_a("IfcFooting") and _texto(
+            getattr(elemento, "PredefinedType", "")
+        ) != "FOOTING_BEAM"
+        if es_zapata:
+            z, altura = 0.0, 0.0
+        else:
+            z, altura = altura_restringida(
+                elev_base,
+                float(restriccion.get("DesfaseBase") or 0.0),
+                elev_tope,
+                float(restriccion.get("DesfaseTope") or 0.0),
+                float(restriccion.get("AlturaSinConexion") or 0.0),
+            )
         if elemento.is_a("IfcWall"):
             self._validar_altura_muro(elemento, altura)
             datos = self._datos_muro(elemento)
@@ -471,9 +504,29 @@ class ModeladoMixin:
             predef = _texto(getattr(elemento, "PredefinedType", ""))
             datos = dict(self._leer_pset(elemento, "OPENRVT_Estructura"))
             peralte = self._peralte_de(elemento)
-            if elemento.is_a("IfcFooting") and predef not in ("FOOTING_BEAM", "STRIP_FOOTING"):
-                datos["Z"] = z
-                datos["Desplante"] = float(nivel_base.Elevation or 0.0) - z
+            if elemento.is_a("IfcFooting") and predef != "FOOTING_BEAM":
+                # O033: un solo parámetro de altura. El desplante se mide desde el
+                # nivel de base; la Z se deriva siempre con el peralte del tipo.
+                if restriccion.get("Desplante") is None:
+                    restriccion["Desplante"] = datos.get("Desplante")
+                try:
+                    desplante = float(restriccion.get("Desplante") or 0.0)
+                except (TypeError, ValueError):
+                    desplante = 0.0
+                if desplante <= TOLERANCIA_CALCULO:
+                    raise self._error("El desplante debe ser positivo.", -32602)
+                datos["Desplante"] = desplante
+                if predef == "STRIP_FOOTING":
+                    datos["Z"] = (
+                        float(nivel_base.Elevation or 0.0) - desplante + peralte / 2.0
+                    )
+                else:
+                    datos["Z"] = float(nivel_base.Elevation or 0.0) - desplante
+                restriccion["Desplante"] = desplante
+                for clave in (
+                    "DesfaseBase", "NivelTope", "DesfaseTope", "AlturaSinConexion"
+                ):
+                    restriccion.pop(clave, None)
             elif elemento.is_a("IfcFooting") and predef == "STRIP_FOOTING":
                 datos["Z"] = z + peralte / 2.0
                 datos["Desplante"] = float(nivel_base.Elevation or 0.0) - z
@@ -483,6 +536,12 @@ class ModeladoMixin:
                 datos["Desfase"] = z - float(nivel_base.Elevation or 0.0)
             self._guardar_pset(elemento, "OPENRVT_Estructura", datos)
             self._guardar_pset(elemento, PSET_RESTRICCIONES, restriccion)
+            if elemento.is_a("IfcFooting") and predef != "FOOTING_BEAM":
+                self._quitar_claves_pset(
+                    elemento,
+                    PSET_RESTRICCIONES,
+                    ("DesfaseBase", "NivelTope", "DesfaseTope", "AlturaSinConexion"),
+                )
             self._regenerar_estructura(elemento)
 
     def _recalcular_restricciones(self, niveles: set[str]) -> list[Any]:
@@ -1248,16 +1307,47 @@ class ModeladoMixin:
         nivel_tope: str | None = None,
         desfase_tope: float | None = None,
         altura_sin_conexion: float | None = None,
+        desplante: float | None = None,
     ) -> dict[str, Any]:
-        """O016: cambia base/tope de un muro o columna en una sola instantánea."""
+        """O016: cambia base/tope de un muro o columna en una sola instantánea.
+
+        O033: las zapatas aisladas y corridas solo aceptan nivel_base y desplante.
+        """
         self._exigir_modelo()
-        entidad = self._entidad_por_gid(globalid, ("IfcWall", "IfcColumn"))
-        if not (entidad.is_a("IfcWall") or entidad.is_a("IfcColumn")):
-            raise self._error("Solo los muros y las columnas admiten restricciones.", -32602)
+        entidad = self._entidad_por_gid(
+            globalid, ("IfcWall", "IfcColumn", "IfcFooting")
+        )
+        predef = _texto(getattr(entidad, "PredefinedType", ""))
+        es_zapata = entidad.is_a("IfcFooting") and predef != "FOOTING_BEAM"
+        if not (
+            entidad.is_a("IfcWall")
+            or entidad.is_a("IfcColumn")
+            or entidad.is_a("IfcFooting")
+        ):
+            raise self._error("Ese elemento no admite restricciones.", -32602)
+        if es_zapata:
+            for proporcionado, nombre in (
+                (desfase_base, "Desfase de base"),
+                (nivel_tope, "Restricción de tope"),
+                (desfase_tope, "Desfase de tope"),
+                (altura_sin_conexion, "Altura"),
+            ):
+                if proporcionado is not None:
+                    raise self._error(
+                        f"La zapata no tiene «{nombre}»: use el desplante.", -32602
+                    )
         restriccion = dict(self._restricciones_de(entidad))
         if nivel_base is not None:
             nivel = self._nivel_por_gid(str(nivel_base))
             restriccion["NivelBase"] = _gid(nivel)
+        if desplante is not None:
+            try:
+                desplante = float(desplante)
+            except (TypeError, ValueError) as exc:
+                raise self._error("El desplante no es un número.", -32602) from exc
+            if desplante <= 0:
+                raise self._error("El desplante debe ser positivo.", -32602)
+            restriccion["Desplante"] = desplante
         if desfase_base is not None:
             try:
                 restriccion["DesfaseBase"] = float(desfase_base)
@@ -1283,21 +1373,22 @@ class ModeladoMixin:
                 ) from exc
         nivel_base_entidad = self._nivel_por_gid(restriccion["NivelBase"])
         elev_base = float(nivel_base_entidad.Elevation or 0.0)
-        elev_tope = None
-        if restriccion["NivelTope"]:
-            elev_tope = float(
-                self._nivel_por_gid(restriccion["NivelTope"]).Elevation or 0.0
-            )
-        try:
-            altura_restringida(
-                elev_base,
-                restriccion["DesfaseBase"],
-                elev_tope,
-                restriccion["DesfaseTope"],
-                restriccion["AlturaSinConexion"],
-            )
-        except ValueError as exc:
-            raise self._error(str(exc), -32602) from exc
+        if not es_zapata:
+            elev_tope = None
+            if restriccion.get("NivelTope"):
+                elev_tope = float(
+                    self._nivel_por_gid(restriccion["NivelTope"]).Elevation or 0.0
+                )
+            try:
+                altura_restringida(
+                    elev_base,
+                    float(restriccion.get("DesfaseBase") or 0.0),
+                    elev_tope,
+                    float(restriccion.get("DesfaseTope") or 0.0),
+                    float(restriccion.get("AlturaSinConexion") or 0.0),
+                )
+            except ValueError as exc:
+                raise self._error(str(exc), -32602) from exc
         self._instantanea()
         try:
             self._aplicar_restriccion(entidad, restriccion)
@@ -1474,6 +1565,15 @@ class ModeladoMixin:
         datos["X2"] = x2
         datos["Y2"] = y2
         datos["Longitud"] = largo
+        if elemento.is_a("IfcFooting") and _texto(
+            getattr(elemento, "PredefinedType", "")
+        ) == "STRIP_FOOTING":
+            # O033: un tramo enlazado empieza y acaba en cruces; si no hay
+            # prolongaciones guardadas, por omisión son medio ancho.
+            _alias, seccion, _armado = self._seccion_y_armado(self._tipo_entidad(elemento))
+            media = float(seccion.get("Ancho") or 0.60) / 2.0
+            datos.setdefault("ProlongacionInicio", media)
+            datos.setdefault("ProlongacionFin", media)
         self._guardar_pset(elemento, "OPENRVT_Estructura", datos)
         self._regenerar_estructura(elemento)
 
@@ -3409,9 +3509,15 @@ class ModeladoMixin:
             largo = float(datos.get("Longitud") or math.hypot(x2 - x1, y2 - y1))
             if largo <= TOLERANCIA_CALCULO:
                 largo = 1.0
-            cuerpo = self._cuerpo_zapata_corrida(seccion, largo)
             ux, uy = (x2 - x1) / largo, (y2 - y1) / largo
-            matriz = self._matriz_viga(x1, y1, float(datos.get("Z") or 0.0), ux, uy)
+            # O033: el cuerpo se prolonga medio ancho en los extremos que llegan
+            # a un cruce; el trazo guardado sigue siendo el de cruce a cruce.
+            pi = float(datos.get("ProlongacionInicio") or 0.0)
+            pf = float(datos.get("ProlongacionFin") or 0.0)
+            cuerpo = self._cuerpo_zapata_corrida(seccion, largo + pi + pf)
+            matriz = self._matriz_viga(
+                x1 - ux * pi, y1 - uy * pi, float(datos.get("Z") or 0.0), ux, uy
+            )
         else:
             cuerpo = self._cuerpo_zapata(seccion)
             matriz = self._matriz_colocacion(
@@ -3537,6 +3643,71 @@ class ModeladoMixin:
         self.con_cambios = True
         return self._resultado([viga], mensaje=f"Viga creada ({largo:.2f} m).")
 
+    def _alinear_corrida_a_eje(
+        self, x1: float, y1: float, x2: float, y2: float, ancho: float
+    ) -> tuple[float, float, float, float, float, float]:
+        """O033: centra una zapata corrida sobre el eje que sigue su trazo.
+
+        Devuelve los extremos proyectados y las prolongaciones por omisión: medio
+        ancho cuando el extremo cae en un cruce de ejes, cero si no.
+        """
+        largo = math.hypot(x2 - x1, y2 - y1)
+        if largo <= TOLERANCIA_CALCULO:
+            return x1, y1, x2, y2, 0.0, 0.0
+        ux, uy = (x2 - x1) / largo, (y2 - y1) / largo
+        grids = self.modelo.by_type("IfcGrid")
+        if not grids:
+            return x1, y1, x2, y2, 0.0, 0.0
+        mejor: tuple[float, Any] | None = None
+        for grid in grids:
+            for eje in self._ejes(grid):
+                ax, ay, bx, by, vx, vy, _largo_eje = self._direccion_eje(eje)
+                if abs(ux * vy - uy * vx) > 0.02:
+                    continue
+                nx, ny = -vy, vx
+                d1 = (x1 - ax) * nx + (y1 - ay) * ny
+                d2 = (x2 - ax) * nx + (y2 - ay) * ny
+                distancia = max(abs(d1), abs(d2))
+                if distancia > max(0.75, ancho):
+                    continue
+                if mejor is None or distancia < mejor[0]:
+                    mejor = (distancia, eje)
+        if mejor is None:
+            return x1, y1, x2, y2, 0.0, 0.0
+        eje = mejor[1]
+        ax, ay, bx, by, vx, vy, largo_eje = self._direccion_eje(eje)
+        # Proyección perpendicular de los extremos sobre la recta del eje.
+        t1 = (x1 - ax) * vx + (y1 - ay) * vy
+        t2 = (x2 - ax) * vx + (y2 - ay) * vy
+        x1, y1 = ax + vx * t1, ay + vy * t1
+        x2, y2 = ax + vx * t2, ay + vy * t2
+        prolongacion = ancho / 2.0
+        pi = pf = 0.0
+        umbral = max(0.60, ancho)
+        for otro in self._ejes(self._grid_de(eje)):
+            if otro is eje:
+                continue
+            ox, oy, _obx, _oby, wx, wy, largo_otro = self._direccion_eje(otro)
+            den = vx * wy - vy * wx
+            if abs(den) <= TOLERANCIA_CALCULO:
+                continue
+            t = ((ox - ax) * wy - (oy - ay) * wx) / den
+            s = ((ox - ax) * vy - (oy - ay) * vx) / den
+            if s < -TOLERANCIA or s > largo_otro + TOLERANCIA:
+                continue
+            cx, cy = ax + vx * t, ay + vy * t
+            if math.hypot(cx - x1, cy - y1) <= umbral:
+                x1, y1, pi = cx, cy, prolongacion
+            if math.hypot(cx - x2, cy - y2) <= umbral:
+                x2, y2, pf = cx, cy, prolongacion
+        return x1, y1, x2, y2, pi, pf
+
+    def _grid_de(self, eje: Any) -> Any:
+        for grid in self.modelo.by_type("IfcGrid"):
+            if eje in self._ejes(grid):
+                return grid
+        return self._grid()
+
     def zapata_crear(
         self,
         tipo: str,
@@ -3573,6 +3744,12 @@ class ModeladoMixin:
                 "X": x, "Y": y, "Rotacion": rotacion, "Z": elevacion - desplante,
                 "Desplante": desplante, "Nivel": nivel,
             },
+        )
+        # O033: el único dato vertical de la zapata es su desplante bajo el nivel.
+        self._guardar_pset(
+            zapata,
+            PSET_RESTRICCIONES,
+            {"NivelBase": _gid(nivel_entidad), "Desplante": desplante},
         )
         self._guardar_enlace_punto(zapata, eje_a, eje_b, x, y)
         self._regenerar_estructura(zapata)
@@ -3611,6 +3788,15 @@ class ModeladoMixin:
         elevacion = float(nivel_entidad.Elevation or 0.0)
         _, seccion, _ = self._seccion_y_armado(tipo_entidad)
         alto = float(seccion.get("Peralte") or 0.20)
+        ancho = float(seccion.get("Ancho") or 0.60)
+        # O033: al trazar sobre un eje, la pieza queda centrada y llega a los
+        # cruces prolongándose medio ancho para cerrar las esquinas.
+        x1, y1, x2, y2, prolongacion_inicio, prolongacion_fin = (
+            self._alinear_corrida_a_eje(x1, y1, x2, y2, ancho)
+        )
+        largo = math.hypot(x2 - x1, y2 - y1)
+        if largo <= TOLERANCIA_CALCULO:
+            raise self._error("La zapata corrida necesita dos puntos distintos.", -32602)
         self._instantanea()
         zapata = root.create_entity(self.modelo, ifc_class="IfcFooting")
         zapata.Name = f"Zapata corrida {_nombre(tipo_entidad)}"
@@ -3622,9 +3808,17 @@ class ModeladoMixin:
             "OPENRVT_Estructura",
             {
                 "X1": x1, "Y1": y1, "X2": x2, "Y2": y2, "Longitud": largo,
+                "ProlongacionInicio": prolongacion_inicio,
+                "ProlongacionFin": prolongacion_fin,
                 "Desplante": desplante, "Z": elevacion - desplante + alto / 2.0,
                 "Nivel": nivel,
             },
+        )
+        # O033: el único dato vertical de la zapata es su desplante bajo el nivel.
+        self._guardar_pset(
+            zapata,
+            PSET_RESTRICCIONES,
+            {"NivelBase": _gid(nivel_entidad), "Desplante": desplante},
         )
         self._regenerar_estructura(zapata)
         spatial_api.assign_container(
@@ -4638,6 +4832,16 @@ class ModeladoMixin:
         )
 
     def elemento_editar(self, globalid: str, cambios: Any) -> dict[str, Any]:
+        """Edita sin dejar una instantánea perdida si el núcleo rechaza el valor."""
+        profundidad = len(self._deshacer)
+        try:
+            return self._elemento_editar_impl(globalid, cambios)
+        except Exception:
+            if len(self._deshacer) > profundidad:
+                self.modelo = ifcopenshell.file.from_string(self._deshacer.pop())
+            raise
+
+    def _elemento_editar_impl(self, globalid: str, cambios: Any) -> dict[str, Any]:
         self._exigir_modelo()
         if not isinstance(cambios, dict) or not cambios:
             raise self._error("No hay cambios para el elemento.", -32602)
@@ -4736,7 +4940,20 @@ class ModeladoMixin:
                 "x": "X", "X": "X", "y": "Y", "Y": "Y",
                 "x1": "X1", "X1": "X1", "y1": "Y1", "Y1": "Y1",
                 "x2": "X2", "X2": "X2", "y2": "Y2", "Y2": "Y2",
+                "prolongacion_inicio": "ProlongacionInicio",
+                "ProlongacionInicio": "ProlongacionInicio",
+                "prolongacion_fin": "ProlongacionFin",
+                "ProlongacionFin": "ProlongacionFin",
             }
+            predef_actual = _texto(getattr(entidad, "PredefinedType", ""))
+            if (
+                entidad.is_a("IfcFooting")
+                and predef_actual != "FOOTING_BEAM"
+                and any(clave in cambios for clave in ("altura", "Altura", "desfase", "Desfase"))
+            ):
+                raise self._error(
+                    "La zapata no tiene altura ni desfase: use el desplante.", -32602
+                )
             for clave, valor in cambios.items():
                 destino = claves.get(clave)
                 if destino is None:
@@ -4752,9 +4969,14 @@ class ModeladoMixin:
                 raise self._error("La altura debe ser positiva.", -32602)
             if "Desplante" in datos and float(datos["Desplante"]) <= 0:
                 raise self._error("El desplante debe ser positivo.", -32602)
+            for clave in ("ProlongacionInicio", "ProlongacionFin"):
+                if clave in datos and float(datos[clave]) < 0:
+                    raise self._error("Las prolongaciones no pueden ser negativas.", -32602)
             tipo = self._tipo_entidad(entidad)
             _, seccion, _ = self._seccion_y_armado(tipo)
             nivel = self._nivel_por_gid(_texto(datos.get("Nivel") or "")) if datos.get("Nivel") else None
+            if nivel is None:
+                nivel = self._nivel_que_contiene(entidad)
             elevacion = float(nivel.Elevation or 0.0) if nivel is not None else 0.0
             alias = self._estructura_de_tipo(tipo) or "trabe"
             if entidad.is_a("IfcColumn"):
