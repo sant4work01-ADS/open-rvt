@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import math
+import json
 from typing import Any, Iterable
 
 import ifcopenshell
@@ -25,6 +26,7 @@ import ifcopenshell.api.unit as unit_api
 import numpy as np
 
 from . import uniones
+from .biblioteca import LINEAS_UBICACION
 
 LOG = logging.getLogger("openrvt_nucleo.modelado")
 
@@ -1893,7 +1895,12 @@ class ModeladoMixin:
             )
         )
         # O028: los enlaces a cruces y tramos se recalculan con la posición nueva.
-        modificados.extend(_gid(e) for e in self._propagar_enlaces_de_eje(globalid))
+        propagados = self._propagar_enlaces_de_eje(globalid)
+        modificados.extend(_gid(e) for e in propagados)
+        # O032: los bordes de losa que citan este eje o los muros movidos se regeneran.
+        self._regenerar_losas_de_bordes(
+            {globalid} | {_gid(e) for e in propagados if e.is_a("IfcWall")}
+        )
         self.con_cambios = True
         return self._resultado(
             modificados=modificados,
@@ -1976,6 +1983,9 @@ class ModeladoMixin:
             modificados.extend(
                 _gid(e) for e in self._propagar_enlaces_de_eje(gid_eje)
             )
+            self._regenerar_losas_de_bordes({gid_eje})
+        # O032: también las losas cuyos bordes citan los muros movidos.
+        self._regenerar_losas_de_bordes({g for g in modificados if g})
         self.con_cambios = True
         return self._resultado(
             modificados=modificados,
@@ -2327,6 +2337,9 @@ class ModeladoMixin:
             "altura": float(datos.get("Altura") or 2.6),
             "espesor": espesor,
             "alineacion": str(datos.get("Alineacion") or "centro"),
+            "linea_ubicacion": self._linea_de_muro(muro, datos),
+            "desfase_ubicacion": float(datos.get("DesfaseUbicacion") or 0.0),
+            "volteado": datos.get("Volteado") in (True, "True", "true", 1, "1"),
             "x2": x + dx * largo,
             "y2": y + dy * largo,
         }
@@ -2837,6 +2850,8 @@ class ModeladoMixin:
         geometry_api.assign_representation(self.modelo, product=muro, representation=cuerpo)
         self._regenerar_eje(muro)
         self._unir_muros(muro)
+        # O032: las losas cuyos bordes se apoyan en este muro se regeneran.
+        self._regenerar_losas_de_bordes({_gid(muro)})
 
     def _regenerar_eje(self, muro: Any) -> None:
         datos = self._datos_muro(muro)
@@ -2863,6 +2878,9 @@ class ModeladoMixin:
         y2: float,
         altura: float = 2.60,
         alineacion: str = "centro",
+        linea_ubicacion: str | None = None,
+        desfase_ubicacion: float = 0.0,
+        volteado: bool = False,
     ) -> dict[str, Any]:
         self._exigir_modelo()
         tipo_entidad = self._tipo_muro(tipo)
@@ -2870,11 +2888,24 @@ class ModeladoMixin:
         try:
             x1, y1, x2, y2 = float(x1), float(y1), float(x2), float(y2)
             altura = float(altura)
+            desfase_ubicacion = float(desfase_ubicacion)
         except (TypeError, ValueError) as exc:
             raise self._error("Los datos del muro no son números.", -32602) from exc
         if alineacion not in ALINEACIONES:
             raise self._error(
                 f"Alineación «{alineacion}» no válida; use centro, interior o exterior.",
+                -32602,
+            )
+        if linea_ubicacion is None:
+            linea_ubicacion = {
+                "centro": "eje_nucleo",
+                "interior": "cara_interior",
+                "exterior": "cara_exterior",
+            }[alineacion]
+        if linea_ubicacion not in LINEAS_UBICACION:
+            raise self._error(
+                "«Línea de ubicación» no válida; use eje_nucleo, cara_exterior, "
+                "cara_interior o centro.",
                 -32602,
             )
         x1, y1, x2, y2 = self._ajustar_extremos_a_ejes(x1, y1, x2, y2)
@@ -2912,6 +2943,9 @@ class ModeladoMixin:
                 "Altura": altura,
                 "Espesor": espesor,
                 "Alineacion": alineacion,
+                "LineaUbicacion": linea_ubicacion,
+                "DesfaseUbicacion": desfase_ubicacion,
+                "Volteado": bool(volteado),
             },
         )
         self._guardar_pset(muro, PSET_RESTRICCIONES, restriccion)
@@ -3876,6 +3910,180 @@ class ModeladoMixin:
             caras.append([base, base + 1, base + 2, base + 3])
         return vertices, caras
 
+    def _normalizar_bordes_losa(
+        self, bordes: Any, poligono: list[tuple[float, float]]
+    ) -> list[dict[str, Any]]:
+        """O032: cada borde guarda referencia y desfase; sin datos, todos «libre»."""
+        from shapely.geometry import Polygon
+
+        area = _poligono_area(poligono)
+        signo_poligono = 1.0 if area >= 0 else -1.0
+        if bordes is None:
+            bordes = [{"referencia": "libre"} for _ in poligono]
+        if not isinstance(bordes, (list, tuple)):
+            raise self._error("Los bordes de la losa deben ser una lista.", -32602)
+        if len(bordes) != len(poligono):
+            raise self._error(
+                "Debe haber un borde por cada lado del contorno.", -32602
+            )
+        salida: list[dict[str, Any]] = []
+        for i, crudo in enumerate(bordes):
+            if not isinstance(crudo, dict):
+                raise self._error("Cada borde debe ser un objeto.", -32602)
+            referencia = str(crudo.get("referencia") or "libre")
+            if referencia not in ("libre", "eje", "muro"):
+                raise self._error(
+                    f"Referencia de borde «{referencia}» no válida.", -32602
+                )
+            try:
+                desfase = float(crudo.get("desfase") or 0.0)
+            except (TypeError, ValueError) as exc:
+                raise self._error("El desfase del borde no es un número.", -32602) from exc
+            a = poligono[i]
+            b = poligono[(i + 1) % len(poligono)]
+            dx, dy = b[0] - a[0], b[1] - a[1]
+            largo = math.hypot(dx, dy) or 1.0
+            ux, uy = dx / largo, dy / largo
+            # Normal exterior del polígono en este lado.
+            ox, oy = signo_poligono * uy, -signo_poligono * ux
+            lado = str(crudo.get("lado") or "")
+            objetivo = str(crudo.get("objetivo") or "")
+            signo = 1
+            refdir = (ux, uy)
+            if referencia == "muro" and objetivo:
+                entidad = self._entidad_por_gid(objetivo)
+                if not entidad.is_a("IfcWall"):
+                    raise self._error(f"{objetivo} no es un muro.", -32022)
+                datos = self._datos_muro(entidad)
+                refdir = (datos["dx"], datos["dy"])
+                if lado not in ("exterior", "eje", "interior"):
+                    lado = "exterior"
+            elif referencia == "eje" and objetivo:
+                _x1, _y1, _x2, _y2, ux_e, uy_e, _l = self._direccion_eje(
+                    self._eje_por_gid(objetivo)[1]
+                )
+                refdir = (ux_e, uy_e)
+                lado = "eje"
+            else:
+                if referencia != "libre":
+                    raise self._error("Falta la referencia del borde.", -32602)
+                lado = "libre"
+            izquierda = (-refdir[1], refdir[0])
+            signo = 1 if ox * izquierda[0] + oy * izquierda[1] >= 0 else -1
+            salida.append(
+                {
+                    "referencia": referencia,
+                    "objetivo": objetivo,
+                    "lado": lado,
+                    "desfase": desfase,
+                    "signo": signo,
+                    "punto_a": [a[0], a[1]],
+                    "punto_b": [b[0], b[1]],
+                }
+            )
+        return salida
+
+    def _linea_de_borde(
+        self, borde: dict[str, Any]
+    ) -> tuple[tuple[float, float], tuple[float, float]] | None:
+        """Recta soporte del borde ya desplazada por su referencia y desfase."""
+        referencia = str(borde.get("referencia") or "libre")
+        desfase = float(borde.get("desfase") or 0.0)
+        signo = int(borde.get("signo") or 1)
+        lado = str(borde.get("lado") or "libre")
+        if referencia == "muro":
+            try:
+                entidad = self._entidad_por_gid(str(borde.get("objetivo") or ""))
+            except Exception:
+                return None
+            if not entidad.is_a("IfcWall"):
+                return None
+            datos = self._datos_muro(entidad)
+            p = (datos["x1"], datos["y1"])
+            d = (datos["dx"], datos["dy"])
+            cara = (
+                datos["espesor"] / 2.0
+                if lado == "exterior"
+                else -datos["espesor"] / 2.0 if lado == "interior" else 0.0
+            )
+            desplazamiento = cara + desfase
+        elif referencia == "eje":
+            try:
+                x1, y1, _x2, _y2, ux, uy, _l = self._direccion_eje(
+                    self._eje_por_gid(str(borde.get("objetivo") or ""))[1]
+                )
+            except Exception:
+                return None
+            p = (x1, y1)
+            d = (ux, uy)
+            desplazamiento = desfase
+        else:
+            a = borde.get("punto_a") or [0.0, 0.0]
+            b = borde.get("punto_b") or [0.0, 0.0]
+            dx, dy = float(b[0]) - float(a[0]), float(b[1]) - float(a[1])
+            largo = math.hypot(dx, dy)
+            if largo <= TOLERANCIA_CALCULO:
+                return None
+            p = (float(a[0]), float(a[1]))
+            d = (dx / largo, dy / largo)
+            desplazamiento = desfase
+        n = (-d[1], d[0])
+        p = (p[0] + signo * n[0] * desplazamiento, p[1] + signo * n[1] * desplazamiento)
+        return p, d
+
+    def _contorno_de_bordes(
+        self, bordes: list[dict[str, Any]]
+    ) -> list[tuple[float, float]] | None:
+        lineas = [self._linea_de_borde(b) for b in bordes]
+        if any(linea is None for linea in lineas) or len(lineas) < 3:
+            return None
+        puntos: list[tuple[float, float]] = []
+        total = len(lineas)
+        for i, (p, d) in enumerate(lineas):
+            # El vértice i cierra el borde i-1 y abre el borde i.
+            q, e = lineas[(i - 1) % total]
+            punto = self._corta_rectas(q, (-e[1], e[0]), p, (-d[1], d[0]))
+            puntos.append(punto if punto is not None else p)
+        if abs(_poligono_area(puntos)) <= TOLERANCIA_CALCULO:
+            return None
+        return puntos
+
+    def _bordes_de_losa(self, losa: Any) -> list[dict[str, Any]] | None:
+        datos = self._leer_pset(losa, "OPENRVT_Losa")
+        crudo = datos.get("Bordes")
+        if not crudo:
+            return None
+        if isinstance(crudo, str):
+            try:
+                crudo = json.loads(crudo)
+            except Exception:
+                return None
+        if not isinstance(crudo, list) or len(crudo) < 3:
+            return None
+        return [dict(b) for b in crudo if isinstance(b, dict)]
+
+    def _regenerar_losas_de_bordes(self, referencias: set[str]) -> list[Any]:
+        """O032: las losas con bordes ligados a esos muros o ejes se regeneran."""
+        salida: list[Any] = []
+        for losa in self.modelo.by_type("IfcSlab"):
+            bordes = self._bordes_de_losa(losa)
+            if not bordes:
+                continue
+            objetivos = {
+                str(b.get("objetivo") or "")
+                for b in bordes
+                if b.get("referencia") in ("muro", "eje")
+            }
+            if not objetivos & referencias:
+                continue
+            self._regenerar_losa(losa)
+            salida.append(losa)
+        return salida
+
+    def muro_voltear(self, globalid: str) -> dict[str, Any]:
+        """O032: intercambia los lados exterior/interior sin mover la línea."""
+        return self.elemento_editar(globalid, {"voltear": True})
+
     def _regenerar_losa(self, losa: Any) -> None:
         """O012b: recorta la losa en planta contra trabes y columnas."""
         from shapely import wkt
@@ -3887,14 +4095,19 @@ class ModeladoMixin:
         espesor = float(datos.get("Espesor") or 0.12)
         if espesor <= 0:
             return
-        original = datos.get("Contorno")
-        if original:
-            try:
-                huella = wkt.loads(str(original))
-            except Exception:
-                huella = Polygon(self._poligono_de_losa(losa))
+        bordes = self._bordes_de_losa(losa)
+        contorno = self._contorno_de_bordes(bordes) if bordes else None
+        if contorno is not None:
+            huella = Polygon(contorno)
         else:
-            huella = Polygon(self._poligono_de_losa(losa))
+            original = datos.get("Contorno")
+            if original:
+                try:
+                    huella = wkt.loads(str(original))
+                except Exception:
+                    huella = Polygon(self._poligono_de_losa(losa))
+            else:
+                huella = Polygon(self._poligono_de_losa(losa))
         vigas, columnas = self._barras_estructura()
         recorte = uniones.recortar_losa(
             list(huella.exterior.coords)[:-1], vigas, columnas, -espesor, 0.0
@@ -3921,6 +4134,7 @@ class ModeladoMixin:
         puntos: Any,
         espesor: float = 0.12,
         desfase: float = 0.0,
+        bordes: Any = None,
     ) -> dict[str, Any]:
         self._exigir_modelo()
         nivel_entidad = self._nivel_por_gid(nivel)
@@ -3936,6 +4150,7 @@ class ModeladoMixin:
             raise self._error("La losa tiene área cero.", -32602)
         if espesor <= 0:
             raise self._error("El espesor de la losa debe ser positivo.", -32602)
+        bordes_normalizados = self._normalizar_bordes_losa(bordes, poligono)
 
         from shapely.geometry import Polygon
 
@@ -3957,6 +4172,7 @@ class ModeladoMixin:
                 "Desfase": desfase,
                 "Puntos": len(poligono),
                 "Contorno": Polygon(poligono).wkt,
+                "Bordes": json.dumps(bordes_normalizados, ensure_ascii=False),
             },
         )
         self._regenerar_losa(losa)
@@ -4004,16 +4220,28 @@ class ModeladoMixin:
             raise self._error("Los muros seleccionados no forman un circuito cerrado.", -32022)
         return orden
 
-    def losa_desde_muros(self, nivel: str, globalids: Any) -> dict[str, Any]:
+    def losa_desde_muros(
+        self,
+        nivel: str,
+        globalids: Any,
+        lado: str = "exterior",
+        desfase: float = 0.0,
+    ) -> dict[str, Any]:
         self._exigir_modelo()
         if not isinstance(globalids, (list, tuple)):
             raise self._error("globalids debe ser una lista de muros.", -32602)
-        nivel_entidad = self._nivel_por_gid(nivel)
+        try:
+            desfase = float(desfase)
+        except (TypeError, ValueError) as exc:
+            raise self._error("El desfase de borde no es un número.", -32602) from exc
+        lado = str(lado or "exterior")
+        if lado not in ("exterior", "eje", "interior"):
+            raise self._error("El borde debe ser exterior, eje o interior.", -32602)
+        self._nivel_por_gid(nivel)
         muros = self._circuito_muros([str(g) for g in globalids])
-        # Línea Media del circuito, recorrida en el orden de la cadena y con cada
-        # muro orientado desde el vértice anterior al siguiente.
+        # Línea media del circuito, recorrida en el orden de la cadena.
         puntos: list[tuple[float, float]] = []
-        lados: list[tuple[float, float, float]] = []
+        lados: list[tuple[float, float, Any]] = []
         primero = self._datos_muro(muros[0])
         actual = (primero["x1"], primero["y1"])
         for muro in muros:
@@ -4028,38 +4256,28 @@ class ModeladoMixin:
                 raise self._error(
                     "Los muros seleccionados no forman un circuito cerrado.", -32022
                 )
-            lados.append((actual[0], actual[1], datos["espesor"]))
+            lados.append((actual[0], actual[1], muro))
             actual = siguiente
         if len(lados) < 3:
             raise self._error("El circuito no tiene muros suficientes.", -32022)
-        area = _poligono_area([(x, y) for x, y, _ in lados])
-        signo = 1.0 if area >= 0 else -1.0
-        for i, (x, y, espesor) in enumerate(lados):
-            nx, ny = lados[(i + 1) % len(lados)][:2]
-            sx, sy = lados[i - 1][:2]
-            # Normal exterior media de los dos lados que llegan al vértice.
-            d1x, d1y = x - sx, y - sy
-            d2x, d2y = nx - x, ny - y
-            n1 = math.hypot(d1x, d1y)
-            n2 = math.hypot(d2x, d2y)
-            if n1 <= TOLERANCIA_CALCULO or n2 <= TOLERANCIA_CALCULO:
-                continue
-            u1 = (d1x / n1, d1y / n1)
-            u2 = (d2x / n2, d2y / n2)
-            # Normales hacia fuera: para un polígono CCW, (dy, -dx).
-            m1 = (u1[1] * signo, -u1[0] * signo)
-            m2 = (u2[1] * signo, -u2[0] * signo)
-            puntos.append(
-                (x + (m1[0] + m2[0]) * espesor / 2.0, y + (m1[1] + m2[1]) * espesor / 2.0)
-            )
-        # Simplifica vértices duplicados.
-        limpio = []
-        for punto in puntos:
-            if not limpio or math.hypot(punto[0] - limpio[-1][0], punto[1] - limpio[-1][1]) > TOLERANCIA_CALCULO:
-                limpio.append(punto)
-        if len(limpio) < 3:
+        puntos = [(x, y) for x, y, _ in lados]
+        if abs(_poligono_area(puntos)) <= TOLERANCIA_CALCULO:
             raise self._error("No se pudo calcular el contorno exterior.", -32022)
-        return self.losa_crear(nivel, limpio, espesor=0.12, desfase=0.0)
+        bordes = [
+            {"referencia": "muro", "objetivo": _gid(muro), "lado": lado, "desfase": desfase}
+            for _x, _y, muro in lados
+        ]
+        bordes_normalizados = self._normalizar_bordes_losa(bordes, puntos)
+        contorno = self._contorno_de_bordes(bordes_normalizados)
+        if contorno is None:
+            raise self._error("No se pudo calcular el contorno exterior.", -32022)
+        return self.losa_crear(
+            nivel,
+            contorno,
+            espesor=0.12,
+            desfase=0.0,
+            bordes=bordes_normalizados,
+        )
 
     # ------------------------------------------------------------------ aberturas
     def _datos_abertura(self, vano: Any) -> dict[str, Any] | None:
@@ -4683,7 +4901,38 @@ class ModeladoMixin:
                             "La nueva longitud deja una abertura fuera del muro.", -32023
                         )
                 datos["longitud"] = longitud
-            if altura is not None or longitud is not None:
+            # O032: línea de ubicación, desfase y volteo del ejemplar.
+            linea = cambios.get("linea_ubicacion", cambios.get("LineaUbicacion"))
+            if linea is not None:
+                linea = str(linea)
+                if linea not in LINEAS_UBICACION:
+                    raise self._error(
+                        "«Línea de ubicación» no válida; use eje_nucleo, "
+                        "cara_exterior, cara_interior o centro.",
+                        -32602,
+                    )
+                datos["linea_ubicacion"] = linea
+            if "desfase_ubicacion" in cambios or "DesfaseUbicacion" in cambios:
+                try:
+                    datos["desfase_ubicacion"] = float(
+                        cambios.get("desfase_ubicacion", cambios.get("DesfaseUbicacion"))
+                    )
+                except (TypeError, ValueError) as exc:
+                    raise self._error("El desfase de ubicación no es un número.", -32602) from exc
+            if "volteado" in cambios or "Volteado" in cambios:
+                datos["volteado"] = bool(cambios.get("volteado", cambios.get("Volteado")))
+            if cambios.get("voltear"):
+                datos["volteado"] = not bool(datos.get("volteado"))
+            if (
+                altura is not None
+                or longitud is not None
+                or linea is not None
+                or "desfase_ubicacion" in cambios
+                or "DesfaseUbicacion" in cambios
+                or "volteado" in cambios
+                or "Volteado" in cambios
+                or cambios.get("voltear")
+            ):
                 self._guardar_pset(
                     entidad,
                     "OPENRVT_Muro",
@@ -4692,6 +4941,9 @@ class ModeladoMixin:
                         "Altura": datos["altura"],
                         "Espesor": datos["espesor"],
                         "Alineacion": datos["alineacion"],
+                        "LineaUbicacion": datos["linea_ubicacion"],
+                        "DesfaseUbicacion": datos["desfase_ubicacion"],
+                        "Volteado": bool(datos["volteado"]),
                     },
                 )
             self._regenerar_muro(entidad)
@@ -4704,6 +4956,43 @@ class ModeladoMixin:
                     modificados.append(relleno)
         elif entidad.is_a("IfcSlab"):
             datos = self._leer_pset(entidad, "OPENRVT_Losa")
+            poligono = self._poligono_de_losa(entidad)
+            bordes_actuales = self._bordes_de_losa(entidad) or self._normalizar_bordes_losa(
+                None, poligono
+            )
+            bordes_nuevos = None
+            if "bordes" in cambios or "Bordes" in cambios:
+                crudos = cambios.get("bordes", cambios.get("Bordes"))
+                bordes_nuevos = self._normalizar_bordes_losa(crudos, poligono)
+            if "desfase_bordes" in cambios or "DesfaseBordes" in cambios:
+                try:
+                    comun = float(
+                        cambios.get("desfase_bordes", cambios.get("DesfaseBordes"))
+                    )
+                except (TypeError, ValueError) as exc:
+                    raise self._error(
+                        "El desfase de bordes no es un número.", -32602
+                    ) from exc
+                base = bordes_nuevos or bordes_actuales
+                for borde in base:
+                    borde["desfase"] = comun
+                bordes_nuevos = self._normalizar_bordes_losa(base, poligono)
+            if "cambio_borde" in cambios or "CambioBorde" in cambios:
+                cambio = cambios.get("cambio_borde", cambios.get("CambioBorde"))
+                if not isinstance(cambio, dict):
+                    raise self._error("El cambio de borde no es válido.", -32602)
+                indice = int(cambio.get("indice", -1))
+                if indice < 0 or indice >= len(bordes_actuales):
+                    raise self._error("El borde indicado no existe.", -32602)
+                base = [dict(b) for b in (bordes_nuevos or bordes_actuales)]
+                for clave in ("referencia", "objetivo", "lado", "desfase"):
+                    if clave in cambio:
+                        base[indice][clave] = cambio[clave]
+                bordes_nuevos = self._normalizar_bordes_losa(base, poligono)
+            if bordes_nuevos is not None:
+                datos["Bordes"] = json.dumps(bordes_nuevos, ensure_ascii=False)
+                self._guardar_pset(entidad, "OPENRVT_Losa", datos)
+                self._regenerar_losa(entidad)
             if "espesor" in cambios or "Espesor" in cambios:
                 espesor = float(cambios.get("espesor", cambios.get("Espesor")))
                 if espesor <= 0:
