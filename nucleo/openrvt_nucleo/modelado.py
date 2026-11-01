@@ -4001,11 +4001,15 @@ class ModeladoMixin:
             datos = self._datos_muro(entidad)
             p = (datos["x1"], datos["y1"])
             d = (datos["dx"], datos["dy"])
-            cara = (
-                datos["espesor"] / 2.0
-                if lado == "exterior"
-                else -datos["espesor"] / 2.0 if lado == "interior" else 0.0
-            )
+            # Cara del cuerpo del muro que da al exterior de la losa, medida
+            # desde el eje y contada en el sentido exterior del borde.
+            offset = self._desfase_de_muro(entidad, datos["espesor"])
+            if lado == "eje":
+                cara = 0.0
+            elif signo > 0:
+                cara = offset + datos["espesor"] if lado == "exterior" else offset
+            else:
+                cara = -offset if lado == "exterior" else -offset - datos["espesor"]
             desplazamiento = cara + desfase
         elif referencia == "eje":
             try:

@@ -254,3 +254,18 @@ def test_flujo_rpc_muro_y_losa_de_bordes() -> None:
     servidor.despachar("muros.voltear", {"globalid": gids[0]})
     muro = servidor.despachar("modelo.propiedades", {"globalid": gids[0]})
     assert muro["psets"]["OPENRVT_Muro"]["Volteado"] is True
+
+
+def test_cambiar_un_muro_a_pano_interior_mueve_la_losa() -> None:
+    nucleo, nivel = _nuevo()
+    muros = _rectangulo(nucleo, nivel)
+    nucleo.losa_desde_muros(nivel, [m.GlobalId for m in muros], lado="exterior")
+    losa = _losa(nucleo)
+    assert _huella(nucleo, losa)[2] == pytest.approx(4.075, abs=1e-6)
+    nucleo.elemento_editar(muros[1].GlobalId, {"linea_ubicacion": "cara_interior"})
+    # Muro derecho a eje: paño exterior 4.075; con paño interior la cara exterior
+    # queda sobre el eje x=4.
+    assert _huella(nucleo, losa)[2] == pytest.approx(4.0, abs=1e-6)
+    # Y la losa conserva los otros tres lados.
+    x0, y0, _x1, y1 = _huella(nucleo, losa)
+    assert (x0, y0, y1) == pytest.approx((-0.075, -0.075, 3.075), abs=1e-6)
