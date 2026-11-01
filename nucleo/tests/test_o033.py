@@ -195,6 +195,38 @@ def test_zapata_no_acepta_altura_ni_tope_por_ninguna_puerta() -> None:
 # --------------------------------------------------------------------- alineación
 
 
+def test_zapata_aislada_rechaza_desplante_cero_y_conserva_globalid() -> None:
+    nucleo = _nuevo()
+    tipo = _tipo(nucleo, "Z-1 Zapata 1.20×1.20")
+    gid = nucleo.zapata_crear(tipo, _nivel(nucleo), 0.0, 0.0)["creados"][0]
+    antes_z = _z(nucleo, gid)
+    antes_undo = len(nucleo._deshacer)
+    with pytest.raises(ErrorNucleo) as excinfo:
+        nucleo.elemento_editar(gid, {"Desplante": 0})
+    assert excinfo.value.codigo == -32602
+    assert _z(nucleo, gid) == pytest.approx(antes_z)
+    assert _entidad(nucleo, gid).GlobalId == gid
+    assert len(nucleo._deshacer) == antes_undo
+    # Una edición válida regenera la pieza pero conserva el GlobalId.
+    nucleo.elemento_editar(gid, {"Desplante": 1.20})
+    assert _entidad(nucleo, gid).GlobalId == gid
+    assert _estructura(nucleo, gid)["Desplante"] == pytest.approx(1.20)
+
+
+def test_contratrabe_editado_conserva_globalid_y_deshace_en_un_paso() -> None:
+    nucleo = _nuevo()
+    _a, _b, _uno, _dos = _reticula(nucleo)
+    tipo = _tipo(nucleo, "CT-1 Contratrabe 20×40")
+    gid = nucleo.viga_crear(
+        tipo, _nivel(nucleo), 0, 0, 5, 0, desfase=-0.10
+    )["creados"][0]
+    nucleo.elemento_editar(gid, {"X2": 4.0})
+    assert _entidad(nucleo, gid).GlobalId == gid
+    assert _estructura(nucleo, gid)["Longitud"] == pytest.approx(4.0)
+    nucleo.deshacer()
+    assert _estructura(nucleo, gid)["Longitud"] == pytest.approx(5.0)
+
+
 def test_zapata_en_eje_centrada_y_prolongaciones_de_medio_ancho() -> None:
     nucleo = _nuevo()
     _reticula(nucleo)
