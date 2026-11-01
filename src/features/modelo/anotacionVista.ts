@@ -106,6 +106,9 @@ export interface LayoutAlzado {
   cajas: CajaAnotacion[];
 }
 
+import { geometriaEje } from "./ejesVista";
+import type { AjusteEjeVista } from "./tipos";
+
 export interface EntradaLayoutAlzado {
   niveles: NivelEntrada[];
   ejes: EjeEntrada[];
@@ -123,6 +126,8 @@ export interface EntradaLayoutAlzado {
   altoTextoNivelMundo?: number;
   /** Alto real del texto de cota en mundo (incluye el mínimo en píxeles del visor). */
   altoTextoCotaMundo?: number;
+  /** O031: codos/extremos manuales de los ejes, para que el globo los siga. */
+  ajustesEje?: Record<string, AjusteEjeVista>;
 }
 
 const MM = (mm: number, escala: EscalaVista) => mmAMundo(mm, escala);
@@ -454,21 +459,34 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
   const ejesLineas: LineaAnotacion[] = [];
   const ocupados: Array<{ t0: number; t1: number }> = [];
   for (const eje of ejes) {
-    let t = eje.s;
-    // Si el globo se encima con otro, se desplaza con codo (como la referencia).
-    while (ocupados.some((o) => t + radio > o.t0 && t - radio < o.t1)) t += radio * 2.2;
+    const ajuste = entrada.ajustesEje?.[eje.globalid];
+    // O031 (regresión de O025b): si el eje tiene codos o extremo manual, el globo
+    // y la línea los siguen; antes se ignoraban y «Agregar codo» no movía el globo.
+    const geo = ajuste
+      ? geometriaEje(ajuste, [eje.s, zBajo], [eje.s, zGloboInferior])
+      : null;
+    let t = geo ? geo.globoFin[0] : eje.s;
+    const zGloboEje = geo ? geo.globoFin[1] + radio : zGlobo;
+    if (!geo) {
+      // Si el globo se encima con otro, se desplaza con codo (como la referencia).
+      while (ocupados.some((o) => t + radio > o.t0 && t - radio < o.t1)) t += radio * 2.2;
+    }
     ocupados.push({ t0: t - radio, t1: t + radio });
-    const puntos: Array<[number, number]> = [
-      [eje.s, zBajo],
-      [eje.s, zGloboInferior - MM(2, escala)],
-    ];
-    if (Math.abs(t - eje.s) > 1e-9) {
-      puntos.push([t, zGloboInferior]);
-    } else {
-      puntos[puntos.length - 1] = [eje.s, zGloboInferior];
+    const puntos: Array<[number, number]> = geo
+      ? geo.puntos.map(([x, z]) => [x, z])
+      : [
+          [eje.s, zBajo],
+          [eje.s, zGloboInferior - MM(2, escala)],
+        ];
+    if (!geo) {
+      if (Math.abs(t - eje.s) > 1e-9) {
+        puntos.push([t, zGloboInferior]);
+      } else {
+        puntos[puntos.length - 1] = [eje.s, zGloboInferior];
+      }
     }
     ejesLineas.push({ tipo: "eje", puntos });
-    globos.push({ globalid: eje.globalid, etiqueta: eje.etiqueta, t, z: zGlobo, radio });
+    globos.push({ globalid: eje.globalid, etiqueta: eje.etiqueta, t, z: zGloboEje, radio });
     cajas.push({
       tipo: "eje",
       texto: eje.etiqueta,
@@ -504,4 +522,27 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
 /** Suma de la cadena de cotas; debe coincidir con la total. */
 export function sumaCadena(parciales: CotaTramoCalc[]): number {
   return parciales.reduce((total, c) => total + c.valor, 0);
+}
+
+export interface TramoCotaEnlazado extends CotaTramoCalc {
+  /** Nivel inferior del tramo (el que se mueve al editar la cota). */
+  referencia?: string;
+  /** Nivel superior (el que la sigue cuando «mover los de arriba» está marcado). */
+  mover?: string;
+}
+
+/**
+ * O031 (regresión de O025): cada cota parcial vuelve a saber entre qué dos niveles
+ * está. Sin estos enlaces, el doble clic sobre «3.00» abría el editor pero no movía
+ * ningún nivel (O010/O006).
+ */
+export function enlazarTramosCota(
+  parciales: CotaTramoCalc[],
+  niveles: NivelEntrada[],
+): TramoCotaEnlazado[] {
+  return parciales.map((tramo, i) => ({
+    ...tramo,
+    referencia: niveles[i]?.globalid,
+    mover: niveles[i + 1]?.globalid,
+  }));
 }

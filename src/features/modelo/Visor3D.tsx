@@ -58,7 +58,7 @@ import {
 } from "./orbita";
 import { DESFASE_NOMBRE_CABEZA, elevacionDesdeCota, normalizarAjusteNivel } from "./niveles";
 import { baseTextoAnotacion } from "./anotacion";
-import { calcularLayoutAlzado, segmentosTrazoPunto } from "./anotacionVista";
+import { calcularLayoutAlzado, enlazarTramosCota, segmentosTrazoPunto } from "./anotacionVista";
 import {
   categoriaOculta,
   factorEscala,
@@ -107,6 +107,7 @@ import { crearMallasCapas } from "./capas3d";
 import {
   MAXIMO_CODOS,
   agregarCodoEje,
+  asasCodoVista,
   arrastrarExtremoEje,
   copiarAjusteEje,
   extremoEje,
@@ -3181,6 +3182,7 @@ export function Visor3D({
           ajustesNivel: ajustesMundo,
           altoTextoNivelMundo: altoTexto,
           altoTextoCotaMundo: altoTextoCota,
+          ajustesEje: { ...(vista.ejes ?? {}), ...(ajusteEnCurso ?? {}) },
         });
         // Encuadre exacto de la zona de anotación para las capturas y pruebas.
         const nodoEncuadre = contenedor.current;
@@ -3449,7 +3451,12 @@ export function Visor3D({
         };
 
         const todosTramos = [
-          ...layout.parciales.map((c) => ({ ...c, tipo: "parcial" as const })),
+          // O031 (regresión de O025): la cota parcial vuelve a saber entre qué dos
+          // niveles está para que el doble clic edite la elevación (O010/O006).
+          ...enlazarTramosCota(layout.parciales, ordenados).map((c) => ({
+            ...c,
+            tipo: "parcial" as const,
+          })),
           ...(layout.total ? [{ ...layout.total, tipo: "total" as const }] : []),
         ];
         for (const tramo of todosTramos) {
@@ -3465,6 +3472,8 @@ export function Visor3D({
               texto: tramo.texto,
               valor: tramo.valor,
               punto: pos,
+              referencia: tramo.tipo === "parcial" ? tramo.referencia : undefined,
+              mover: tramo.tipo === "parcial" ? tramo.mover : undefined,
             });
             anotacionesAlzado.current.push({
               tipo: tramo.tipo,
@@ -3545,6 +3554,20 @@ export function Visor3D({
             indice: null,
             punto: puntoHZ(s, zBajoEje),
           });
+          // O031 (regresión de O025b): recuperar las asas de los codos en el
+          // alzado, que la reescritura de la anotación había perdido. Sin ellas no
+          // se puede arrastrar ni quitar un codo con el menú contextual.
+          const ajusteEje = ajusteEnCurso?.[eje.globalid] ?? vista.ejes?.[eje.globalid];
+          for (const asaCodo of asasCodoVista(ajusteEje)) {
+            ejesInteraccion.current.push({
+              globalid: eje.globalid,
+              etiqueta: eje.etiqueta,
+              lado: asaCodo.lado,
+              tipo: "codo",
+              indice: asaCodo.indice,
+              punto: puntoHZ(asaCodo.punto[0], asaCodo.punto[1]),
+            });
+          }
         }
 
         datosNiveles.push({
@@ -5480,17 +5503,24 @@ export function Visor3D({
       etiqueta: string,
       lado: LadoEje = "fin",
       indiceCodo?: number,
+      tipoAsa?: "globo" | "base",
     ) => {
       const camera = camara.current;
       if (!camera) return null;
-      const asa = ejesInteraccion.current.find((a) =>
-        indiceCodo === undefined
-          ? a.etiqueta === etiqueta && a.lado === lado && a.tipo !== "codo"
-          : a.etiqueta === etiqueta &&
+      const asa = ejesInteraccion.current.find((a) => {
+        if (indiceCodo !== undefined) {
+          return (
+            a.etiqueta === etiqueta &&
             a.lado === lado &&
             a.tipo === "codo" &&
-            a.indice === indiceCodo,
-      );
+            a.indice === indiceCodo
+          );
+        }
+        if (a.etiqueta !== etiqueta || a.lado !== lado || a.tipo === "codo") return false;
+        // O031: con globos desplazados, la asa «globo» ya no sirve para arrastrar
+        // el extremo real; las pruebas piden explícitamente la asa «base».
+        return tipoAsa === undefined || a.tipo === tipoAsa;
+      });
       if (!asa) return null;
       camera.updateMatrixWorld();
       const punto = new THREE.Vector3(...asa.punto).project(camera);

@@ -266,7 +266,8 @@ export function cajaConEjes(caja: Caja, ejes: EjeReferencia[]): Caja {
   };
 }
 
-/** Crea las vistas que la aplicación muestra al abrir un modelo. */export function crearVistas(niveles: Nivel[]): Vista[] {
+/** Crea las vistas que la aplicación muestra al abrir un modelo. */
+export function crearVistas(niveles: Nivel[]): Vista[] {
   const categorias = CATEGORIAS_TODAS();
   const idsNiveles = niveles.map((n) => n.globalid);
   const vistas: Vista[] = [];
@@ -557,6 +558,23 @@ export function dibujaSiluetaSobreCorte(
   return (
     cotaMinima > corte + 1e-4 && cotaMinima <= corte + (vista.alturaArriba ?? 3)
   );
+}
+
+/**
+ * O031: un archivo guardado con solo plantas (por ejemplo, creado por la herramienta
+ * Nivel desde otro cliente) no debe ocultar los alzados y el 3D automáticos. Se
+ * completan únicamente cuando no queda ninguna vista que no sea planta: si el usuario
+ * borró a mano un alzado o una vista 3D, su elección se respeta al abrir.
+ */
+export function completarVistasEstandar(
+  vistas: Vista[],
+  niveles: Nivel[],
+): { vistas: Vista[]; cambiadas: boolean } {
+  if (vistas.some((v) => v.tipo !== "planta")) return { vistas, cambiadas: false };
+  const ids = new Set(vistas.map((v) => v.id));
+  const faltantes = crearVistas(niveles).filter((v) => !ids.has(v.id));
+  if (faltantes.length === 0) return { vistas, cambiadas: false };
+  return { vistas: [...vistas, ...faltantes], cambiadas: true };
 }
 
 /**

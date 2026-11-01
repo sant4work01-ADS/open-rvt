@@ -388,3 +388,28 @@ export function imanMultiplo(
   if (d <= Math.abs(tolerancia)) return { valor: multiplo, enganchado: true };
   return { valor, enganchado: false };
 }
+
+export interface AsaCodoVista {
+  lado: LadoEje;
+  indice: number;
+  punto: Punto2;
+}
+
+/**
+ * O031 (regresión de O025b): asas de los codos que hay que dibujar en una vista.
+ * El alzado dejó de crearlas al reescribir la anotación; sin ellas el codo no se
+ * puede arrastrar ni quitar desde el menú contextual (O011).
+ */
+export function asasCodoVista(ajuste: AjusteEjeVista | undefined): AsaCodoVista[] {
+  const limpio = normalizarAjusteEje(ajuste);
+  const asas: AsaCodoVista[] = [];
+  for (const [lado, clave] of [
+    ["inicio", "codosInicio"],
+    ["fin", "codosFin"],
+  ] as const) {
+    (limpio?.[clave] ?? []).forEach((punto, indice) => {
+      asas.push({ lado, indice, punto });
+    });
+  }
+  return asas;
+}

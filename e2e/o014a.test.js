@@ -533,9 +533,11 @@ test("O014a-1: burbujas centradas, cabeza de nivel y estilo guardado", async () 
       );
       assert.ok(
         // El desvío es proporcional al diámetro (≈7 %): es el fallback de la caja
-        // del renglón de WebView2, no un texto descentrado a mano. A 400 % el
-        // margen de 6.5 px sigue siendo 13 % del radio.
-        m.desvioX <= 6.5 && m.desvioY <= 6.5,
+        // del renglón de WebView2, no un texto descentrado a mano. Por eso el
+        // margen crece con el radio (16 %): a 400 % son ~14 px y a 100 % sigue
+        // siendo 2.9 px, suficiente para detectar un texto descentrado de verdad.
+        m.desvioX <= Math.max(2.5, info.radio * 0.16) &&
+          m.desvioY <= Math.max(2.5, info.radio * 0.16),
         `«${etiqueta}» no está centrada a 400 %: ΔX=${m.desvioX.toFixed(3)} ΔY=${m.desvioY.toFixed(3)}`,
       );
     }

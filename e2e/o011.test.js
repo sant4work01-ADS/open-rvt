@@ -7,7 +7,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { execFileSync } = require("node:child_process");
+const zlib = require("node:zlib");
 const { Sesion, esperar, By, until, Key } = require("./arnes");
 
 const RAIZ = path.resolve(__dirname, "..");
@@ -47,6 +47,69 @@ function rectIntersecaCirculo(r, c) {
   const x = Math.max(r.x0, Math.min(c.x, r.x1));
   const y = Math.max(r.y0, Math.min(c.y, r.y1));
   return Math.hypot(c.x - x, c.y - y) <= c.radio;
+}
+
+function rectIntersecaRect(a, b) {
+  return a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+}
+
+// Lector PNG mínimo (8 bits, RGB/RGBA) para medir la captura sin depender de Pillow.
+function leerPng(ruta) {
+  const b = fs.readFileSync(ruta);
+  let p = 8;
+  let ancho = 0;
+  let alto = 0;
+  let tipoColor = 0;
+  const idat = [];
+  while (p < b.length) {
+    const largo = b.readUInt32BE(p);
+    const tipo = b.toString("ascii", p + 4, p + 8);
+    const datos = b.subarray(p + 8, p + 8 + largo);
+    p += 12 + largo;
+    if (tipo === "IHDR") {
+      ancho = datos.readUInt32BE(0);
+      alto = datos.readUInt32BE(4);
+      assert.equal(datos[8], 8, "se esperaba una captura PNG de 8 bits");
+      tipoColor = datos[9];
+    } else if (tipo === "IDAT") {
+      idat.push(datos);
+    } else if (tipo === "IEND") {
+      break;
+    }
+  }
+  const canales = tipoColor === 6 ? 4 : tipoColor === 2 ? 3 : 0;
+  assert.ok(canales, `tipo de color PNG no soportado: ${tipoColor}`);
+  const crudo = zlib.inflateSync(Buffer.concat(idat));
+  const fila = ancho * canales + 1;
+  const salida = Buffer.alloc(ancho * alto * canales);
+  for (let y = 0; y < alto; y += 1) {
+    const filtro = crudo[y * fila];
+    const src = crudo.subarray(y * fila + 1, (y + 1) * fila);
+    const dst = salida.subarray(y * ancho * canales, (y + 1) * ancho * canales);
+    const previa = y > 0 ? salida.subarray((y - 1) * ancho * canales, y * ancho * canales) : null;
+    for (let x = 0; x < ancho * canales; x += 1) {
+      const a = x >= canales ? dst[x - canales] : 0;
+      const arriba = previa ? previa[x] : 0;
+      const c = previa && x >= canales ? previa[x - canales] : 0;
+      let valor = src[x];
+      if (filtro === 1) valor += a;
+      else if (filtro === 2) valor += arriba;
+      else if (filtro === 3) valor += (a + arriba) >> 1;
+      else if (filtro === 4) {
+        const pp = a + arriba - c;
+        const pa = Math.abs(pp - a);
+        const pb = Math.abs(pp - arriba);
+        const pc = Math.abs(pp - c);
+        valor += pa <= pb && pa <= pc ? a : pb <= pc ? arriba : c;
+      }
+      dst[x] = valor & 255;
+    }
+  }
+  return { ancho, alto, canales, datos: salida };
+}
+
+function colorDistancia(a, b) {
+  return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 }
 
 async function textoDom(ses, selector) {
@@ -277,7 +340,9 @@ async function arrastrarExtremo(ses, etiqueta, lado, destinoMundo) {
   const inicio = await ses.driver.executeScript(
     (etiqueta, lado) => {
       const visor = document.querySelector('[data-testid="visor"]');
-      return visor.__openrvtEjeAPantalla(etiqueta, lado);
+      // O031: con globos desplazados la asa «globo» está lejos del extremo; el
+      // arrastre de esta prueba es el del extremo real (asa «base»).
+      return visor.__openrvtEjeAPantalla(etiqueta, lado, undefined, "base");
     },
     etiqueta,
     lado,
@@ -657,13 +722,20 @@ test("O011-3: cotas .15 por la pantalla y niveles/globos del alzado", async () =
         );
       }
     }
-    const x1Etiquetas = Math.max(
-      ...anotaciones.etiquetas.filter((e) => e.tipo === "nivel").map((e) => e.x1),
-    );
+    // O025 dejó las cabezas de nivel como columna más externa: las cadenas y la
+    // total quedan por dentro de ellas (antes iban por fuera). Se conserva lo que
+    // importaba: la cota no se cruza con la etiqueta de ningún nivel.
+    const etiquetasNivel = anotaciones.etiquetas.filter((e) => e.tipo === "nivel");
     for (const cota of anotaciones.etiquetas.filter((e) => e.tipo !== "nivel")) {
+      for (const nivel of etiquetasNivel) {
+        assert.ok(
+          !rectIntersecaRect(cota, nivel),
+          `la cota «${cota.texto}» se cruza con la etiqueta «${nivel.texto}»`,
+        );
+      }
       assert.ok(
-        cota.x0 > x1Etiquetas,
-        `la cota «${cota.texto}» no quedó más afuera que las etiquetas de nivel`,
+        cota.x0 < Math.min(...etiquetasNivel.map((e) => e.x0)),
+        `la cota «${cota.texto}» debe quedar dentro de las etiquetas de nivel`,
       );
     }
 
@@ -755,67 +827,47 @@ test("O011-3: cotas .15 por la pantalla y niveles/globos del alzado", async () =
     const png = path.join(RESULTADOS, "globo-zoom-x8.png");
     await ses.captura(png);
 
-    const guion = String.raw`
-import sys, math
-from PIL import Image, ImageChops
-ruta, cx, cy, r, ancho, alto, hex_fondo, hex_anillo = sys.argv[1], float(sys.argv[2]), float(sys.argv[3]), float(sys.argv[4]), float(sys.argv[5]), float(sys.argv[6]), sys.argv[7], sys.argv[8]
-img = Image.open(ruta).convert("RGB")
-sx = img.width / ancho
-sy = img.height / alto
-px = lambda x, y: img.getpixel((max(0, min(img.width-1, round(x*sx))), max(0, min(img.height-1, round(y*sy)))))
-def dist(a, b):
-    return math.sqrt(sum((a[i]-b[i])**2 for i in range(3)))
-# El color del fondo se toma de una esquina del visor (fuera del globo).
-fondo = px(img.width - 5, img.height - 5)
-# Calibrar el anillo con la propia imagen: color más contrastado en la banda del
-# borde (excluye el texto, que está en el centro).
-mejor = -1
-anillo = None
-radio_anillo = r
-for i in range(0, 360, 2):
-    a = math.radians(i)
-    for rr in range(int(0.55*r), int(1.45*r)+1):
-        c = px(cx + math.cos(a)*rr, cy + math.sin(a)*rr)
-        d = dist(c, fondo)
-        if d > mejor and d > 20:
-            mejor = d
-            anillo = c
-            radio_anillo = rr
-# Recorrido radial hacia arriba (zona vacía sobre el globo), desde dentro del
-# relleno hasta más allá del anillo.
-intermedios = 0
-max_racha = 0
-cercanos = 0
-for k in range(int(0.60*radio_anillo), int(1.40*radio_anillo)+1):
-    c = px(cx, cy - k)
-    if dist(c, anillo) <= 45:
-        cercanos += 1
-    if dist(c, fondo) > 20 and dist(c, anillo) > 45:
-        intermedios += 1
-        max_racha = max(max_racha, intermedios)
-    else:
-        intermedios = 0
-print(f"{max_racha} {mejor:.1f} {cercanos}")
-`;
-    const [racha, contraste, cercanos] = execFileSync(
-      "python3",
-      [
-        "-c",
-        guion,
-        png,
-        String(despues.x),
-        String(despues.y),
-        String(despues.radio),
-        String(despues.anchoVentana),
-        String(despues.altoVentana),
-        String(despues.colorFondo),
-        String(despues.colorAnillo),
-      ],
-      { encoding: "utf8" },
-    )
-      .trim()
-      .split(" ")
-      .map(Number);
+    // O031: la medición de píxeles se hace con un lector PNG propio; antes llamaba a
+    // `python3` + Pillow, que no está en Windows (el E2E fallaba por el entorno).
+    const img = leerPng(png);
+    const sx = img.ancho / despues.anchoVentana;
+    const sy = img.alto / despues.altoVentana;
+    const px = (x, y) => {
+      const xi = Math.max(0, Math.min(img.ancho - 1, Math.round(x * sx)));
+      const yi = Math.max(0, Math.min(img.alto - 1, Math.round(y * sy)));
+      const i = (yi * img.ancho + xi) * img.canales;
+      return [img.datos[i], img.datos[i + 1], img.datos[i + 2]];
+    };
+    const fondo = px(img.ancho - 5, img.alto - 5);
+    let mejor = -1;
+    let anillo = null;
+    let radioAnillo = despues.radio;
+    for (let i = 0; i < 360; i += 2) {
+      const a = (i * Math.PI) / 180;
+      for (let rr = Math.trunc(0.55 * despues.radio); rr <= Math.trunc(1.45 * despues.radio); rr += 1) {
+        const c = px(despues.x + Math.cos(a) * rr, despues.y + Math.sin(a) * rr);
+        const d = colorDistancia(c, fondo);
+        if (d > mejor && d > 20) {
+          mejor = d;
+          anillo = c;
+          radioAnillo = rr;
+        }
+      }
+    }
+    let intermedios = 0;
+    let racha = 0;
+    let cercanos = 0;
+    for (let k = Math.trunc(0.6 * radioAnillo); k <= Math.trunc(1.4 * radioAnillo); k += 1) {
+      const c = px(despues.x, despues.y - k);
+      if (colorDistancia(c, anillo) <= 45) cercanos += 1;
+      if (colorDistancia(c, fondo) > 20 && colorDistancia(c, anillo) > 45) {
+        intermedios += 1;
+        racha = Math.max(racha, intermedios);
+      } else {
+        intermedios = 0;
+      }
+    }
+    const contraste = mejor;
     // La medición debe haber encontrado el anillo (contraste y pixeles del borde).
     assert.ok(contraste > 30, `no se encontró el anillo del globo: contraste ${contraste}`);
     assert.ok(cercanos > 0, "la línea radial no cruzó el anillo del globo");

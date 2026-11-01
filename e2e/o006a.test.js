@@ -384,15 +384,16 @@ test("O006a: el entrepiso manda y los muros del nivel superior suben", async () 
     const zAntes = await cajaMalla(ses, muro.creados[0]);
 
     const textos = (await atributoVisor(ses, "niveles-texto")) || "";
-    assert.match(textos, /Nivel 0/);
-    assert.match(textos, /Nivel 1/);
-    assert.match(textos, /2\.70/);
-    // O006b: con un solo entrepiso no se repite la total «2.70».
+    // O025 rotula las cabezas «Npt» (no el nombre del nivel) y «Mostrar nombre»
+    // viene apagado; con dos niveles ya hay cadena (2.70) y total (2.70).
+    assert.match(textos, /Npt 0\.00m/);
+    assert.match(textos, /Npt \+2\.70m/);
+    assert.match(textos, /2\.70 2\.70/);
     const filasNiveles = JSON.parse((await atributoVisor(ses, "niveles-cotas")) || "[]");
     const filaNiveles = filasNiveles.find((f) => f.nombre === "Niveles");
     assert.ok(filaNiveles, "faltan las cotas de niveles");
     assert.deepEqual(filaNiveles.parciales, ["2.70"]);
-    assert.equal(filaNiveles.total, null);
+    assert.equal(filaNiveles.total, "2.70");
     const capturaAlzado = path.join(CAPTURAS, "o006a_alzado_niveles.png");
     await ses.captura(capturaAlzado);
     assert.deepEqual(dimensionesPng(capturaAlzado), { ancho: 1600, alto: 900 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { estilosPorDefecto, estiloCotaPorDefecto } from "./estilos";
 import {
   calcularLayoutAlzado,
+  enlazarTramosCota,
   segmentosTrazoPunto,
   sumaCadena,
   textoNivel,
@@ -289,5 +290,30 @@ describe("O024/O025: entradas raras y bordes", () => {
     const l = layout({ estiloCota: cota });
     expect(l.parciales[0].valor).toBeCloseTo(0.5, 12);
     expect(l.parciales[0].remates[0].t).toBe(l.tCadena);
+  });
+});
+
+describe("O031: enlace de las cotas parciales con sus niveles", () => {
+  it("cada tramo apunta al nivel inferior y al superior, en orden", () => {
+    // Tres niveles a 0, 1.5 y 4 m: dos tramos de 1.50 y 2.50.
+    const niveles = [
+      { globalid: "n0", nombre: "Nivel 0", elevacion: 0 },
+      { globalid: "n1", nombre: "Nivel 1", elevacion: 1.5 },
+      { globalid: "n2", nombre: "Nivel 2", elevacion: 4 },
+    ];
+    const tramos = [
+      { desde: 0, hasta: 1.5, valor: 1.5, texto: "1.50", t: 1, fuera: false },
+      { desde: 1.5, hasta: 4, valor: 2.5, texto: "2.50", t: 1, fuera: false },
+    ] as Parameters<typeof enlazarTramosCota>[0];
+    const enlazados = enlazarTramosCota(tramos, niveles);
+    expect(enlazados.map((t) => [t.referencia, t.mover])).toEqual([
+      ["n0", "n1"],
+      ["n1", "n2"],
+    ]);
+    // No inventa enlaces si falta un nivel.
+    expect(enlazarTramosCota(tramos, niveles.slice(0, 1))[1]).toMatchObject({
+      referencia: undefined,
+      mover: undefined,
+    });
   });
 });

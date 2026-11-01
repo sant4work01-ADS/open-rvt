@@ -19,6 +19,7 @@ import {
 } from "./tipos";
 import {
   cajaDeMallas,
+  completarVistasEstandar,
   crearVistaCorte,
   crearVistas,
   migrarNivelesVisibles,
@@ -607,6 +608,9 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       const migracion = migrarNivelesVisibles(vistas, niveles);
       vistas = migracion.vistas;
       migradas = migracion.cambiadas;
+      // O031: completar los alzados y el 3D que falten en archivos guardados solo
+      // con plantas; no marca la obra como modificada.
+      vistas = completarVistasEstandar(vistas, niveles).vistas;
     }
     const activa =
       vistas.find((v) => v.tipo === "planta") ?? vistas[0] ?? null;

@@ -6,6 +6,7 @@ import {
   camaraPerspectiva,
   cajaConEjes,
   cajaDeMallas,
+  completarVistasEstandar,
   crearVistaCorte,
   crearVistas,
   dibujaSiluetaSobreCorte,
@@ -131,6 +132,32 @@ describe("creación automática de vistas", () => {
     ]);
     expect(vistas.find((v) => v.tipo === "iso")?.nombre).toBe("3D Isométrica");
     expect(vistas.find((v) => v.tipo === "perspectiva")?.nombre).toBe("3D Perspectiva");
+  });
+
+  it("O031: un archivo con solo plantas recupera los alzados y el 3D automáticos", () => {
+    // Caso real: el núcleo guardó únicamente la planta que creó la herramienta Nivel.
+    const guardadas = crearVistas(NIVELES).filter((v) => v.tipo === "planta");
+    const completas = completarVistasEstandar(guardadas, NIVELES);
+    expect(completas.cambiadas).toBe(true);
+    expect(completas.vistas.map((v) => v.id)).toEqual([
+      "planta-nivel-0",
+      "planta-nivel-1",
+      "alzado-norte",
+      "alzado-sur",
+      "alzado-este",
+      "alzado-oeste",
+      "iso",
+      "perspectiva",
+    ]);
+    // No se duplican las plantas que ya estaban.
+    expect(completas.vistas.filter((v) => v.id === "planta-nivel-0")).toHaveLength(1);
+
+    // Si queda al menos un alzado, la lista es una elección del usuario y no se toca.
+    const conAlzado = [...guardadas, crearVistas(NIVELES).find((v) => v.id === "alzado-norte")!];
+    expect(completarVistasEstandar(conAlzado, NIVELES)).toEqual({
+      vistas: conAlzado,
+      cambiadas: false,
+    });
   });
 
   it("el corte es perpendicular a la línea y conserva la altura de la planta", () => {

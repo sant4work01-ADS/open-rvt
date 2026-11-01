@@ -487,7 +487,13 @@ test("O010-2: niveles, cotas, ejes ordenados, paneles y rango de vista", async (
     const orden = (await atributoVisor(ses, "ejes-alzado-orden")) || "";
     assert.equal(orden, "1,5,3,4,2", `orden de ejes inesperado: ${orden}`);
     const textos = (await atributoVisor(ses, "niveles-texto")) || "";
-    assert.match(textos, /Total 11\.00/, `la cota total no está rotulada: ${textos}`);
+    // O025 quitó la palabra «Total» de su fila: la total es el número solo.
+    // Se comprueba el valor exacto y que la cadena suma la total (8.00 + 3.00).
+    const filas = JSON.parse((await atributoVisor(ses, "niveles-cotas")) || "[]");
+    const filaNiveles = filas.find((f) => f.nombre === "Niveles");
+    assert.ok(filaNiveles, `faltan las cotas de niveles: ${textos}`);
+    assert.deepEqual(filaNiveles.parciales, ["8.00", "3.00"]);
+    assert.equal(filaNiveles.total, "11.00", `la cota total no es 11.00: ${textos}`);
 
     // Grupo de rango de vista plegado.
     await elegirVista(ses, "Planta Nivel renombrado");

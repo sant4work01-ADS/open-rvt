@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import {
   agregarCodoEje,
+  asasCodoVista,
   imanAlineacion,
   imanMultiplo,
   restringirArrastre,
@@ -377,5 +378,26 @@ describe("O021: candado de alineación, globos por extremo y copia", () => {
     expect(imanMultiplo(1.7, 0, 0.8, 0.05)).toEqual({ valor: 1.7, enganchado: false });
     // El enganche se mide desde la posición original, no desde cero.
     expect(imanMultiplo(2.45, 0.75, 0.8, 0.05)).toEqual({ valor: 2.45, enganchado: false });
+  });
+});
+
+describe("O031: asas de los codos en el alzado", () => {
+  it("devuelve un asa por codo con su lado e índice exactos", () => {
+    // Dos codos abajo y uno arriba, con coordenadas (t, z) del plano del alzado.
+    const ajuste = {
+      codosInicio: [[-0.5, 1.5]] as Array<[number, number]>,
+      codosFin: [
+        [0, 6.3],
+        [0.8, 6.6],
+      ] as Array<[number, number]>,
+    };
+    expect(asasCodoVista(ajuste)).toEqual([
+      { lado: "inicio", indice: 0, punto: [-0.5, 1.5] },
+      { lado: "fin", indice: 0, punto: [0, 6.3] },
+      { lado: "fin", indice: 1, punto: [0.8, 6.6] },
+    ]);
+    // Sin ajuste no hay asas (no se inventan codos).
+    expect(asasCodoVista(undefined)).toEqual([]);
+    expect(asasCodoVista({})).toEqual([]);
   });
 });
