@@ -120,8 +120,10 @@ import {
   normalizarAjusteEje,
   quitarCodoEje,
   restablecerExtremoEje,
-  restringirArrastre,
   candadoArrastreAsa,
+  desplazamientoArrastreNivel,
+  destinoArrastreAsa,
+  puntoAsaEje,
   type DireccionEjeArrastre,
   type LadoEje,
   type TipoAsaArrastre,
@@ -951,11 +953,15 @@ export function Visor3D({
     /** O020: qué hace el arrastre, decidido al pulsar. */
     accion: AccionArrastre;
   } | null>(null);
+  // Coordenadas de página (como clientX/Y); `ox`/`oy` es la esquina del visor para
+  // dibujar el rectángulo dentro de él, que es `relative`.
   const [ventanaSeleccion, setVentanaSeleccion] = useState<{
     x1: number;
     y1: number;
     x2: number;
     y2: number;
+    ox: number;
+    oy: number;
   } | null>(null);
   // O003b: estado de la herramienta activa.
   const herramienta = useModelo((s) => s.herramienta);
@@ -1023,6 +1029,8 @@ export function Visor3D({
     candado: boolean;
     familia: "vertical" | "horizontal" | "alzado";
     inicio: Punto2;
+    /** Posición del asa al pulsar (el destino parte de aquí, no del puntero). */
+    asaInicio: Punto2;
     originales: Record<string, AjusteEjeVista>;
     movido: boolean;
     tipo: "globo" | "codo" | "codo-nuevo" | "base";
@@ -1072,7 +1080,10 @@ export function Visor3D({
     globalid: string;
     elev: number;
     desplazamiento: number;
+    /** Desplazamiento de la cabeza al pulsar; el arrastre suma lo que se mueve el puntero. */
+    desplazamientoInicial: number;
     inicio: Punto2;
+    pantallaInicio: { x: number; y: number };
     movido: boolean;
   } | null>(null);
   const [ajustesNivelEnCurso, setAjustesNivelEnCurso] = useState<
@@ -1325,6 +1336,14 @@ export function Visor3D({
     const plano = new THREE.Plane(normal, -ctx.profundidad);
     if (!rayo.ray.intersectPlane(plano, punto)) return null;
     return [punto.x * ctx.h[0] + punto.y * ctx.h[1], punto.z];
+  }, []);
+
+  /** Punto de mundo (como el de las asas) en coordenadas de la vista. */
+  const puntoVistaDeMundo = useCallback((p: [number, number, number]): Punto2 | null => {
+    const ctx = contextoEje.current;
+    if (!ctx) return null;
+    if (ctx.tipo === "planta") return [p[0], p[1]];
+    return [p[0] * ctx.h[0] + p[1] * ctx.h[1], p[2]];
   }, []);
 
   const persistirAjusteEje = (globalid: string, ajuste: AjusteEjeVista | undefined) => {
@@ -4763,7 +4782,9 @@ export function Visor3D({
             globalid: asaNivel.globalid,
             elev: asaNivel.elev,
             desplazamiento: asaNivel.desplazamiento,
+            desplazamientoInicial: asaNivel.desplazamiento,
             inicio: puntoNivel,
+            pantallaInicio: { x: evento.clientX, y: evento.clientY },
             movido: false,
           };
           setAjustesNivelEnCurso({});
@@ -4807,6 +4828,17 @@ export function Visor3D({
                     : "horizontal"
                   : "alzado",
               inicio: punto,
+              // El asa del extremo de la línea se dibuja justo en su punto; la del
+              // globo y la del codo nuevo no (el globo va un radio arriba).
+              asaInicio: asa.tipo !== "base" && ctx.bases[asa.globalid]
+                ? puntoAsaEje(
+                    inicialConCambios[asa.globalid],
+                    ctx.bases[asa.globalid],
+                    asa.lado,
+                    asa.tipo,
+                    asa.tipo === "codo" ? asa.indice : null,
+                  )
+                : (puntoVistaDeMundo(asa.punto) ?? punto),
               originales: inicial,
               movido: false,
               tipo: asa.tipo,
@@ -4848,13 +4880,39 @@ export function Visor3D({
       // O014b: la cabeza de nivel sigue al puntero en vertical.
       const arrNivel = arrastreNivel.current;
       if (arrNivel) {
+        // Umbral de 3 px: un clic sobre la cabeza no la mueve ni le crea codo.
+        if (!arrNivel.movido) {
+          const recorrido = Math.hypot(
+            evento.clientX - arrNivel.pantallaInicio.x,
+            evento.clientY - arrNivel.pantallaInicio.y,
+          );
+          if (recorrido < 3) return;
+        }
         const punto = puntoVistaDesdeEvento(evento.clientX, evento.clientY);
         if (punto) {
           arrNivel.movido = true;
-          const desplazamiento = punto[1] - arrNivel.elev;
+          // Suma lo que se movió el puntero al desplazamiento que tenía (no salta
+          // a donde se pulsó) y se engancha de vuelta sobre su línea.
+          const { valor: desplazamiento, enganchado } = desplazamientoArrastreNivel(
+            arrNivel.desplazamientoInicial,
+            arrNivel.inicio[1],
+            punto[1],
+            8 * mundoPorPxRef.current,
+            evento.shiftKey,
+          );
           arrNivel.desplazamiento = desplazamiento;
           setAjustesNivelEnCurso({
             [arrNivel.globalid]: { desplazamiento },
+          });
+          const rect = nodo.getBoundingClientRect();
+          const py = evento.clientY - rect.top;
+          setGuiaArrastre({
+            x1: 0,
+            y1: py,
+            x2: rect.width,
+            y2: py,
+            texto: `${desplazamiento.toFixed(3)} m`,
+            enganchado,
           });
           evento.preventDefault();
           return;
@@ -4891,6 +4949,16 @@ export function Visor3D({
             );
             arrEje.originales = inicial;
             arrEje.codoCreado = true;
+            // El codo desplazó el globo: el arrastre sigue desde su lugar nuevo.
+            const basesCodo = ctx.bases[arrEje.globalid];
+            if (basesCodo) {
+              arrEje.asaInicio = puntoAsaEje(
+                inicial[arrEje.globalid],
+                basesCodo,
+                arrEje.lado,
+                "globo",
+              );
+            }
             const conCodo = { ...(ajusteEnCursoRef.current ?? {}), ...inicial };
             ajusteEnCursoRef.current = conCodo;
             setAjusteEnCurso(conCodo);
@@ -4912,9 +4980,16 @@ export function Visor3D({
         else if (arrEje.tipo === "codo") tipoAsa = "codo";
         else tipoAsa = codosLado.length > 0 ? "globo" : "extremo";
 
-        const crudo: Punto2 = [punto[0] - arrEje.inicio[0], punto[1] - arrEje.inicio[1]];
-        const delta = restringirArrastre(tipoAsa, direccion, crudo, evento.shiftKey);
-        const destino: Punto2 = [arrEje.inicio[0] + delta[0], arrEje.inicio[1] + delta[1]];
+        // El destino parte del asa, no del puntero: pulsar fuera del centro ya no
+        // hace saltar el punto ni lo saca de su línea de restricción.
+        const destino = destinoArrastreAsa(
+          arrEje.asaInicio,
+          arrEje.inicio,
+          punto,
+          tipoAsa,
+          direccion,
+          evento.shiftKey,
+        );
 
         // Imanes: extremos a la alineación de los demás ejes (o a los niveles en
         // alzado); globos desplazados a múltiplos de un diámetro.
@@ -4924,7 +4999,7 @@ export function Visor3D({
           const perp = direccion === "vertical" ? 0 : 1;
           const iman = imanMultiplo(
             destino[perp],
-            arrEje.inicio[perp],
+            arrEje.asaInicio[perp],
             altoBurbujaRef.current,
             tolerancia,
           );
@@ -4960,8 +5035,8 @@ export function Visor3D({
         // Cota temporal y línea guía mientras se arrastra.
         const rect = nodo.getBoundingClientRect();
         const distancia = Math.hypot(
-          destino[0] - arrEje.inicio[0],
-          destino[1] - arrEje.inicio[1],
+          destino[0] - arrEje.asaInicio[0],
+          destino[1] - arrEje.asaInicio[1],
         );
         const guiaVertical =
           tipoAsa === "globo" ? direccion === "vertical" : direccion === "horizontal";
@@ -5126,11 +5201,14 @@ export function Visor3D({
       arr.y = evento.clientY;
       if (!arr.paneable) {
         if (arr.movido && arr.boton === 0 && !herramienta) {
+          const marco = nodo.getBoundingClientRect();
           setVentanaSeleccion({
             x1: arr.inicioX,
             y1: arr.inicioY,
             x2: evento.clientX,
             y2: evento.clientY,
+            ox: marco.left,
+            oy: marco.top,
           });
         }
         return;
@@ -5469,6 +5547,7 @@ export function Visor3D({
     lineaEjeEn,
     lineaNivelEn,
     fijarNivelSeleccionado,
+    puntoVistaDeMundo,
     puntoVistaDesdeEvento,
     candados,
     ejeSeleccionado,
@@ -5964,8 +6043,10 @@ export function Visor3D({
           data-testid="ventana-seleccion"
           className="pointer-events-none absolute z-10 border border-sky-500 bg-sky-500/10"
           style={{
-            left: Math.min(ventanaSeleccion.x1, ventanaSeleccion.x2),
-            top: Math.min(ventanaSeleccion.y1, ventanaSeleccion.y2),
+            // Antes se dibujaba con coordenadas de página dentro del visor y salía
+            // corrido el ancho del panel de vistas y el alto de la cinta.
+            left: Math.min(ventanaSeleccion.x1, ventanaSeleccion.x2) - ventanaSeleccion.ox,
+            top: Math.min(ventanaSeleccion.y1, ventanaSeleccion.y2) - ventanaSeleccion.oy,
             width: Math.abs(ventanaSeleccion.x2 - ventanaSeleccion.x1),
             height: Math.abs(ventanaSeleccion.y2 - ventanaSeleccion.y1),
           }}

@@ -7,6 +7,9 @@ import {
   imanAlineacion,
   imanMultiplo,
   restringirArrastre,
+  destinoArrastreAsa,
+  desplazamientoArrastreNivel,
+  puntoAsaEje,
   arrastrarExtremoEje,
   candadoArrastreAsa,
   copiarAjusteEje,
@@ -399,5 +402,60 @@ describe("O031: asas de los codos en el alzado", () => {
     // Sin ajuste no hay asas (no se inventan codos).
     expect(asasCodoVista(undefined)).toEqual([]);
     expect(asasCodoVista({})).toEqual([]);
+  });
+});
+
+describe("arrastre desde el asa, no desde el puntero", () => {
+  it("pulsar el globo fuera de su centro no lo saca de su línea", () => {
+    // Globo con codo en alzado (eje vertical): solo se separa en horizontal. Se pulsa
+    // 0.3 m arriba y 0.2 m a la derecha del centro y se arrastra 1 m a la derecha.
+    const destino = destinoArrastreAsa([5, 10], [5.2, 10.3], [6.2, 10.3], "globo", "vertical");
+    expect(destino).toEqual([6, 10]);
+  });
+
+  it("el codo avanza por el eje sin saltar de lado aunque se pulse fuera de él", () => {
+    const destino = destinoArrastreAsa([5, 9], [5.15, 9.05], [5.15, 9.55], "codo", "vertical");
+    expect(destino[0]).toBe(5);
+    expect(destino[1]).toBeCloseTo(9.5, 9);
+  });
+
+  it("sin moverse el asa queda exactamente donde estaba", () => {
+    expect(destinoArrastreAsa([3, 4], [3.1, 4.1], [3.1, 4.1], "extremo", "horizontal")).toEqual([3, 4]);
+  });
+
+  it("con Shift el arrastre es libre pero sigue partiendo del asa", () => {
+    const libre = destinoArrastreAsa([3, 4], [3.1, 4.1], [4.1, 5.1], "codo", "vertical", true);
+    expect(libre[0]).toBeCloseTo(4, 9);
+    expect(libre[1]).toBeCloseTo(5, 9);
+  });
+
+  it("el punto del asa es el extremo real, no donde se dibuja", () => {
+    const bases = { inicio: [0, -1] as [number, number], fin: [0, 10] as [number, number] };
+    expect(puntoAsaEje(undefined, bases, "fin", "globo")).toEqual([0, 10]);
+    expect(puntoAsaEje(undefined, bases, "inicio", "base")).toEqual([0, -1]);
+    const conCodo = agregarCodoEje(undefined, "fin", [0, 10], [0, 1], 0.3, 0.8);
+    // Tras crear el codo el globo quedó desplazado: el arrastre debe seguir desde ahí.
+    expect(puntoAsaEje(conCodo, bases, "fin", "globo")).toEqual(conCodo.extremoFin);
+    expect(puntoAsaEje(conCodo, bases, "fin", "codo", 0)).toEqual(conCodo.codosFin![0]);
+  });
+});
+
+describe("arrastre de cabeza de nivel", () => {
+  it("suma el movimiento del puntero al desplazamiento que tenía", () => {
+    // Cabeza ya bajada 0.4 m (automática); se pulsa en z=2.0 y se baja a 1.7.
+    const r = desplazamientoArrastreNivel(-0.4, 2.0, 1.7, 0.05);
+    expect(r.valor).toBeCloseTo(-0.7, 9);
+    expect(r.enganchado).toBe(false);
+  });
+
+  it("se engancha de vuelta sobre su línea cerca de 0", () => {
+    const r = desplazamientoArrastreNivel(-0.4, 2.0, 2.37, 0.05);
+    expect(r).toEqual({ valor: 0, enganchado: true });
+  });
+
+  it("con Shift no se engancha", () => {
+    const r = desplazamientoArrastreNivel(-0.4, 2.0, 2.37, 0.05, true);
+    expect(r.valor).toBeCloseTo(-0.03, 9);
+    expect(r.enganchado).toBe(false);
   });
 });

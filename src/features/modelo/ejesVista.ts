@@ -337,6 +337,71 @@ export function restringirArrastre(
   return direccionEje === "vertical" ? [0, dy] : [dx, 0];
 }
 
+/**
+ * Destino de un asa arrastrada: parte de donde estaba el asa, no de donde se pulsó.
+ * Pulsar unos píxeles fuera del centro del globo o del codo ya no lo hace saltar
+ * ni lo saca de la línea a la que está restringido.
+ */
+export function destinoArrastreAsa(
+  asaInicio: Punto2,
+  cursorInicio: Punto2,
+  cursor: Punto2,
+  tipoAsa: TipoAsaArrastre,
+  direccionEje: DireccionEjeArrastre,
+  libre = false,
+): Punto2 {
+  const delta = restringirArrastre(
+    tipoAsa,
+    direccionEje,
+    [cursor[0] - cursorInicio[0], cursor[1] - cursorInicio[1]],
+    libre,
+  );
+  return [asaInicio[0] + delta[0], asaInicio[1] + delta[1]];
+}
+
+/**
+ * Posición real (en coordenadas de la vista) del punto que mueve un asa: el codo,
+ * el extremo de la línea o el globo. No es el punto donde se dibuja el asa: en
+ * alzado el globo se dibuja un radio arriba de su extremo y el asa «codo nuevo»
+ * debajo del globo.
+ */
+export function puntoAsaEje(
+  ajuste: AjusteEjeVista | undefined,
+  bases: { inicio: Punto2; fin: Punto2 },
+  lado: LadoEje,
+  tipo: "globo" | "codo" | "codo-nuevo" | "base",
+  indice: number | null = null,
+): Punto2 {
+  const limpio = normalizarAjusteEje(ajuste);
+  if (tipo === "codo" && indice !== null) {
+    const codos = (lado === "inicio" ? limpio?.codosInicio : limpio?.codosFin) ?? [];
+    const codo = codos[indice];
+    if (codo) return [codo[0], codo[1]];
+  }
+  // Sin codos ni extremo libre el asa «base» y el globo coinciden con el extremo.
+  if (tipo === "base") return extremoEje(limpio, lado, bases.inicio, bases.fin);
+  const g = geometriaEje(limpio, bases.inicio, bases.fin, { globoInicio: true });
+  const globo = lado === "inicio" ? (g.globoInicio ?? bases.inicio) : g.globoFin;
+  return [globo[0], globo[1]];
+}
+
+/**
+ * Desplazamiento de una cabeza de nivel al arrastrarla: el que tenía más lo que
+ * se movió el puntero en vertical. Se engancha a 0 (de vuelta sobre su línea)
+ * dentro de la tolerancia, salvo con `libre` (Shift).
+ */
+export function desplazamientoArrastreNivel(
+  desplazamientoInicial: number,
+  zCursorInicio: number,
+  zCursor: number,
+  tolerancia: number,
+  libre = false,
+): ResultadoIman {
+  const valor = desplazamientoInicial + (zCursor - zCursorInicio);
+  if (libre) return { valor, enganchado: false };
+  return imanAlineacion(valor, [0], tolerancia);
+}
+
 /** O031: el candado de alineación vale para las asas de extremo, incluido el globo
  *  cuando aún no tiene codo (antes el globo quedaba siempre libre y rompía O021).
  *  Con codo el globo se separa perpendicular al eje (O027), no sigue la alineación. */
