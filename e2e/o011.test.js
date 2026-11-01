@@ -808,6 +808,10 @@ test("O011-3: cotas .15 por la pantalla y niveles/globos del alzado", async () =
       etiquetaGlobo,
     );
     assert.ok(antes && antes.radio > 4, `no se encontró el globo del eje ${etiquetaGlobo}`);
+    // O031: sin el eje seleccionado no flota la barra «Agregar codo» sobre el globo;
+    // su texto negro se colaba como «anillo» en la medición de píxeles a ×8.
+    await tecla(ses, "Escape", "Escape");
+    await esperar(300);
     await ses.captura(path.join(RESULTADOS, "globo-zoom-x1.png"));
     await ses.driver.executeScript(
       (x, y) => document.querySelector('[data-testid="visor"]').__openrvtZoomEn(0.125, x, y),
