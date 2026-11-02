@@ -221,6 +221,8 @@ interface EstadoModelo {
   cargando: boolean;
   error: string | null;
   aviso: string | null;
+  /** O041: pista de Tab bajo el cursor («Tab: siguiente (Cerramiento …)»). */
+  pistaTab: string | null;
   modoCorte: boolean;
   puntoCorte: [number, number] | null;
   preguntaGuardar: PreguntaGuardar | null;
@@ -458,6 +460,7 @@ interface EstadoModelo {
   anadirPuntoCorte: (punto: [number, number]) => Promise<void>;
   limpiarAviso: () => void;
   fijarAviso: (texto: string) => void;
+  fijarPistaTab: (texto: string | null) => void;
   comprobarNucleo: () => Promise<void>;
 }
 
@@ -699,6 +702,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       cargando: false,
       error: null,
       aviso: null,
+      pistaTab: null,
       modoCorte: false,
       puntoCorte: null,
       tiposMuro: tipos,
@@ -1095,6 +1099,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     cargando: false,
     error: null,
     aviso: null,
+    pistaTab: null,
     modoCorte: false,
     puntoCorte: null,
     preguntaGuardar: null,
@@ -1539,6 +1544,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     limpiarAviso: () => set({ aviso: null }),
 
     fijarAviso: (texto) => set({ aviso: texto }),
+    fijarPistaTab: (texto) => set({ pistaTab: texto }),
 
     activarHerramienta: (herramienta) => {
       const vista = get().vistas.find((v) => v.id === get().vistaActivaId);

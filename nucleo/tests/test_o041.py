@@ -331,3 +331,44 @@ def test_castillos_automaticos_no_regeneran_por_cada_castillo() -> None:
         assert contador["n"] == 1, f"se regeneró {contador['n']} veces"
     finally:
         kls._recalcular_uniones_estructura = original
+
+
+def test_mover_un_cerramiento_ligado_avisa_y_el_muro_si_se_mueve() -> None:
+    """O041 §2: Mover un cerramiento ligado avisa con claridad; con el muro también
+    seleccionado, ambos se mueven y el cerramiento sigue el eje."""
+    nucleo = _nuevo()
+    muro, cerramiento, _n1 = _modelo_con_cerramiento(nucleo)
+    with pytest.raises(Exception, match="ligado al muro"):
+        nucleo.elementos_mover([cerramiento], 1.0, 0.0, 0.0)
+    # No se movió nada: el cerramiento conserva su eje en x = 0.
+    datos = nucleo._leer_pset(_entidad(nucleo, cerramiento), "OPENRVT_Estructura")
+    assert datos["X1"] == pytest.approx(0.0, abs=1e-9)
+    nucleo.elementos_mover([muro, cerramiento], 1.0, 0.0, 0.0)
+    datos = nucleo._leer_pset(_entidad(nucleo, cerramiento), "OPENRVT_Estructura")
+    assert datos["X1"] == pytest.approx(1.0, abs=1e-9)
+    assert datos["Longitud"] == pytest.approx(4.0, abs=1e-9)
+
+
+def test_copiar_un_cerramiento_ligado_avisa() -> None:
+    """O041 §2: Copiar un cerramiento ligado no crea una copia colgando del muro
+    original: se avisa y se deja soltar primero."""
+    nucleo = _nuevo()
+    _muro, cerramiento, _n1 = _modelo_con_cerramiento(nucleo)
+    with pytest.raises(Exception, match="Soltar del muro"):
+        nucleo.elementos_copiar([cerramiento], 1.0, 0.0, 0.0)
+    nucleo.soltar_del_muro(cerramiento)
+    nucleo.elementos_copiar([cerramiento], 1.0, 0.0, 0.0)
+    copias = [
+        e for e in nucleo.modelo.by_type("IfcBeam")
+        if nucleo._leer_pset(e, "OPENRVT_Estructura").get("X1") == pytest.approx(1.0, abs=1e-9)
+    ]
+    assert len(copias) == 1
+
+
+def test_supr_borra_el_cerramiento_y_deja_el_muro() -> None:
+    """O041 §2: Supr sobre un cerramiento lo borra sin llevarse el muro."""
+    nucleo = _nuevo()
+    muro, cerramiento, _n1 = _modelo_con_cerramiento(nucleo)
+    nucleo.elementos_borrar([cerramiento], True)
+    assert cerramiento not in {e.GlobalId for e in nucleo.modelo.by_type("IfcBeam")}
+    assert _entidad(nucleo, muro).is_a("IfcWall")

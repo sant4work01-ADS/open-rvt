@@ -20,8 +20,8 @@ describe("O041: barra de la herramienta Cerramiento", () => {
         {
           globalid: "t1",
           nombre: "CE-1 Cerramiento 15×20",
+          clase: "IfcBeamType",
           alias: "cerramiento",
-          descripcion: "",
         },
       ],
       opcionesCerramiento: { nivel: "", desfase: "" },

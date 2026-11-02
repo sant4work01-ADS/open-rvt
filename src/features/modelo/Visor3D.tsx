@@ -12,7 +12,20 @@ import { Text, configureTextBuilder } from "troika-three-text";
 import type { Abertura, AjusteEjeVista, Caja, ElementoMalla, Nivel, Vista } from "./tipos";
 import { categoriaVisible, dibujaSiluetaSobreCorte } from "./vistas";
 import { useModelo } from "./estado";
-import { calcularPlantaMuros, lineasCerramientoPlanta, type MuroPlanta } from "./planta";
+import {
+  calcularPlantaMuros,
+  contornoCerramientoPlanta,
+  lineaEjeCerramientoPlanta,
+  type MuroPlanta,
+} from "./planta";
+import {
+  aliasCiclico,
+  candidatosBajoPunto,
+  ORDEN_CICLO,
+  siguienteCandidato,
+  textoPistaTab,
+  type CandidatoTab,
+} from "./seleccionCiclica";
 import {
   detectorRueda,
   factorZoomRueda,
@@ -128,6 +141,42 @@ import {
   type LadoEje,
   type TipoAsaArrastre,
 } from "./ejesVista";
+
+/** Distancia de un punto a un segmento (para saber si un cerramiento tiene muro debajo). */
+function distanciaPuntoSegmento(
+  px: number,
+  py: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+): number {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const largo2 = dx * dx + dy * dy;
+  if (largo2 <= 1e-12) return Math.hypot(px - x1, py - y1);
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / largo2));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+}
+
+/** O041: el cerramiento se dibuja con contorno completo si no hay muro debajo. */
+function muroBajoCerramiento(
+  eje: [number, number, number, number],
+  mallas: readonly ElementoMalla[],
+): boolean {
+  const [x1, y1, x2, y2] = eje;
+  const mx = (x1 + x2) / 2;
+  const my = (y1 + y2) / 2;
+  return mallas.some((malla) => {
+    if (malla.clase !== "IfcWall" || !malla.eje) return false;
+    const [wx1, wy1, wx2, wy2] = malla.eje;
+    return (
+      distanciaPuntoSegmento(x1, y1, wx1, wy1, wx2, wy2) <= 0.06 &&
+      distanciaPuntoSegmento(x2, y2, wx1, wy1, wx2, wy2) <= 0.06 &&
+      distanciaPuntoSegmento(mx, my, wx1, wy1, wx2, wy2) <= 0.06
+    );
+  });
+}
 
 interface Props {
   vista: Vista;
@@ -1050,6 +1099,10 @@ export function Visor3D({
   const mundoPorPxRef = useRef(1e-3);
   const altoBurbujaRef = useRef(0.8);
   const ejeSeleccionadoRef = useRef<string | null>(null);
+  // O041: candidato bajo el cursor que Tab convertiría en selección.
+  const [resaltado, setResaltado] = useState<string | null>(null);
+  const ultimoPuntero = useRef<{ x: number; y: number } | null>(null);
+  const resaltadoRef = useRef<string | null>(null);
   // O027: guía y cota temporal que se dibujan sobre el visor mientras se arrastra.
   const [guiaArrastre, setGuiaArrastre] = useState<{
     x1: number;
@@ -1103,6 +1156,7 @@ export function Visor3D({
   const ejeSeleccionadoStore = useModelo((s) => s.ejeSeleccionado);
   const nivelSeleccionado = useModelo((s) => s.nivelSeleccionado);
   const fijarNivelSeleccionado = useModelo((s) => s.fijarNivelSeleccionado);
+  const fijarPistaTab = useModelo((s) => s.fijarPistaTab);
   const fijarEjeSeleccionadoStore = useModelo((s) => s.fijarEjeSeleccionado);
   const ejeStorePrevio = useRef(ejeSeleccionadoStore);
   useEffect(() => {
@@ -2053,7 +2107,9 @@ export function Visor3D({
       geometriaSolido.setAttribute("normal", new THREE.BufferAttribute(plana.normales, 3));
 
       const seleccionado =
-        elemento.globalid === seleccion || seleccionados.includes(elemento.globalid);
+        elemento.globalid === seleccion ||
+        seleccionados.includes(elemento.globalid) ||
+        elemento.globalid === resaltado;
       const opaco = elemento.opacidad >= 1;
       // O007a: en 3D el sólido lleva el color de la capa exterior del muro; si la
       // capa no trae color de biblioteca, se conserva el color de la categoría.
@@ -2549,9 +2605,12 @@ export function Visor3D({
         const numero = (valor: unknown, respaldo = 0) =>
           Number(valor) || respaldo;
         const alias = estructura.alias;
-        const color = seleccion === elemento.globalid || seleccionados.includes(elemento.globalid)
-          ? "#ff8a00"
-          : estilos.categorias[elemento.categoria].color;
+        const color =
+          seleccion === elemento.globalid ||
+          seleccionados.includes(elemento.globalid) ||
+          resaltado === elemento.globalid
+            ? "#ff8a00"
+            : estilos.categorias[elemento.categoria].color;
         const mm = grosorDe(elemento.categoria, "corte") ?? 0.35;
         const trazado = (
           puntos: Array<[number, number]>,
@@ -2615,24 +2674,36 @@ export function Visor3D({
             }
           }
         } else if (alias === "cerramiento") {
-          // O040: el cerramiento queda por arriba del corte y se dibuja como
-          // proyección superior: dos líneas discontinuas de su ancho, sin relleno.
+          // O041: en planta el cerramiento es UNA línea discontinua sobre su eje,
+          // fina y encima del achurado del muro. Al seleccionarlo se resalta su
+          // huella completa; suelto (sin muro debajo) se dibuja el contorno completo.
           const ancho = numero(seccion.B, 0.20);
-          const lineas = lineasCerramientoPlanta(
-            [numero(datos.X1), numero(datos.Y1), numero(datos.X2), numero(datos.Y2)],
-            ancho,
-          );
-          for (const [a, b] of lineas) {
-            const material = crearMaterialLinea({
-              mm,
-              escala: vista.escala,
-              color,
-              patron: "discontinua",
-              registro,
-              mundoPorPx,
-              profundidad: false,
-            });
-            lineaCerrada([p3(a), p3(b)], material, 1.35, grupoLocal);
+          const eje: [number, number, number, number] = [
+            numero(datos.X1),
+            numero(datos.Y1),
+            numero(datos.X2),
+            numero(datos.Y2),
+          ];
+          const resaltadoAqui = seleccion === elemento.globalid || seleccionados.includes(elemento.globalid) || resaltado === elemento.globalid;
+          const material = crearMaterialLinea({
+            mm,
+            escala: vista.escala,
+            color: resaltadoAqui ? "#ff8a00" : color,
+            patron: "discontinua",
+            registro,
+            mundoPorPx,
+            profundidad: false,
+          });
+          if (resaltadoAqui || !muroBajoCerramiento(eje, mallas)) {
+            const contorno = contornoCerramientoPlanta(eje, ancho);
+            if (contorno.length > 0) {
+              lineaCerrada(contorno.map((p) => p3(p)), material, 1.35, grupoLocal);
+            }
+          } else {
+            const linea = lineaEjeCerramientoPlanta(eje);
+            if (linea) {
+              lineaCerrada([p3(linea[0]), p3(linea[1])], material, 1.35, grupoLocal);
+            }
           }
         } else if (alias === "trabe") {
           const ancho = numero(seccion.B, 0.20);
@@ -4049,6 +4120,7 @@ export function Visor3D({
     oscuro,
     seleccion,
     seleccionados,
+    resaltado,
     puntoCorte,
     nivelGlobalidPorNombre,
     estilos,
@@ -4775,6 +4847,67 @@ export function Visor3D({
       return [punto.x, punto.y];
     };
 
+    // O041: elementos bajo el cursor para Tab. En planta se detectan por geometría
+    // (el cerramiento queda arriba del corte y no tiene malla que el rayo toque); en
+    // alzado, corte y 3D se suma el rayo y la línea del cerramiento en pantalla.
+    const candidatosEn = (clientX: number, clientY: number): CandidatoTab[] => {
+      const encontrados = new Map<string, CandidatoTab>();
+      const agregar = (gid: string | null | undefined) => {
+        if (!gid || encontrados.has(gid)) return;
+        const malla = mallas.find((m) => m.globalid === gid);
+        if (!malla) return;
+        const alias = aliasCiclico(malla);
+        if (!alias) return;
+        encontrados.set(gid, { globalid: gid, nombre: malla.nombre, alias });
+      };
+      if (vista.tipo === "planta") {
+        const punto = puntoPlanta({ clientX, clientY } as PointerEvent);
+        if (punto) {
+          for (const candidato of candidatosBajoPunto(mallas, punto)) {
+            encontrados.set(candidato.globalid, candidato);
+          }
+        }
+      }
+      const camera = camara.current;
+      if (camera) {
+        const rect = nodo.getBoundingClientRect();
+        const raton = new THREE.Vector2(
+          ((clientX - rect.left) / rect.width) * 2 - 1,
+          -((clientY - rect.top) / rect.height) * 2 + 1,
+        );
+        const rayo = new THREE.Raycaster();
+        rayo.setFromCamera(raton, camera);
+        for (const impacto of rayo.intersectObjects(meshes.current, false)) {
+          agregar(impacto.object.userData.globalid as string | undefined);
+        }
+      }
+      if (vista.tipo !== "planta") {
+        // Cerramiento sin malla visible: se mide su eje proyectado a la pantalla.
+        for (const malla of mallas) {
+          if (aliasCiclico(malla) !== "cerramiento" || !malla.estructura?.datos) continue;
+          const datos = malla.estructura.datos;
+          const z = Number(datos.Z) || 0;
+          const a = pantallaDePunto([Number(datos.X1), Number(datos.Y1), z]);
+          const b = pantallaDePunto([Number(datos.X2), Number(datos.Y2), z]);
+          if (!a || !b) continue;
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const largo2 = dx * dx + dy * dy;
+          if (largo2 <= 1) continue;
+          const t = Math.max(
+            0,
+            Math.min(1, ((clientX - a.x) * dx + (clientY - a.y) * dy) / largo2),
+          );
+          if (Math.hypot(clientX - (a.x + t * dx), clientY - (a.y + t * dy)) <= 10) {
+            agregar(malla.globalid);
+          }
+        }
+      }
+      return [...encontrados.values()].sort(
+        (a, b) => ORDEN_CICLO.indexOf(a.alias) - ORDEN_CICLO.indexOf(b.alias),
+      );
+    };
+
     const hacerClic = (
       clientX: number,
       clientY: number,
@@ -5131,6 +5264,31 @@ export function Visor3D({
       const nav = navegacion.current;
       const camera = camara.current;
       if (!nav || !camera) return;
+      if (evento.pointerType !== "touch") {
+        ultimoPuntero.current = { x: evento.clientX, y: evento.clientY };
+      }
+      // O041: al pasar el cursor se resalta lo que Tab seleccionaría a continuación.
+      if (
+        evento.buttons === 0 &&
+        evento.pointerType !== "touch" &&
+        !arrastre.current &&
+        !arrastreNivel.current &&
+        !arrastreEje.current &&
+        !herramienta &&
+        !modoCorte
+      ) {
+        const candidatos = candidatosEn(evento.clientX, evento.clientY);
+        const siguiente = siguienteCandidato(
+          candidatos,
+          useModelo.getState().seleccion,
+        );
+        const gid = siguiente?.globalid ?? null;
+        if (gid !== resaltadoRef.current) {
+          resaltadoRef.current = gid;
+          setResaltado(gid);
+          fijarPistaTab(textoPistaTab(siguiente));
+        }
+      }
       // O014b: la cabeza de nivel sigue al puntero en vertical.
       const arrNivel = arrastreNivel.current;
       if (arrNivel) {
@@ -5676,6 +5834,24 @@ export function Visor3D({
         evento.preventDefault();
         return;
       }
+      // O041: Tab recorre muro → cerramiento → castillo → muro bajo el cursor.
+      if (evento.key === "Tab" && !evento.ctrlKey && !evento.metaKey && !evento.altKey) {
+        const posicion = ultimoPuntero.current;
+        if (!posicion) return;
+        const candidatos = candidatosEn(posicion.x, posicion.y);
+        const siguiente = siguienteCandidato(
+          candidatos,
+          useModelo.getState().seleccion,
+        );
+        if (!siguiente) return;
+        evento.preventDefault();
+        evento.stopPropagation();
+        resaltadoRef.current = siguiente.globalid;
+        setResaltado(siguiente.globalid);
+        fijarPistaTab(textoPistaTab(siguiente));
+        onSeleccionar(siguiente.globalid);
+        return;
+      }
       if (evento.code === "Space") {
         espacio.current = true;
         evento.preventDefault();
@@ -5759,6 +5935,8 @@ export function Visor3D({
     dobleClicEnPlanta,
     ventanaSeleccion,
     fijarAviso,
+    fijarPistaTab,
+    pantallaDePunto,
     metrosPorPixelActual,
     asaEjeEn,
     asaNivelEn,
@@ -5775,6 +5953,7 @@ export function Visor3D({
     referencias.ejes,
     vista.ejes,
     elementosBloqueados,
+    mallas,
   ]);
 
   useEffect(() => {

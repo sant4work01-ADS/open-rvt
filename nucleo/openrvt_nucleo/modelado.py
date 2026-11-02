@@ -4986,6 +4986,16 @@ class ModeladoMixin:
             raise self._error("El desplazamiento no es numérico.", -32602) from exc
         if abs(dx) + abs(dy) + abs(dz) <= TOLERANCIA_CALCULO:
             return self._resultado(mensaje="Sin desplazamiento.")
+        # O041: un cerramiento ligado no se mueve solo; su eje lo manda el muro.
+        for gid in gids:
+            entidad = self._entidad_por_gid(gid)
+            muro_liga = self._muro_ligado_de(entidad)
+            if muro_liga and muro_liga not in gids:
+                raise self._error(
+                    f"El cerramiento «{_nombre(entidad)}» está ligado al muro "
+                    f"«{muro_liga}»: mueva el muro o use «Soltar del muro».",
+                    -32602,
+                )
         self._instantanea()
         afectados: list[Any] = []
         # Se comparan GlobalId, no id() de los envoltorios: un envoltorio liberado
@@ -5036,6 +5046,15 @@ class ModeladoMixin:
             modificados=[g for g in afectados if not g.is_a("IfcOpeningElement")],
             mensaje=f"{len(afectados)} elemento(s) movido(s).",
         )
+
+    def _muro_ligado_de(self, entidad: Any) -> str:
+        """O041: GlobalId del muro al que cuelga un cerramiento, o cadena vacía."""
+        try:
+            if self._estructura_de_tipo(self._tipo_entidad(entidad)) != "cerramiento":
+                return ""
+            return _texto(self._leer_liga(entidad).get("Muro"))
+        except Exception:
+            return ""
 
     def _desplazar_pset_estructura(
         self, producto: Any, dx: float, dy: float, dz: float
@@ -5141,6 +5160,16 @@ class ModeladoMixin:
             dx, dy, dz = float(dx), float(dy), float(dz)
         except (TypeError, ValueError) as exc:
             raise self._error("El desplazamiento no es numérico.", -32602) from exc
+        # O041: copiar un cerramiento ligado dejaría una copia colgando del muro
+        # original; se avisa y se deja soltar primero.
+        for gid in gids:
+            entidad = self._entidad_por_gid(gid)
+            if self._muro_ligado_de(entidad):
+                raise self._error(
+                    f"El cerramiento «{_nombre(entidad)}» está ligado al muro: "
+                    "use «Soltar del muro» antes de copiarlo.",
+                    -32602,
+                )
         self._instantanea()
         creados: list[Any] = []
         for gid in gids:
