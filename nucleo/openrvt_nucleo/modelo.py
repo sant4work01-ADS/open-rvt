@@ -447,6 +447,19 @@ class ModeloNucleo(
                     salida["enlace"] = enlace
             except Exception:
                 LOG.debug("no se pudo leer el enlace a ejes", exc_info=True)
+            # O040: liga al muro de cerramientos y dalas (para el panel «Soltar del
+            # muro» y la leyenda «Sigue la corona del muro …»).
+            try:
+                liga = self._leer_pset(elemento, "OPENRVT_Liga")
+                muro_gid = _texto(liga.get("Muro"))
+                if muro_gid:
+                    muro = self._entidad_por_gid(muro_gid, ("IfcWall",))
+                    salida["muro_liga"] = {
+                        "muro": muro_gid,
+                        "nombre": _texto(getattr(muro, "Name", "")),
+                    }
+            except Exception:
+                LOG.debug("no se pudo leer la liga al muro", exc_info=True)
         return salida
 
     # ------------------------------------------------------------------ geometría

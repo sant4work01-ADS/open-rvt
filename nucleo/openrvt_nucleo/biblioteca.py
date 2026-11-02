@@ -1363,6 +1363,7 @@ class BibliotecaMixin:
             modificados = list(self._instancias_de_tipo(tipo)) if cambio_geometria else []
             for instancia in modificados:
                 self._regenerar_estructura(instancia)
+                self._recolocar_cerramiento_vertical(instancia)
         else:
             if parametros:
                 self._guardar_pset(tipo, "OPENRVT_Tipo", parametros)
@@ -1458,6 +1459,7 @@ class BibliotecaMixin:
             elemento, "OPENRVT_Estructura"
         ):
             self._regenerar_estructura(elemento)
+            self._recolocar_cerramiento_vertical(elemento)
         self.con_cambios = True
         return self._resultado(
             modificados=modificados,

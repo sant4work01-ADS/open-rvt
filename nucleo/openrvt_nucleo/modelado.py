@@ -355,9 +355,13 @@ class ModeladoMixin:
         return float(seccion.get("H") or seccion.get("Peralte") or 0.20)
 
     def _lecho_bajo(self, elemento: Any) -> bool:
-        """Las dalas y cerramientos se cuelgan del nivel por su lecho inferior."""
+        """Las dalas se cuelgan del nivel por su lecho inferior.
+
+        O040: el cerramiento mide al lecho **superior** (la corona del muro), no al
+        inferior; solo la dala de desplante cuelga por su fondo.
+        """
         alias = self._estructura_de_tipo(self._tipo_entidad(elemento))
-        return alias in ("dala", "cerramiento")
+        return alias == "dala"
 
     def _z_de_elemento(self, elemento: Any) -> float:
         """Cota de referencia vertical (base del muro/columna, lecho de vigas)."""
@@ -505,6 +509,9 @@ class ModeladoMixin:
                 self._guardar_pset(elemento, "OPENRVT_Muro", pset)
             self._guardar_pset(elemento, PSET_RESTRICCIONES, restriccion)
             self._regenerar_muro(elemento)
+            # O040: al cambiar la corona del muro, el cerramiento y los castillos
+            # ligados se recalculan en la misma instantánea.
+            self._actualizar_dependientes_muro(elemento)
         elif elemento.is_a("IfcColumn"):
             datos = dict(self._leer_pset(elemento, "OPENRVT_Estructura"))
             datos["Base"] = z
@@ -516,7 +523,8 @@ class ModeladoMixin:
         elif elemento.is_a("IfcBeam") or elemento.is_a("IfcFooting"):
             # O028: trabes, cerramientos, dalas, contratrabes y zapatas siguen al
             # nivel. Para las piezas horizontales el desfase se mide al lecho de
-            # referencia (tope salvo dala/cerramiento) y el peralte sale del tipo.
+            # referencia (tope, salvo la dala que cuelga por su fondo) y el peralte
+            # sale del tipo.
             predef = _texto(getattr(elemento, "PredefinedType", ""))
             datos = dict(self._leer_pset(elemento, "OPENRVT_Estructura"))
             peralte = self._peralte_de(elemento)
@@ -550,6 +558,7 @@ class ModeladoMixin:
                 centro = z + peralte / 2.0 if self._lecho_bajo(elemento) else z - peralte / 2.0
                 datos["Z"] = centro
                 datos["Desfase"] = z - float(nivel_base.Elevation or 0.0)
+                datos["Nivel"] = _gid(nivel_base)
             self._guardar_pset(elemento, "OPENRVT_Estructura", datos)
             self._guardar_pset(elemento, PSET_RESTRICCIONES, restriccion)
             if elemento.is_a("IfcFooting") and predef != "FOOTING_BEAM":
@@ -1328,17 +1337,24 @@ class ModeladoMixin:
         """O016: cambia base/tope de un muro o columna en una sola instantánea.
 
         O033: las zapatas aisladas y corridas solo aceptan nivel_base y desplante.
+        O040: los cerramientos sueltos aceptan nivel_base y desfase_base; no tienen
+        restricción de tope ni altura.
         """
         self._exigir_modelo()
         entidad = self._entidad_por_gid(
-            globalid, ("IfcWall", "IfcColumn", "IfcFooting")
+            globalid, ("IfcWall", "IfcColumn", "IfcFooting", "IfcBeam")
         )
         predef = _texto(getattr(entidad, "PredefinedType", ""))
         es_zapata = entidad.is_a("IfcFooting") and predef != "FOOTING_BEAM"
+        es_cerramiento = (
+            entidad.is_a("IfcBeam")
+            and self._estructura_de_tipo(self._tipo_entidad(entidad)) == "cerramiento"
+        )
         if not (
             entidad.is_a("IfcWall")
             or entidad.is_a("IfcColumn")
             or entidad.is_a("IfcFooting")
+            or es_cerramiento
         ):
             raise self._error("Ese elemento no admite restricciones.", -32602)
         if es_zapata:
@@ -1351,6 +1367,18 @@ class ModeladoMixin:
                 if proporcionado is not None:
                     raise self._error(
                         f"La zapata no tiene «{nombre}»: use el desplante.", -32602
+                    )
+        if es_cerramiento:
+            for proporcionado, nombre in (
+                (nivel_tope, "Restricción de tope"),
+                (desfase_tope, "Desfase de tope"),
+                (altura_sin_conexion, "Altura"),
+            ):
+                if proporcionado is not None:
+                    raise self._error(
+                        f"El cerramiento no tiene «{nombre}»: use el nivel y el "
+                        "desfase.",
+                        -32602,
                     )
         restriccion = dict(self._restricciones_de(entidad))
         if nivel_base is not None:
@@ -3382,6 +3410,7 @@ class ModeladoMixin:
                 ancho=float(datos.get("B") or seccion.get("B") or 0.20),
                 z0=centro - alto / 2.0,
                 z1=centro + alto / 2.0,
+                clase="cerramiento" if alias == "cerramiento" else "viga",
             )
         return None
 

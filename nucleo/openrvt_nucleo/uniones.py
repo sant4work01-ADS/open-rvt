@@ -35,6 +35,7 @@ class Barra:
     z1: float
     fondo: float = 0.0
     rotacion: float = 0.0
+    clase: str = "viga"  # "viga" | "cerramiento" (O040: esquinas solapadas)
 
     @property
     def largo(self) -> float:
@@ -395,6 +396,43 @@ def _aplicar_x(
         estado[perdedora.gid]["cortes"].append((ta, tb))
 
 
+def _extender_extremo(
+    estado: dict[str, dict[str, object]], barra: Barra, extremo: int, cantidad: float
+) -> None:
+    """O040: alarga el eje de la barra `cantidad` m más allá de su extremo.
+
+    Los cerramientos envuelven la esquina un ancho completo para que el hueco
+    quede lleno; el traslape se descuenta después por prioridad (O007c).
+    """
+    e = estado[barra.gid]
+    if extremo == 0:
+        e["lo"] = min(float(e["lo"]), -cantidad)
+    else:
+        e["hi"] = max(float(e["hi"]), barra.largo + cantidad)
+
+
+def _aplicar_cerramiento(
+    ganadora: Barra,
+    perdedora: Barra,
+    tipo: str,
+    e_gan: int,
+    e_per: int,
+    estado: dict[str, dict[str, object]],
+) -> None:
+    """O040: esquinas de cerramiento con traslape (no inglete).
+
+    En L ambos envuelven la esquina su ancho completo; en T el que llega envuelve
+    a la pasante (que queda entera); en X ambos quedan enteros. El traslape lo
+    descuenta la medición por prioridad, no se corta aquí.
+    """
+    if tipo == "L":
+        _extender_extremo(estado, ganadora, e_gan, ganadora.ancho)
+        _extender_extremo(estado, perdedora, e_per, perdedora.ancho)
+    elif tipo == "T":
+        _extender_extremo(estado, perdedora, e_per, perdedora.ancho)
+    # X: nada; el cruce ya queda lleno y la medición descuenta el traslape.
+
+
 def recortar_losa(
     poligono: list[tuple[float, float]],
     vigas: list[Barra],
@@ -462,7 +500,11 @@ def calcular(
             uniones.append(
                 {"maestro": ganadora.gid, "esclavo": perdedora.gid, "tipo": tipo}
             )
-            if tipo == "L":
+            if ganadora.clase == "cerramiento" and perdedora.clase == "cerramiento":
+                _aplicar_cerramiento(
+                    ganadora, perdedora, tipo, e_gan, e_per, estado
+                )
+            elif tipo == "L":
                 _aplicar_l(ganadora, perdedora, e_gan, e_per, estado)
             elif tipo == "T":
                 _aplicar_t(perdedora, ganadora, e_per, estado)
