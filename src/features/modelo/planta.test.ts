@@ -5,6 +5,7 @@ import {
   calcularPlantaMuros,
   contarVertices,
   lineasCapas,
+  lineasCerramientoPlanta,
   nucleoMuro,
   poligonosCapas,
   puntoDentroDeHuella,
@@ -477,5 +478,38 @@ describe("esquinas con línea de ubicación a paño (O032)", () => {
     expect(puntoDentroDeHuella([4, -0.075], huella)).toBe(true);
     expect(huella.huecos).toHaveLength(0);
     expect(contarVertices(huella)).toBe(8);
+  });
+});
+
+describe("proyección del cerramiento en planta (O040)", () => {
+  test("son dos líneas abiertas, paralelas y separadas por el ancho", () => {
+    const lineas = lineasCerramientoPlanta([0, 0, 4, 0], 0.15);
+    expect(lineas).toHaveLength(2);
+    for (const linea of lineas) {
+      expect(linea).toHaveLength(2);
+    }
+    const [a, b] = lineas;
+    // Largo exacto del eje (sin cerrar ni acortar los cantos).
+    expect(Math.hypot(a[1][0] - a[0][0], a[1][1] - a[0][1])).toBeCloseTo(4, 9);
+    expect(Math.hypot(b[1][0] - b[0][0], b[1][1] - b[0][1])).toBeCloseTo(4, 9);
+    // Las dos líneas quedan a 0.15 una de otra (el ancho del cerramiento).
+    expect(Math.abs(a[0][1] - b[0][1])).toBeCloseTo(0.15, 9);
+    // Centradas sobre el eje.
+    expect((a[0][1] + b[0][1]) / 2).toBeCloseTo(0, 9);
+  });
+
+  test("una diagonal conserva el ancho perpendicular al eje", () => {
+    const lineas = lineasCerramientoPlanta([0, 0, 3, 4], 0.2);
+    expect(lineas).toHaveLength(2);
+    const [a, b] = lineas;
+    const largo = Math.hypot(3, 4);
+    expect(Math.hypot(a[1][0] - a[0][0], a[1][1] - a[0][1])).toBeCloseTo(largo, 9);
+    // Distancia perpendicular entre las dos rectas = ancho.
+    const d = Math.hypot(a[0][0] - b[0][0], a[0][1] - b[0][1]);
+    expect(d).toBeCloseTo(0.2, 9);
+  });
+
+  test("un eje degenerado no produce líneas", () => {
+    expect(lineasCerramientoPlanta([1, 1, 1, 1], 0.15)).toHaveLength(0);
   });
 });

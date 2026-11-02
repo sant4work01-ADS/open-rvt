@@ -12,7 +12,7 @@ import { Text, configureTextBuilder } from "troika-three-text";
 import type { Abertura, AjusteEjeVista, Caja, ElementoMalla, Nivel, Vista } from "./tipos";
 import { categoriaVisible, dibujaSiluetaSobreCorte } from "./vistas";
 import { useModelo } from "./estado";
-import { calcularPlantaMuros, type MuroPlanta } from "./planta";
+import { calcularPlantaMuros, lineasCerramientoPlanta, type MuroPlanta } from "./planta";
 import {
   detectorRueda,
   factorZoomRueda,
@@ -2025,6 +2025,11 @@ export function Visor3D({
         : null;
 
     for (const elemento of visibles) {
+      // O040: la dala de desplante queda abajo del corte y cubierta por el muro; en
+      // planta no se dibuja (ni cuerpo, ni aristas, ni simbología).
+      if (vista.tipo === "planta" && elemento.estructura?.alias === "dala") {
+        continue;
+      }
       const geometria = new THREE.BufferGeometry();
       geometria.setAttribute("position", new THREE.BufferAttribute(elemento.vertices, 3));
       geometria.setIndex(new THREE.BufferAttribute(elemento.indices, 1));
@@ -2149,8 +2154,14 @@ export function Visor3D({
       }
 
       const categoriaEstilo = elemento.categoria;
+      // O040: el cerramiento y la dala no se dibujan como silueta genérica: el
+      // cerramiento se traza con dos líneas discontinuas en la simbología y la dala
+      // (abajo del corte, cubierta) no se dibuja.
+      const esCerramientoODala =
+        elemento.estructura?.alias === "cerramiento" ||
+        elemento.estructura?.alias === "dala";
       if (diseno) {
-        if (siluetaArriba) {
+        if (siluetaArriba && !esCerramientoODala) {
           const mm = grosorDe("arriba-corte", "proyeccion");
           const siluetas =
             mm === null ? [] : siluetaProyectada(elemento.vertices, elemento.indices);
@@ -2591,7 +2602,27 @@ export function Visor3D({
               lineaCerrada([punto(x1, y1), punto(x2, y2)], materialRaya, 1.2, grupoLocal);
             }
           }
-        } else if (alias === "trabe" || alias === "cerramiento" || alias === "dala") {
+        } else if (alias === "cerramiento") {
+          // O040: el cerramiento queda por arriba del corte y se dibuja como
+          // proyección superior: dos líneas discontinuas de su ancho, sin relleno.
+          const ancho = numero(seccion.B, 0.20);
+          const lineas = lineasCerramientoPlanta(
+            [numero(datos.X1), numero(datos.Y1), numero(datos.X2), numero(datos.Y2)],
+            ancho,
+          );
+          for (const [a, b] of lineas) {
+            const material = crearMaterialLinea({
+              mm,
+              escala: vista.escala,
+              color,
+              patron: "discontinua",
+              registro,
+              mundoPorPx,
+              profundidad: false,
+            });
+            lineaCerrada([p3(a), p3(b)], material, 1.35, grupoLocal);
+          }
+        } else if (alias === "trabe") {
           const ancho = numero(seccion.B, 0.20);
           const x1 = numero(datos.X1);
           const y1 = numero(datos.Y1);

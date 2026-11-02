@@ -442,6 +442,12 @@ class ModeloNucleo(
             except Exception:
                 LOG.debug("no se pudieron leer las restricciones", exc_info=True)
             try:
+                alias = self._estructura_de_tipo(self._tipo_entidad(elemento))
+                if alias:
+                    salida["alias"] = alias
+            except Exception:
+                LOG.debug("no se pudo leer el alias de estructura", exc_info=True)
+            try:
                 enlace = self._enlace_de(elemento)
                 if enlace:
                     salida["enlace"] = enlace

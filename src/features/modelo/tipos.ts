@@ -272,6 +272,10 @@ export interface PropiedadesElemento {
   };
   /** O028: cruce o tramo de ejes al que está anclado. */
   enlace?: EnlaceEjes;
+  /** O040: alias de estructura (muro, cerramiento, dala, …). */
+  alias?: string;
+  /** O040: muro al que está ligado un cerramiento o dala. */
+  muro_liga?: { muro: string; nombre: string };
 }
 
 export interface Caja {
