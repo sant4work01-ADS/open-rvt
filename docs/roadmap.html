@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OPEN-RVT — Roadmap</title>
+<style>
+:root{--fondo:#14171c;--panel:#1d2128;--linea:#2c323c;--texto:#e6e8eb;--tenue:#8b93a1;--hoy:#ff5d5d;
+--f0:#7f8c9d;--f1:#5fb36b;--f2:#d9a441;--f3:#4f8fd6;--f4:#c96fd1;--f5:#3fb8b0;--f6:#e0694f;--mvp:#f2d34b}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.4 system-ui,Segoe UI,Roboto,sans-serif;background:var(--fondo);color:var(--texto)}
+header{padding:18px 24px;border-bottom:1px solid var(--linea);display:flex;gap:24px;align-items:center;flex-wrap:wrap}
+h1{font-size:20px;margin:0}
+.sub{color:var(--tenue);font-size:13px}
+.kpis{display:flex;gap:14px;margin-left:auto;flex-wrap:wrap}
+.kpi{background:var(--panel);border:1px solid var(--linea);border-radius:8px;padding:8px 14px;min-width:110px}
+.kpi b{display:block;font-size:20px}
+.kpi span{color:var(--tenue);font-size:12px}
+.barra-total{height:8px;background:#2a2f38;border-radius:4px;overflow:hidden;margin-top:6px}
+.barra-total i{display:block;height:100%;background:linear-gradient(90deg,var(--f1),var(--mvp))}
+nav{display:flex;gap:8px;padding:10px 24px;border-bottom:1px solid var(--linea);flex-wrap:wrap}
+nav button{background:var(--panel);color:var(--texto);border:1px solid var(--linea);border-radius:6px;padding:6px 12px;cursor:pointer}
+nav button.activo{border-color:var(--mvp);color:var(--mvp)}
+main{padding:16px 24px}
+.gantt{display:grid;grid-template-columns:330px 1fr;border:1px solid var(--linea);border-radius:8px;overflow:hidden;background:var(--panel)}
+.col-izq{border-right:1px solid var(--linea)}
+.cab{height:46px;border-bottom:1px solid var(--linea);display:flex;align-items:flex-end;padding:0 10px 6px;color:var(--tenue);font-size:12px}
+.fila{height:40px;border-bottom:1px solid var(--linea);display:flex;align-items:center;padding:0 10px;gap:8px;cursor:pointer}
+.fila:hover{background:#252a33}
+.fase-titulo{height:30px;background:#191c22;border-bottom:1px solid var(--linea);display:flex;align-items:center;padding:0 10px;font-weight:600;font-size:12px;letter-spacing:.04em;text-transform:uppercase}
+.id{font-family:ui-monospace,Consolas,monospace;color:var(--tenue);font-size:12px;width:44px}
+.nombre{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.estado{font-size:11px;padding:2px 7px;border-radius:10px;border:1px solid}
+.e-hecho{color:#7bd389;border-color:#3d6b45}
+.e-curso{color:#ffd166;border-color:#7a6430}
+.e-pend{color:var(--tenue);border-color:var(--linea)}
+.e-futuro{color:#9aa6ff;border-color:#3e4680}
+.col-der{overflow-x:auto;position:relative}
+.lienzo{position:relative}
+.semanas{display:flex;height:46px;border-bottom:1px solid var(--linea)}
+.semana{border-right:1px solid var(--linea);font-size:11px;color:var(--tenue);padding:4px 6px;flex:none}
+.semana b{display:block;color:var(--texto);font-size:12px}
+.pista{height:40px;border-bottom:1px solid var(--linea);position:relative}
+.pista.fase{height:30px;background:#191c22}
+.bloque{position:absolute;top:9px;height:22px;border-radius:5px;overflow:hidden;box-shadow:0 1px 0 #0006;cursor:pointer}
+.bloque .fondo{position:absolute;inset:0;opacity:.35}
+.bloque .avance{position:absolute;top:0;bottom:0;left:0}
+.bloque span{position:relative;font-size:11px;padding:0 6px;line-height:22px;white-space:nowrap;font-weight:600;text-shadow:0 1px 1px #0008}
+.hito{position:absolute;top:10px;width:18px;height:18px;transform:rotate(45deg);background:var(--mvp);border:2px solid #0008}
+.hoy{position:absolute;top:0;bottom:0;width:2px;background:var(--hoy);z-index:5}
+.hoy::after{content:"hoy";position:absolute;top:2px;left:4px;color:var(--hoy);font-size:11px;font-weight:600}
+.finde{position:absolute;top:46px;bottom:0;background:#ffffff06;pointer-events:none}
+#detalle{margin-top:16px;background:var(--panel);border:1px solid var(--linea);border-radius:8px;padding:16px;display:none}
+#detalle h2{margin:0 0 6px;font-size:17px}
+#detalle .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:10px}
+#detalle h3{font-size:12px;color:var(--tenue);text-transform:uppercase;margin:0 0 4px}
+#detalle ul{margin:0;padding-left:18px}
+.chip{display:inline-block;background:#2a2f38;border-radius:10px;padding:1px 8px;margin:2px;font-size:12px}
+.chip.recicla{background:#203a2a;color:#9fe0ad}
+.leyenda{display:flex;gap:14px;flex-wrap:wrap;margin:12px 0;color:var(--tenue);font-size:12px}
+.leyenda i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-2px}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--linea);border-radius:8px;overflow:hidden}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--linea);vertical-align:top}
+th{color:var(--tenue);font-weight:500;font-size:12px}
+.mini{height:6px;background:#2a2f38;border-radius:3px;overflow:hidden;width:90px}
+.mini i{display:block;height:100%}
+.oculto{display:none}
+footer{color:var(--tenue);font-size:12px;padding:10px 24px 30px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>OPEN-RVT — Roadmap</h1>
+    <div class="sub">Editor BIM libre (IFC) · Tauri 2 + three.js + IfcOpenShell</div>
+  </div>
+  <div class="kpis">
+    <div class="kpi"><b id="k-avance">0%</b><span>avance total</span><div class="barra-total"><i id="k-barra"></i></div></div>
+    <div class="kpi"><b id="k-hechas">0</b><span>tareas hechas</span></div>
+    <div class="kpi"><b id="k-curso">0</b><span>en curso</span></div>
+    <div class="kpi"><b id="k-mvp">—</b><span>MVP estimado</span></div>
+  </div>
+</header>
+<nav>
+  <button data-vista="gantt" class="activo">Gantt</button>
+  <button data-vista="tabla">Tabla</button>
+  <button data-vista="reciclado">Qué se reutiliza</button>
+</nav>
+<main>
+  <div class="leyenda" id="leyenda"></div>
+  <section id="v-gantt">
+    <div class="gantt">
+      <div class="col-izq" id="izq"></div>
+      <div class="col-der"><div class="lienzo" id="lienzo"></div></div>
+    </div>
+    <div id="detalle"></div>
+  </section>
+  <section id="v-tabla" class="oculto"></section>
+  <section id="v-reciclado" class="oculto"></section>
+</main>
+<footer>Actualizado: <span id="actualizado"></span> · Los datos están en el arreglo <code>TAREAS</code> de este archivo; el gerente lo actualiza al fusionar cada encargo.</footer>
+
+<script>
+// ======================= DATOS (editar aquí) =======================
+const ACTUALIZADO = "2026-11-02";
+const HOY = "2026-11-02";
+const FASES = {
+  F0:{nombre:"Cimientos y decisión",              color:"var(--f0)"},
+  F1:{nombre:"Núcleo IFC y modelado",             color:"var(--f1)"},
+  F2:{nombre:"Dibujo y anotación",                color:"var(--f2)"},
+  F3:{nombre:"Tipos, estructura y medición",      color:"var(--f3)"},
+  F4:{nombre:"Uniones, niveles y navegación",     color:"var(--f4)"},
+  F5:{nombre:"Estilos, restricciones y referencia", color:"var(--f5)"},
+  F6:{nombre:"Siguiente entrega",                 color:"var(--f6)"},
+  FX:{nombre:"Después del MVP",                   color:"#5a6378"},
+};
+// estado: hecho | curso | pend | futuro · avance 0..100
+const TAREAS = [
+ {id:"O001",fase:"F0",nombre:"Comparar motores IFC (IfcOpenShell y web-ifc)",ini:"2026-10-24",fin:"2026-10-24",avance:100,estado:"hecho",
+  entrega:["Apertura, teselado y memoria medidos con tres IFC","Edición probada con ifcopenshell.api","Decisión: IfcOpenShell como núcleo"],recicla:[]},
+ {id:"O002",fase:"F0",nombre:"Esqueleto de la app copiado de PresupuestosPro",ini:"2026-10-24",fin:"2026-10-24",avance:100,estado:"hecho",
+  entrega:["Tauri 2 + React + three.js con la interfaz de PP","Módulos de la app y barra de título","Pruebas de PP retiradas y suite propia"],recicla:[]},
+
+ {id:"O003",fase:"F1",nombre:"Núcleo IFC y visor con vistas",ini:"2026-10-24",fin:"2026-10-25",avance:100,estado:"hecho",dep:["O002"],
+  entrega:["Python + IfcOpenShell como proceso JSON-RPC","Plantas, alzados, cortes y 3D","Herramientas para niveles, ejes, muros, losas, puertas y ventanas","Mover, borrar y deshacer"],
+  recicla:["src-tauri/","nucleo/openrvt_nucleo/","src/features/modelo/Visor3D.tsx"]},
+ {id:"O004",fase:"F1",nombre:"Python embebido en los instaladores",ini:"2026-10-25",fin:"2026-10-25",avance:100,estado:"hecho",dep:["O003"],
+  entrega:["Python 3.12 embeddable con SHA256 fijo","IfcOpenShell y dependencias en site-packages","Instaladores .exe y .deb con el núcleo dentro"],recicla:["nucleo/","herramientas/"]},
+
+ {id:"O005",fase:"F2",nombre:"Lineamientos de dibujo (plumillas, rellenos y simbología)",ini:"2026-10-25",fin:"2026-10-25",avance:100,estado:"hecho",
+  entrega:["Grosor y estilo por categoría y escala","Relleno de corte por material","Símbolos de puerta y ventana en planta","Líneas ocultas y de proyección"],
+  recicla:["src/features/modelo/planta.ts","src/features/modelo/estilos.ts","nucleo/openrvt_nucleo/modelado.py"]},
+ {id:"O005C",fase:"F2",nombre:"Actualizador automático y herramienta Eje",ini:"2026-10-25",fin:"2026-10-25",avance:100,estado:"hecho",
+  entrega:["El eje termina el trazo en Windows","Actualizador al cerrar cada tarea","Versión 0.3.1 publicada"],recicla:["src/features/actualizaciones/","nucleo/openrvt_nucleo/modelado.py","src/lib/ipc.ts"]},
+ {id:"O006",fase:"F2",nombre:"Cotas entre ejes y entre niveles",ini:"2026-10-25",fin:"2026-10-25",avance:100,estado:"hecho",
+  entrega:["Cota editable que mueve el eje o el nivel","Cadena de cotas y cota total","Orientación norte corregida","Texto legible en planta"],
+  recicla:["src/features/modelo/cotas.ts","src/features/modelo/ejesVista.ts","nucleo/openrvt_nucleo/modelado.py"]},
+ {id:"O006C",fase:"F2",nombre:"Bitácora completa y exportable",ini:"2026-10-25",fin:"2026-10-25",avance:100,estado:"hecho",
+  entrega:["Registro JSONL de clics, acciones y errores","Panel en Ayuda y exportación .zip","Traza del núcleo conservada hasta la interfaz"],
+  recicla:["src/lib/bitacora.ts","src/lib/bitacoraExportar.ts","nucleo/openrvt_nucleo/servidor.py"]},
+ {id:"O006D",fase:"F2",nombre:"Ejes en ambos sentidos y navegación",ini:"2026-10-25",fin:"2026-10-25",avance:100,estado:"hecho",
+  entrega:["Retícula en x y y con rebase","Eje suelto restringido","Zoom, paneo y atajos visibles","Touchpad en Windows"],
+  recicla:["src/features/modelo/ejesVista.ts","src/features/modelo/orbita.ts","src/lib/rueda.ts"]},
+ {id:"O006E",fase:"F2",nombre:"Touchpad, enganches y esquinas de muro",ini:"2026-10-25",fin:"2026-10-25",avance:100,estado:"hecho",
+  entrega:["Detección de rueda por ráfagas","Enganche a cruces con tolerancia en píxeles","Esquinas de muro recortadas en planta y 3D"],
+  recicla:["src/lib/gestos.ts","src/features/modelo/planta.ts","nucleo/openrvt_nucleo/modelado.py"]},
+
+ {id:"O007",fase:"F3",nombre:"Tipos, materiales y estructura",ini:"2026-10-25",fin:"2026-10-25",avance:100,estado:"hecho",
+  entrega:["Editor de tipos con sección y armado","Muros multicapa y biblioteca de materiales","Castillos, cerramientos, dalas y zapatas","Cortes por prioridad y edición en cadena"],
+  recicla:["src/features/tipos/","nucleo/openrvt_nucleo/biblioteca.py","nucleo/openrvt_nucleo/interacciones.py","nucleo/openrvt_nucleo/acero.py"]},
+ {id:"O009",fase:"F3",nombre:"Medición hacia PresupuestosPro",ini:"2026-10-25",fin:"2026-10-25",avance:100,estado:"hecho",dep:["O007"],
+  entrega:["Partidas por tipo en OPENRVT_Medicion","Cálculo por criterio y renglones de generador","Exportación .openrvt-medicion.json","Editor de medición en el centro"],
+  recicla:["nucleo/openrvt_nucleo/medicion.py","src/features/tipos/medicion.test.tsx","src/features/modelo/CantidadesView.tsx"]},
+ {id:"O010",fase:"F3",nombre:"Pulir lo que hay (sin funciones nuevas)",ini:"2026-10-26",fin:"2026-10-26",avance:100,estado:"hecho",
+  entrega:["La cámara no se mueve al editar","3D en perspectiva con aristas y normales planas","Esquinas limpias en L y T"],
+  recicla:["src/features/modelo/Visor3D.tsx","src/features/modelo/geometria.ts","src/features/modelo/vistas.ts"]},
+ {id:"MVP",fase:"F3",nombre:"MVP: modelar y medir en IFC",ini:"2026-10-25",fin:"2026-10-25",avance:100,estado:"hecho",hito:true,dep:["O009"],
+  entrega:["Muros, losas, puertas y ventanas en planta y 3D","Exportar IFC","Cantidades hacia PresupuestosPro"],recicla:[]},
+
+ {id:"O011",fase:"F4",nombre:"Ejes con codos y anotación nítida",ini:"2026-10-27",fin:"2026-10-27",avance:100,estado:"hecho",
+  entrega:["Codos en los extremos de los ejes","Niveles en alzado y paneles plegables","Lectura numérica única de cotas"],
+  recicla:["src/features/modelo/ejesVista.ts","src/features/modelo/anotacion.ts","src/app/SidebarPlegable.tsx"]},
+ {id:"O012",fase:"F4",nombre:"Uniones 3D y jerarquía de elementos",ini:"2026-10-27",fin:"2026-10-27",avance:100,estado:"hecho",
+  entrega:["Vigas, contratrabes y zapatas unidas","Capas de muro recortadas en 3D","Jerarquía dado, contratrabe y castillo"],
+  recicla:["nucleo/openrvt_nucleo/uniones.py","src/features/modelo/geometria.ts"]},
+ {id:"O013",fase:"F4",nombre:"Correcciones de integración 0.5.8",ini:"2026-10-27",fin:"2026-10-27",avance:100,estado:"hecho",dep:["O011","O012"],
+  entrega:["E2E de O007b, O003b, O012 y O002 al día","Regresiones corregidas sin esconderlas","Versión 0.5.8"],
+  recicla:["e2e/","src/features/modelo/centrado.ts"]},
+ {id:"O014",fase:"F4",nombre:"Niveles con estilo y codo articulado",ini:"2026-10-30",fin:"2026-10-31",avance:100,estado:"hecho",
+  entrega:["Cabeza Npt y texto centrado","Codo articulado y burbujas","Texto legible en alzado y corte"],
+  recicla:["src/features/modelo/anotacion.ts","src/features/modelo/niveles.ts","src/features/modelo/centrado.ts"]},
+ {id:"O015",fase:"F4",nombre:"Losas sombreadas en planta y corte",ini:"2026-10-30",fin:"2026-10-30",avance:100,estado:"hecho",
+  entrega:["Achurado de sección en corte","Sombreado de losa bajo el corte","Sin achurado en alzado"],
+  recicla:["src/features/modelo/planta.ts","src/features/modelo/seccion.ts","src/features/modelo/estilos.ts"]},
+ {id:"O016",fase:"F4",nombre:"Restricciones de base y tope por nivel",ini:"2026-10-30",fin:"2026-10-30",avance:100,estado:"hecho",
+  entrega:["Pset OPENRVT_Restricciones en muro y columna","Altura calculada entre niveles y desfases","Compatibilidad con elementos existentes"],
+  recicla:["nucleo/openrvt_nucleo/modelado.py","src/features/modelo/Restricciones.tsx"]},
+ {id:"O017",fase:"F4",nombre:"Zoom con touchpad en Windows",ini:"2026-10-30",fin:"2026-10-31",avance:100,estado:"hecho",
+  entrega:["Pellizco y Ctrl+rueda con sensibilidad de touchpad","Zoom sin depender del dispositivo","Diagnóstico grabable"],
+  recicla:["src/lib/rueda.ts","src/features/modelo/ControlesZoom.tsx","src-tauri/src/lib.rs"]},
+ {id:"O018",fase:"F4",nombre:"Pellizco nativo captado desde Windows",ini:"2026-10-31",fin:"2026-10-31",avance:100,estado:"hecho",dep:["O017"],
+  entrega:["Subclase de ventana en Rust","Eventos de pellizco del touchpad","Zoom en el navegador y en la ventana Tauri"],
+  recicla:["src-tauri/src/gestos_windows.rs","src/lib/gestos.ts"]},
+ {id:"O019",fase:"F4",nombre:"Aristas verticales en 3D",ini:"2026-10-31",fin:"2026-10-31",avance:100,estado:"hecho",
+  entrega:["Arista vertical conservada en esquinas","Uniones en T sin cortes falsos","Aristas de canto de losa"],
+  recicla:["src/features/modelo/geometria.ts","src/features/modelo/Visor3D.tsx"]},
+ {id:"O020",fase:"F4",nombre:"Orbitar con touchpad",ini:"2026-10-31",fin:"2026-10-31",avance:100,estado:"hecho",
+  entrega:["Shift + dos dedos orbita en 3D","Botón Orbitar y arrastre derecho","Ayuda de touchpad en el visor"],
+  recicla:["src/features/modelo/orbita.ts","src/features/modelo/Visor3D.tsx"]},
+ {id:"O021",fase:"F4",nombre:"Editar el acomodo de los ejes",ini:"2026-10-31",fin:"2026-10-31",avance:100,estado:"hecho",
+  entrega:["Asas de extremo y de codo","Candado para mover ejes paralelos","Texto de nivel sobre la línea","Cotas chicas sin encimarse"],
+  recicla:["src/features/modelo/ejesVista.ts","src/features/modelo/anotacionVista.ts","src/features/modelo/cotas.ts"]},
+ {id:"O022",fase:"F4",nombre:"Sidebars plegables y con buscador",ini:"2026-10-31",fin:"2026-10-31",avance:100,estado:"hecho",
+  entrega:["Grupos plegables con contador","Buscador sin acentos ni mayúsculas","Menú contextual y renombrar en línea"],
+  recicla:["src/app/SidebarModulos.tsx","src/features/modelo/NavegadorVistas.tsx","src/features/modelo/PanelPropiedades.tsx"]},
+ {id:"O023",fase:"F4",nombre:"Auditoría de pulir lo que hay",ini:"2026-10-31",fin:"2026-10-31",avance:100,estado:"hecho",
+  entrega:["Esquinas L y T sin picos ni huecos","Rango de vista plegado por omisión","Elevación de nivel con formatos flexibles"],
+  recicla:["src/features/modelo/geometria.ts","src/features/modelo/cotas.ts","docs/progreso/"]},
+
+ {id:"O024",fase:"F5",nombre:"Editor de estilos de anotación",ini:"2026-10-31",fin:"2026-10-31",avance:100,estado:"hecho",
+  entrega:["Estilos de nivel, eje y cota","Patrón de línea, color, grosor y tamaño","Tres pestañas en un diálogo"],
+  recicla:["src/features/modelo/DialogoEstilos.tsx","src/features/modelo/estilos.ts"]},
+ {id:"O025",fase:"F5",nombre:"Niveles y cotas como la referencia",ini:"2026-10-31",fin:"2026-10-31",avance:100,estado:"hecho",dep:["O024"],
+  entrega:["Línea de nivel trazo-punto y cabeza triangular","Cabezas separadas con codo","Cadenas de cotas entre niveles","Ejes con globo circular"],
+  recicla:["src/features/modelo/anotacionVista.ts","src/features/modelo/cotas.ts","src/features/modelo/ejesVista.ts"]},
+ {id:"O026",fase:"F5",nombre:"Herramienta Alinear",ini:"2026-10-31",fin:"2026-10-31",avance:100,estado:"hecho",
+  entrega:["Alinear con referencia y elemento","Candado que guarda la restricción","Atajo AL"],
+  recicla:["src/features/modelo/alinear.ts","src/features/ribbon/comandos.ts"]},
+ {id:"O027",fase:"F5",nombre:"Nodos de ejes y niveles restringidos",ini:"2026-10-31",fin:"2026-10-31",avance:100,estado:"hecho",
+  entrega:["Asa de extremo solo a lo largo","Codo solo perpendicular","Shift libera y Escape cancela"],
+  recicla:["src/features/modelo/ejesVista.ts","src/features/modelo/niveles.ts","src/features/modelo/gestos.ts"]},
+ {id:"O028",fase:"F5",nombre:"Elementos enlazados a ejes y niveles",ini:"2026-10-31",fin:"2026-10-31",avance:100,estado:"hecho",dep:["O016"],
+  entrega:["Enlace puntual a cruces de ejes","Enlace lineal a un eje guía con desfase","Mover el nivel mueve lo enlazado","Herramientas por lote en la cinta"],
+  recicla:["nucleo/openrvt_nucleo/modelado.py","src/features/modelo/enlaces.ts","src/features/modelo/Restricciones.tsx"]},
+ {id:"O029",fase:"F5",nombre:"Dibujar niveles en alzado y corte",ini:"2026-10-31",fin:"2026-10-31",avance:100,estado:"hecho",
+  entrega:["Herramienta Nivel de dos clics","Nivel fantasma y cotas temporales","Nombre automático y copiar con desfase"],
+  recicla:["src/features/modelo/niveles.ts","src/features/modelo/nivelesHerramienta.test.ts","src/features/modelo/BarraHerramientaNivel.test.tsx"]},
+ {id:"O030",fase:"F5",nombre:"Anotación a escala",ini:"2026-10-31",fin:"2026-10-31",avance:100,estado:"hecho",dep:["O025"],
+  entrega:["Modo papel y modo pantalla","Zoom 1:1 y control en propiedades","La anotación no cambia con el zoom en papel"],
+  recicla:["src/features/modelo/anotacionEscala.ts","src/features/modelo/anotacionVista.ts"]},
+ {id:"O031",fase:"F5",nombre:"Reparar los E2E viejos",ini:"2026-10-31",fin:"2026-10-31",avance:100,estado:"hecho",
+  entrega:["E2E de O014, O025 y otros al día","Cámara conservada al volver de otro módulo","Batería completa con binario debug"],
+  recicla:["e2e/","src/features/modelo/vistas.ts"]},
+ {id:"O032",fase:"F5",nombre:"Línea de ubicación y bordes de losa",ini:"2026-10-31",fin:"2026-11-01",avance:100,estado:"hecho",
+  entrega:["Muro a eje, paño interior o exterior","Desfase de cada borde de losa","Edición después de crear","El contorno de losa sigue la línea de ubicación"],
+  recicla:["src/features/modelo/bordesLosa.ts","nucleo/openrvt_nucleo/modelado.py","src/features/modelo/PanelPropiedades.tsx"]},
+ {id:"O033",fase:"F5",nombre:"Zapata corrida cuelga del nivel",ini:"2026-10-31",fin:"2026-11-01",avance:100,estado:"hecho",
+  entrega:["La zapata se define desde el nivel y el desplante","Centrada bajo el eje y alineada con el muro","Panel con solo base, desplante y prolongaciones","GlobalId estable en pruebas"],
+  recicla:["nucleo/openrvt_nucleo/modelado.py","src/features/modelo/PanelPropiedades.tsx","nucleo/tests/test_o033.py"]},
+
+ {id:"O034",fase:"F6",nombre:"Asas en planta para el desfase de cada borde de losa",ini:"2026-11-03",fin:"2026-11-04",avance:0,estado:"pend",dep:["O032"],
+  entrega:["Asa por borde de losa en planta","Arrastrar cambia el desfase del borde","Lo mismo que ya hace la tabla de Propiedades"],
+  recicla:["src/features/modelo/bordesLosa.ts","src/features/modelo/planta.ts","src/features/modelo/PanelPropiedades.tsx"]},
+ {id:"O035",fase:"F6",nombre:"El muro baja hasta el lecho superior de la zapata",ini:"2026-11-05",fin:"2026-11-06",avance:0,estado:"pend",dep:["O033"],
+  entrega:["El muro nace en el lecho superior de la zapata","No queda hueco entre muro y cimentación","Altura recalculada al mover la zapata"],
+  recicla:["nucleo/openrvt_nucleo/uniones.py","nucleo/openrvt_nucleo/modelado.py"]},
+ {id:"O036",fase:"F6",nombre:"Pendientes de O028 a ejes y niveles",ini:"2026-11-07",fin:"2026-11-08",avance:0,estado:"pend",dep:["O028"],
+  entrega:["Auto-enlace de muro y trabe con dos clics en cruces","Giro de ejes con propagación","Cubre lo que docs/progreso/O028.md dejó pendiente"],
+  recicla:["src/features/modelo/enlaces.ts","nucleo/openrvt_nucleo/modelado.py","docs/progreso/O028.md"]},
+ {id:"PLA",fase:"F6",nombre:"Planos y exportación a PDF",ini:"2026-11-07",fin:"2026-11-10",avance:0,estado:"pend",
+  entrega:["Láminas con cuadro de datos","Vistas colocadas a escala","Exportación a PDF","Reutiliza la anotación a escala de O030"],
+  recicla:["src/features/modelo/anotacionEscala.ts","src/features/modelo/vistas.ts","nucleo/openrvt_nucleo/medicion.py"]},
+ {id:"ESC",fase:"F6",nombre:"Escaleras rectas",ini:"2026-11-08",fin:"2026-11-12",avance:0,estado:"pend",
+  entrega:["Escalera recta con huella y peralte","Tipo paramétrico y herramienta de colocación","Cantidades de concreto y acero"],
+  recicla:["nucleo/openrvt_nucleo/modelado.py","nucleo/openrvt_nucleo/acero.py","src/features/tipos/"]},
+ {id:"CUB",fase:"F6",nombre:"Cubiertas planas y a dos aguas",ini:"2026-11-08",fin:"2026-11-13",avance:0,estado:"pend",
+  entrega:["Cubierta plana y a dos aguas","Aguas y faldones editables","Uniones con muros y losas","Cantidades por superficie"],
+  recicla:["nucleo/openrvt_nucleo/modelado.py","nucleo/openrvt_nucleo/uniones.py","src/features/modelo/geometria.ts"]},
+ {id:"ED1",fase:"F6",nombre:"Recortar y extender elementos",ini:"2026-11-09",fin:"2026-11-10",avance:0,estado:"pend",
+  entrega:["Recortar contra un elemento de referencia","Extender hasta el límite elegido","Atajo y vista previa"],
+  recicla:["src/features/modelo/planta.ts","src/features/modelo/geometria.ts","nucleo/openrvt_nucleo/modelado.py"]},
+ {id:"ED2",fase:"F6",nombre:"Espejo y matriz de elementos",ini:"2026-11-11",fin:"2026-11-12",avance:0,estado:"pend",
+  entrega:["Espejo con eje de simetría","Matriz lineal y polar","Copia con sus vanos"],
+  recicla:["src/features/modelo/planta.ts","nucleo/openrvt_nucleo/modelado.py"]},
+ {id:"ED3",fase:"F6",nombre:"Copiar un muro con sus vanos",ini:"2026-11-14",fin:"2026-11-15",avance:0,estado:"pend",dep:["ED2"],
+  entrega:["Copia el muro y sus puertas y ventanas","Conserva tipo, capas y restricciones","Un solo paso de deshacer"],
+  recicla:["src/features/modelo/aberturas.ts","nucleo/openrvt_nucleo/modelado.py","src/features/modelo/estado.ts"]},
+ {id:"BAR",fase:"F6",nombre:"Barandales",ini:"2026-11-14",fin:"2026-11-16",avance:0,estado:"pend",dep:["ESC"],
+  entrega:["Barandal recto sobre losa o escalera","Tipo con altura y separación de montantes","Cantidades por longitud"],
+  recicla:["nucleo/openrvt_nucleo/modelado.py","nucleo/openrvt_nucleo/uniones.py","src/features/tipos/"]},
+ {id:"DXF",fase:"F6",nombre:"Exportación DXF de láminas",ini:"2026-11-15",fin:"2026-11-17",avance:0,estado:"pend",dep:["PLA"],
+  entrega:["Exportar vistas y láminas a DXF","Capas por categoría y escala","Compatible con AutoCAD y LibreCAD"],
+  recicla:["src/features/modelo/vistas.ts","src/features/modelo/anotacionEscala.ts","nucleo/openrvt_nucleo/medicion.py"]},
+
+ {id:"FX1",fase:"FX",nombre:"Módulo de cálculo estructural",ini:"2026-11-18",fin:"2026-11-24",avance:0,estado:"futuro",
+  entrega:["Revisión de vigas, columnas y cimentación","Resistencia y deformaciones con norma","Reporte de memoria de cálculo"],
+  recicla:["nucleo/openrvt_nucleo/acero.py","ideas/2026-10-26-modulo-calculo-estructural.md"]},
+ {id:"FX2",fase:"FX",nombre:"Asistente que modela desde imágenes y CAD",ini:"2026-11-25",fin:"2026-12-01",avance:0,estado:"futuro",
+  entrega:["Leer planos, croquis y fotos","Leer DWG/DXF como referencia","Proponer muros, vanos y niveles"],
+  recicla:["ideas/2026-10-26-asistente-modela-desde-imagenes-y-cad.md","nucleo/openrvt_nucleo/modelado.py"]},
+ {id:"FX3",fase:"FX",nombre:"Instalaciones (agua, drenaje y eléctrica)",ini:"2026-12-02",fin:"2026-12-08",avance:0,estado:"futuro",
+  entrega:["Tuberías y conexiones","Circuitos y canalizaciones","Cuantificación por tramo"],
+  recicla:["ideas/2026-10-25-elementos-editor-instalaciones.md","nucleo/openrvt_nucleo/modelado.py"]},
+ {id:"FX4",fase:"FX",nombre:"Plugin para SketchUp",ini:"2026-12-09",fin:"2026-12-15",avance:0,estado:"futuro",
+  entrega:["Enviar el modelo a SketchUp","Traer geometría de vuelta","Conservar tipos y medición"],
+  recicla:["ideas/2026-10-22-plugin-sketchup.md","nucleo/openrvt_nucleo/medicion.py"]},
+ {id:"FX5",fase:"FX",nombre:"Render con los motores de Blender",ini:"2026-12-16",fin:"2026-12-22",avance:0,estado:"futuro",
+  entrega:["Exportar a Blender","Render Cycles o EEVEE","Volver a OPEN-RVT"],
+  recicla:["ideas/2026-10-23-motores-render-blender.md"]},
+ {id:"FX6",fase:"FX",nombre:"Armado paramétrico y disposición del acero",ini:"2026-12-23",fin:"2026-12-29",avance:0,estado:"futuro",
+  entrega:["Armado por tipo y diámetro","Despiece y longitud de desarrollo","Planos de armado"],
+  recicla:["nucleo/openrvt_nucleo/acero.py","ideas/2026-10-27-armado-parametrico-y-disposicion.md"]},
+];
+// ===================================================================
+
+const DIA = 86400000, ANCHO_DIA = 28;
+const f = s => new Date(s+"T00:00:00");
+const ini0 = new Date(Math.min(...TAREAS.map(t=>f(t.ini))));
+ini0.setDate(ini0.getDate() - ((ini0.getDay()+6)%7)); // lunes
+const finMax = new Date(Math.max(...TAREAS.map(t=>f(t.fin))));
+const dias = Math.ceil((finMax-ini0)/DIA)+8;
+const x = d => Math.round((f(d)-ini0)/DIA)*ANCHO_DIA;
+const MESES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+const fmt = s => { const d=f(s); return d.getDate()+" "+MESES[d.getMonth()]; };
+const ETQ = {hecho:"hecho",curso:"en curso",pend:"pendiente",futuro:"futuro"};
+
+function kpis(){
+  const mvp = TAREAS.filter(t=>t.fase!=="FX" && !t.hito);
+  const pesos = mvp.map(t=>Math.max(1,(f(t.fin)-f(t.ini))/DIA+1));
+  const tot = pesos.reduce((a,b)=>a+b,0);
+  const av = mvp.reduce((a,t,i)=>a+t.avance*pesos[i],0)/tot;
+  document.getElementById("k-avance").textContent = Math.round(av)+"%";
+  document.getElementById("k-barra").style.width = av+"%";
+  document.getElementById("k-hechas").textContent = mvp.filter(t=>t.estado==="hecho").length+" / "+mvp.length;
+  document.getElementById("k-curso").textContent = mvp.filter(t=>t.estado==="curso").length;
+  const h = TAREAS.find(t=>t.hito); document.getElementById("k-mvp").textContent = h?fmt(h.fin):"—";
+  document.getElementById("actualizado").textContent = ACTUALIZADO;
+}
+
+function gantt(){
+  const izq = document.getElementById("izq"), lz = document.getElementById("lienzo");
+  izq.innerHTML = '<div class="cab">Tarea</div>'; lz.innerHTML = "";
+  lz.style.width = (dias*ANCHO_DIA)+"px";
+  const sem = document.createElement("div"); sem.className="semanas";
+  for(let d=0; d<dias; d+=7){
+    const dd = new Date(ini0.getTime()+d*DIA);
+    const s = document.createElement("div"); s.className="semana"; s.style.width=(7*ANCHO_DIA)+"px";
+    s.innerHTML = "<b>"+dd.getDate()+" "+MESES[dd.getMonth()]+"</b>semana "+(1+d/7);
+    sem.appendChild(s);
+    const fin = document.createElement("div"); fin.className="finde";
+    fin.style.left=((d+5)*ANCHO_DIA)+"px"; fin.style.width=(2*ANCHO_DIA)+"px"; lz.appendChild(fin);
+  }
+  lz.appendChild(sem);
+  for(const [fid,fase] of Object.entries(FASES)){
+    const ts = TAREAS.filter(t=>t.fase===fid); if(!ts.length) continue;
+    const ft = document.createElement("div"); ft.className="fase-titulo"; ft.style.color=fase.color;
+    ft.textContent = fid+" · "+fase.nombre; izq.appendChild(ft);
+    const fp = document.createElement("div"); fp.className="pista fase"; lz.appendChild(fp);
+    for(const t of ts){
+      const fila = document.createElement("div"); fila.className="fila";
+      fila.innerHTML = `<span class="id">${t.id}</span><span class="nombre" title="${t.nombre}">${t.nombre}</span><span class="estado e-${t.estado}">${ETQ[t.estado]}</span>`;
+      fila.onclick = ()=>detalle(t); izq.appendChild(fila);
+      const p = document.createElement("div"); p.className="pista";
+      if(t.hito){
+        const h = document.createElement("div"); h.className="hito"; h.style.left=(x(t.ini)+ANCHO_DIA/2-9)+"px";
+        h.title=t.nombre; h.onclick=()=>detalle(t); p.appendChild(h);
+      } else {
+        const b = document.createElement("div"); b.className="bloque";
+        b.style.left = x(t.ini)+"px"; b.style.width = (x(t.fin)-x(t.ini)+ANCHO_DIA)+"px";
+        b.innerHTML = `<div class="fondo" style="background:${fase.color}"></div><div class="avance" style="width:${t.avance}%;background:${fase.color}"></div><span>${t.avance}%</span>`;
+        b.title = `${t.id} · ${fmt(t.ini)} → ${fmt(t.fin)}`; b.onclick=()=>detalle(t);
+        p.appendChild(b);
+      }
+      lz.appendChild(p);
+    }
+  }
+  const hoy = document.createElement("div"); hoy.className="hoy"; hoy.style.left=(x(HOY)+ANCHO_DIA/2)+"px"; lz.appendChild(hoy);
+  document.getElementById("leyenda").innerHTML = Object.entries(FASES).map(([k,v])=>`<span><i style="background:${v.color}"></i>${k} ${v.nombre}</span>`).join("")
+    + '<span><i style="background:var(--mvp);transform:rotate(45deg)"></i>hito</span><span><i style="background:#ffffff10"></i>fin de semana (carga pesada)</span>';
+}
+
+function detalle(t){
+  const d = document.getElementById("detalle"); d.style.display="block";
+  const deps = (t.dep||[]).map(id=>{const o=TAREAS.find(z=>z.id===id);return `<span class="chip">${id}${o?" · "+ETQ[o.estado]:""}</span>`}).join("") || "—";
+  d.innerHTML = `<h2>${t.id} · ${t.nombre}</h2>
+   <div class="sub">${FASES[t.fase].nombre} · ${fmt(t.ini)} → ${fmt(t.fin)} · <span class="estado e-${t.estado}">${ETQ[t.estado]}</span> · ${t.avance}%</div>
+   <div class="grid">
+    <div><h3>Entrega</h3><ul>${(t.entrega||[]).map(e=>`<li>${e}</li>`).join("")}</ul></div>
+    <div><h3>Reutiliza del repo</h3>${(t.recicla||[]).map(r=>`<span class="chip recicla">${r}</span>`).join("")||"—"}</div>
+    <div><h3>Depende de</h3>${deps}</div>
+   </div>`;
+  d.scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+
+function tabla(){
+  const filas = TAREAS.map(t=>`<tr><td class="id">${t.id}</td><td>${t.nombre}<div class="sub">${(t.entrega||[]).join(" · ")}</div></td>
+   <td>${FASES[t.fase].nombre}</td><td>${fmt(t.ini)} → ${fmt(t.fin)}</td>
+   <td><span class="estado e-${t.estado}">${ETQ[t.estado]}</span></td>
+   <td><div class="mini"><i style="width:${t.avance}%;background:${FASES[t.fase].color}"></i></div>${t.avance}%</td></tr>`).join("");
+  document.getElementById("v-tabla").innerHTML = `<table><tr><th>ID</th><th>Tarea</th><th>Fase</th><th>Fechas</th><th>Estado</th><th>Avance</th></tr>${filas}</table>`;
+}
+
+function reciclado(){
+  const mapa = {};
+  for(const t of TAREAS) for(const r of (t.recicla||[])) (mapa[r] ||= []).push(t.id);
+  const filas = Object.entries(mapa).map(([r,ids])=>`<tr><td><span class="chip recicla">${r}</span></td><td>${ids.map(i=>`<span class="chip">${i}</span>`).join("")}</td></tr>`).join("");
+  document.getElementById("v-reciclado").innerHTML = `<p class="sub">Módulos y archivos del propio OPEN-RVT que cada tarea reutiliza, en vez de reescribirlos.</p>
+   <table><tr><th>Pieza reutilizada</th><th>Tareas</th></tr>${filas}</table>`;
+}
+
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("nav button").forEach(o=>o.classList.toggle("activo",o===b));
+  for(const v of ["gantt","tabla","reciclado"]) document.getElementById("v-"+v).classList.toggle("oculto", v!==b.dataset.vista);
+});
+kpis(); gantt(); tabla(); reciclado();
+</script>
+</body>
+</html>
