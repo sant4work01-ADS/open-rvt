@@ -303,7 +303,9 @@ test("O012-1: cimentación con 6 zapatas, L, T y hueco de 3 cm", async () => {
       if (typeof visor.__openrvtAristasEnCaja !== "function") return -1;
       return visor.__openrvtAristasEnCaja([5.7, 7.85, -0.42], [6.3, 7.95, 0.02]);
     });
-    assert.equal(aristasNodo, 2, `quedaron ${aristasNodo} aristas internas en el nudo`);
+    // O037: el dado del nudo ya llega al nivel y envuelve esa zona, así que también
+    // pueden quedar 0 (las aristas caen dentro del dado). Lo que no debe pasar son 6.
+    assert.ok(aristasNodo >= 0 && aristasNodo <= 2, `quedaron ${aristasNodo} aristas internas en el nudo`);
 
     for (const archivo of [
       "antes-fundacion-perspectiva.jpg",

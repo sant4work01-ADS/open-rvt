@@ -261,3 +261,26 @@ def test_rpc_de_puntas_suelta_y_cambia_nivel() -> None:
         {"globalid": cerramiento, "nivel_base": _nivel(nucleo), "desfase_base": 2.40},
     )
     assert _tope(nucleo, cerramiento) == pytest.approx(2.40, abs=1e-6)
+
+# ------------------------------------------------- muro que no se teselaba (2-nov)
+
+
+@pytest.mark.parametrize("largo,ancho", [(4.0, 3.0), (5.0, 4.0), (6.0, 3.5), (3.0, 3.0)])
+def test_todos_los_muros_se_teselan_con_castillos_y_cerramientos(largo, ancho) -> None:
+    """El recorte con castillos dejaba vértices casi repetidos en un muro y
+    IfcOpenShell no lo teselaba: desaparecía de planta, alzado y 3D."""
+    from openrvt_nucleo.modelo import ModeloNucleo
+
+    nucleo = ModeloNucleo()
+    nucleo.nuevo("O040 teselado")
+    nivel = nucleo.niveles()[0]["globalid"]
+    muros = [
+        nucleo.muro_crear("Block 15", nivel, *c, 2.6, "centro", "eje_nucleo")["creados"][0]
+        for c in [(0, 0, largo, 0), (largo, 0, largo, ancho), (largo, ancho, 0, ancho), (0, ancho, 0, 0)]
+    ]
+    nucleo.castillos_automaticos(muros, 3.0, None)
+    for muro in muros:
+        nucleo.cerramiento_crear_en_muro("CE-1 Cerramiento 15×20", muro)
+    teselados = {e["globalid"] for e in nucleo.teselar(None)["elementos"]}
+    todos = {e["globalid"] for e in nucleo.elementos()}
+    assert todos <= teselados, f"sin geometría: {sorted(todos - teselados)}"

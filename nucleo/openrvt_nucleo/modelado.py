@@ -92,6 +92,34 @@ def _redondear(valor: float) -> float:
     return round(float(valor), 6)
 
 
+def _limpiar_anillo(
+    puntos: list[tuple[float, float]], tolerancia: float = 1e-7
+) -> list[tuple[float, float]]:
+    """Anillo sin ruido de coma flotante: redondea a 1e-9, quita vértices repetidos
+    (incluido el cierre) y los que quedan alineados con sus vecinos."""
+    limpios: list[tuple[float, float]] = []
+    for x, y in puntos:
+        p = (round(float(x), 9) + 0.0, round(float(y), 9) + 0.0)
+        if limpios and math.hypot(p[0] - limpios[-1][0], p[1] - limpios[-1][1]) <= tolerancia:
+            continue
+        limpios.append(p)
+    while len(limpios) > 1 and math.hypot(
+        limpios[0][0] - limpios[-1][0], limpios[0][1] - limpios[-1][1]
+    ) <= tolerancia:
+        limpios.pop()
+    cambio = True
+    while cambio and len(limpios) > 3:
+        cambio = False
+        for k in range(len(limpios)):
+            a, b, c = limpios[k - 1], limpios[k], limpios[(k + 1) % len(limpios)]
+            cruz = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+            if abs(cruz) <= tolerancia * max(1.0, math.hypot(c[0] - a[0], c[1] - a[1])):
+                del limpios[k]
+                cambio = True
+                break
+    return limpios
+
+
 def _poligono_area(puntos: list[tuple[float, float]]) -> float:
     area = 0.0
     for i, (x1, y1) in enumerate(puntos):
@@ -2697,12 +2725,15 @@ class ModeladoMixin:
         for pieza in piezas:
             if pieza.is_empty or pieza.area <= TOLERANCIA_CALCULO:
                 continue
-            salida.append(
-                [
-                    self._punto_en_local(datos, x, y)
-                    for x, y in list(pieza.exterior.coords)[:-1]
-                ]
+            # O040: el recorte con castillos deja vértices casi repetidos
+            # (2.925, 0.075) y (2.925, 0.07499999999999982) que IfcOpenShell no
+            # tesela: el muro desaparece de planta, alzado y 3D. Se limpian aquí.
+            pieza = pieza.simplify(1e-7, preserve_topology=True)
+            anillo = _limpiar_anillo(
+                [self._punto_en_local(datos, x, y) for x, y in list(pieza.exterior.coords)[:-1]]
             )
+            if len(anillo) >= 3:
+                salida.append(anillo)
         return salida or [poligono]
 
     def _limites_verticales_muro(
