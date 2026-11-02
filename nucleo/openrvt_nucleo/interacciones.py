@@ -136,6 +136,7 @@ class InteraccionesMixin:
         y: float,
         rotacion: float,
         altura: float,
+        recalcular: bool = True,
     ) -> tuple[Any, float]:
         elevacion = float(nivel_entidad.Elevation or 0.0)
         if altura <= 0:
@@ -159,7 +160,9 @@ class InteraccionesMixin:
         spatial_api.assign_container(
             self.modelo, products=[columna], relating_structure=nivel_entidad
         )
-        self._recalcular_uniones_estructura()
+        # O041: en lotes se recalcula una sola vez al final.
+        if recalcular:
+            self._recalcular_uniones_estructura()
         return columna, elevacion
 
     def _viga_nueva(
@@ -234,6 +237,7 @@ class InteraccionesMixin:
         muro: Any,
         distancia: float,
         corregir_existente: bool = True,
+        recalcular: bool = True,
     ) -> Any:
         datos = self._datos_muro(muro)
         x, y, rotacion = self._punto_en_muro(muro, distancia)
@@ -258,7 +262,8 @@ class InteraccionesMixin:
             altura = datos["altura"]
         elevacion = datos["z"]
         castillo, _ = self._columna_nueva(
-            tipo_entidad, nivel_entidad, x, y, rotacion, max(altura, 0.05)
+            tipo_entidad, nivel_entidad, x, y, rotacion, max(altura, 0.05),
+            recalcular=recalcular,
         )
         pset = {
             **self._leer_pset(castillo, "OPENRVT_Estructura"),
@@ -271,7 +276,9 @@ class InteraccionesMixin:
         self._guardar_liga(castillo, {"Muro": _gid(muro), "Distancia": distancia})
         self._conectar(castillo, muro)
         # O012b: con B/H del muro ya fijados, se recortan las vigas y el muro vecino.
-        self._recalcular_uniones_estructura()
+        # O041: en la colocación por lotes se recalcula una sola vez al final.
+        if recalcular:
+            self._recalcular_uniones_estructura()
         return castillo
 
     def castillos_automaticos(
@@ -327,7 +334,7 @@ class InteraccionesMixin:
                 ) < 0.05:
                     omitidos.append(castillo)
                     return
-            creados.append(self._castillo_en(tipo_entidad, muro, distancia))
+            creados.append(self._castillo_en(tipo_entidad, muro, distancia, recalcular=False))
 
         # 1. Esquinas: un solo castillo por cruce, centrado en la intersección.
         esquinas: list[tuple[float, float, Any, float]] = []
@@ -399,6 +406,9 @@ class InteraccionesMixin:
                 if any(abs(distancia - e) < 0.05 for e in existentes):
                     continue
                 colocar(muro, distancia)
+        # O041: todos los castillos creados; una sola regeneración de los muros
+        # afectados y sus dependientes (antes se hacía por cada castillo).
+        self._recalcular_uniones_estructura()
         self.con_cambios = True
         return self._resultado(
             creados,
