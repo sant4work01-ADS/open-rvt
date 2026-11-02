@@ -72,9 +72,12 @@ function rectangulo(
 ): Anillo {
   const [x1, y1] = muro.eje;
   const { ux, uy, nx, ny, largo } = direccion(muro);
+  // Redondeo a 1e-9 m: dos huellas que tocan la misma cara por caminos distintos
+  // (eje + desfase de ubicación) no deben dejar un vértice casi duplicado.
+  const fijo = (v: number) => Math.round(v * 1e9) / 1e9;
   const punto = (t: number, off: number): Par => [
-    x1 + ux * t + nx * off,
-    y1 + uy * t + ny * off,
+    fijo(x1 + ux * t + nx * off),
+    fijo(y1 + uy * t + ny * off),
   ];
   const a = punto(-extensionInicio, desde);
   const b = punto(largo + extensionFin, desde);
@@ -84,29 +87,52 @@ function rectangulo(
 }
 
 /**
- * En una unión en L los dos muros se alargan media thickness para que el inglete
- * cierre el contorno; en T el muro que llega se recorta contra el núcleo pasante.
+ * En una unión en L (o una T) el muro se alarga hasta la cara más lejana del vecino.
+ * O032: el vecino puede ir a paño, así que su cuerpo no está centrado en su línea
+ * dibujada; el alcance se mide con sus límites reales, no con medio espesor.
  */
+function alcanceHacia(otro: MuroPlanta, salida: Par): number {
+  const { nx, ny } = direccion(otro);
+  const { min, max } = limites(otro);
+  const proyeccion = nx * salida[0] + ny * salida[1];
+  return Math.max(0, proyeccion * min, proyeccion * max);
+}
+
+/** El punto cae sobre la línea dibujada del otro muro, lejos de sus extremos. */
+function enTramo(otro: MuroPlanta, px: number, py: number): boolean {
+  const [ox1, oy1, ox2, oy2] = otro.eje;
+  const dx = ox2 - ox1;
+  const dy = oy2 - oy1;
+  const largo2 = dx * dx + dy * dy;
+  if (largo2 <= 1e-12) return false;
+  const t = ((px - ox1) * dx + (py - oy1) * dy) / largo2;
+  if (t <= 0.02 || t >= 0.98) return false;
+  return Math.hypot(px - (ox1 + t * dx), py - (oy1 + t * dy)) <= 0.01;
+}
+
 function extensionesEnExtremos(
   muro: MuroPlanta,
   todos: MuroPlanta[],
 ): { inicio: number; fin: number } {
   const [x1, y1, x2, y2] = muro.eje;
+  const { ux, uy } = direccion(muro);
   let inicio = 0;
   let fin = 0;
   for (const otro of todos) {
     if (otro.globalid === muro.globalid) continue;
     const [ox1, oy1, ox2, oy2] = otro.eje;
-    // O010: en L cada muro llega a la cara exterior del otro. La extensión es el
-    // medio espesor del vecino; con espesores distintos, usar el propio dejaría
-    // una muesca en el muro delgado.
-    const alcance = espesorDe(otro) / 2;
+    // O010: en L cada muro llega a la cara exterior del otro (con espesores
+    // distintos, usar el propio dejaría una muesca en el muro delgado).
     if (Math.hypot(ox1 - x1, oy1 - y1) <= 0.01 || Math.hypot(ox2 - x1, oy2 - y1) <= 0.01) {
-      inicio = Math.max(inicio, alcance);
+      inicio = Math.max(inicio, alcanceHacia(otro, [-ux, -uy]));
     }
     if (Math.hypot(ox1 - x2, oy1 - y2) <= 0.01 || Math.hypot(ox2 - x2, oy2 - y2) <= 0.01) {
-      fin = Math.max(fin, alcance);
+      fin = Math.max(fin, alcanceHacia(otro, [ux, uy]));
     }
+    // En T el muro que llega termina en la línea dibujada del pasante; si el
+    // pasante va a paño, se alarga hasta su cara lejana para no dejar hueco.
+    if (enTramo(otro, x1, y1)) inicio = Math.max(inicio, alcanceHacia(otro, [-ux, -uy]));
+    if (enTramo(otro, x2, y2)) fin = Math.max(fin, alcanceHacia(otro, [ux, uy]));
   }
   return { inicio, fin };
 }

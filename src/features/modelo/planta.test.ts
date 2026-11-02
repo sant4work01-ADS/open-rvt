@@ -402,3 +402,80 @@ function anilloAbiertoTest(anillo: Array<[number, number]>): Array<[number, numb
   const [bx, by] = anillo[anillo.length - 1];
   return Math.hypot(ax - bx, ay - by) < 1e-9 ? anillo.slice(0, -1) : anillo;
 }
+
+// O032: con la línea de ubicación a paño el cuerpo del muro no está centrado en su
+// línea dibujada. La planta debe cerrar las esquinas sin sobresalir ni dejar hueco.
+describe("esquinas con línea de ubicación a paño (O032)", () => {
+  const e = 0.15;
+  // Capa con el centro desplazado: «paño interior» deja el cuerpo hacia +n (exterior).
+  const aPano = (lado: 1 | -1): CapaMuro[] => [
+    { material: "Block de concreto 15", funcion: "núcleo", espesor: e, centro: (lado * e) / 2 },
+  ];
+  const rect = (lineas: Array<0 | 1 | -1>) => {
+    const ejes: Array<[number, number, number, number]> = [
+      [0, 0, 0, 3],
+      [0, 3, 4, 3],
+      [4, 3, 4, 0],
+      [4, 0, 0, 0],
+    ];
+    return ejes.map((eje, i) =>
+      muro(`m${i}`, eje, lineas[i] === 0 ? nucleo(e) : aPano(lineas[i] as 1 | -1)),
+    );
+  };
+  const area = (poligonos: ReturnType<typeof unirHuellas>) =>
+    poligonos.reduce((total, p) => {
+      const anillo = (r: number[][]) => {
+        let s = 0;
+        for (let i = 0, j = r.length - 1; i < r.length; j = i, i += 1) {
+          s += (r[j][0] + r[i][0]) * (r[j][1] - r[i][1]);
+        }
+        return Math.abs(s) / 2;
+      };
+      return total + anillo(p.exterior) - p.huecos.reduce((h, r) => h + anillo(r), 0);
+    }, 0);
+
+  const combinaciones: Array<Array<0 | 1 | -1>> = [];
+  for (const a of [0, 1, -1] as const)
+    for (const b of [0, 1, -1] as const)
+      for (const c of [0, 1, -1] as const)
+        for (const d of [0, 1, -1] as const) combinaciones.push([a, b, c, d]);
+
+  test.each(combinaciones)("rectángulo %i %i %i %i: anillo limpio de 4+4 vértices y área exacta", (...lineas) => {
+    const muros = rect(lineas as Array<0 | 1 | -1>);
+    const huellas = unirHuellas(muros);
+    expect(huellas).toHaveLength(1);
+    expect(huellas[0].huecos).toHaveLength(1);
+    // Sin muescas ni salientes: 4 vértices afuera y 4 en el hueco.
+    // Sin muescas ni salientes: 4 vértices afuera y 4 en el hueco.
+    expect(contarVertices(huellas[0])).toBe(4);
+    expect(contarVertices({ exterior: huellas[0].huecos[0], huecos: [] })).toBe(4);
+    // Área esperada a mano: rectángulo exterior menos interior, según dónde quede
+    // la cara de cada muro (m0 izquierda x, m1 arriba y, m2 derecha x, m3 abajo y).
+    const caras = muros.map((m) => {
+      const c = m.capas[0].centro ?? 0;
+      return [c - e / 2, c + e / 2];
+    });
+    // n de m0 (sube) = −x; de m1 (a la derecha) = +y; de m2 (baja) = +x; de m3 (izq.) = −y.
+    const x0e = 0 - caras[0][1];
+    const x0i = 0 - caras[0][0];
+    const y1e = 3 + caras[1][1];
+    const y1i = 3 + caras[1][0];
+    const x2e = 4 + caras[2][1];
+    const x2i = 4 + caras[2][0];
+    const y3e = 0 - caras[3][1];
+    const y3i = 0 - caras[3][0];
+    const esperada = (x2e - x0e) * (y1e - y3e) - (x2i - x0i) * (y1i - y3i);
+    expect(area(huellas)).toBeCloseTo(esperada, 9);
+  });
+
+  test("T con el pasante a paño: el que llega toca la cara lejana sin hueco", () => {
+    const muros = [
+      muro("pasante", [8, 0, 0, 0], aPano(1)), // n = −y: cuerpo de y=0 a y=−0.15
+      muro("llega", [4, 0, 4, 3]),
+    ];
+    const [huella] = unirHuellas(muros);
+    expect(puntoDentroDeHuella([4, -0.075], huella)).toBe(true);
+    expect(huella.huecos).toHaveLength(0);
+    expect(contarVertices(huella)).toBe(8);
+  });
+});

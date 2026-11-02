@@ -2436,6 +2436,9 @@ export function Visor3D({
         });
       if (murosPlanta.length > 0) {
         const planta = calcularPlantaMuros(murosPlanta, seccionesPlanta);
+        // E2E: el contorno que de verdad se dibuja, para medirlo sin leer píxeles.
+        (window as unknown as { __OPENRVT_PLANTA_MUROS__?: unknown }).__OPENRVT_PLANTA_MUROS__ =
+          planta.contorno;
         const zPlantas = corteZ + 0.035;
         const colorPlantas = oscuro ? "#e5e7eb" : estilos.categorias.muros.color;
         const materialContorno = crearMaterialLinea({
