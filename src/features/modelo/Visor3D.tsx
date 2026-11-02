@@ -5890,6 +5890,28 @@ export function Visor3D({
     const alSoltarTecla = (evento: KeyboardEvent) => {
       if (evento.code === "Space") espacio.current = false;
     };
+    // Utilidad de las pruebas E2E: candidatos de Tab bajo un punto de la pantalla.
+    (nodo as unknown as Record<string, unknown>).__openrvtCandidatosTab = (
+      clientX: number,
+      clientY: number,
+    ) => candidatosEn(clientX, clientY);
+    // Utilidad de las pruebas E2E: GlobalId de la primera malla bajo un píxel.
+    (nodo as unknown as Record<string, unknown>).__openrvtImpactoEn = (
+      clientX: number,
+      clientY: number,
+    ) => {
+      const camera = camara.current;
+      if (!camera) return null;
+      const rect = nodo.getBoundingClientRect();
+      const raton = new THREE.Vector2(
+        ((clientX - rect.left) / rect.width) * 2 - 1,
+        -((clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      const rayo = new THREE.Raycaster();
+      rayo.setFromCamera(raton, camera);
+      const impacto = rayo.intersectObjects(meshes.current, false)[0];
+      return impacto?.object.userData.globalid ?? null;
+    };
     (nodo as unknown as Record<string, unknown>).__openrvtZoomEn = (
       factor: number,
       clientX: number,
@@ -6433,6 +6455,7 @@ export function Visor3D({
       data-enganche={engancheHerramienta?.tipo}
       data-largo-tecleado={longitudTecleada || undefined}
       data-eje-seleccionado={ejeSeleccionado ?? undefined}
+      data-seleccion={seleccion ?? undefined}
       data-ejes-ajustes={JSON.stringify(vista.ejes ?? {})}
       className="relative min-h-0 flex-1 overflow-hidden bg-background"
     >

@@ -190,6 +190,67 @@ def test_matriz_L_T_y_cruz_sin_hueco_ni_volumen_duplicado() -> None:
     )
 
 
+@pytest.mark.parametrize("linea_a,linea_b", [
+    ("eje_nucleo", "cara_exterior"),
+    ("cara_exterior", "cara_interior"),
+    ("cara_interior", "eje_nucleo"),
+])
+def test_matriz_muros_a_eje_ya_pano(linea_a: str, linea_b: str) -> None:
+    """Cerramientos en una L con los muros a eje y a paño exterior/interior (O032).
+
+    Dos muros de 4.00 y 3.00 m, ambos Block 15, con cerramiento CE-1 de 0.15 de
+    ancho y 0.20 de peralte (el ancho lo manda el núcleo del muro): 4·0.15·0.20 =
+    0.12 y 3·0.15·0.20 = 0.09 m³ brutos. No hay hueco ni doble conteo: la suma de
+    netos es el volumen de la unión, y todos los cerramientos se teselan.
+    """
+    nucleo = _nuevo()
+    nivel = nucleo.niveles()[0]["globalid"]
+    n1 = nucleo.nivel_crear("Nivel 1", 2.60)["creados"][0]
+    a = nucleo.muro_crear(
+        "Block 15", nivel, 0, 0, 4, 0, linea_ubicacion=linea_a
+    )["creados"][0]
+    b = nucleo.muro_crear(
+        "Block 15", nivel, 4, 0, 4, 3, linea_ubicacion=linea_b
+    )["creados"][0]
+    for muro in (a, b):
+        nucleo.restricciones_editar(muro, nivel_tope=n1)
+        nucleo.cerramiento_crear_en_muro("CE-1 Cerramiento 15×20", muro)
+    assert _todos_con_geometria(nucleo) == set()
+    cantidades = nucleo.cantidades_estructura()
+    cerramientos = [e for e in cantidades["elementos"] if e["alias"] == "cerramiento"]
+    assert len(cerramientos) == 2
+    assert sorted(e["volumen_bruto_m3"] for e in cerramientos) == pytest.approx(
+        [0.09, 0.12], abs=1e-6
+    )
+    assert cantidades["total"]["volumen_neto_m3"] == pytest.approx(
+        cantidades["union_m3"], abs=1e-6
+    )
+
+
+def test_matriz_muros_de_15_y_12_cm_juntos() -> None:
+    """Un muro Block 15 y otro Block 12 en L: cada cerramiento toma el ancho de su
+    núcleo (0.15 y 0.12), así que los brutos son 4·0.15·0.20 = 0.12 y
+    3·0.12·0.20 = 0.072 m³. Se teselan los dos y la suma de netos es la unión."""
+    nucleo = _nuevo()
+    nivel = nucleo.niveles()[0]["globalid"]
+    n1 = nucleo.nivel_crear("Nivel 1", 2.60)["creados"][0]
+    a = _muro(nucleo, nivel, 0, 0, 4, 0)
+    b = nucleo.muro_crear("Block 12", nivel, 4, 0, 4, 3)["creados"][0]
+    for muro in (a, b):
+        nucleo.restricciones_editar(muro, nivel_tope=n1)
+        nucleo.cerramiento_crear_en_muro("CE-1 Cerramiento 15×20", muro)
+    assert _todos_con_geometria(nucleo) == set()
+    cantidades = nucleo.cantidades_estructura()
+    cerramientos = [e for e in cantidades["elementos"] if e["alias"] == "cerramiento"]
+    assert len(cerramientos) == 2
+    assert sorted(e["volumen_bruto_m3"] for e in cerramientos) == pytest.approx(
+        [0.072, 0.12], abs=1e-6
+    )
+    assert cantidades["total"]["volumen_neto_m3"] == pytest.approx(
+        cantidades["union_m3"], abs=1e-6
+    )
+
+
 def test_retícula_3x3_de_cuartos_con_cerramientos() -> None:
     """Retícula de 3×3 cuartos (muros corridos): todos los cerramientos se teselan."""
     nucleo = _nuevo()
