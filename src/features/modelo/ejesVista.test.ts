@@ -21,6 +21,7 @@ import {
   normalizarAjusteEje,
   quitarCodoEje,
   restablecerExtremoEje,
+  puntoAsaCodoNuevo,
 } from "./ejesVista";
 
 const INICIO: [number, number] = [0, 0];
@@ -437,6 +438,45 @@ describe("arrastre desde el asa, no desde el puntero", () => {
     // Tras crear el codo el globo quedó desplazado: el arrastre debe seguir desde ahí.
     expect(puntoAsaEje(conCodo, bases, "fin", "globo")).toEqual(conCodo.extremoFin);
     expect(puntoAsaEje(conCodo, bases, "fin", "codo", 0)).toEqual(conCodo.codosFin![0]);
+  });
+});
+
+describe("O037: asa de codo nuevo sobre la polilínea", () => {
+  /** Distancia de un punto al segmento [a, b]; 0 si cae sobre él. */
+  function distanciaASegmento(p: [number, number], a: [number, number], b: [number, number]) {
+    const [px, py] = p;
+    const [ax, ay] = a;
+    const [bx, by] = b;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const largo2 = dx * dx + dy * dy;
+    if (largo2 < 1e-18) return Math.hypot(px - ax, py - ay);
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / largo2));
+    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+  }
+
+  it("con un codo el asa queda en el último tramo, no flota fuera", () => {
+    // Eje (0,0)→(0,10) con un codo: vértice (0,10.3) y globo (0.8,10.6). Separación
+    // 0.5 m desde el globo hacia el codo: cae sobre el tramo (0,10.3)→(0.8,10.6).
+    const bases = { inicio: [0, 0] as [number, number], fin: [0, 10] as [number, number] };
+    const asa = puntoAsaCodoNuevo(
+      { codosFin: [[0, 10.3]], extremoFin: [0.8, 10.6] },
+      bases,
+      "fin",
+      0.5,
+    );
+    // Queda exactamente a 0.5 m del globo.
+    expect(Math.hypot(asa[0] - 0.8, asa[1] - 10.6)).toBeCloseTo(0.5, 9);
+    // Y sobre la polilínea (distancia al último tramo ≤ 1e-6).
+    expect(distanciaASegmento(asa, [0, 10.3], [0.8, 10.6])).toBeLessThanOrEqual(1e-6);
+  });
+
+  it("sin codo el asa va sobre la propia línea base", () => {
+    const bases = { inicio: [0, 0] as [number, number], fin: [0, 10] as [number, number] };
+    const asa = puntoAsaCodoNuevo(undefined, bases, "fin", 0.5);
+    expect(asa[0]).toBeCloseTo(0, 9);
+    expect(asa[1]).toBeCloseTo(9.5, 9);
+    expect(distanciaASegmento(asa, [0, 0], [0, 10])).toBeLessThanOrEqual(1e-6);
   });
 });
 

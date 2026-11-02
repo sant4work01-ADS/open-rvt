@@ -220,6 +220,27 @@ describe("O025: colocación de niveles con el estilo por omisión", () => {
     ]);
   });
 
+  it("O037: el trazo-punto no se reinicia al cruzar un vértice", () => {
+    // Polilínea con un quiebre en (0.5,0). El trazo de 0.6 m (1:100) arranca en (0,0)
+    // y cruza el vértice sin reiniciarse: (0,0)→(0.5,0) y (0.5,0)→(0.5,0.1) son el
+    // mismo trazo de 0.6 m. Si el patrón se reiniciara, el segundo sería (0.5,0)→(0.5,0.6).
+    const tramos = segmentosTrazoPunto(
+      [
+        [0, 0],
+        [0.5, 0],
+        [0.5, 1],
+      ],
+      100,
+    );
+    expect(tramos[0]).toEqual([
+      [0, 0],
+      [0.5, 0],
+    ]);
+    expect(tramos[1][0]).toEqual([0.5, 0]);
+    expect(tramos[1][1][0]).toBeCloseTo(0.5, 9);
+    expect(tramos[1][1][1]).toBeCloseTo(0.1, 9);
+  });
+
   it("el globo más bajo queda a 10 mm sobre el último nivel", () => {
     const l = layout();
     // A 1:20: 10 mm = 0.20 m y radio 4 mm = 0.08 m.
