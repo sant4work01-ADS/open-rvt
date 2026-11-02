@@ -1,11 +1,13 @@
 // OPEN-RVT: editor de la spec O003a. Navegador de vistas a la izquierda, visor three.js
 // al centro y propiedades de la vista o del elemento a la derecha. Sin modelo abierto se
 // conserva el hueco del esqueleto de O002.
-import { PanelLeft, PanelRight } from "lucide-react";
+import { PanelLeft, PanelRight, Layers, ListTree } from "lucide-react";
+import { useMemo, useState } from "react";
 import { tr } from "@/i18n";
 import { useModelo } from "./estado";
 import { Visor3D } from "./Visor3D";
 import { NavegadorVistas } from "./NavegadorVistas";
+import { ArbolProyecto } from "./ArbolProyecto";
 import { PanelPropiedades } from "./PanelPropiedades";
 import { BarraHerramienta } from "./BarraHerramienta";
 import { DialogoEstilos } from "./DialogoEstilos";
@@ -16,6 +18,7 @@ import { CantidadesView } from "./CantidadesView";
 import { EditorTipos } from "@/features/tipos/EditorTipos";
 import { PanelRedimensionable } from "@/app/PanelRedimensionable";
 import { useTema } from "@/lib/tema";
+import { expandirGlobalids, indexarArbol } from "./arbol";
 
 export function ModeloView() {
   const ruta = useModelo((s) => s.ruta);
@@ -46,16 +49,38 @@ export function ModeloView() {
   const cerrarEditorTipos = useModelo((s) => s.cerrarEditorTipos);
   const seleccionar = useModelo((s) => s.seleccionar);
   const anadirPuntoCorte = useModelo((s) => s.anadirPuntoCorte);
+  // O038: árbol del proyecto.
+  const arbol = useModelo((s) => s.arbol);
+  const alternarNodoArbol = useModelo((s) => s.alternarNodoArbol);
+  const aislarNodoArbol = useModelo((s) => s.aislarNodoArbol);
+  const mostrarTodoArbol = useModelo((s) => s.mostrarTodoArbol);
+  const seleccionarVarios = useModelo((s) => s.seleccionarVarios);
+  const pedirAjustar = useModelo((s) => s.pedirAjustar);
+  const fijarEjeSeleccionado = useModelo((s) => s.fijarEjeSeleccionado);
+  const fijarNivelSeleccionado = useModelo((s) => s.fijarNivelSeleccionado);
   // O011: los paneles laterales se pliegan y su estado se recuerda entre sesiones.
   const panelIzquierdoPlegado = useTema((s) => s.panelIzquierdoPlegado);
   const panelDerechoPlegado = useTema((s) => s.panelDerechoPlegado);
   const fijarPanelIzquierdoPlegado = useTema((s) => s.fijarPanelIzquierdoPlegado);
   const fijarPanelDerechoPlegado = useTema((s) => s.fijarPanelDerechoPlegado);
+  // O038: pestaña del panel izquierdo (Vistas o Proyecto).
+  const [panelIzquierdo, setPanelIzquierdo] = useState<"vistas" | "proyecto">("vistas");
 
   const esCantidades = vistaActivaId === "cantidades";
   const vista = esCantidades
     ? null
     : (vistas.find((v) => v.id === vistaActivaId) ?? vistas[0]);
+
+  // O038: el ojo y el candado del árbol se expanden a GlobalIds de elementos.
+  const indiceArbol = useMemo(() => indexarArbol(arbol), [arbol]);
+  const elementosOcultos = useMemo(
+    () => [...expandirGlobalids(indiceArbol, vista?.arbolOcultos ?? [])],
+    [indiceArbol, vista?.arbolOcultos],
+  );
+  const elementosBloqueados = useMemo(
+    () => [...expandirGlobalids(indiceArbol, vista?.arbolBloqueados ?? [])],
+    [indiceArbol, vista?.arbolBloqueados],
+  );
 
   // O007a: el editor de tipos ocupa toda el área de trabajo.
   if (editorTipos) {
@@ -82,19 +107,69 @@ export function ModeloView() {
   return (
     <div data-testid="modelo-editor" className="flex min-h-0 flex-1 overflow-hidden">
       {!panelIzquierdoPlegado && (
-        <PanelRedimensionable id="vistas" lado="izquierdo" etiqueta="el panel Vistas">
-          <NavegadorVistas
-            vistas={vistas}
-            niveles={niveles}
-            activaId={vista?.id ?? null}
-            onElegir={fijarVista}
-            cantidadesActiva={esCantidades}
-            onCantidades={() => fijarVista("cantidades")}
-            onPlegar={() => fijarPanelIzquierdoPlegado(true)}
-            onRenombrar={(id, nombre) => void actualizarVista(id, { nombre })}
-            onDuplicar={(id) => void duplicarVista(id)}
-            onEliminar={(id) => void eliminarVista(id)}
-          />
+        <PanelRedimensionable id="vistas" lado="izquierdo" etiqueta="el panel izquierdo">
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex shrink-0 items-stretch border-b" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                data-testid="panel-pestana-vistas"
+                aria-selected={panelIzquierdo === "vistas"}
+                onClick={() => setPanelIzquierdo("vistas")}
+                className={
+                  panelIzquierdo === "vistas"
+                    ? "flex flex-1 items-center justify-center gap-1 border-b-2 border-primary py-1.5 text-xs font-medium text-primary"
+                    : "flex flex-1 items-center justify-center gap-1 border-b-2 border-transparent py-1.5 text-xs text-muted-foreground hover:bg-muted"
+                }
+              >
+                <Layers size={13} /> Vistas
+              </button>
+              <button
+                type="button"
+                role="tab"
+                data-testid="panel-pestana-proyecto"
+                aria-selected={panelIzquierdo === "proyecto"}
+                onClick={() => setPanelIzquierdo("proyecto")}
+                className={
+                  panelIzquierdo === "proyecto"
+                    ? "flex flex-1 items-center justify-center gap-1 border-b-2 border-primary py-1.5 text-xs font-medium text-primary"
+                    : "flex flex-1 items-center justify-center gap-1 border-b-2 border-transparent py-1.5 text-xs text-muted-foreground hover:bg-muted"
+                }
+              >
+                <ListTree size={13} /> Proyecto
+              </button>
+            </div>
+            {panelIzquierdo === "proyecto" ? (
+              <ArbolProyecto
+                arbol={arbol}
+                ocultos={vista?.arbolOcultos ?? []}
+                bloqueados={vista?.arbolBloqueados ?? []}
+                seleccionados={seleccionados}
+                onAlternar={(clave, tipo) => void alternarNodoArbol(clave, tipo)}
+                onAislar={(clave) => void aislarNodoArbol(clave)}
+                onMostrarTodo={() => void mostrarTodoArbol()}
+                onElegirElemento={(gid) => void seleccionar(gid)}
+                onElegirElementos={(gids) => void seleccionarVarios(gids)}
+                onElegirEje={(gid) => fijarEjeSeleccionado(gid)}
+                onElegirNivel={(gid) => fijarNivelSeleccionado(gid)}
+                onAjustar={pedirAjustar}
+                onPlegar={() => fijarPanelIzquierdoPlegado(true)}
+              />
+            ) : (
+              <NavegadorVistas
+                vistas={vistas}
+                niveles={niveles}
+                activaId={vista?.id ?? null}
+                onElegir={fijarVista}
+                cantidadesActiva={esCantidades}
+                onCantidades={() => fijarVista("cantidades")}
+                onPlegar={() => fijarPanelIzquierdoPlegado(true)}
+                onRenombrar={(id, nombre) => void actualizarVista(id, { nombre })}
+                onDuplicar={(id) => void duplicarVista(id)}
+                onEliminar={(id) => void eliminarVista(id)}
+              />
+            )}
+          </div>
         </PanelRedimensionable>
       )}
       <div className="flex min-w-0 flex-1 flex-col">
@@ -160,6 +235,8 @@ export function ModeloView() {
               seleccionados={seleccionados}
               modoCorte={modoCorte}
               puntoCorte={puntoCorte}
+              elementosOcultos={elementosOcultos}
+              elementosBloqueados={elementosBloqueados}
               onSeleccionar={(gid, agregar) => void seleccionar(gid, agregar)}
               onSeleccionarVarios={(gids) => {
                 if (gids.length === 0) void seleccionar(null);

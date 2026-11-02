@@ -90,6 +90,10 @@ export interface Vista {
   separacionGlobos?: number;
   /** O024: nombre del estilo de cota por omisión de esta vista. */
   estiloCota?: string;
+  /** O038: claves de nodos del árbol del proyecto ocultos en esta vista. */
+  arbolOcultos?: string[];
+  /** O038: claves de nodos del árbol del proyecto bloqueados en esta vista. */
+  arbolBloqueados?: string[];
 }
 
 export interface Nivel {

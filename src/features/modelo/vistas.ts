@@ -447,6 +447,13 @@ export function normalizarVista(valor: unknown): Vista | null {
       if (ajuste) nivelesAjuste[globalid] = ajuste;
     }
   }
+  // O038: claves de nodos ocultos/bloqueados del árbol del proyecto, por vista.
+  const arbolOcultos = Array.isArray(v.arbolOcultos)
+    ? v.arbolOcultos.filter((x): x is string => typeof x === "string")
+    : [];
+  const arbolBloqueados = Array.isArray(v.arbolBloqueados)
+    ? v.arbolBloqueados.filter((x): x is string => typeof x === "string")
+    : [];
   return {
     id: typeof v.id === "string" && v.id ? v.id : `vista-${Math.random().toString(36).slice(2)}`,
     nombre: typeof v.nombre === "string" && v.nombre ? v.nombre : "Vista",
@@ -478,6 +485,8 @@ export function normalizarVista(valor: unknown): Vista | null {
           : "pantalla",
     ejes: Object.keys(ejes).length > 0 ? ejes : undefined,
     nivelesAjuste: Object.keys(nivelesAjuste).length > 0 ? nivelesAjuste : undefined,
+    arbolOcultos: arbolOcultos.length > 0 ? arbolOcultos : undefined,
+    arbolBloqueados: arbolBloqueados.length > 0 ? arbolBloqueados : undefined,
   };
 }
 

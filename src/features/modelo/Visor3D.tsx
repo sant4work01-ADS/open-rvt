@@ -149,6 +149,10 @@ interface Props {
   onCambiarAnotacion?: (modo: "papel" | "pantalla") => void;
   /** O031: identifica el archivo abierto para no heredar cámaras de otro modelo. */
   claveModelo?: string;
+  /** O038: GlobalIds de elementos ocultos por el árbol del proyecto en esta vista. */
+  elementosOcultos?: string[];
+  /** O038: GlobalIds de elementos bloqueados (visibles pero no seleccionables). */
+  elementosBloqueados?: string[];
 }
 
 interface Navegacion {
@@ -928,6 +932,8 @@ export function Visor3D({
   onEscape,
   onCambiarAnotacion,
   claveModelo = "",
+  elementosOcultos = [],
+  elementosBloqueados = [],
 }: Props) {
   const contenedor = useRef<HTMLDivElement>(null);
   const escena = useRef<THREE.Scene | null>(null);
@@ -983,6 +989,8 @@ export function Visor3D({
   const opcionesNivel = useModelo((s) => s.opcionesNivel);
   const cotasNivel = useModelo((s) => s.cotasNivel);
   const dobleClicEnPlanta = useModelo((s) => s.dobleClicEnPlanta);
+  // O038: el árbol pide «Ajustar» (doble clic) subiendo este contador.
+  const ajustarToken = useModelo((s) => s.ajustarToken);
   const espacio = useRef(false);
   const ultimaZ = useRef(0);
   const ultimoMedio = useRef(0);
@@ -1877,9 +1885,12 @@ export function Visor3D({
     const colorArista = new THREE.Color(colorTrazo);
     const tamano = Math.max(diagonalCaja(cajaVista), 2);
     const nivelesVisibles = new Set(vista.nivelesVisibles);
+    const ocultosArbol = new Set(elementosOcultos);
     const visibles = mallas.filter((malla) => {
       if (!categoriaVisible(vista, malla.categoria)) return false;
       if (categoriaOculta(vista, malla.categoria)) return false;
+      // O038: el ojo del árbol del proyecto oculta el elemento en todas las vistas.
+      if (ocultosArbol.has(malla.globalid)) return false;
       // O005c: en planta puertas y ventanas se dibujan solo con su simbología 2D;
       // su marco y su hoja en 3D no deben asomar como un rectángulo fuera del muro.
       if (
@@ -4049,6 +4060,8 @@ export function Visor3D({
     ajusteEnCurso,
     ajustesNivelEnCurso,
     zoomTick,
+    elementosOcultos,
+    elementosBloqueados,
   ]);
 
   // O027: al cambiar de eje seleccionado se muestran solo sus asas (y todas si no
@@ -4314,6 +4327,14 @@ export function Visor3D({
     camara.current = crearCamaraDeVista(vista, cajaVista, aspecto, nav);
     aplicarCamara();
   }, [aplicarCamara, vista, cajaVista]);
+
+  // O038: el árbol pide «Ajustar» con el doble clic; la primera vez no dispara.
+  const ajustarTokenPrevio = useRef(ajustarToken);
+  useEffect(() => {
+    if (ajustarToken === ajustarTokenPrevio.current) return;
+    ajustarTokenPrevio.current = ajustarToken;
+    ajustar();
+  }, [ajustarToken, ajustar]);
 
   // O006d: zoom con + y − desde el teclado, centrado en la vista.
   const zoomEnCentro = useCallback(
@@ -4901,7 +4922,13 @@ export function Visor3D({
       }
       setEjeSeleccionado(null);
       const impacto = rayo.intersectObjects(meshes.current, false)[0];
-      onSeleccionar(impacto?.object.userData.globalid ?? null, agregar);
+      const gidTocado = impacto?.object.userData.globalid ?? null;
+      // O038: lo bloqueado en el árbol se ve pero no se puede seleccionar.
+      if (gidTocado && elementosBloqueados.includes(gidTocado)) {
+        onSeleccionar(null, agregar);
+        return;
+      }
+      onSeleccionar(gidTocado, agregar);
     };
 
     // O027: el codo se crea cuando el arrastre supera el umbral de 3 px, no al
@@ -5747,6 +5774,7 @@ export function Visor3D({
     fijarAjustesNiveles,
     referencias.ejes,
     vista.ejes,
+    elementosBloqueados,
   ]);
 
   useEffect(() => {

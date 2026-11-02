@@ -18,6 +18,7 @@ import {
   type AjusteEjeVista,
   type LineaUbicacion,
 } from "./tipos";
+import { clavesParaAislar, type NodoArbol } from "./arbol";
 import {
   cajaDeMallas,
   completarVistasEstandar,
@@ -198,6 +199,10 @@ interface EstadoModelo {
   estilos: Estilos;
   /** O005: puertas y ventanas con sus datos de planta. */
   aberturas: Abertura[];
+  /** O038: jerarquía del proyecto (modo Modelo) devuelta por `modelo.arbol`. */
+  arbol: NodoArbol | null;
+  /** O038: contador que el árbol incrementa para pedir «Ajustar» al visor. */
+  ajustarToken: number;
   vistaActivaId: string | null;
   /** O021: eje seleccionado en el visor (para el panel de propiedades). */
   ejeSeleccionado: string | null;
@@ -425,6 +430,16 @@ interface EstadoModelo {
   ) => Promise<boolean>;
   recargarTipos: () => Promise<void>;
   seleccionar: (globalid: string | null, agregar?: boolean) => Promise<void>;
+  /** O038: selecciona varios elementos a la vez (clic en tipo/categoría/nivel). */
+  seleccionarVarios: (globalids: string[]) => Promise<void>;
+  /** O038: alterna el ojo o el candado de un nodo en la vista activa. */
+  alternarNodoArbol: (clave: string, tipo: "oculto" | "bloqueado") => Promise<void>;
+  /** O038: oculta todo salvo el subárbol del nodo. */
+  aislarNodoArbol: (clave: string) => Promise<void>;
+  /** O038: muestra todos los nodos de la vista activa. */
+  mostrarTodoArbol: () => Promise<void>;
+  /** O038: pide al visor que ajuste el encuadre a la selección. */
+  pedirAjustar: () => void;
   fijarEjeSeleccionado: (globalid: string | null) => void;
   /** O029: selecciona el nivel tocado en un alzado/corte. */
   fijarNivelSeleccionado: (globalid: string | null) => void;
@@ -616,7 +631,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
   const cargar = async (info: RespuestaInfo) => {
     const inicio = performance.now();
     const [niveles, elementos, teselado, vistasCrudas, tipos, referenciasCrudas, estilosCrudos,
-      tiposEstructura] = await Promise.all([
+      tiposEstructura, arbol] = await Promise.all([
         rpc<Nivel[]>("modelo.niveles"),
         rpc<Elemento[]>("modelo.elementos"),
         rpc<RespuestaTeselado>("geometria.teselar", { globalids: null }),
@@ -627,6 +642,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         rpc<Referencias>("modelo.referencias"),
         rpc<unknown>("estilos.leer").catch(() => null),
         cargarTiposEstructura(),
+        rpc<NodoArbol>("modelo.arbol").catch(() => null),
       ]);
     const mallas = teselado.elementos.map(decodificarMalla);
     const caja = cajaDeMallas(mallas);
@@ -664,6 +680,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       vistas,
       estilos: normalizarEstilos(estilosCrudos),
       aberturas,
+      arbol,
       vistasPersistidas: persistidas,
       vistaActivaId: activa?.id ?? null,
       seleccion: null,
@@ -753,7 +770,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
   const refrescarDeComando = async (resultado: RespuestaComando) => {
     const tocados = [...new Set([...(resultado.creados ?? []), ...(resultado.modificados ?? [])])];
     const borrados = new Set(resultado.borrados ?? []);
-    const [info, niveles, elementos, referenciasCrudas, teselado] = await Promise.all([
+    const [info, niveles, elementos, referenciasCrudas, teselado, arbol] = await Promise.all([
       rpc<RespuestaInfo>("proyecto.info"),
       rpc<Nivel[]>("modelo.niveles"),
       rpc<Elemento[]>("modelo.elementos"),
@@ -761,6 +778,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       tocados.length > 0
         ? rpc<RespuestaTeselado>("geometria.teselar", { globalids: tocados })
         : Promise.resolve(null),
+      rpc<NodoArbol>("modelo.arbol").catch(() => get().arbol),
     ]);
     let mallas = get().mallas.filter(
       (m) => !borrados.has(m.globalid) && !tocados.includes(m.globalid),
@@ -780,6 +798,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       mallas,
       caja: cajaDeMallas(mallas),
       aberturas,
+      arbol,
       seleccion,
       seleccionados,
       propiedades: seleccion ? get().propiedades : null,
@@ -1055,6 +1074,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     vistas: [],
     estilos: estilosPorDefecto(),
     aberturas: [],
+    arbol: null,
+    ajustarToken: 0,
     vistaActivaId: null,
     ejeSeleccionado: null,
     nivelSeleccionado: null,
@@ -1385,6 +1406,69 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         }
       }
     },
+
+    seleccionarVarios: async (globalids) => {
+      const token = ++tokenSeleccion;
+      if (globalids.length === 0) {
+        set({ seleccion: null, seleccionados: [], propiedades: null });
+        return;
+      }
+      const elegido = globalids[globalids.length - 1] ?? null;
+      set({ ejeSeleccionado: null, seleccion: elegido, seleccionados: [...globalids] });
+      if (!elegido) return;
+      try {
+        const propiedades = await rpc<PropiedadesElemento>("modelo.propiedades", {
+          globalid: elegido,
+        });
+        if (token === tokenSeleccion) set({ propiedades, error: null });
+      } catch (e) {
+        if (token === tokenSeleccion) {
+          set({ propiedades: null, error: e instanceof Error ? e.message : String(e) });
+        }
+      }
+    },
+
+    alternarNodoArbol: async (clave, tipo) => {
+      const vista = get().vistas.find((v) => v.id === get().vistaActivaId);
+      if (!vista) return;
+      const campo = tipo === "oculto" ? "arbolOcultos" : "arbolBloqueados";
+      const actual = vista[campo] ?? [];
+      const siguiente = actual.includes(clave)
+        ? actual.filter((c) => c !== clave)
+        : [...actual, clave];
+      const vistas = get().vistas.map((v) =>
+        v.id === vista.id
+          ? { ...v, [campo]: siguiente.length > 0 ? siguiente : undefined }
+          : v,
+      );
+      set({ vistas, conCambios: true });
+      await persistirVistas(vistas);
+    },
+
+    aislarNodoArbol: async (clave) => {
+      const vista = get().vistas.find((v) => v.id === get().vistaActivaId);
+      if (!vista) return;
+      const ocultos = clavesParaAislar(get().arbol, clave);
+      const vistas = get().vistas.map((v) =>
+        v.id === vista.id
+          ? { ...v, arbolOcultos: ocultos.length > 0 ? ocultos : undefined }
+          : v,
+      );
+      set({ vistas, conCambios: true });
+      await persistirVistas(vistas);
+    },
+
+    mostrarTodoArbol: async () => {
+      const vista = get().vistas.find((v) => v.id === get().vistaActivaId);
+      if (!vista) return;
+      const vistas = get().vistas.map((v) =>
+        v.id === vista.id ? { ...v, arbolOcultos: undefined } : v,
+      );
+      set({ vistas, conCambios: true });
+      await persistirVistas(vistas);
+    },
+
+    pedirAjustar: () => set({ ajustarToken: get().ajustarToken + 1 }),
 
     iniciarCorte: () => {
       const vista = get().vistas.find((v) => v.id === get().vistaActivaId);
