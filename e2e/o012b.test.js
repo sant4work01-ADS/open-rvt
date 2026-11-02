@@ -384,11 +384,10 @@ test("O012b-2: losas entre trabes y columnas (dibujo del usuario)", async () => 
 
     const cantidades = await invocar(ses, "cantidades.estructura", {});
     const infoLosa = cantidades.elementos.find((e) => e.globalid === losa.globalid);
-    // O037: el dado (0.40 × 0.40) ya llega al nivel y entra en la losa. Cada esquina
-    // pierde lo que el dado asoma tras la cara de la trabe: (0.20 − 0.125)² = 0.005625
-    // m² (antes solo la columna: 0.025² = 0.000625). 17.8125 − 4·0.005625 = 17.79 m²
-    // × 0.10 = 1.779 m³. El volumen no se pierde: lo cuenta el dado.
-    assert.ok(Math.abs(infoLosa.volumen_neto_m3 - 1.779) < 1e-6, `losa ${infoLosa.volumen_neto_m3}`);
+    // O041: el dado ya no entra en la losa: termina en su cara inferior. La losa solo
+    // pierde lo que asoma la columna (0.025² = 0.000625 por esquina). La columna sí
+    // atraviesa la losa, como siempre. 17.8125 − 4·0.000625 = 17.81 m² × 0.10 = 1.781.
+    assert.ok(Math.abs(infoLosa.volumen_neto_m3 - 1.781) < 1e-6, `losa ${infoLosa.volumen_neto_m3}`);
     const trabes = cantidades.elementos
       .filter((e) => e.alias === "trabe")
       .map((e) => e.volumen_neto_m3)

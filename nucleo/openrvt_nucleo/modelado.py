@@ -390,6 +390,58 @@ class ModeladoMixin:
             return 0.0
         return desplante - float(seccion.get("Peralte") or 0.25)
 
+    def _tope_dado(self, zapata: Any) -> float | None:
+        """O041: cota superior del dado, o None si la zapata no lleva dado.
+
+        El dado sube hasta el nivel de la zapata solo si nada lo cubre en planta. Si
+        queda debajo de una losa de ese nivel, termina en su cara inferior (la losa
+        conserva su volumen). Las contratrabes y trabes no cubren el dado: el dado las
+        recorta (jerarquía O012b), así que nunca quedan encima.
+        """
+        from shapely.geometry import Polygon
+
+        tipo = self._tipo_entidad(zapata)
+        _alias, seccion, _armado = self._seccion_y_armado(tipo)
+        dado_b = float(seccion.get("DadoB") or 0.0)
+        dado_h = float(seccion.get("DadoH") or 0.0)
+        datos = self._leer_pset(zapata, "OPENRVT_Estructura")
+        if dado_b <= 0 or dado_h <= 0 or not datos or datos.get("Desplante") is None:
+            return None
+        z = float(datos.get("Z") or 0.0)
+        tope = z + float(datos.get("Desplante"))
+        x, y = float(datos.get("X") or 0.0), float(datos.get("Y") or 0.0)
+        rot = float(datos.get("Rotacion") or 0.0)
+        coseno, seno = math.cos(rot), math.sin(rot)
+        puntos = []
+        for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+            lx, ly = sx * dado_b / 2.0, sy * dado_h / 2.0
+            puntos.append((x + lx * coseno - ly * seno, y + lx * seno + ly * coseno))
+        huella_dado = Polygon(puntos)
+        nivel = self._nivel_que_contiene(zapata)
+        if nivel is None:
+            nivel = self._nivel_por_gid(_texto(datos.get("Nivel")))
+        nivel_gid = _gid(nivel) if nivel is not None else None
+        elev = float(nivel.Elevation or 0.0) if nivel is not None else 0.0
+        techo = tope
+        for elemento in self.modelo.by_type("IfcSlab"):
+            if nivel_gid is not None and _gid(self._nivel_que_contiene(elemento)) != nivel_gid:
+                continue
+            ldatos = self._leer_pset(elemento, "OPENRVT_Losa")
+            if not ldatos:
+                continue
+            espesor = float(ldatos.get("Espesor") or 0.12)
+            desfase = float(ldatos.get("Desfase") or 0.0)
+            fondo = elev + desfase - espesor
+            if fondo >= tope - 1e-9:
+                continue
+            try:
+                huella = Polygon(self._poligono_de_losa(elemento))
+            except Exception:
+                continue
+            if not huella.is_empty and huella.intersects(huella_dado):
+                techo = min(techo, fondo)
+        return techo
+
     def _lecho_bajo(self, elemento: Any) -> bool:
         """Las dalas se cuelgan del nivel por su lecho inferior.
 
@@ -3325,7 +3377,8 @@ class ModeladoMixin:
         return self._malla_de_cajas(cajas)
 
     def _cuerpo_zapata(
-        self, seccion: dict[str, Any], desplante: float | None = None
+        self, seccion: dict[str, Any], desplante: float | None = None,
+        dado_alto: float | None = None,
     ) -> Any:
         largo = float(seccion.get("Largo") or 1.2)
         ancho = float(seccion.get("Ancho") or 1.2)
@@ -3335,9 +3388,10 @@ class ModeladoMixin:
         dado_h = float(seccion.get("DadoH") or 0.0)
         # O037: el alto del dado sale del desplante (y el peralte), no de un valor
         # fijo del tipo; sin desplante (zapata importada) se conserva el del tipo.
+        # O041: si viene limitado por un elemento que lo cubre, se respeta ese tope.
         if desplante is None:
-            dado_alto = float(seccion.get("DadoAlto") or 0.0)
-        else:
+            dado_alto = float(seccion.get("DadoAlto") or 0.0) if dado_alto is None else dado_alto
+        elif dado_alto is None:
             dado_alto = self._dado_alto_de(seccion, desplante)
         cajas = []
         if plantilla > 0:
@@ -3505,6 +3559,12 @@ class ModeladoMixin:
         if dado_b <= 0 or dado_h <= 0 or dado_alto <= 0:
             return []
         z = float(datos.get("Z") or 0.0)
+        # O041: el dado termina en la cara inferior del elemento que lo cubre.
+        tope_dado = self._tope_dado(elemento)
+        if tope_dado is not None:
+            dado_alto = max(0.0, tope_dado - z - peralte)
+            if dado_alto <= 0:
+                return []
         return [
             uniones.Barra(
                 gid=_gid(elemento),
@@ -3663,8 +3723,14 @@ class ModeladoMixin:
             )
         else:
             desplante = datos.get("Desplante")
+            # O041: el dado termina en la cara inferior del elemento que lo cubre.
+            dado_alto = None
+            tope_dado = self._tope_dado(elemento)
+            if tope_dado is not None and desplante is not None:
+                z = float(datos.get("Z") or 0.0)
+                dado_alto = max(0.0, tope_dado - z - float(seccion.get("Peralte") or 0.25))
             cuerpo = self._cuerpo_zapata(
-                seccion, float(desplante) if desplante is not None else None
+                seccion, float(desplante) if desplante is not None else None, dado_alto
             )
             matriz = self._matriz_colocacion(
                 float(datos.get("X") or 0.0), float(datos.get("Y") or 0.0),

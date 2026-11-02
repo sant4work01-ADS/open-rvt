@@ -101,6 +101,50 @@ def test_zapata_corrida_sin_residuo_flotante() -> None:
     assert tope == pytest.approx(-0.60, abs=1e-6)
 
 
+def test_zapata_sin_losa_el_dado_llega_al_nivel() -> None:
+    """Sin losa encima, el dado sube hasta la elevación del nivel (0.00)."""
+    nucleo = _nuevo()
+    gid = _zapata(nucleo, 1.0)
+    fondo, tope = _caja_z(nucleo, gid)
+    assert tope == pytest.approx(0.0, abs=1e-6)
+    assert fondo == pytest.approx(-1.05, abs=1e-6)
+
+
+def test_zapata_con_losa_encima_el_dado_termina_en_el_lecho_de_la_losa() -> None:
+    """La losa conserva su volumen: el dado termina en su cara inferior (−0.10).
+
+    Zapata Z-1 (dado 0.40×0.40) con desplante 1.00 en (2, 1.5), cubierta por la losa
+    [(0,0),(4,0),(4,3),(0,3)] de espesor 0.10. La cara inferior de la losa queda en
+    −0.10, así que el dado se acorta: 0.65 de alto en vez de 0.75. El tope del dado
+    pasa de 0.00 a −0.10 y la losa no pierde volumen (4×3×0.10 = 1.20 m³).
+    """
+    nucleo = _nuevo()
+    nucleo.losa_crear(_nivel(nucleo), [(0, 0), (4, 0), (4, 3), (0, 3)], espesor=0.10)
+    gid = nucleo.zapata_crear(
+        _tipo(nucleo, "IfcFootingType", "Z-1 Zapata 1.20×1.20"),
+        _nivel(nucleo), 2.0, 1.5, desplante=1.00,
+    )["creados"][0]
+    fondo, tope = _caja_z(nucleo, gid)
+    assert fondo == pytest.approx(-1.05, abs=1e-6)
+    assert tope == pytest.approx(-0.10, abs=1e-6)
+    cantidades = nucleo.cantidades_estructura()
+    losas = [e for e in cantidades["elementos"] if e["alias"] == "losa"]
+    assert len(losas) == 1
+    assert losas[0]["volumen_neto_m3"] == pytest.approx(1.20, abs=1e-6)
+
+
+def test_zapata_fuera_de_la_losa_el_dado_llega_al_nivel() -> None:
+    """Si la zapata no queda debajo de la losa, el dado sube hasta el nivel."""
+    nucleo = _nuevo()
+    _losa = _losa_rectangular(nucleo)
+    gid = nucleo.zapata_crear(
+        _tipo(nucleo, "IfcFootingType", "Z-1 Zapata 1.20×1.20"),
+        _nivel(nucleo), 6.0, 0.0, desplante=1.00,
+    )["creados"][0]
+    _fondo, tope = _caja_z(nucleo, gid)
+    assert tope == pytest.approx(0.0, abs=1e-6)
+
+
 # --------------------------------------------------------------------- 3: losa
 
 
