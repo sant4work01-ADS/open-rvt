@@ -228,6 +228,16 @@ const TAREAS = [
   entrega:["La zapata se define desde el nivel y el desplante","Centrada bajo el eje y alineada con el muro","Panel con solo base, desplante y prolongaciones","GlobalId estable en pruebas"],
   recicla:["nucleo/openrvt_nucleo/modelado.py","src/features/modelo/PanelPropiedades.tsx","nucleo/tests/test_o033.py"]},
 
+ {id:"O037",fase:"F6",nombre:"Detalles del usuario: zapata, eje con codo, bordes de losa, nivel borrado",ini:"2026-11-02",fin:"2026-11-03",avance:0,estado:"curso",dep:["O032","O033"],
+  entrega:["El dado llega al nivel","Eje con codo: trazos continuos y pinzamientos sobre la línea","Desfase de borde de losa sin acumular","Nivel borrado desaparece de todas las vistas"],
+  recicla:["nucleo/openrvt_nucleo/modelado.py","src/features/modelo/ejesVista.ts","src/features/modelo/anotacionVista.ts"]},
+ {id:"O038",fase:"F6",nombre:"Árbol del proyecto: modo Modelo (capas)",ini:"2026-11-04",fin:"2026-11-06",avance:0,estado:"pend",dep:["O037"],
+  entrega:["Panel Proyecto: Nivel, Categoría, Tipo, Elemento","Ojo, candado y aislar por vista, como capas de AutoCAD","Selección sincronizada con las vistas","Búsqueda"],
+  recicla:["src/features/modelo/NavegadorVistas.tsx","src/features/modelo/vistas.ts","nucleo/openrvt_nucleo/modelado.py"]},
+ {id:"O039",fase:"F6",nombre:"Árbol del proyecto: modo Obra (capítulos y partidas)",ini:"2026-11-07",fin:"2026-11-09",avance:0,estado:"pend",dep:["O038","O009"],
+  entrega:["Capítulo, Partida, Elemento con cantidades","Capítulos editables y arrastrables","IfcClassification «OPEN-RVT Obra»","Exportación a PP por capítulo"],
+  recicla:["src/features/modelo/CantidadesView.tsx","docs/specs/O009-medicion-hacia-pp.md"]},
+
  {id:"O034",fase:"F6",nombre:"Asas en planta para el desfase de cada borde de losa",ini:"2026-11-03",fin:"2026-11-04",avance:0,estado:"pend",dep:["O032"],
   entrega:["Asa por borde de losa en planta","Arrastrar cambia el desfase del borde","Lo mismo que ya hace la tabla de Propiedades"],
   recicla:["src/features/modelo/bordesLosa.ts","src/features/modelo/planta.ts","src/features/modelo/PanelPropiedades.tsx"]},
