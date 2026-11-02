@@ -2753,6 +2753,41 @@ class ModeladoMixin:
                     )
         return cuerpo
 
+    def _partir_huecos(self, datos: dict[str, Any], piezas: list[Any]) -> list[Any]:
+        """Parte en el castillo las piezas que quedaron con hueco.
+
+        Con acabados más anchos que el castillo, el castillo queda encerrado por el
+        aplanado de ambos lados y la huella resulta un polígono con hueco. El cuerpo
+        se extruye solo con el anillo exterior, así que el hueco se perdía y el muro
+        rellenaba el castillo (reporte 2-nov). Se corta con una recta perpendicular
+        al eje por el centro de cada hueco: quedan piezas sin huecos.
+        """
+        from shapely.geometry import LineString
+        from shapely.ops import split
+
+        salida: list[Any] = []
+        pendientes = list(piezas)
+        vueltas = 0
+        while pendientes and vueltas < 64:
+            vueltas += 1
+            pieza = pendientes.pop()
+            if pieza.is_empty or pieza.geom_type != "Polygon" or not pieza.interiors:
+                salida.append(pieza)
+                continue
+            centro = pieza.interiors[0].centroid
+            u, _v = self._punto_en_local(datos, centro.x, centro.y)
+            ancho = 10.0 * max(datos["espesor"], 1.0)
+            corte = LineString(
+                [self._punto_local(datos, u, -ancho), self._punto_local(datos, u, ancho)]
+            )
+            partes = list(split(pieza, corte).geoms)
+            if len(partes) < 2:
+                salida.append(pieza)
+                continue
+            pendientes.extend(partes)
+        salida.extend(pendientes)
+        return salida
+
     def _huellas_muro(
         self, muro: Any, datos: dict[str, Any] | None = None
     ) -> list[list[tuple[float, float]]]:
@@ -2786,6 +2821,7 @@ class ModeladoMixin:
         if huella.is_empty:
             return [poligono]
         piezas = [huella] if huella.geom_type == "Polygon" else list(huella.geoms)
+        piezas = self._partir_huecos(datos, piezas)
         salida: list[list[tuple[float, float]]] = []
         for pieza in piezas:
             if pieza.is_empty or pieza.area <= TOLERANCIA_CALCULO:
@@ -5403,9 +5439,11 @@ class ModeladoMixin:
                         "Volteado": bool(datos["volteado"]),
                     },
                 )
-            self._regenerar_muro(entidad)
             # O007c: el castillo, el cerramiento y la dala se recalculan con el muro.
+            # Primero los dependientes y después el cuerpo: si el núcleo cambió (otro
+            # tipo), el muro se recorta con los castillos ya del ancho nuevo.
             modificados.extend(self._actualizar_dependientes_muro(entidad))
+            self._regenerar_muro(entidad)
             for vano, info in self._aberturas_del_muro(entidad):
                 relleno = self._relleno_de(vano)
                 if relleno is not None:

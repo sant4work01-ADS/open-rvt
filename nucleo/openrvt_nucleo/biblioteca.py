@@ -1439,6 +1439,10 @@ class BibliotecaMixin:
         if elemento.is_a("IfcWall"):
             datos = self._datos_muro(elemento)
             espesor = self._espesor_tipo(tipo_entidad)
+            # Reporte 2-nov: con castillos, al pasar de Block 12 a uno de 15 con
+            # acabados el núcleo nuevo se metía en los castillos (seguían de 12) y
+            # se perdían línea de ubicación, desfase y volteo. Mismo orden que la
+            # edición del muro: pset completo → dependientes → cuerpo.
             self._guardar_pset(
                 elemento,
                 "OPENRVT_Muro",
@@ -1447,8 +1451,12 @@ class BibliotecaMixin:
                     "Altura": datos["altura"],
                     "Espesor": espesor,
                     "Alineacion": datos["alineacion"],
+                    "LineaUbicacion": datos["linea_ubicacion"],
+                    "DesfaseUbicacion": datos["desfase_ubicacion"],
+                    "Volteado": bool(datos["volteado"]),
                 },
             )
+            modificados.extend(self._actualizar_dependientes_muro(elemento))
             self._regenerar_muro(elemento)
             for vano in self._aberturas_del_muro(elemento):
                 relleno = self._relleno_de(vano[0])
