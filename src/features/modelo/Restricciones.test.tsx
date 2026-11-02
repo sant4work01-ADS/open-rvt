@@ -191,3 +191,78 @@ describe("panel de zapata (O033)", () => {
     );
   });
 });
+
+describe("panel de cerramiento (O040)", () => {
+  function cerramiento(ligado: boolean): Propiedades {
+    const base: Propiedades = {
+      globalid: "c1",
+      clase: "IfcBeam",
+      nombre: "Cerramiento CE-1",
+      nivel: "Nivel 1",
+      tipo: "CE-1 Cerramiento 15×20",
+      alias: "cerramiento",
+      atributos: {},
+      materiales: [],
+      psets: {
+        OPENRVT_Estructura: { B: 0.15, H: 0.20, Z: 2.5, Desfase: 0, Nivel: "n1" },
+      },
+      restricciones: { NivelBase: "n1", DesfaseBase: 0 },
+    };
+    if (ligado) base.muro_liga = { muro: "m1", nombre: "M-1" };
+    return base;
+  }
+  beforeEach(() => {
+    llamar.mockReset();
+    llamar.mockImplementation(async (metodo: string) => {
+      if (metodo === "modelo.propiedades") return cerramiento(true);
+      if (metodo === "acero.estimar") {
+        return { total_kg: 0, longitudinal_kg: 0, estribos_kg: 0 };
+      }
+      return { creados: [], modificados: ["c1"], borrados: [] };
+    });
+    useModelo.setState({
+      error: null,
+      niveles: [
+        { globalid: "n0", nombre: "Nivel 0", elevacion: 0 },
+        { globalid: "n1", nombre: "Nivel 1", elevacion: 3 },
+      ],
+      tiposMuro: [],
+    });
+  });
+  afterEach(cleanup);
+
+  it("ligado: texto «Sigue la corona del muro», sin selector ni tope ni altura", () => {
+    useModelo.setState({ propiedades: cerramiento(true) });
+    render(<PropiedadesElemento />);
+    expect(screen.getByTestId("cerramiento-ligado")).not.toBeNull();
+    expect(screen.getByTestId("cerramiento-leyenda").textContent).toContain(
+      "Sigue la corona del muro M-1",
+    );
+    expect(screen.queryByTestId("restriccion-base")).toBeNull();
+    expect(screen.queryByTestId("restriccion-tope")).toBeNull();
+    expect(screen.queryByTestId("elemento-altura-estructura")).toBeNull();
+    expect(screen.getByTestId("soltar-del-muro")).not.toBeNull();
+  });
+
+  it("suelto: selector de nivel editable y desfase, sin tope ni altura", () => {
+    useModelo.setState({ propiedades: cerramiento(false) });
+    render(<PropiedadesElemento />);
+    expect(screen.queryByTestId("cerramiento-ligado")).toBeNull();
+    const selector = screen.getByTestId("restriccion-base") as HTMLSelectElement;
+    expect(selector.value).toBe("n1");
+    expect(screen.getByTestId("desfase-base")).not.toBeNull();
+    expect(screen.queryByTestId("restriccion-tope")).toBeNull();
+    expect(screen.queryByTestId("elemento-altura-estructura")).toBeNull();
+  });
+
+  it("soltar del muro llama al RPC de cerramientos", async () => {
+    useModelo.setState({ propiedades: cerramiento(true) });
+    render(<PropiedadesElemento />);
+    fireEvent.click(screen.getByTestId("soltar-del-muro"));
+    await waitFor(() =>
+      expect(llamar).toHaveBeenCalledWith("cerramientos.soltar_del_muro", {
+        globalid: "c1",
+      }),
+    );
+  });
+});

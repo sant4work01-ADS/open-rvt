@@ -369,6 +369,8 @@ interface EstadoModelo {
   murosEntreEjes: () => Promise<boolean>;
   /** O028: quita el enlace del elemento sin moverlo. */
   soltarEnlace: (globalid: string) => Promise<void>;
+  /** O040: suelta un cerramiento o dala de su muro, dejándolo en su lugar. */
+  soltarDelMuro: (globalid: string) => Promise<void>;
   editarElemento: (globalid: string, cambios: Record<string, unknown>) => Promise<void>;
   /** O016: cambia base, tope y desfases de un muro o columna. */
   editarRestricciones: (
@@ -2489,6 +2491,11 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     soltarEnlace: async (globalid) => {
       if (!globalid) return;
       await ejecutar("restricciones.soltar_enlace", { globalid });
+    },
+
+    soltarDelMuro: async (globalid) => {
+      if (!globalid) return;
+      await ejecutar("cerramientos.soltar_del_muro", { globalid });
     },
 
     unirTrabes: async () => {

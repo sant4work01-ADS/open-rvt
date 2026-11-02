@@ -919,3 +919,36 @@ export function contarVertices(poligono: PoligonoPlanta): number {
     ? puntos.length - 1
     : puntos.length;
 }
+
+/**
+ * O040: proyección superior del cerramiento en planta.
+ *
+ * Regla: el cerramiento queda por arriba del plano de corte (1.20 m, `vistas.ts`) y
+ * en planta se dibuja como proyección superior: las dos líneas largas de su ancho,
+ * en trazo discontinuo (línea oculta), finas y **sin relleno**, encima del muro y sin
+ * taparle el achurado. Se devuelven las dos polilíneas abiertas (sin los cantos).
+ * La dala de desplante, que queda abajo del corte y cubierta por el muro, no se
+ * dibuja en planta.
+ */
+export function lineasCerramientoPlanta(
+  eje: LineaMuro,
+  ancho: number,
+): Array<[[number, number], [number, number]]> {
+  const [x1, y1, x2, y2] = eje;
+  const largo = Math.hypot(x2 - x1, y2 - y1);
+  if (largo <= 1e-6) return [];
+  const ux = (x2 - x1) / largo;
+  const uy = (y2 - y1) / largo;
+  const nx = (-uy * ancho) / 2;
+  const ny = (ux * ancho) / 2;
+  return [
+    [
+      [x1 + nx, y1 + ny],
+      [x2 + nx, y2 + ny],
+    ],
+    [
+      [x1 - nx, y1 - ny],
+      [x2 - nx, y2 - ny],
+    ],
+  ];
+}

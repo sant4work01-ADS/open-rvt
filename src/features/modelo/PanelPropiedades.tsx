@@ -855,6 +855,80 @@ function RestriccionesZapata({
   );
 }
 
+/** O040: el cerramiento cuelga de un nivel (o de la corona de su muro), sin
+ * restricción de tope ni altura. Ligado se ve como texto con «Soltar del muro»;
+ * suelto, el nivel y el desfase son editables. */
+function RestriccionesCerramiento({ globalid }: { globalid: string }) {
+  const niveles = useModelo((s) => s.niveles);
+  const restricciones = useModelo((s) => s.propiedades?.restricciones);
+  const muroLiga = useModelo((s) => s.propiedades?.muro_liga);
+  const editarRestricciones = useModelo((s) => s.editarRestricciones);
+  const soltarDelMuro = useModelo((s) => s.soltarDelMuro);
+  if (!restricciones) return null;
+  const nombreNivel = (gid: string) =>
+    niveles.find((n) => n.globalid === gid)?.nombre ?? "(nivel actual)";
+  if (muroLiga) {
+    return (
+      <div data-testid="cerramiento-ligado" className="flex flex-col gap-1 text-xs">
+        <div className="text-muted-foreground" data-testid="cerramiento-leyenda">
+          Sigue la corona del muro {muroLiga.nombre}
+        </div>
+        <label className="flex items-center justify-between gap-2">
+          <span className="text-muted-foreground">Nivel de referencia</span>
+          <span data-testid="cerramiento-nivel">{nombreNivel(restricciones.NivelBase)}</span>
+        </label>
+        <label className="flex items-center justify-between gap-2">
+          <span className="text-muted-foreground">Desfase (m)</span>
+          <span data-testid="cerramiento-desfase">
+            {Number(restricciones.DesfaseBase ?? 0).toFixed(2)}
+          </span>
+        </label>
+        <button
+          type="button"
+          data-testid="soltar-del-muro"
+          className="mt-1 self-start rounded border px-2 py-1 hover:bg-muted"
+          onClick={() => void soltarDelMuro(globalid)}
+        >
+          Soltar del muro
+        </button>
+      </div>
+    );
+  }
+  return (
+    <>
+      <label className="flex items-center justify-between gap-2 text-xs">
+        <span className="text-muted-foreground">Nivel de referencia</span>
+        <select
+          key={restricciones.NivelBase}
+          data-testid="restriccion-base"
+          defaultValue={restricciones.NivelBase}
+          onChange={(e) => void editarRestricciones(globalid, { nivel_base: e.target.value })}
+          className="w-32 rounded border bg-background px-2 py-1"
+        >
+          {niveles.map((nivel) => (
+            <option key={nivel.globalid} value={nivel.globalid}>
+              {nivel.nombre}
+            </option>
+          ))}
+          {!niveles.some((n) => n.globalid === restricciones.NivelBase) && (
+            <option value={restricciones.NivelBase}>(nivel actual)</option>
+          )}
+        </select>
+      </label>
+      <CampoEditable
+        etiqueta="Desfase (m)"
+        testid="desfase-base"
+        numerico
+        paso={0.05}
+        valor={restricciones.DesfaseBase}
+        onGuardar={(desfase_base) =>
+          void editarRestricciones(globalid, { desfase_base: Number(desfase_base) })
+        }
+      />
+    </>
+  );
+}
+
 function BordesLosaElemento({
   globalid,
   pset,
@@ -955,6 +1029,8 @@ export function PropiedadesElemento() {
   // O033: zapata aislada o corrida (el contratrabe es una viga de cimentación).
   const esZapata = propiedades.clase === "IfcFooting" && predefinido !== "FOOTING_BEAM";
   const esZapataCorrida = esZapata && predefinido === "STRIP_FOOTING";
+  // O040: el cerramiento cuelga del muro o de un nivel; sin tope ni altura.
+  const esCerramiento = propiedades.alias === "cerramiento";
   const atributos = propiedades.atributos;
   const ancho = Number(atributos.OverallWidth ?? 0);
   const alto = Number(atributos.OverallHeight ?? 0);
@@ -1104,22 +1180,28 @@ export function PropiedadesElemento() {
         )}
         {esEstructural && !esZapata && (
           <>
-            {estructura?.Desfase !== undefined && (
-              <CampoEditable
-                etiqueta="Desfase (m)"
-                testid="elemento-desfase"
-                numerico
-                paso={0.05}
-                valor={Number(estructura.Desfase)}
-                onGuardar={(valor) => void editar(gid, { Desfase: valor })}
-              />
-            )}
-            {!esMuro && (
-              <RestriccionesNivel
-                globalid={gid}
-                testidAltura="elemento-altura-estructura"
-                alturaActual={Number(estructura?.Altura ?? estructura?.H ?? 0)}
-              />
+            {esCerramiento ? (
+              <RestriccionesCerramiento globalid={gid} />
+            ) : (
+              <>
+                {estructura?.Desfase !== undefined && (
+                  <CampoEditable
+                    etiqueta="Desfase (m)"
+                    testid="elemento-desfase"
+                    numerico
+                    paso={0.05}
+                    valor={Number(estructura.Desfase)}
+                    onGuardar={(valor) => void editar(gid, { Desfase: valor })}
+                  />
+                )}
+                {!esMuro && (
+                  <RestriccionesNivel
+                    globalid={gid}
+                    testidAltura="elemento-altura-estructura"
+                    alturaActual={Number(estructura?.Altura ?? estructura?.H ?? 0)}
+                  />
+                )}
+              </>
             )}
           </>
         )}

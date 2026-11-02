@@ -362,6 +362,10 @@ class Servidor:
             return self._exigir().cerramiento_crear_en_muro(
                 str(params.get("tipo") or ""), str(params.get("muro") or "")
             )
+        if metodo in ("cerramientos.soltar_del_muro", "elementos.soltar_del_muro"):
+            return self._exigir().soltar_del_muro(
+                str(params.get("globalid") or params.get("elemento") or "")
+            )
         if metodo in ("dalas.crear_en_muro", "dala.crear_en_muro"):
             return self._exigir().dala_crear_en_muro(
                 str(params.get("tipo") or ""), str(params.get("muro") or "")
