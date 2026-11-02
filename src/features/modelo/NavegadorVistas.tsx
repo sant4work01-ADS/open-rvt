@@ -21,7 +21,7 @@ interface Props {
   vistas: Vista[];
   activaId: string | null;
   /** O029: elevación de cada nivel para ordenar las plantas. */
-  niveles?: Array<{ globalid: string; elevacion: number }>;
+  niveles?: Array<{ globalid: string; elevacion: number; nombre?: string }>;
   onElegir: (id: string) => void;
   /** O009: la vista Cantidades vive bajo 3D y no es una vista IFC guardada. */
   cantidadesActiva?: boolean;
@@ -51,6 +51,26 @@ export function normalizarBusqueda(texto: string): string {
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
+}
+
+/**
+ * O037: la última planta de un nivel se lleva el nivel. Lo dice antes de confirmar
+ * para que «Eliminar» no deje un nivel sin planta que sigue en los alzados.
+ */
+export function textoEliminar(
+  vista: Vista,
+  vistas: Vista[],
+  niveles: Array<{ globalid: string; nombre?: string }>,
+): string {
+  const ultimaDelNivel =
+    vista.tipo === "planta" &&
+    !!vista.nivel &&
+    vistas.filter((v) => v.tipo === "planta" && v.nivel === vista.nivel).length === 1;
+  const nivel = ultimaDelNivel ? niveles.find((n) => n.globalid === vista.nivel) : undefined;
+  if (nivel) {
+    return `¿Eliminar «${vista.nombre}» y su nivel «${nivel.nombre ?? "sin nombre"}»? El nivel desaparece de todas las vistas.`;
+  }
+  return `¿Eliminar «${vista.nombre}»?`;
 }
 
 /** Filtra por nombre sin distinguir acentos ni mayúsculas. */
@@ -403,7 +423,9 @@ export function NavegadorVistas({
         >
           {confirmarBorrado === menuVista.id ? (
             <div className="px-2 py-1">
-              <div className="mb-1 text-muted-foreground">¿Eliminar «{menuVista.nombre}»?</div>
+              <div className="mb-1 max-w-56 text-muted-foreground" data-testid="vista-eliminar-texto">
+                {textoEliminar(menuVista, vistas, niveles)}
+              </div>
               <div className="flex justify-end gap-1">
                 <button
                   type="button"

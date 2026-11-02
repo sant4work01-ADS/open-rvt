@@ -161,7 +161,7 @@ def test_crear_columna_castillo_viga_zapata_y_corrida() -> None:
     assert entidad_z.PredefinedType == "PAD_FOOTING"
     minimo, maximo, _, _ = _caja(nucleo, zapata["creados"][0])
     assert minimo == pytest.approx(-1.05)  # la plantilla va debajo del desplante
-    assert maximo == pytest.approx(-0.15)  # el dado llega hasta -0.15
+    assert maximo == pytest.approx(0.0)  # O037: el dado llega al nivel (antes quedaba a -0.15)
 
     corrida = nucleo.zapata_corrida_crear(
         "ZC-1 Zapata corrida 60", nivel, 0.0, 0.0, 6.0, 0.0, 0.80

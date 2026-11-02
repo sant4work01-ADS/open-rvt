@@ -479,6 +479,23 @@ let tokenSeleccion = 0;
  * O006a: al mover niveles, las plantas conservan su plano de corte y su fondo
  * relativos a la nueva elevación. La cadena puede mover varios niveles a la vez.
  */
+/** O037: ¿es la única planta que muestra su nivel? */
+export function plantaUnicaDeNivel(vistas: Vista[], vista: Vista): boolean {
+  return (
+    vista.tipo === "planta" &&
+    !!vista.nivel &&
+    vistas.filter((v) => v.tipo === "planta" && v.nivel === vista.nivel).length === 1
+  );
+}
+
+/** O037: quita las plantas cuyo nivel ya no existe (borrado con Supr, deshacer…). */
+export function quitarPlantasHuerfanas(vistas: Vista[], niveles: Nivel[]): Vista[] {
+  const ids = new Set(niveles.map((n) => n.globalid));
+  const quedan = vistas.filter((v) => v.tipo !== "planta" || !v.nivel || ids.has(v.nivel));
+  // Nunca se queda sin plantas: si todas eran huérfanas se conservan.
+  return quedan.some((v) => v.tipo === "planta") ? quedan : vistas;
+}
+
 function sincronizarPlantas(vistas: Vista[], niveles: Nivel[]): Vista[] {
   const ordenados = [...niveles].sort((a, b) => a.elevacion - b.elevacion);
   return vistas.map((vista) => {
@@ -767,6 +784,21 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       error: null,
       aviso: resultado.mensaje || get().aviso,
     });
+    if (borrados.size > 0) {
+      const antes = get().vistas;
+      const vistas = quitarPlantasHuerfanas(antes, niveles);
+      if (vistas.length !== antes.length) {
+        const activa = get().vistaActivaId;
+        set({
+          vistas,
+          vistaActivaId:
+            vistas.find((v) => v.id === activa)?.id ??
+            vistas.find((v) => v.tipo === "planta")?.id ??
+            null,
+        });
+        await persistirVistas(vistas);
+      }
+    }
     if (seleccion && get().propiedades?.globalid !== seleccion) {
       await get().seleccionar(seleccion);
     }
@@ -1203,6 +1235,16 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       if (!vista) return false;
       const delMismoTipo = estado.vistas.filter((v) => v.tipo === vista.tipo);
       if (delMismoTipo.length <= 1) return false;
+      // O037: la última planta de un nivel es el nivel. Eliminarla borra el nivel
+      // (si el núcleo lo rechaza, por elementos o restricciones, no se toca nada).
+      if (
+        vista.nivel &&
+        plantaUnicaDeNivel(estado.vistas, vista) &&
+        estado.niveles.some((n) => n.globalid === vista.nivel)
+      ) {
+        await get().borrarNivel(vista.nivel);
+        return !get().vistas.some((v) => v.id === id);
+      }
       const vistas = estado.vistas.filter((v) => v.id !== id);
       const activa = estado.vistaActivaId === id ? (vistas[0]?.id ?? null) : estado.vistaActivaId;
       set({ vistas, vistaActivaId: activa, conCambios: true, modoCorte: false, puntoCorte: null });
