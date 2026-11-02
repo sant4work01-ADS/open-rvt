@@ -371,6 +371,11 @@ test("O041: cerramientos con clics, Tab, panel, Supr y la losa sobre el dado", a
     const pista = await textoDom(ses, '[data-testid="estado-pista-tab"]');
     assert.match(pista ?? "", /Tab: siguiente \(Cerramiento /, `pista: ${pista}`);
     const propsCer = await invocar(ses, "modelo.propiedades", { globalid: cerramiento });
+    // Tras Tab muro → cerramiento, el campo Nombre debe ser el del cerramiento, no el del muro.
+    const nombrePanel = await ses.driver.executeScript(
+      () => document.querySelector('[data-testid="elemento-nombre"]')?.value,
+    );
+    assert.equal(nombrePanel, propsCer.nombre, "el campo Nombre quedó con el del muro");
     const muroLiga = propsCer.muro_liga?.muro;
     assert.ok(muroLiga, "el cerramiento no está ligado a un muro");
     assert.ok(Math.abs((await alturaMuro(ses, muroLiga)) - 2.6) < 1e-6, "altura inicial del muro");

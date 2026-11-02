@@ -594,7 +594,7 @@ export function PropiedadesVista({ vista }: { vista: Vista }) {
 }
 
 /** Campo editable que guarda con Enter o al perder el foco (spec O003b). */
-function CampoEditable({
+export function CampoEditable({
   etiqueta,
   valor,
   testid,
@@ -612,6 +612,13 @@ function CampoEditable({
   onGuardar: (valor: string | number) => void;
 }) {
   const [texto, setTexto] = useState(String(valor ?? ""));
+  // Al cambiar la selección (p. ej. Tab muro → cerramiento) el campo muestra el valor nuevo,
+  // no el del elemento anterior.
+  const [previo, setPrevio] = useState(valor);
+  if (valor !== previo) {
+    setPrevio(valor);
+    setTexto(String(valor ?? ""));
+  }
   const guardar = (entrada: string) => {
     if (numerico) {
       const numero = Number(entrada);
