@@ -88,6 +88,19 @@ def test_desplante_menor_que_el_peralte_se_rechaza() -> None:
         _zapata(nucleo, 0.20)
 
 
+def test_zapata_corrida_sin_residuo_flotante() -> None:
+    nucleo = _nuevo()
+    tipo = _tipo(nucleo, "IfcFootingType", "ZC-1 Zapata corrida 60")
+    gid = nucleo.zapata_corrida_crear(
+        tipo, _nivel(nucleo), 0.0, 0.0, 3.0, 0.0, desplante=0.80
+    )["creados"][0]
+    fondo, tope = _caja_z(nucleo, gid)
+    # Sin dado: fondo = 0.00 − 0.80 − plantilla(0.05) = −0.85;
+    # tope = 0.00 − 0.80 + peralte(0.20) = −0.60 (sin franja residual).
+    assert fondo == pytest.approx(-0.85, abs=1e-6)
+    assert tope == pytest.approx(-0.60, abs=1e-6)
+
+
 # --------------------------------------------------------------------- 3: losa
 
 
