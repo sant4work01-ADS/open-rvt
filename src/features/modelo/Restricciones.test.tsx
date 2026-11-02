@@ -231,17 +231,32 @@ describe("panel de cerramiento (O040)", () => {
   });
   afterEach(cleanup);
 
-  it("ligado: texto «Sigue la corona del muro», sin selector ni tope ni altura", () => {
+  it("ligado: leyenda del eje del muro, con selector de nivel y desfase editables (O041)", () => {
     useModelo.setState({ propiedades: cerramiento(true) });
     render(<PropiedadesElemento />);
     expect(screen.getByTestId("cerramiento-ligado")).not.toBeNull();
     expect(screen.getByTestId("cerramiento-leyenda").textContent).toContain(
-      "Sigue la corona del muro M-1",
+      "Sigue el eje del muro M-1",
     );
-    expect(screen.queryByTestId("restriccion-base")).toBeNull();
+    const selector = screen.getByTestId("restriccion-base") as HTMLSelectElement;
+    expect(selector.value).toBe("n1");
+    expect(selector.disabled).toBe(false);
+    expect(screen.getByTestId("desfase-base")).not.toBeNull();
     expect(screen.queryByTestId("restriccion-tope")).toBeNull();
     expect(screen.queryByTestId("elemento-altura-estructura")).toBeNull();
     expect(screen.getByTestId("soltar-del-muro")).not.toBeNull();
+  });
+
+  it("ligado: cambiar el nivel llama a editar_restricciones (O041)", async () => {
+    useModelo.setState({ propiedades: cerramiento(true) });
+    render(<PropiedadesElemento />);
+    fireEvent.change(screen.getByTestId("restriccion-base"), { target: { value: "n0" } });
+    await waitFor(() =>
+      expect(llamar).toHaveBeenCalledWith("restricciones.editar", {
+        globalid: "c1",
+        nivel_base: "n0",
+      }),
+    );
   });
 
   it("suelto: selector de nivel editable y desfase, sin tope ni altura", () => {
