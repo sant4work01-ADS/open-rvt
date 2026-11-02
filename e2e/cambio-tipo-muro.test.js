@@ -65,6 +65,12 @@ test("cambio de tipo de muro con castillos: el muro no se come el castillo", asy
       assert.equal(Number(p.psets.OPENRVT_Estructura.H), 0.15, "el castillo debe tomar el núcleo de 15");
     }
     // Las llamadas directas no pasan por React: deshacer y rehacer recarga y re-tesela.
+    const pestana = await ses.driver.wait(
+      until.elementLocated(By.xpath('//*[@role="tab"][normalize-space(.)="Modelar"]')),
+      10_000,
+    );
+    await pestana.click();
+    await esperar(300);
     for (const id of ["cmd-deshacer", "cmd-rehacer"]) {
       await (await ses.porTestid(id)).click();
       await esperar(900);
