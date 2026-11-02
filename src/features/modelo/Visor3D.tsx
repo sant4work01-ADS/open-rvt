@@ -123,6 +123,7 @@ import {
   desplazamientoArrastreNivel,
   destinoArrastreAsa,
   puntoAsaEje,
+  puntoAsaCodoNuevo,
   type DireccionEjeArrastre,
   type LadoEje,
   type TipoAsaArrastre,
@@ -2744,6 +2745,17 @@ export function Visor3D({
           registro,
           mundoPorPx,
         });
+        // O037: material continuo para el trazo-punto dibujado por segmentos y para
+        // las asas (cuadros) y el trazo lleno de cada vértice; antes las asas usaban
+        // el material discontinuo y quedaban partidas.
+        const materialEjeContinuo = crearMaterialLinea({
+          mm: mmEjes,
+          escala: vista.escala,
+          color: colorEje,
+          profundidad: false,
+          registro,
+          mundoPorPx,
+        });
         // O011: el globo mide 8 mm de papel (0.8 m a 1:100), como en Revit.
         const altoBurbuja = mmAMundo(8, vista.escala);
         contextoEje.current = {
@@ -2770,7 +2782,41 @@ export function Visor3D({
             globoInicio: tocaInicio,
           });
           const puntos = g.puntos.map(([x, y]) => [x, y, zEje] as [number, number, number]);
-          lineaCerrada(puntos, materialEje, 1.6, grupoLocal);
+          // O037: trazo-punto continuo a lo largo de toda la polilínea (la distancia
+          // acumulada sigue en cada vértice), dibujado por segmentos para poder incluir
+          // el punto del patrón; antes LineMaterial solo hacía guion/hueco.
+          for (const [a, b] of segmentosTrazoPunto(g.puntos, vista.escala)) {
+            lineaCerrada(
+              [[a[0], a[1], zEje], [b[0], b[1], zEje]],
+              materialEjeContinuo,
+              1.6,
+              grupoLocal,
+            );
+          }
+          // Trazo lleno en cada vértice interior (codo), para que el quiebre no quede
+          // hueco cuando el patrón cae en un hueco justo en el vértice.
+          const mediaDado = mmAMundo(1.5, vista.escala);
+          for (let i = 1; i < g.puntos.length - 1; i += 1) {
+            const a = g.puntos[i - 1];
+            const v = g.puntos[i];
+            const b = g.puntos[i + 1];
+            const hacia = (p: Punto2, q: Punto2): Punto2 => {
+              const d: Punto2 = [q[0] - p[0], q[1] - p[1]];
+              const m = Math.hypot(d[0], d[1]) || 1;
+              return [d[0] / m, d[1] / m];
+            };
+            const ua = hacia(v, a);
+            const ub = hacia(v, b);
+            lineaCerrada(
+              [
+                [v[0] + ua[0] * mediaDado, v[1] + ua[1] * mediaDado, zEje],
+                [v[0] + ub[0] * mediaDado, v[1] + ub[1] * mediaDado, zEje],
+              ],
+              materialEjeContinuo,
+              1.6,
+              grupoLocal,
+            );
+          }
           lineasEje.current.push({ globalid: eje.globalid, etiqueta: eje.etiqueta, puntos });
           const globos: Array<{ punto: Punto2; lado: LadoEje }> = [];
           if (globoVisibleEje(ajuste, "fin")) globos.push({ punto: g.globoFin, lado: "fin" });
@@ -2815,7 +2861,7 @@ export function Visor3D({
                   [codo[0] - ladoMundo, codo[1] + ladoMundo, zEje],
                   [codo[0] - ladoMundo, codo[1] - ladoMundo, zEje],
                 ],
-                materialEje,
+                materialEjeContinuo,
                 1.6,
                 grupoLocal,
               );
@@ -2831,16 +2877,16 @@ export function Visor3D({
           }
           // O021: asa de codo junto a cada globo (arrastrarla crea el codo) y asas
           // circulares en los extremos reales de la línea para no perderlos de vista.
-          for (const { punto, lado } of globos) {
-            const haciaAdentro: Punto2 = lado === "fin"
-              ? [eje.x1 - eje.x2, eje.y1 - eje.y2]
-              : [eje.x2 - eje.x1, eje.y2 - eje.y1];
-            const largoHacia = Math.hypot(haciaAdentro[0], haciaAdentro[1]) || 1;
+          for (const { lado } of globos) {
             const separacionCodo = altoBurbuja * 0.9;
-            const asaCodo: Punto2 = [
-              punto[0] + (haciaAdentro[0] / largoHacia) * separacionCodo,
-              punto[1] + (haciaAdentro[1] / largoHacia) * separacionCodo,
-            ];
+            // O037: el asa va sobre el último tramo de la polilínea, no a lo largo de
+            // la línea base; con un codo, la base ya no pasa por el globo.
+            const asaCodo = puntoAsaCodoNuevo(
+              ajuste,
+              { inicio: [eje.x1, eje.y1], fin: [eje.x2, eje.y2] },
+              lado,
+              separacionCodo,
+            );
             const ladoMundo = Math.max(altoBurbuja * 0.09, 0.04);
             lineaCerrada(
               [
@@ -2850,7 +2896,7 @@ export function Visor3D({
                 [asaCodo[0] - ladoMundo, asaCodo[1] + ladoMundo, zEje],
                 [asaCodo[0] - ladoMundo, asaCodo[1] - ladoMundo, zEje],
               ],
-              materialEje,
+              materialEjeContinuo,
               1.6,
               grupoLocal,
             );

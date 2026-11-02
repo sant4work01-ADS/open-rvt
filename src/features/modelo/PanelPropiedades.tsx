@@ -600,6 +600,7 @@ function CampoEditable({
   testid,
   numerico,
   paso,
+  title,
   onGuardar,
 }: {
   etiqueta: string;
@@ -607,6 +608,7 @@ function CampoEditable({
   testid: string;
   numerico?: boolean;
   paso?: number;
+  title?: string;
   onGuardar: (valor: string | number) => void;
 }) {
   const [texto, setTexto] = useState(String(valor ?? ""));
@@ -622,7 +624,7 @@ function CampoEditable({
   };
   return (
     <label className="flex items-center justify-between gap-2 text-xs">
-      <span className="text-muted-foreground">{etiqueta}</span>
+      <span className="text-muted-foreground" title={title}>{etiqueta}</span>
       <input
         key={String(valor)}
         data-testid={testid}
@@ -825,6 +827,7 @@ function RestriccionesZapata({
         testid="elemento-desplante"
         numerico
         paso={0.05}
+        title="Profundidad del fondo de la zapata bajo el nivel de base"
         valor={valorDesplante}
         onGuardar={(valor) => void editarRestricciones(globalid, { desplante: Number(valor) })}
       />

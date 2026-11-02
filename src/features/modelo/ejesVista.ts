@@ -461,6 +461,36 @@ export interface AsaCodoVista {
 }
 
 /**
+ * O037: posición del asa «codo nuevo» (la que, al arrastrarla, crea un codo junto al
+ * globo). Debe quedar exactamente sobre la polilínea, en su último tramo (codo → globo
+ * en el lado fin; globo → codo en el lado inicio), separada `separacion` del globo hacia
+ * el interior. Antes se colocaba a lo largo de la línea base del IfcGrid, por lo que al
+ * existir un codo quedaba flotando fuera de la polilínea.
+ */
+export function puntoAsaCodoNuevo(
+  ajuste: AjusteEjeVista | undefined,
+  bases: { inicio: Punto2; fin: Punto2 },
+  lado: LadoEje,
+  separacion: number,
+): Punto2 {
+  const g = geometriaEje(ajuste, bases.inicio, bases.fin, { globoInicio: true });
+  const globo = lado === "inicio" ? (g.globoInicio ?? bases.inicio) : g.globoFin;
+  // El punto de la polilínea contiguo al globo, hacia el interior del eje.
+  const adyacente =
+    lado === "inicio"
+      ? (g.puntos[1] ?? bases.fin)
+      : (g.puntos[g.puntos.length - 2] ?? bases.inicio);
+  const dx = globo[0] - adyacente[0];
+  const dy = globo[1] - adyacente[1];
+  const largo = Math.hypot(dx, dy);
+  if (largo <= 1e-9) return [globo[0], globo[1]];
+  return [
+    globo[0] - (dx / largo) * separacion,
+    globo[1] - (dy / largo) * separacion,
+  ];
+}
+
+/**
  * O031 (regresión de O025b): asas de los codos que hay que dibujar en una vista.
  * El alzado dejó de crearlas al reescribir la anotación; sin ellas el codo no se
  * puede arrastrar ni quitar desde el menú contextual (O011).

@@ -182,4 +182,12 @@ describe("panel de zapata (O033)", () => {
       }),
     );
   });
+
+  it("el campo Desplante explica su significado (O037)", () => {
+    render(<PropiedadesElemento />);
+    const etiqueta = screen.getByText("Desplante (m)");
+    expect(etiqueta.getAttribute("title")).toBe(
+      "Profundidad del fondo de la zapata bajo el nivel de base",
+    );
+  });
 });

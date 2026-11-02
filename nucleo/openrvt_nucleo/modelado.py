@@ -354,6 +354,14 @@ class ModeladoMixin:
         _alias, seccion, _armado = self._seccion_y_armado(tipo)
         return float(seccion.get("H") or seccion.get("Peralte") or 0.20)
 
+    def _dado_alto_de(self, seccion: dict[str, Any], desplante: float) -> float:
+        """O037: el alto del dado se deriva del desplante y el peralte (no del tipo)."""
+        dado_b = float(seccion.get("DadoB") or 0.0)
+        dado_h = float(seccion.get("DadoH") or 0.0)
+        if dado_b <= 0 or dado_h <= 0:
+            return 0.0
+        return desplante - float(seccion.get("Peralte") or 0.25)
+
     def _lecho_bajo(self, elemento: Any) -> bool:
         """Las dalas y cerramientos se cuelgan del nivel por su lecho inferior."""
         alias = self._estructura_de_tipo(self._tipo_entidad(elemento))
@@ -531,6 +539,21 @@ class ModeladoMixin:
                     desplante = 0.0
                 if desplante <= TOLERANCIA_CALCULO:
                     raise self._error("El desplante debe ser positivo.", -32602)
+                # O037: con dado, el desplante debe superar el peralte para que el
+                # dado llegue exactamente al nivel de base.
+                if predef != "STRIP_FOOTING":
+                    _alias, seccion, _armado = self._seccion_y_armado(
+                        self._tipo_entidad(elemento)
+                    )
+                    if (
+                        float(seccion.get("DadoB") or 0.0) > 0
+                        and float(seccion.get("DadoH") or 0.0) > 0
+                        and desplante <= peralte + TOLERANCIA_CALCULO
+                    ):
+                        raise self._error(
+                            "El desplante es menor que el peralte: el dado no cabe.",
+                            -32602,
+                        )
                 datos["Desplante"] = desplante
                 if predef == "STRIP_FOOTING":
                     datos["Z"] = (
@@ -3242,14 +3265,21 @@ class ModeladoMixin:
             cajas = [self._caja_entre(-b / 2.0, b / 2.0, -h / 2.0, h / 2.0, 0.0, 0.001)]
         return self._malla_de_cajas(cajas)
 
-    def _cuerpo_zapata(self, seccion: dict[str, Any]) -> Any:
+    def _cuerpo_zapata(
+        self, seccion: dict[str, Any], desplante: float | None = None
+    ) -> Any:
         largo = float(seccion.get("Largo") or 1.2)
         ancho = float(seccion.get("Ancho") or 1.2)
         peralte = float(seccion.get("Peralte") or 0.25)
         plantilla = float(seccion.get("Plantilla") or 0.05)
         dado_b = float(seccion.get("DadoB") or 0.0)
         dado_h = float(seccion.get("DadoH") or 0.0)
-        dado_alto = float(seccion.get("DadoAlto") or 0.0)
+        # O037: el alto del dado sale del desplante (y el peralte), no de un valor
+        # fijo del tipo; sin desplante (zapata importada) se conserva el del tipo.
+        if desplante is None:
+            dado_alto = float(seccion.get("DadoAlto") or 0.0)
+        else:
+            dado_alto = self._dado_alto_de(seccion, desplante)
         cajas = []
         if plantilla > 0:
             cajas.append(
@@ -3405,8 +3435,13 @@ class ModeladoMixin:
             return []
         dado_b = float(seccion.get("DadoB") or 0.0)
         dado_h = float(seccion.get("DadoH") or 0.0)
-        dado_alto = float(seccion.get("DadoAlto") or 0.0)
         peralte = float(seccion.get("Peralte") or 0.25)
+        desplante = datos.get("Desplante")
+        dado_alto = (
+            float(desplante) - peralte
+            if desplante is not None
+            else float(seccion.get("DadoAlto") or 0.0)
+        )
         if dado_b <= 0 or dado_h <= 0 or dado_alto <= 0:
             return []
         z = float(datos.get("Z") or 0.0)
@@ -3567,7 +3602,10 @@ class ModeladoMixin:
                 x1 - ux * pi, y1 - uy * pi, float(datos.get("Z") or 0.0), ux, uy
             )
         else:
-            cuerpo = self._cuerpo_zapata(seccion)
+            desplante = datos.get("Desplante")
+            cuerpo = self._cuerpo_zapata(
+                seccion, float(desplante) if desplante is not None else None
+            )
             matriz = self._matriz_colocacion(
                 float(datos.get("X") or 0.0), float(datos.get("Y") or 0.0),
                 float(datos.get("Z") or 0.0), float(datos.get("Rotacion") or 0.0),
@@ -3778,6 +3816,15 @@ class ModeladoMixin:
             raise self._error("La posición de la zapata no es numérica.", -32602) from exc
         if desplante <= 0:
             raise self._error("El desplante de la zapata debe ser positivo.", -32602)
+        _alias, seccion, _armado = self._seccion_y_armado(tipo_entidad)
+        if (
+            float(seccion.get("DadoB") or 0.0) > 0
+            and float(seccion.get("DadoH") or 0.0) > 0
+            and desplante <= float(seccion.get("Peralte") or 0.25) + TOLERANCIA_CALCULO
+        ):
+            raise self._error(
+                "El desplante es menor que el peralte: el dado no cabe.", -32602
+            )
         elevacion = float(nivel_entidad.Elevation or 0.0)
         self._instantanea()
         zapata = root.create_entity(self.modelo, ifc_class="IfcFooting")
@@ -4157,6 +4204,17 @@ class ModeladoMixin:
                 raise self._error("El desfase del borde no es un número.", -32602) from exc
             a = poligono[i]
             b = poligono[(i + 1) % len(poligono)]
+            # O037: la línea base (sin desfase) se conserva entre ediciones; solo se
+            # deriva del contorno cuando el borde aún no la trae (creación o archivo
+            # viejo). Así el contorno final es siempre «base + desfase» (idempotente).
+            punto_a = crudo.get("punto_a")
+            punto_b = crudo.get("punto_b")
+            if punto_a is None or punto_b is None:
+                punto_a = [float(a[0]), float(a[1])]
+                punto_b = [float(b[0]), float(b[1])]
+            else:
+                punto_a = [float(punto_a[0]), float(punto_a[1])]
+                punto_b = [float(punto_b[0]), float(punto_b[1])]
             dx, dy = b[0] - a[0], b[1] - a[1]
             largo = math.hypot(dx, dy) or 1.0
             ux, uy = dx / largo, dy / largo
@@ -4193,8 +4251,8 @@ class ModeladoMixin:
                     "lado": lado,
                     "desfase": desfase,
                     "signo": signo,
-                    "punto_a": [a[0], a[1]],
-                    "punto_b": [b[0], b[1]],
+                    "punto_a": punto_a,
+                    "punto_b": punto_b,
                 }
             )
         return salida
