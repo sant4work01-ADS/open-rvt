@@ -87,6 +87,8 @@ class Servidor:
             return self._exigir().niveles()
         if metodo == "modelo.elementos":
             return self._exigir().elementos(params.get("filtro"))
+        if metodo == "modelo.arbol":
+            return self._exigir().arbol()
         if metodo == "modelo.propiedades":
             return self._exigir().propiedades(str(params.get("globalid") or ""))
         if metodo == "geometria.teselar":

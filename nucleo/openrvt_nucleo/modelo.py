@@ -79,6 +79,22 @@ MAX_HISTORIAL = 50
 # Clases que no son elementos del edificio: aperturas, espacios y anotaciones.
 NO_ELEMENTOS = ("IfcOpeningElement", "IfcFeatureElementSubtraction", "IfcVirtualElement")
 
+# O038: categorías del árbol del proyecto (modo Modelo), en el orden en que se
+# muestran. «otros» recoge los elementos que no encajan en ninguna partida.
+CATEGORIAS_ARBOL = (
+    ("muros", "Muros"),
+    ("losas", "Losas"),
+    ("columnas", "Columnas"),
+    ("castillos", "Castillos"),
+    ("trabes", "Trabes"),
+    ("dalas_cerramientos", "Dalas y cerramientos"),
+    ("zapatas", "Zapatas"),
+    ("contratrabes", "Contratrabes"),
+    ("puertas", "Puertas"),
+    ("ventanas", "Ventanas"),
+    ("otros", "Otros"),
+)
+
 
 class ErrorNucleo(Exception):
     """Error de comando con un código JSON-RPC y un mensaje para el usuario."""
@@ -371,6 +387,208 @@ class ModeloNucleo(
                 }
             )
         return salida
+
+    # ------------------------------------------------------------------ árbol O038
+    def _categoria_arbol(self, elemento: Any) -> str:
+        """Categoría del árbol del proyecto para un elemento.
+
+        Los castillos, trabes, dalas, cerramientos, zapatas y contratrabes se separan
+        por el alias estructural del tipo (castillo, dala, cerramiento, contratrabe…),
+        no por la clase IFC: un castillo es un IfcColumn y una trabe un IfcBeam.
+        """
+        clase = elemento.is_a()
+        if "Wall" in clase:
+            return "muros"
+        if "Slab" in clase or "Plate" in clase:
+            return "losas"
+        if "Column" in clase:
+            return (
+                "castillos"
+                if self._estructura_de_tipo(self._tipo_entidad(elemento)) == "castillo"
+                else "columnas"
+            )
+        if "Footing" in clase:
+            return (
+                "contratrabes"
+                if self._estructura_de_tipo(self._tipo_entidad(elemento)) == "contratrabe"
+                else "zapatas"
+            )
+        if "Beam" in clase:
+            alias = self._estructura_de_tipo(self._tipo_entidad(elemento))
+            if alias == "contratrabe":
+                return "contratrabes"
+            if alias in ("cerramiento", "dala"):
+                return "dalas_cerramientos"
+            return "trabes"
+        if "Door" in clase:
+            return "puertas"
+        if "Window" in clase:
+            return "ventanas"
+        return "otros"
+
+    def arbol(self) -> dict[str, Any]:
+        """Jerarquía del modo Modelo ya agrupada, sin N llamadas al núcleo.
+
+        Devuelve un árbol con nodos `{clave, nombre, tipo, conteo, hijos}`:
+
+        - `edificio` → `nivel` (ordenado por elevación) → `categoria` → `tipo` →
+          `elemento`.
+        - La rama `referencias` contiene los `eje` y `nivel-ref` fuera de los niveles.
+        - Los elementos sin nivel cuelgan de un nivel sintético «Sin nivel» al final.
+        """
+        self._exigir_modelo()
+        niveles_info = self.niveles()
+        gid_por_nombre = {n["nombre"]: n["globalid"] for n in niveles_info}
+
+        # nombre del nivel -> { categoría -> { (clave_tipo, nombre_tipo, gid_tipo) -> [elementos] } }
+        por_nivel: dict[str, dict[str, dict[tuple[str, str, str], list[Any]]]] = {}
+        for elemento in self._elementos_ordenados():
+            nombre_nivel = self._nivel_de(elemento)
+            if nombre_nivel not in gid_por_nombre:
+                nombre_nivel = "Sin nivel"
+            categoria = self._categoria_arbol(elemento)
+            tipo_entidad = self._tipo_entidad(elemento)
+            if tipo_entidad is not None:
+                clave_tipo = f"tipo:{_texto(tipo_entidad.GlobalId)}"
+                nombre_tipo = _texto(tipo_entidad.Name) or tipo_entidad.is_a()
+                gid_tipo = _texto(tipo_entidad.GlobalId)
+            else:
+                clave_tipo = "tipo:sin-tipo"
+                nombre_tipo = self._tipo_de(elemento) or "(sin tipo)"
+                gid_tipo = ""
+            por_nivel.setdefault(nombre_nivel, {}).setdefault(categoria, {}).setdefault(
+                (clave_tipo, nombre_tipo, gid_tipo), []
+            ).append(elemento)
+
+        def nodo_elemento(elemento: Any) -> dict[str, Any]:
+            gid = _texto(elemento.GlobalId)
+            return {
+                "clave": f"elemento:{gid}",
+                "nombre": _texto(elemento.Name) or elemento.is_a(),
+                "tipo": "elemento",
+                "globalid": gid,
+                "clase": elemento.is_a(),
+                "conteo": 1,
+            }
+
+        def nodo_nivel(info: dict[str, Any], mapa: dict[str, Any]) -> dict[str, Any]:
+            gid = info["globalid"]
+            hijos: list[dict[str, Any]] = []
+            total = 0
+            for clave_cat, nombre_cat in CATEGORIAS_ARBOL:
+                tipos = mapa.get(clave_cat)
+                if not tipos:
+                    continue
+                hijos_tipos: list[dict[str, Any]] = []
+                conteo_cat = 0
+                for (clave_tipo, nombre_tipo, gid_tipo), elementos in sorted(
+                    tipos.items(), key=lambda kv: kv[0][1].lower()
+                ):
+                    hijos_tipos.append(
+                        {
+                            "clave": clave_tipo,
+                            "nombre": nombre_tipo,
+                            "tipo": "tipo",
+                            **({"globalid": gid_tipo} if gid_tipo else {}),
+                            "conteo": len(elementos),
+                            "hijos": [nodo_elemento(e) for e in elementos],
+                        }
+                    )
+                    conteo_cat += len(elementos)
+                total += conteo_cat
+                hijos.append(
+                    {
+                        "clave": f"categoria:{clave_cat}",
+                        "nombre": nombre_cat,
+                        "tipo": "categoria",
+                        "categoria": clave_cat,
+                        "conteo": conteo_cat,
+                        "hijos": hijos_tipos,
+                    }
+                )
+            return {
+                "clave": f"nivel:{gid}",
+                "nombre": info["nombre"],
+                "tipo": "nivel",
+                "globalid": gid,
+                "elevacion": info["elevacion"],
+                "conteo": total,
+                "hijos": hijos,
+            }
+
+        # Niveles en orden de elevación; un nivel sin elementos aparece vacío.
+        hijos_edificio = [
+            nodo_nivel(info, por_nivel.get(info["nombre"], {})) for info in niveles_info
+        ]
+        # Elementos sueltos que no cuelgan de ningún nivel conocido.
+        if "Sin nivel" in por_nivel:
+            hijos_edificio.append(
+                {
+                    "clave": "nivel:sin-nivel",
+                    "nombre": "Sin nivel",
+                    "tipo": "nivel",
+                    "elevacion": None,
+                    "conteo": sum(
+                        len(elementos)
+                        for mapa in por_nivel["Sin nivel"].values()
+                        for elementos in mapa.values()
+                    ),
+                    "hijos": nodo_nivel(
+                        {"globalid": "sin-nivel", "nombre": "Sin nivel", "elevacion": 0.0},
+                        por_nivel["Sin nivel"],
+                    )["hijos"],
+                }
+            )
+
+        ejes = self.ejes_listar()
+        referencias = {
+            "clave": "referencias",
+            "nombre": "Referencias",
+            "tipo": "referencias",
+            "hijos": [
+                {
+                    "clave": "referencias:ejes",
+                    "nombre": "Ejes",
+                    "tipo": "grupo",
+                    "conteo": len(ejes),
+                    "hijos": [
+                        {
+                            "clave": f"eje:{e['globalid']}",
+                            "nombre": e["etiqueta"],
+                            "tipo": "eje",
+                            "globalid": e["globalid"],
+                            "conteo": 1,
+                        }
+                        for e in ejes
+                    ],
+                },
+                {
+                    "clave": "referencias:niveles",
+                    "nombre": "Niveles",
+                    "tipo": "grupo",
+                    "conteo": len(niveles_info),
+                    "hijos": [
+                        {
+                            "clave": f"nivel:{n['globalid']}",
+                            "nombre": n["nombre"],
+                            "tipo": "nivel-ref",
+                            "globalid": n["globalid"],
+                            "elevacion": n["elevacion"],
+                            "conteo": 1,
+                        }
+                        for n in niveles_info
+                    ],
+                },
+            ],
+        }
+        total_elementos = sum(n["conteo"] for n in hijos_edificio)
+        return {
+            "clave": "edificio",
+            "nombre": "Edificio",
+            "tipo": "edificio",
+            "conteo": total_elementos,
+            "hijos": [*hijos_edificio, referencias],
+        }
 
     def propiedades(self, globalid: str) -> dict[str, Any]:
         modelo = self._exigir_modelo()
