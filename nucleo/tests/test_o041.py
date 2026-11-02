@@ -14,12 +14,216 @@ import sys
 import time
 from pathlib import Path
 
+import ifcopenshell.util.placement as placement
 import pytest
 
 RAIZ = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(RAIZ / "nucleo"))
 
 from openrvt_nucleo.modelo import ModeloNucleo  # noqa: E402
+
+
+def _nuevo() -> ModeloNucleo:
+    nucleo = ModeloNucleo()
+    nucleo.nuevo("O041")
+    return nucleo
+
+
+def _entidad(nucleo: ModeloNucleo, gid: str):
+    return next(e for e in nucleo.modelo.by_type("IfcProduct") if e.GlobalId == gid)
+
+
+def _z(nucleo: ModeloNucleo, gid: str) -> float:
+    matriz = placement.get_local_placement(_entidad(nucleo, gid).ObjectPlacement)
+    return float(matriz[2][3])
+
+
+def _datos_muro(nucleo: ModeloNucleo, gid: str) -> dict:
+    return nucleo._datos_muro(_entidad(nucleo, gid))
+
+
+def _modelo_con_cerramiento(
+    nucleo: ModeloNucleo, altura_nivel: float = 2.60
+) -> tuple[str, str, str]:
+    """(muro, cerramiento, nivel1) con el muro de Nivel 0 a Nivel 1."""
+    nivel0 = nucleo.niveles()[0]["globalid"]
+    n1 = nucleo.nivel_crear("Nivel 1", altura_nivel)["creados"][0]
+    muro = nucleo.muro_crear("Block 15", nivel0, 0, 0, 4, 0)["creados"][0]
+    nucleo.restricciones_editar(muro, nivel_tope=n1)
+    cerramiento = nucleo.cerramiento_crear_en_muro(
+        "CE-1 Cerramiento 15×20", muro
+    )["creados"][0]
+    return muro, cerramiento, n1
+
+
+def _castillos_de(nucleo: ModeloNucleo, muro: str) -> list[str]:
+    salida = []
+    for e in nucleo.modelo.by_type("IfcColumn"):
+        if nucleo._leer_pset(e, "OPENRVT_Liga").get("Muro") == muro:
+            salida.append(str(e.GlobalId))
+    return salida
+
+
+def test_ligado_editar_nivel_cambia_la_altura_del_muro() -> None:
+    """O041: al bajar el cerramiento a Nivel 1 − 0.20, el muro se acorta.
+
+    Muro Block 15 de Nivel 0 a Nivel 1 (2.60); cerramiento CE-1 (H 0.20) ligado,
+    con tope 2.60. Al fijar desfase −0.20 el tope pasa a 2.40, el fondo a 2.20 y el
+    muro (que termina en la cara inferior del cerramiento) baja de 2.60 a 2.40.
+    """
+    nucleo = _nuevo()
+    muro, cerramiento, n1 = _modelo_con_cerramiento(nucleo)
+    nucleo.castillos_automaticos([muro], 3.0, None)
+    assert _datos_muro(nucleo, muro)["altura"] == pytest.approx(2.60, abs=1e-9)
+    nucleo.restricciones_editar(cerramiento, nivel_base=n1, desfase_base=-0.20)
+    assert _z(nucleo, cerramiento) == pytest.approx(2.30, abs=1e-9)
+    # El muro termina en la cara inferior (2.20); la altura guardada es 2.40.
+    assert _datos_muro(nucleo, muro)["altura"] == pytest.approx(2.40, abs=1e-9)
+    for castillo in _castillos_de(nucleo, muro):
+        datos = nucleo._leer_pset(_entidad(nucleo, castillo), "OPENRVT_Estructura")
+        assert datos["Altura"] == pytest.approx(2.20, abs=1e-9)
+
+
+def test_ligado_editar_desfase_es_un_solo_paso_de_deshacer() -> None:
+    """O041: cambiar el nivel o el desfase conserva el GlobalId y es un deshacer."""
+    nucleo = _nuevo()
+    muro, cerramiento, n1 = _modelo_con_cerramiento(nucleo)
+    nucleo.restricciones_editar(cerramiento, nivel_base=n1, desfase_base=-0.20)
+    assert _datos_muro(nucleo, muro)["altura"] == pytest.approx(2.40, abs=1e-9)
+    nucleo.deshacer()
+    assert _entidad(nucleo, cerramiento).GlobalId == cerramiento
+    assert _z(nucleo, cerramiento) == pytest.approx(2.50, abs=1e-9)
+    assert _datos_muro(nucleo, muro)["altura"] == pytest.approx(2.60, abs=1e-9)
+
+
+def test_ligado_sigue_el_eje_y_el_largo_pero_no_la_altura() -> None:
+    """O041: la liga es solo en planta; al mover el muro el cerramiento sigue el eje
+    y el largo, pero conserva su altura (que manda él)."""
+    nucleo = _nuevo()
+    muro, cerramiento, n1 = _modelo_con_cerramiento(nucleo)
+    nucleo.restricciones_editar(cerramiento, nivel_base=n1, desfase_base=0.30)
+    assert _z(nucleo, cerramiento) == pytest.approx(2.80, abs=1e-9)
+    # Mover el muro en planta no cambia la cota del cerramiento, solo su eje.
+    nucleo.elementos_mover([muro], 1.0, 2.0, 0.0)
+    datos = nucleo._leer_pset(_entidad(nucleo, cerramiento), "OPENRVT_Estructura")
+    assert datos["X1"] == pytest.approx(1.0, abs=1e-9)
+    assert datos["Y1"] == pytest.approx(2.0, abs=1e-9)
+    assert datos["Longitud"] == pytest.approx(4.0, abs=1e-9)
+    assert _z(nucleo, cerramiento) == pytest.approx(2.80, abs=1e-9)
+
+
+def test_soltar_del_muro_deja_la_altura_donde_esta() -> None:
+    """O041: «Soltar del muro» suelta la liga y deja el cerramiento donde está."""
+    nucleo = _nuevo()
+    _muro, cerramiento, _n1 = _modelo_con_cerramiento(nucleo)
+    nucleo.soltar_del_muro(cerramiento)
+    assert nucleo._leer_pset(_entidad(nucleo, cerramiento), "OPENRVT_Liga") == {}
+    assert _z(nucleo, cerramiento) == pytest.approx(2.50, abs=1e-9)
+
+
+# ------------------------------------------------------------------ matriz (O041 §4)
+
+
+def _todos_con_geometria(nucleo: ModeloNucleo) -> set[str]:
+    teselados = {e["globalid"] for e in nucleo.teselar(None)["elementos"]}
+    todos = {e["globalid"] for e in nucleo.elementos()}
+    return todos - teselados
+
+
+def _muro(nucleo: ModeloNucleo, nivel: str, x1, y1, x2, y2) -> str:
+    return nucleo.muro_crear("Block 15", nivel, x1, y1, x2, y2)["creados"][0]
+
+
+def test_matriz_L_T_y_cruz_sin_hueco_ni_volumen_duplicado() -> None:
+    """Uniones en L, T y cruz: cada cerramiento tiene malla y la suma de netos es el
+    volumen de la unión (sin huecos ni doble conteo)."""
+    nucleo = _nuevo()
+    nivel = nucleo.niveles()[0]["globalid"]
+    n1 = nucleo.nivel_crear("Nivel 1", 2.60)["creados"][0]
+    muros = []
+    # L en (0,0): horizontal +x y vertical +y.
+    muros += [_muro(nucleo, nivel, 0, 0, 4, 0), _muro(nucleo, nivel, 0, 0, 0, 3)]
+    # T en (10,0): horizontal pasante y vertical que llega.
+    muros += [_muro(nucleo, nivel, 8, 0, 12, 0), _muro(nucleo, nivel, 10, 0, 10, 3)]
+    # Cruz en (20,0): horizontal y vertical que se cruzan.
+    muros += [_muro(nucleo, nivel, 18, 0, 22, 0), _muro(nucleo, nivel, 20, -1.5, 20, 1.5)]
+    for muro in muros:
+        nucleo.restricciones_editar(muro, nivel_tope=n1)
+        nucleo.cerramiento_crear_en_muro("CE-1 Cerramiento 15×20", muro)
+    # Ningún elemento queda sin geometría.
+    assert _todos_con_geometria(nucleo) == set()
+    cantidades = nucleo.cantidades_estructura()
+    cerramientos = [e for e in cantidades["elementos"] if e["alias"] == "cerramiento"]
+    assert len(cerramientos) == len(muros)
+    assert sum(e["volumen_neto_m3"] for e in cerramientos) > 0
+    assert cantidades["total"]["volumen_neto_m3"] == pytest.approx(
+        cantidades["union_m3"], abs=1e-6
+    )
+
+
+def test_retícula_3x3_de_cuartos_con_cerramientos() -> None:
+    """Retícula de 3×3 cuartos (muros corridos): todos los cerramientos se teselan."""
+    nucleo = _nuevo()
+    nivel = nucleo.niveles()[0]["globalid"]
+    n1 = nucleo.nivel_crear("Nivel 1", 2.60)["creados"][0]
+    dx, dy = 4.0, 3.0
+    muros = []
+    for i in range(4):
+        muros.append(_muro(nucleo, nivel, 0, i * dy, 3 * dx, i * dy))
+    for j in range(4):
+        muros.append(_muro(nucleo, nivel, j * dx, 0, j * dx, 3 * dy))
+    for muro in muros:
+        nucleo.restricciones_editar(muro, nivel_tope=n1)
+        nucleo.cerramiento_crear_en_muro("CE-1 Cerramiento 15×20", muro)
+    assert _todos_con_geometria(nucleo) == set()
+    cantidades = nucleo.cantidades_estructura()
+    assert cantidades["total"]["volumen_neto_m3"] == pytest.approx(
+        cantidades["union_m3"], abs=1e-6
+    )
+
+
+def test_dos_ordenes_castillos_y_cerramientos_dan_el_mismo_volumen() -> None:
+    """Crear castillos y luego cerramientos, o cerramientos y luego castillos
+    automáticos, deja el mismo volumen de cerramientos."""
+
+    def construir(castillos_primero: bool) -> float:
+        nucleo = _nuevo()
+        nivel = nucleo.niveles()[0]["globalid"]
+        n1 = nucleo.nivel_crear("Nivel 1", 2.60)["creados"][0]
+        muro = _muro(nucleo, nivel, 0, 0, 6, 0)
+        nucleo.restricciones_editar(muro, nivel_tope=n1)
+        if castillos_primero:
+            nucleo.castillos_automaticos([muro], 3.0, None)
+            nucleo.cerramiento_crear_en_muro("CE-1 Cerramiento 15×20", muro)
+        else:
+            nucleo.cerramiento_crear_en_muro("CE-1 Cerramiento 15×20", muro)
+            nucleo.castillos_automaticos([muro], 3.0, None)
+        assert _todos_con_geometria(nucleo) == set()
+        cerramientos = [
+            e for e in nucleo.cantidades_estructura()["elementos"]
+            if e["alias"] == "cerramiento"
+        ]
+        return sum(e["volumen_neto_m3"] for e in cerramientos)
+
+    assert construir(True) == pytest.approx(construir(False), abs=1e-9)
+
+
+def test_cerramiento_sobre_muro_con_losa_y_sin_losa() -> None:
+    """El cerramiento se tesela tanto con losa encima como sin ella."""
+    nucleo = _nuevo()
+    nivel = nucleo.niveles()[0]["globalid"]
+    n1 = nucleo.nivel_crear("Nivel 1", 2.60)["creados"][0]
+    muro = _muro(nucleo, nivel, 0, 0, 4, 0)
+    nucleo.restricciones_editar(muro, nivel_tope=n1)
+    cerramiento = nucleo.cerramiento_crear_en_muro(
+        "CE-1 Cerramiento 15×20", muro
+    )["creados"][0]
+    assert _todos_con_geometria(nucleo) == set()
+    # Losa encima: el cerramiento y la losa conviven sin perderse.
+    nucleo.losa_crear(n1, [(-1, -1), (5, -1), (5, 1), (-1, 1)], espesor=0.10)
+    assert _todos_con_geometria(nucleo) == set()
+    datos = nucleo._leer_pset(_entidad(nucleo, cerramiento), "OPENRVT_Estructura")
+    assert datos["Longitud"] == pytest.approx(4.0, abs=1e-9)
 
 
 def _retícula(nucleo: ModeloNucleo, n: int) -> list[str]:

@@ -671,6 +671,13 @@ class ModeladoMixin:
                     ("DesfaseBase", "NivelTope", "DesfaseTope", "AlturaSinConexion"),
                 )
             self._regenerar_estructura(elemento)
+            # O041: el cerramiento ligado manda la altura; el muro y los castillos
+            # terminan en su cara inferior.
+            if (
+                elemento.is_a("IfcBeam")
+                and self._estructura_de_tipo(self._tipo_entidad(elemento)) == "cerramiento"
+            ):
+                self._muro_sigue_cerramiento(elemento)
 
     def _recalcular_restricciones(self, niveles: set[str]) -> list[Any]:
         """Recalcula los elementos ligados a cualquiera de esos niveles."""

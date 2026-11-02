@@ -12,6 +12,7 @@ export function DialogoCastillos() {
   const elementos = useModelo((s) => s.elementos);
   const [separacion, setSeparacion] = useState("3.00");
   const [error, setError] = useState<string | null>(null);
+  const [procesando, setProcesando] = useState(false);
   const muros = seleccionados.filter((gid) =>
     elementos.some((e) => e.globalid === gid && e.clase === "IfcWall"),
   );
@@ -23,7 +24,10 @@ export function DialogoCastillos() {
       setError("La separación debe ser un número mayor que cero.");
       return;
     }
+    setError(null);
+    setProcesando(true);
     const ok = await aplicar(valor);
+    setProcesando(false);
     if (!ok) setError("No se pudieron colocar los castillos.");
   };
 
@@ -59,19 +63,25 @@ export function DialogoCastillos() {
           <span>m</span>
         </label>
         {error && <p className="text-red-600">{error}</p>}
+        {procesando && (
+          <p data-testid="castillos-procesando" className="text-muted-foreground">
+            Colocando castillos…
+          </p>
+        )}
         <div className="flex justify-end gap-2">
           <button
             type="button"
             data-testid="castillos-cancelar"
             onClick={cerrar}
-            className="rounded border px-3 py-1 hover:bg-muted"
+            disabled={procesando}
+            className="rounded border px-3 py-1 hover:bg-muted disabled:opacity-50"
           >
             Cancelar
           </button>
           <button
             type="button"
             data-testid="castillos-aceptar"
-            disabled={!valido}
+            disabled={!valido || procesando}
             onClick={() => void aceptar()}
             className="rounded bg-primary px-3 py-1 text-primary-foreground disabled:opacity-50"
           >
