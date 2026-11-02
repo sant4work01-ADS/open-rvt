@@ -545,6 +545,7 @@ class ModeloNucleo(
             "clave": "referencias",
             "nombre": "Referencias",
             "tipo": "referencias",
+            "conteo": len(ejes) + len(niveles_info),
             "hijos": [
                 {
                     "clave": "referencias:ejes",
@@ -569,7 +570,7 @@ class ModeloNucleo(
                     "conteo": len(niveles_info),
                     "hijos": [
                         {
-                            "clave": f"nivel:{n['globalid']}",
+                            "clave": f"nivel-ref:{n['globalid']}",
                             "nombre": n["nombre"],
                             "tipo": "nivel-ref",
                             "globalid": n["globalid"],

@@ -114,6 +114,8 @@ def test_arbol_conteos_a_mano() -> None:
     # Referencias: 2 ejes y 2 niveles, fuera de la jerarquía de niveles.
     assert _grupo(arbol, "Ejes")["conteo"] == 2
     assert _grupo(arbol, "Niveles")["conteo"] == 2
+    # La rama Referencias muestra su total (antes decía «Referencias (0)»).
+    assert next(h for h in arbol["hijos"] if h["tipo"] == "referencias")["conteo"] == 4
     assert _grupo(arbol, "Ejes")["hijos"][0]["tipo"] == "eje"
     assert _grupo(arbol, "Niveles")["hijos"][0]["tipo"] == "nivel-ref"
 

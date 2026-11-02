@@ -134,6 +134,13 @@ export function ArbolProyecto({
       for (const hijo of nodo.hijos ?? []) visitar(hijo);
     };
     visitar(arbol);
+    // Si ya hay un elemento seleccionado (p. ej. al volver de la pestaña Vistas),
+    // se expande también su ruta para mostrarlo resaltado.
+    const seleccionada = seleccionados[0];
+    if (seleccionada) {
+      const ruta = rutaDeElemento(arbol, seleccionada);
+      if (ruta) for (const clave of ruta) iniciales.add(clave);
+    }
     setExpandidos(iniciales);
   }
 
@@ -239,10 +246,16 @@ export function ArbolProyecto({
     : filas;
   const totalAltura = filas.length * ALTO_FILA;
 
+  // Los elementos de un mismo tipo suelen llamarse igual («Muro Block 15»): se les
+  // agrega el inicio de su GlobalId para distinguirlos; el nombre completo va en title.
   const nombreConConteo = (nodo: NodoArbol) =>
-    nodo.tipo === "elemento" || nodo.tipo === "eje" || nodo.tipo === "nivel-ref"
-      ? nodo.nombre
-      : `${nodo.nombre} (${nodo.conteo ?? 0})`;
+    nodo.tipo === "elemento"
+      ? nodo.globalid
+        ? `${nodo.globalid.slice(0, 6)} · ${nodo.nombre}`
+        : nodo.nombre
+      : nodo.tipo === "eje" || nodo.tipo === "nivel-ref"
+        ? nodo.nombre
+        : `${nodo.nombre} (${nodo.conteo ?? 0})`;
 
   return (
     <aside
@@ -324,6 +337,7 @@ export function ArbolProyecto({
       {menu && (
         <div
           data-testid="arbol-menu"
+          data-clave={menu.clave}
           role="menu"
           style={{ position: "fixed", left: menu.x, top: menu.y, zIndex: 60 }}
           className="min-w-36 rounded-md border border-border bg-card py-1 text-xs shadow-lg"
@@ -424,6 +438,11 @@ export function ArbolProyecto({
           <IconoCandado estado={estadoCandado(nodo.clave)} />
         </button>
         <span
+          title={
+            nodo.tipo === "elemento" && nodo.globalid
+              ? `${nodo.nombre} · ${nodo.globalid}`
+              : nombreConConteo(nodo)
+          }
           className={
             seleccionado
               ? "truncate font-medium text-primary"
