@@ -132,6 +132,16 @@ def test_losa_desfase_idempotente_y_campo_general() -> None:
     assert _huella(nucleo, losa) == pytest.approx((-0.30, -0.30, 4.30, 3.30), abs=1e-9)
 
 
+def test_losa_desfase_negativo_mete_el_lado_hacia_adentro() -> None:
+    nucleo = _nuevo()
+    losa = _losa_rectangular(nucleo)
+    nucleo.elemento_editar(losa.GlobalId, {"cambio_borde": {"indice": 0, "desfase": -0.30}})
+    # Borde 0 es el lado inferior (y=0): negativo lo sube hacia adentro, a y=+0.30.
+    x0, y0, x1, y1 = _huella(nucleo, losa)
+    assert y0 == pytest.approx(0.30, abs=1e-9)
+    assert (x0, y1, x1) == pytest.approx((0.0, 3.0, 4.0), abs=1e-9)
+
+
 def test_losa_vieja_sin_base_toma_el_contorno_actual_como_base() -> None:
     nucleo = _nuevo()
     losa = _losa_rectangular(nucleo)
