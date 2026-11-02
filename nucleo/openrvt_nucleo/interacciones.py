@@ -481,13 +481,28 @@ class InteraccionesMixin:
             )
         return {"NivelBase": nivel, "DesfaseBase": desfase}
 
-    def cerramiento_crear_en_muro(self, tipo: str, muro: str) -> dict[str, Any]:
-        return self._lineal_en_muro(tipo, muro, "cerramiento")
+    def cerramiento_crear_en_muro(
+        self,
+        tipo: str,
+        muro: str,
+        nivel: str | None = None,
+        desfase: float | None = None,
+    ) -> dict[str, Any]:
+        return self._lineal_en_muro(
+            tipo, muro, "cerramiento", nivel_elegido=nivel, desfase_elegido=desfase
+        )
 
     def dala_crear_en_muro(self, tipo: str, muro: str) -> dict[str, Any]:
         return self._lineal_en_muro(tipo, muro, "dala")
 
-    def _lineal_en_muro(self, tipo: str, muro: str, esperado: str) -> dict[str, Any]:
+    def _lineal_en_muro(
+        self,
+        tipo: str,
+        muro: str,
+        esperado: str,
+        nivel_elegido: str | None = None,
+        desfase_elegido: float | None = None,
+    ) -> dict[str, Any]:
         self._exigir_modelo()
         tipo_entidad = self._tipo_estructura(tipo, ("IfcBeamType",))
         if self._estructura_de_tipo(tipo_entidad) != esperado:
@@ -524,6 +539,19 @@ class InteraccionesMixin:
         self._guardar_liga(viga, {"Muro": _gid(muro_entidad)})
         if esperado == "cerramiento":
             restriccion = self._restricciones_cerramiento_ligado(muro_entidad)
+            explicito = bool(nivel_elegido) or desfase_elegido is not None
+            if explicito:
+                # O041: la barra de opciones deja elegir nivel y desfase antes
+                # del clic; el desfase se mide del nivel a la cara superior.
+                if nivel_elegido:
+                    restriccion["NivelBase"] = _gid(
+                        self._nivel_por_gid(str(nivel_elegido))
+                    )
+                if desfase_elegido is not None:
+                    try:
+                        restriccion["DesfaseBase"] = float(desfase_elegido)
+                    except (TypeError, ValueError) as exc:
+                        raise self._error("El desfase no es un número.", -32602) from exc
             self._guardar_pset(viga, PSET_RESTRICCIONES, restriccion)
             self._guardar_pset(
                 viga,
@@ -534,6 +562,10 @@ class InteraccionesMixin:
                     "Desfase": restriccion["DesfaseBase"],
                 },
             )
+            if explicito:
+                # Recalcula Z y coloca el muro bajo la cara inferior, en la
+                # misma instantánea (un solo paso de Deshacer).
+                self._aplicar_restriccion(viga, restriccion)
         self._conectar(viga, muro_entidad)
         if esperado == "cerramiento":
             self._actualizar_castillos(muro_entidad)

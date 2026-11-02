@@ -571,6 +571,12 @@ class ModeladoMixin:
         ) != "FOOTING_BEAM"
         if es_zapata:
             z, altura = 0.0, 0.0
+        elif elemento.is_a("IfcBeam"):
+            # O041: trabes, cerramientos y dalas no tienen tope ni altura; su
+            # lecho de referencia sale del nivel más el desfase, sin exigir
+            # altura positiva (esa validación es de muros y columnas).
+            z = elev_base + float(restriccion.get("DesfaseBase") or 0.0)
+            altura = 0.0
         else:
             z, altura = altura_restringida(
                 elev_base,

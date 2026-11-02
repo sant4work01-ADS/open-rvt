@@ -121,6 +121,35 @@ def test_soltar_del_muro_deja_la_altura_donde_esta() -> None:
     assert _z(nucleo, cerramiento) == pytest.approx(2.50, abs=1e-9)
 
 
+def test_crear_con_nivel_y_desfase_de_la_barra() -> None:
+    """O041 §1: la barra de opciones aplica nivel y desfase al crear.
+
+    Muro Block 15 de Nivel 0 (0.00) a Nivel 1 (2.60). Con Nivel 0 y desfase 1.80
+    en la barra, la cara superior del cerramiento (CE-1, H 0.20) queda en 1.80,
+    su centro en 1.70, y el muro guarda altura 1.80 (la cara superior, como en
+    «la altura la manda el cerramiento»; los castillos pararían en 1.60).
+    Todo es un solo paso de Deshacer.
+    """
+    nucleo = _nuevo()
+    nivel0 = nucleo.niveles()[0]["globalid"]
+    n1 = nucleo.nivel_crear("Nivel 1", 2.60)["creados"][0]
+    muro = nucleo.muro_crear("Block 15", nivel0, 0, 0, 4, 0)["creados"][0]
+    nucleo.restricciones_editar(muro, nivel_tope=n1)
+    cerramiento = nucleo.cerramiento_crear_en_muro(
+        "CE-1 Cerramiento 15×20", muro, nivel=nivel0, desfase=1.80
+    )["creados"][0]
+    assert _z(nucleo, cerramiento) == pytest.approx(1.70, abs=1e-9)
+    assert _datos_muro(nucleo, muro)["altura"] == pytest.approx(1.80, abs=1e-9)
+    restriccion = nucleo._restricciones_de(_entidad(nucleo, cerramiento))
+    assert restriccion["NivelBase"] == nivel0
+    assert restriccion["DesfaseBase"] == pytest.approx(1.80, abs=1e-9)
+    # Un solo paso de Deshacer deshace la creación completa (incluido el ajuste
+    # de nivel y desfase): el cerramiento desaparece y el muro vuelve a 2.60.
+    nucleo.deshacer()
+    assert cerramiento not in {e.GlobalId for e in nucleo.modelo.by_type("IfcBeam")}
+    assert _datos_muro(nucleo, muro)["altura"] == pytest.approx(2.60, abs=1e-9)
+
+
 # ------------------------------------------------------------------ matriz (O041 §4)
 
 

@@ -362,7 +362,10 @@ class Servidor:
             )
         if metodo in ("cerramientos.crear_en_muro", "cerramiento.crear_en_muro"):
             return self._exigir().cerramiento_crear_en_muro(
-                str(params.get("tipo") or ""), str(params.get("muro") or "")
+                str(params.get("tipo") or ""),
+                str(params.get("muro") or ""),
+                params.get("nivel") or None,
+                params.get("desfase"),
             )
         if metodo in ("cerramientos.soltar_del_muro", "elementos.soltar_del_muro"):
             return self._exigir().soltar_del_muro(
