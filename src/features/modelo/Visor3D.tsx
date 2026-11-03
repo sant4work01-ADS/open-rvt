@@ -42,6 +42,7 @@ import { debeIgnorarGestoNativo, factorGestoZoom } from "@/lib/gestos";
 import { elegirDestinoDiagnostico } from "@/lib/dialogos";
 import { commands } from "@/lib/bindings";
 import {
+  buscarEnganche,
   colocarAbertura,
   describirEnganche,
   distanciaAEjeParalelo,
@@ -53,6 +54,15 @@ import {
   rectaDeEje,
   rectaDeMalla,
 } from "./alinear";
+import { bordesDePset } from "./bordesLosa";
+import {
+  asasDeLosa,
+  contornoPrevio,
+  desfaseConArrastre,
+  hayAsasLosa,
+  leerPoligonoWkt,
+  type AsaLosa,
+} from "./asasLosa";
 import {
   calcularFamiliasCotas,
   parsearCota,
@@ -1097,6 +1107,40 @@ export function Visor3D({
     /** O042: dirección elegida para el arrastre de V2, fija hasta soltar. */
     modoCodo: "eje" | "perpendicular" | null;
   } | null>(null);
+  // O034: asas de los bordes de la losa seleccionada y su arrastre en planta.
+  const propiedades = useModelo((s) => s.propiedades);
+  const asasLosa = useRef<
+    Array<
+      AsaLosa & {
+        punto: [number, number, number];
+      }
+    >
+  >([]);
+  const arrastreLosa = useRef<{
+    globalid: string;
+    indice: number;
+    desfaseInicial: number;
+    desfase: number;
+    normal: Punto2;
+    medio: Punto2;
+    inicio: Punto2;
+    poligono: Punto2[] | null;
+    movido: boolean;
+    pantallaInicio: { x: number; y: number };
+  } | null>(null);
+  // O034: Escape cancela el arrastre; el pointerup que llega después no debe
+  // reinterpretarse como un clic de selección (descartaría la losa).
+  const soltarLosaCancelado = useRef(false);
+  const [previewLosaPx, setPreviewLosaPx] = useState<
+    Array<{ x: number; y: number }> | null
+  >(null);
+  const [editorDesfaseLosa, setEditorDesfaseLosa] = useState<{
+    globalid: string;
+    indice: number;
+    izquierda: number;
+    arriba: number;
+    valor: string;
+  } | null>(null);
   // O027: píxeles de mundo del último dibujo y diámetro de globo de la vista, para
   // imanes y cotas temporales sin recalcular la cámara en cada movimiento.
   const mundoPorPxRef = useRef(1e-3);
@@ -1298,6 +1342,22 @@ export function Visor3D({
     let mejor: (typeof ejesInteraccion.current)[number] | null = null;
     let distancia = 16;
     for (const asa of ejesInteraccion.current) {
+      const p = pantallaDePunto(asa.punto);
+      if (!p) continue;
+      const d = Math.hypot(p.x - clientX, p.y - clientY);
+      if (d < distancia) {
+        distancia = d;
+        mejor = asa;
+      }
+    }
+    return mejor;
+  }, [pantallaDePunto]);
+
+  // O034: asa de borde de losa bajo el puntero (solo existe en planta con una losa).
+  const asaLosaEn = useCallback((clientX: number, clientY: number) => {
+    let mejor: (typeof asasLosa.current)[number] | null = null;
+    let distancia = 16;
+    for (const asa of asasLosa.current) {
       const p = pantallaDePunto(asa.punto);
       if (!p) continue;
       const d = Math.hypot(p.x - clientX, p.y - clientY);
@@ -4076,6 +4136,62 @@ export function Visor3D({
       }
     }
 
+    // O034: asas triangulares en el punto medio de cada borde de la losa
+    // seleccionada, apuntando hacia afuera. Solo en planta y con una losa.
+    asasLosa.current = [];
+    if (
+      vista.tipo === "planta" &&
+      !herramienta &&
+      !modoCorte &&
+      hayAsasLosa(seleccion, seleccionados, propiedades?.clase)
+    ) {
+      const pset = propiedades?.psets?.OPENRVT_Losa as
+        | Record<string, unknown>
+        | undefined;
+      const poligono = leerPoligonoWkt(
+        typeof pset?.Contorno === "string" ? pset.Contorno : null,
+      );
+      const asas = asasDeLosa(bordesDePset(pset), poligono);
+      const tamanoAsa = Math.max(mundoPorPx * 10, 0.05);
+      const zAsa = corteZ + 0.02;
+      for (const asa of asas) {
+        const [mx, my] = asa.medio;
+        const [nx, ny] = asa.normal;
+        const tx = -ny;
+        const ty = nx;
+        const base = tamanoAsa * 0.55;
+        const vertices = new Float32Array([
+          mx + nx * tamanoAsa,
+          my + ny * tamanoAsa,
+          zAsa,
+          mx - nx * base + tx * base,
+          my - ny * base + ty * base,
+          zAsa,
+          mx - nx * base - tx * base,
+          my - ny * base - ty * base,
+          zAsa,
+        ]);
+        const geometria = new THREE.BufferGeometry();
+        geometria.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
+        const material = new THREE.MeshBasicMaterial({
+          color: new THREE.Color(0xf59e0b),
+          side: THREE.DoubleSide,
+          depthTest: false,
+          depthWrite: false,
+          transparent: true,
+          opacity: 0.95,
+        });
+        const asaMalla = new THREE.Mesh(geometria, material);
+        asaMalla.renderOrder = 18;
+        asaMalla.userData.asaLosa = { indice: asa.indice };
+        grupoLocal.add(asaMalla);
+        asasLosa.current.push({ ...asa, punto: [mx, my, zAsa] });
+      }
+    }
+    if (contenedor.current) {
+      contenedor.current.dataset.asasLosa = String(asasLosa.current.length);
+    }
+
     // Trazas de los cortes sobre las plantas, con flechas en los extremos.
     if (vista.tipo === "planta") {
       const z = (vista.alturaPlano ?? caja.max[2]) + 0.02;
@@ -4143,6 +4259,7 @@ export function Visor3D({
     oscuro,
     seleccion,
     seleccionados,
+    propiedades,
     resaltado,
     puntoCorte,
     nivelGlobalidPorNombre,
@@ -5183,6 +5300,42 @@ export function Visor3D({
         evento.preventDefault();
         nodo.style.cursor = "grabbing";
       }
+      // O034: arrastrar el asa del borde de una losa en planta.
+      if (izquierdo && !paneable && !herramienta && !modoCorte && vista.tipo === "planta") {
+        const asaLosa = asaLosaEn(evento.clientX, evento.clientY);
+        if (asaLosa) {
+          soltarLosaCancelado.current = false;
+          const punto = puntoPlanta(evento);
+          if (punto) {
+            const props = useModelo.getState().propiedades;
+            const pset = props?.psets?.OPENRVT_Losa as
+              | Record<string, unknown>
+              | undefined;
+            const crudo = pset?.Contorno;
+            arrastreLosa.current = {
+              globalid: props?.globalid ?? "",
+              indice: asaLosa.indice,
+              desfaseInicial: asaLosa.desfase,
+              desfase: asaLosa.desfase,
+              normal: asaLosa.normal,
+              medio: asaLosa.medio,
+              inicio: punto,
+              poligono: leerPoligonoWkt(typeof crudo === "string" ? crudo : null),
+              movido: false,
+              pantallaInicio: { x: evento.clientX, y: evento.clientY },
+            };
+            setPreviewLosaPx(null);
+            setEditorDesfaseLosa(null);
+            try {
+              nodo.setPointerCapture(evento.pointerId);
+            } catch {
+              /* eventos sintéticos de las pruebas */
+            }
+            evento.preventDefault();
+            return;
+          }
+        }
+      }
       // O014b: arrastrar una cabeza de nivel para colocarla a mano.
       if (izquierdo && !paneable && !herramienta && !modoCorte) {
         const asaNivel = asaNivelEn(evento.clientX, evento.clientY);
@@ -5298,6 +5451,7 @@ export function Visor3D({
         evento.buttons === 0 &&
         evento.pointerType !== "touch" &&
         !arrastre.current &&
+        !arrastreLosa.current &&
         !arrastreNivel.current &&
         !arrastreEje.current &&
         !herramienta &&
@@ -5314,6 +5468,89 @@ export function Visor3D({
           setResaltado(gid);
           fijarPistaTab(textoPistaTab(siguiente));
         }
+      }
+      // O034: el borde de la losa sigue al puntero en su normal exterior.
+      const arrLosa = arrastreLosa.current;
+      if (arrLosa) {
+        if (!arrLosa.movido) {
+          const recorrido = Math.hypot(
+            evento.clientX - arrLosa.pantallaInicio.x,
+            evento.clientY - arrLosa.pantallaInicio.y,
+          );
+          if (recorrido < 3) return;
+          arrLosa.movido = true;
+        }
+        const crudo = puntoPlanta(evento);
+        if (!crudo) return;
+        // O034: primero los imanes de la planta (extremos, medios, cruces e
+        // intersecciones); si no hay ninguno, se usa el punto y el redondeo de
+        // 0.005 m de `desfaseConArrastre`.
+        const enganche = buscarEnganche(
+          crudo,
+          useModelo.getState().referencias,
+          null,
+          mundoPorPxRef.current,
+        );
+        const punto = enganche.tipo === "cuadricula" ? crudo : enganche.punto;
+        const delta: Punto2 = [
+          punto[0] - arrLosa.inicio[0],
+          punto[1] - arrLosa.inicio[1],
+        ];
+        const nuevo = desfaseConArrastre(
+          arrLosa.desfaseInicial,
+          arrLosa.normal,
+          delta,
+        );
+        arrLosa.desfase = nuevo;
+        const rect = nodo.getBoundingClientRect();
+        const z = (vista.alturaPlano ?? caja.max[2]) + 0.02;
+        if (arrLosa.poligono) {
+          const contorno = contornoPrevio(
+            arrLosa.poligono,
+            arrLosa.indice,
+            arrLosa.normal,
+            nuevo - arrLosa.desfaseInicial,
+          );
+          const puntos = contorno
+            ? contorno.map((punto) => {
+                const pantalla = pantallaDePunto([punto[0], punto[1], z]);
+                return pantalla
+                  ? { x: pantalla.x - rect.left, y: pantalla.y - rect.top }
+                  : null;
+              })
+            : null;
+          setPreviewLosaPx(
+            puntos && puntos.every((punto) => punto !== null)
+              ? (puntos as Array<{ x: number; y: number }>)
+              : null,
+          );
+        } else {
+          setPreviewLosaPx(null);
+        }
+        const desplazamiento = nuevo - arrLosa.desfaseInicial;
+        const medioNuevo: Punto2 = [
+          arrLosa.medio[0] + arrLosa.normal[0] * desplazamiento,
+          arrLosa.medio[1] + arrLosa.normal[1] * desplazamiento,
+        ];
+        const antes = pantallaDePunto([arrLosa.medio[0], arrLosa.medio[1], z]);
+        const despues = pantallaDePunto([medioNuevo[0], medioNuevo[1], z]);
+        if (antes && despues) {
+          const signo = nuevo > 0 ? "+" : "";
+          // Dos decimales como en la cota de Revit («+0.20»); solo se añade el
+          // tercero cuando el paso de 0.005 m lo necesita.
+          const decimales =
+            Math.abs(Math.round(nuevo * 1000) % 10) < 1e-9 ? 2 : 3;
+          setGuiaArrastre({
+            x1: antes.x - rect.left,
+            y1: antes.y - rect.top,
+            x2: despues.x - rect.left,
+            y2: despues.y - rect.top,
+            texto: `${signo}${nuevo.toFixed(decimales)} m`,
+            enganchado: true,
+          });
+        }
+        evento.preventDefault();
+        return;
       }
       // O014b: la cabeza de nivel sigue al puntero en vertical.
       const arrNivel = arrastreNivel.current;
@@ -5738,6 +5975,38 @@ export function Visor3D({
         }
         return;
       }
+      if (soltarLosaCancelado.current) {
+        soltarLosaCancelado.current = false;
+        setPreviewLosaPx(null);
+        setGuiaArrastre(null);
+        return;
+      }
+      const arrLosa = arrastreLosa.current;
+      if (arrLosa) {
+        arrastreLosa.current = null;
+        setPreviewLosaPx(null);
+        setGuiaArrastre(null);
+        if (arrLosa.movido) {
+          if (arrLosa.globalid) {
+            // Mismo comando que la tabla de Propiedades: un solo paso de deshacer.
+            void useModelo
+              .getState()
+              .editarElemento(arrLosa.globalid, {
+                cambio_borde: { indice: arrLosa.indice, desfase: arrLosa.desfase },
+              });
+          }
+        } else {
+          const rect = nodo.getBoundingClientRect();
+          setEditorDesfaseLosa({
+            globalid: arrLosa.globalid,
+            indice: arrLosa.indice,
+            izquierda: Math.max(70, Math.min(rect.width - 70, evento.clientX - rect.left)),
+            arriba: Math.max(8, Math.min(rect.height - 48, evento.clientY - rect.top - 38)),
+            valor: String(arrLosa.desfase),
+          });
+        }
+        return;
+      }
       const arrNivel = arrastreNivel.current;
       if (arrNivel) {
         arrastreNivel.current = null;
@@ -5869,16 +6138,21 @@ export function Visor3D({
       // O027: Escape cancela el arrastre y devuelve todo a como estaba.
       if (
         evento.key === "Escape" &&
-        (arrastreEje.current || arrastreNivel.current)
+        (arrastreEje.current || arrastreNivel.current || arrastreLosa.current)
       ) {
+        if (arrastreLosa.current) soltarLosaCancelado.current = true;
         arrastreEje.current = null;
         arrastreNivel.current = null;
+        arrastreLosa.current = null;
         ajusteEnCursoRef.current = null;
         setAjusteEnCurso(null);
         setAjustesNivelEnCurso({});
+        setPreviewLosaPx(null);
         setGuiaArrastre(null);
         evento.preventDefault();
-        evento.stopPropagation();
+        // El atajo global de App (mismo `window`) deseleccionaría la losa con Esc:
+        // hay que cortar también los demás oyentes del mismo nodo.
+        evento.stopImmediatePropagation();
         return;
       }
       if (evento.key === "Escape" && (menuEje || ejeSeleccionado)) {
@@ -5977,7 +6251,9 @@ export function Visor3D({
     nodo.addEventListener("contextmenu", alMenuContextual);
     window.addEventListener("pointermove", alMover);
     window.addEventListener("pointerup", alSoltar);
-    window.addEventListener("keydown", alTecla);
+    // O034: en captura para que Escape cancele el arrastre antes de que el atajo
+    // global de App (burbuja en el mismo `window`) deseleccione la losa.
+    window.addEventListener("keydown", alTecla, true);
     window.addEventListener("keyup", alSoltarTecla);
     return () => {
       nodo.removeEventListener("pointerdown", alBajar);
@@ -5985,7 +6261,7 @@ export function Visor3D({
       nodo.removeEventListener("contextmenu", alMenuContextual);
       window.removeEventListener("pointermove", alMover);
       window.removeEventListener("pointerup", alSoltar);
-      window.removeEventListener("keydown", alTecla);
+      window.removeEventListener("keydown", alTecla, true);
       window.removeEventListener("keyup", alSoltarTecla);
     };
   }, [
@@ -6014,6 +6290,7 @@ export function Visor3D({
     pantallaDePunto,
     metrosPorPixelActual,
     asaEjeEn,
+    asaLosaEn,
     asaNivelEn,
     lineaEjeEn,
     lineaNivelEn,
@@ -6063,6 +6340,21 @@ export function Visor3D({
       if (!asa) return null;
       return pantallaDePunto(asa.punto);
     };
+    // O034: asas de borde de losa en pantalla (índice de borde del pset).
+    (nodo as unknown as Record<string, unknown>).__openrvtAsaLosaAPantalla = (
+      indice: number,
+    ) => {
+      const asa = asasLosa.current.find((a) => a.indice === indice);
+      if (!asa) return null;
+      return pantallaDePunto(asa.punto);
+    };
+    (nodo as unknown as Record<string, unknown>).__openrvtAsasLosa = () =>
+      asasLosa.current.map((a) => ({
+        indice: a.indice,
+        medio: a.medio,
+        normal: a.normal,
+        desfase: a.desfase,
+      }));
     // O026: mover un eje desde la E2E por el mismo comando que la interfaz.
     (nodo as unknown as Record<string, unknown>).__openrvtMoverEje = (
       globalid: string,
@@ -6673,6 +6965,62 @@ export function Visor3D({
             {guiaArrastre.texto}
           </div>
         </>
+      )}
+      {previewLosaPx && (
+        <svg
+          data-testid="preview-losa"
+          data-puntos={previewLosaPx.length}
+          className="pointer-events-none absolute inset-0 z-20 h-full w-full"
+        >
+          <polygon
+            points={previewLosaPx.map((punto) => `${punto.x},${punto.y}`).join(" ")}
+            fill="rgba(245, 158, 11, 0.12)"
+            stroke="#f59e0b"
+            strokeWidth={2}
+            strokeDasharray="6 3"
+          />
+        </svg>
+      )}
+      {editorDesfaseLosa && (
+        <div
+          data-testid="asa-losa-editor"
+          className="absolute z-30 flex items-center gap-1 rounded border bg-background/95 p-1 text-[11px] shadow"
+          style={{ left: editorDesfaseLosa.izquierda, top: editorDesfaseLosa.arriba }}
+        >
+          <span className="text-muted-foreground">Desfase</span>
+          <input
+            data-testid="asa-losa-desfase"
+            autoFocus
+            type="text"
+            inputMode="decimal"
+            value={editorDesfaseLosa.valor}
+            onChange={(evento) =>
+              setEditorDesfaseLosa((actual) =>
+                actual ? { ...actual, valor: evento.target.value } : actual,
+              )
+            }
+            onKeyDown={(evento) => {
+              evento.stopPropagation();
+              if (evento.key === "Escape") {
+                evento.preventDefault();
+                setEditorDesfaseLosa(null);
+                return;
+              }
+              if (evento.key !== "Enter") return;
+              evento.preventDefault();
+              const valor = Number(editorDesfaseLosa.valor.replace(",", "."));
+              const editor = editorDesfaseLosa;
+              setEditorDesfaseLosa(null);
+              if (!Number.isFinite(valor)) return;
+              void useModelo.getState().editarElemento(editor.globalid, {
+                cambio_borde: { indice: editor.indice, desfase: valor },
+              });
+            }}
+            onBlur={() => setEditorDesfaseLosa(null)}
+            className="w-20 rounded border bg-background px-1 py-0.5 text-right"
+          />
+          <span className="text-muted-foreground">m</span>
+        </div>
       )}
       <div className="absolute left-2 top-2 z-10 flex gap-1">
         <button
