@@ -3011,22 +3011,29 @@ export function Visor3D({
               punto: [asaCodo[0], asaCodo[1], zEje],
             });
           }
-          ejesInteraccion.current.push({
-            globalid: eje.globalid,
-            etiqueta: eje.etiqueta,
-            lado: "inicio",
-            tipo: "base",
-            indice: null,
-            punto: [g.baseInicio[0], g.baseInicio[1], zEje],
-          });
-          ejesInteraccion.current.push({
-            globalid: eje.globalid,
-            etiqueta: eje.etiqueta,
-            lado: "fin",
-            tipo: "base",
-            indice: null,
-            punto: [g.baseFin[0], g.baseFin[1], zEje],
-          });
+          // O042 (revisión): en un extremo con codo el extremo original ya no se
+          // dibuja; su pinzamiento quedaría flotando fuera de la polilínea. Ese
+          // lado solo conserva el pinzamiento de V2.
+          if ((ajuste?.codosInicio?.length ?? 0) === 0) {
+            ejesInteraccion.current.push({
+              globalid: eje.globalid,
+              etiqueta: eje.etiqueta,
+              lado: "inicio",
+              tipo: "base",
+              indice: null,
+              punto: [g.baseInicio[0], g.baseInicio[1], zEje],
+            });
+          }
+          if ((ajuste?.codosFin?.length ?? 0) === 0) {
+            ejesInteraccion.current.push({
+              globalid: eje.globalid,
+              etiqueta: eje.etiqueta,
+              lado: "fin",
+              tipo: "base",
+              indice: null,
+              punto: [g.baseFin[0], g.baseFin[1], zEje],
+            });
+          }
         }
 
         // O027: un candado por grupo de extremos alineados (no uno por eje), junto
@@ -3875,32 +3882,41 @@ export function Visor3D({
             grupoLocal.add(burbuja);
             burbujasEje.current.push({ etiqueta: eje.etiqueta, grupo: burbuja });
           }
-          ejesInteraccion.current.push({
-            globalid: eje.globalid,
-            etiqueta: eje.etiqueta,
-            lado: "fin",
-            tipo: "globo",
-            indice: null,
-            punto: pos,
-          });
-          ejesInteraccion.current.push({
-            globalid: eje.globalid,
-            etiqueta: eje.etiqueta,
-            lado: "fin",
-            tipo: "codo-nuevo",
-            indice: null,
-            punto: puntoHZ(globo.t, globo.z - globo.radio * 1.8),
-          });
+          // O042: con codo el globo no se arrastra y tampoco hay asa de codo nuevo;
+          // el único pinzamiento del codo es V2 (se agrega más abajo).
+          const ajusteAlzado = ajusteEnCurso?.[eje.globalid] ?? vista.ejes?.[eje.globalid];
+          const conCodoFin = (ajusteAlzado?.codosFin?.length ?? 0) > 0;
+          if (!conCodoFin) {
+            ejesInteraccion.current.push({
+              globalid: eje.globalid,
+              etiqueta: eje.etiqueta,
+              lado: "fin",
+              tipo: "globo",
+              indice: null,
+              punto: pos,
+            });
+            ejesInteraccion.current.push({
+              globalid: eje.globalid,
+              etiqueta: eje.etiqueta,
+              lado: "fin",
+              tipo: "codo-nuevo",
+              indice: null,
+              punto: puntoHZ(globo.t, globo.z - globo.radio * 1.8),
+            });
+          }
         }
         for (const { eje, s } of cruces) {
-          ejesInteraccion.current.push({
-            globalid: eje.globalid,
-            etiqueta: eje.etiqueta,
-            lado: "inicio",
-            tipo: "base",
-            indice: null,
-            punto: puntoHZ(s, zBajoEje),
-          });
+          const ajusteAlzado = ajusteEnCurso?.[eje.globalid] ?? vista.ejes?.[eje.globalid];
+          if ((ajusteAlzado?.codosInicio?.length ?? 0) === 0) {
+            ejesInteraccion.current.push({
+              globalid: eje.globalid,
+              etiqueta: eje.etiqueta,
+              lado: "inicio",
+              tipo: "base",
+              indice: null,
+              punto: puntoHZ(s, zBajoEje),
+            });
+          }
           // O031 (regresión de O025b): recuperar las asas de los codos en el
           // alzado, que la reescritura de la anotación había perdido. Sin ellas no
           // se puede arrastrar ni quitar un codo con el menú contextual.

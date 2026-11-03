@@ -109,32 +109,40 @@ export function geometriaEje(
   const codosInicio = limpio?.codosInicio ?? [];
   const codosFin = limpio?.codosFin ?? [];
   const diametro = opciones.diametroGlobo ?? 0;
-  // O042: con el codo completo (V1 y V2) el globo se apoya D más afuera de V2 y el
-  // tramo final queda paralelo al eje. Los archivos viejos guardaban el centro en
-  // `extremo`; si no hay dos nodos se respeta el extremo.
+  const radio = diametro / 2;
+  // O042 (revisión): con el codo completo (V1 y V2) el globo queda paralelo al eje,
+  // a 1.0·D de V2 hasta su borde (1.5·D hasta el centro). Los archivos viejos
+  // guardaban el centro en `extremo`; si no hay dos nodos se respeta el extremo.
   const globoDerivado = (codos: Punto2[], lado: LadoEje): Punto2 | null => {
     if (codos.length < 2 || !(diametro > 1e-12)) return null;
-    return desplazar(codos[1], afueraEje(inicio, fin, lado), diametro);
+    return desplazar(codos[1], afueraEje(inicio, fin, lado), radio + diametro);
   };
+  // Sin codo el borde del globo toca el extremo de la línea: el centro queda medio
+  // diámetro más afuera. Así el globo no se mueve a lo largo del eje al agregar codo.
+  const globoBase = (base: Punto2, lado: LadoEje): Punto2 =>
+    radio > 0 ? desplazar(base, afueraEje(inicio, fin, lado), radio) : base;
   const globoInicio =
     globoDerivado(codosInicio, "inicio") ??
     limpio?.extremoInicio ??
-    codosInicio[codosInicio.length - 1] ??
-    inicio;
+    (codosInicio.length > 0 ? codosInicio[codosInicio.length - 1] : globoBase(inicio, "inicio"));
   const globoFin =
     globoDerivado(codosFin, "fin") ??
     limpio?.extremoFin ??
-    codosFin[codosFin.length - 1] ??
-    fin;
+    (codosFin.length > 0 ? codosFin[codosFin.length - 1] : globoBase(fin, "fin"));
+  // Borde del globo hacia el interior del eje: allí termina la línea dibujada.
+  const bordeGlobo = (globo: Punto2, lado: LadoEje): Punto2 =>
+    radio > 0 ? desplazar(globo, afueraEje(inicio, fin, lado), -radio) : globo;
   const igual = (a: Punto2, b: Punto2) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= 1e-9;
   // O042: con codo el extremo bruto del IfcGrid ya no se visita; la línea pasa por
   // V1 y V2. Sin codo se conserva el recorrido de siempre (incluido el extremo libre).
+  const inicioConGlobo = codosInicio.length > 0 || !!opciones.globoInicio;
+  const puntoInicio = inicioConGlobo ? globoInicio : bordeGlobo(globoInicio, "inicio");
   const parteInicio =
     codosInicio.length > 0
       ? [globoInicio, ...codosInicio.slice().reverse()]
-      : igual(globoInicio, inicio)
+      : igual(puntoInicio, inicio)
         ? [inicio]
-        : [globoInicio, inicio];
+        : [puntoInicio, inicio];
   const parteFin =
     codosFin.length > 0
       ? [...codosFin, globoFin]
@@ -142,17 +150,20 @@ export function geometriaEje(
         ? [fin]
         : [fin, globoFin];
   const puntos = deduplicar([...parteInicio, ...parteFin]);
-  // El eje discontinuo llega hasta V1 (el primer nodo del codo) de cada lado.
+  // El eje discontinuo llega hasta V1 (el primer nodo del codo) de cada lado; sin
+  // codo termina en el borde del globo, nunca en su centro.
+  const bordeInicio = bordeGlobo(globoInicio, "inicio");
+  const bordeFin = bordeGlobo(globoFin, "fin");
   const ejeDiscontinuo: [Punto2, Punto2] = [
-    codosInicio.length > 0 ? codosInicio[0] : globoInicio,
-    codosFin.length > 0 ? codosFin[0] : globoFin,
+    codosInicio.length > 0 ? codosInicio[0] : bordeInicio,
+    codosFin.length > 0 ? codosFin[0] : bordeFin,
   ];
   const tramosSolidos: Punto2[][] = [];
   if (codosInicio.length > 0) {
-    tramosSolidos.push([globoInicio, ...codosInicio.slice().reverse()]);
+    tramosSolidos.push([bordeInicio, ...codosInicio.slice().reverse()]);
   }
   if (codosFin.length > 0) {
-    tramosSolidos.push([...codosFin, globoFin]);
+    tramosSolidos.push([...codosFin, bordeFin]);
   }
   return {
     puntos,
@@ -168,12 +179,13 @@ export function geometriaEje(
 /**
  * O042: «Agregar codo» crea el codo completo (V1 y V2) de una vez.
  *
- * - V1 queda a 2·D antes del extremo, sobre el eje.
- * - V2 está D más afuera que V1 y D de lado (perpendicular).
- * - El tramo final mide D/2 hasta el borde del globo; el centro queda a D de V2,
- *   paralelo al eje, de modo que la línea dibujada no se superpone con V2.
+ * - El globo conserva su posición a lo largo del eje y solo se separa 0.6·D de lado.
+ * - V2 queda 1.5·D antes del centro del globo (1.0·D hasta el borde + el radio) y
+ *   0.6·D de lado.
+ * - V1 queda 0.85·D antes de V2 y vuelve al eje; la diagonal mide lo que resulte.
+ * - El tramo final (V2 → borde del globo) mide 1.0·D y es paralelo al eje.
  *
- * `extremo` es el extremo de la línea del eje (o el globo libre si se había
+ * `extremo` es el centro del globo antes del codo (el extremo libre si se había
  * arrastrado) y `direccion` el sentido hacia afuera. Un archivo viejo con un solo
  * nodo se completa: el nodo existente es V1.
  */
@@ -192,14 +204,21 @@ export function agregarCodoEje(
   const afuera = normalizar(direccion);
   const perpendicular: Punto2 = [-afuera[1], afuera[0]];
   const D = diametroGlobo;
-  const v1 =
-    codos.length > 0
-      ? ([codos[0][0], codos[0][1]] as Punto2)
-      : desplazar(extremo, afuera, -2 * D);
-  const v2: Punto2 = [
-    v1[0] + afuera[0] * D + perpendicular[0] * D,
-    v1[1] + afuera[1] * D + perpendicular[1] * D,
-  ];
+  const v1: Punto2 = [0, 0];
+  const v2: Punto2 = [0, 0];
+  if (codos.length > 0) {
+    // Archivo viejo con un solo nodo: ese nodo es V1 y el codo se completa.
+    v1[0] = codos[0][0];
+    v1[1] = codos[0][1];
+    v2[0] = v1[0] + afuera[0] * 0.85 * D + perpendicular[0] * 0.6 * D;
+    v2[1] = v1[1] + afuera[1] * 0.85 * D + perpendicular[1] * 0.6 * D;
+  } else {
+    // El globo no cambia su posición a lo largo del eje: solo se separa de lado.
+    v2[0] = extremo[0] - afuera[0] * 1.5 * D + perpendicular[0] * 0.6 * D;
+    v2[1] = extremo[1] - afuera[1] * 1.5 * D + perpendicular[1] * 0.6 * D;
+    v1[0] = v2[0] - afuera[0] * 0.85 * D - perpendicular[0] * 0.6 * D;
+    v1[1] = v2[1] - afuera[1] * 0.85 * D - perpendicular[1] * 0.6 * D;
+  }
   const salida: AjusteEjeVista = { ...base, [claveCodos]: [v1, v2] };
   // El globo se deriva de V2; un extremo libre guardado ya no aplica.
   delete salida[claveExtremo];
@@ -551,19 +570,18 @@ export function puntoAsaCodoNuevo(
     diametroGlobo,
   });
   const globo = lado === "inicio" ? (g.globoInicio ?? bases.inicio) : g.globoFin;
-  // El punto de la polilínea contiguo al globo, hacia el interior del eje.
+  // El punto de la polilínea contiguo al globo (su borde), hacia el interior del eje.
   const adyacente =
     lado === "inicio"
       ? (g.puntos[1] ?? bases.fin)
       : (g.puntos[g.puntos.length - 2] ?? bases.inicio);
-  const dx = globo[0] - adyacente[0];
-  const dy = globo[1] - adyacente[1];
+  const dx = adyacente[0] - globo[0];
+  const dy = adyacente[1] - globo[1];
   const largo = Math.hypot(dx, dy);
   if (largo <= 1e-9) return [globo[0], globo[1]];
-  return [
-    globo[0] - (dx / largo) * separacion,
-    globo[1] - (dy / largo) * separacion,
-  ];
+  // Desde el centro, avanza hasta el borde (radio) y luego la separación pedida.
+  const avance = (diametroGlobo > 1e-12 ? diametroGlobo / 2 : 0) + separacion;
+  return [globo[0] + (dx / largo) * avance, globo[1] + (dy / largo) * avance];
 }
 
 /**

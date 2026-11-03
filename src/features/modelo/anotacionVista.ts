@@ -472,7 +472,8 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
         })
       : null;
     let t = geo ? geo.globoFin[0] : eje.s;
-    const zGloboEje = geo ? geo.globoFin[1] + radio : zGlobo;
+    // O042: `globoFin` ya es el centro del globo (el borde queda sobre el extremo).
+    const zGloboEje = geo ? geo.globoFin[1] : zGlobo;
     if (!geo) {
       // Si el globo se encima con otro, se desplaza con codo (como la referencia).
       while (ocupados.some((o) => t + radio > o.t0 && t - radio < o.t1)) t += radio * 2.2;
