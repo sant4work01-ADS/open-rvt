@@ -1052,10 +1052,11 @@ export const useModelo = create<EstadoModelo>((set, get) => {
   ): Promise<boolean> => {
     // O006d: con ejes previos y sin Ctrl/Alt, el eje se fuerza paralelo a la familia
     // más cercana y toma sus extremos; el segundo punto solo fija la distancia.
-    const restriccion = restringirEje(origen, destino, get().referencias.ejes, libre);
-    // O036b: sin familia, el eje se fuerza a la dirección dominante desde el
-    // primer punto; nunca se crea un eje oblicuo.
-    const forzado = restriccion ? null : ejeOrtogonal(origen, destino);
+    // O036b: el eje pasa por el primer punto y va horizontal o vertical; el segundo
+    // punto solo da la dirección dominante y el largo (también dentro de una familia).
+    const ortogonal = ejeOrtogonal(origen, destino);
+    const restriccion = restringirEje(origen, ortogonal.fin, get().referencias.ejes, libre);
+    const forzado = restriccion ? null : ortogonal;
     const inicio = restriccion?.inicio ?? origen;
     const fin = restriccion?.fin ?? forzado!.fin;
     if (Math.hypot(fin[0] - inicio[0], fin[1] - inicio[1]) < 0.01) {

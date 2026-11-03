@@ -1636,7 +1636,7 @@ export function Visor3D({
       herramienta === "eje" && puntosHerramienta.length > 0 && ratonHerramienta
         ? restringirEje(
             puntosHerramienta[0],
-            ratonHerramienta,
+            ejeOrtogonal(puntosHerramienta[0], ratonHerramienta).fin,
             referencias.ejes,
             ejeLibre,
           )
@@ -4351,7 +4351,7 @@ export function Visor3D({
       herramienta === "eje" && puntosHerramienta.length > 0 && ratonHerramienta
         ? restringirEje(
             puntosHerramienta[0],
-            ratonHerramienta,
+            ejeOrtogonal(puntosHerramienta[0], ratonHerramienta).fin,
             referencias.ejes,
             ejeLibre,
           )
