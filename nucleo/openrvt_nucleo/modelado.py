@@ -1680,7 +1680,7 @@ class ModeladoMixin:
         y1 = float(datos.get("Y1") or datos.get("Y") or 0.0)
         return x1, y1, float(datos.get("X2") or x1), float(datos.get("Y2") or y1)
 
-    def _ejes_en_punto(self, x: float, y: float) -> list[str]:
+    def _ejes_que_pasan_por(self, x: float, y: float) -> list[str]:
         """O036: ejes que pasan por el punto, con la tolerancia de columnas y zapatas."""
         salida: list[str] = []
         for grid in self.modelo.by_type("IfcGrid"):
@@ -1701,8 +1701,8 @@ class ModeladoMixin:
         self, x1: float, y1: float, x2: float, y2: float
     ) -> tuple[str, str, str] | None:
         """O036: dos extremos en cruces que comparten un eje guía."""
-        inicio_ejes = self._ejes_en_punto(x1, y1)
-        fin_ejes = self._ejes_en_punto(x2, y2)
+        inicio_ejes = self._ejes_que_pasan_por(x1, y1)
+        fin_ejes = self._ejes_que_pasan_por(x2, y2)
         if len(inicio_ejes) < 2 or len(fin_ejes) < 2:
             return None
         comunes = [gid for gid in inicio_ejes if gid in fin_ejes]
@@ -2305,7 +2305,7 @@ class ModeladoMixin:
         """O036: gira un eje en el IfcGrid; lo enlazado sigue sus cruces nuevos."""
         self._exigir_modelo()
         try:
-            angulo = float(angulo)
+            rad = float(angulo)
         except (TypeError, ValueError) as exc:
             raise self._error("El ángulo del giro no es un número.", -32602) from exc
         grid, eje = self._eje_por_gid(globalid)
@@ -2317,7 +2317,6 @@ class ModeladoMixin:
                 cx, cy = float(centro[0]), float(centro[1])
             except (TypeError, ValueError, IndexError) as exc:
                 raise self._error("El centro de giro no es un punto.", -32602) from exc
-        rad = math.radians(angulo)
         coseno, seno = math.cos(rad), math.sin(rad)
 
         def girar(px: float, py: float) -> tuple[float, float]:
@@ -2354,9 +2353,9 @@ class ModeladoMixin:
         self.con_cambios = True
         return self._resultado(
             modificados=modificados,
-            mensaje=f"Eje girado {angulo:.2f}° alrededor de ({cx:.2f}, {cy:.2f}).",
+            mensaje=f"Eje girado {math.degrees(rad):.2f}° alrededor de ({cx:.2f}, {cy:.2f}).",
             centro=[cx, cy],
-            angulo=angulo,
+            angulo=rad,
         )
 
     def ejes_separacion(

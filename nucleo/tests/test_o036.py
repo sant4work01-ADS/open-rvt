@@ -104,6 +104,14 @@ def test_muro_con_un_extremo_fuera_de_cruce_no_se_enlaza() -> None:
     assert _pset(nucleo, muro).get("EnlaceTipo") is None
 
 
+def test_muro_entre_dos_cruces_sin_eje_comun_no_se_enlaza() -> None:
+    nucleo = _nuevo()
+    _reticula(nucleo)
+    # (0,0) es el cruce 1-A y (4,3) el 2-B: no comparten ningún eje.
+    muro = nucleo.muro_crear("Block 15", _nivel(nucleo), 0, 0, 4, 3)["creados"][0]
+    assert _pset(nucleo, muro).get("EnlaceTipo") is None
+
+
 def test_contratrabe_y_trabe_de_dos_clics_sobre_cruces_se_enlazan() -> None:
     nucleo = _nuevo()
     ejes = _reticula(nucleo)
@@ -140,7 +148,7 @@ def test_giro_que_deja_un_eje_paralelo_se_rechaza_sin_cambios() -> None:
     largo_antes = nucleo.propiedades(muro)["psets"]["OPENRVT_Muro"]["Longitud"]
     historial_antes = len(nucleo._deshacer)
     with pytest.raises(Exception, match="paralelo"):
-        nucleo.ejes_girar(ejes["A"], 90.0, [0.0, 0.0])
+        nucleo.ejes_girar(ejes["A"], math.radians(90.0), [0.0, 0.0])
     assert _extremos_eje(nucleo, ejes["A"]) == pytest.approx(antes)
     assert (
         nucleo.propiedades(muro)["psets"]["OPENRVT_Muro"]["Longitud"]
@@ -166,8 +174,15 @@ def test_giro_valido_mueve_cruces_muro_y_columna_y_deshace_en_un_paso() -> None:
     # 4 ± 1.5·tan 10°.
     cruce_2a = 4.0 + 1.5 * math.tan(math.radians(10.0))
     cruce_2b = 4.0 - 1.5 * math.tan(math.radians(10.0))
-    nucleo.ejes_girar(ejes["2"], 10.0, [4.0, 1.5])
+    nucleo.ejes_girar(ejes["2"], math.radians(10.0), [4.0, 1.5])
 
+    # Cruces calculados a mano: 2-A = (4 + 1.5·tan 10°, 0) y 2-B = (4 − 1.5·tan 10°, 3).
+    assert nucleo._cruce_de_ejes(ejes["2"], ejes["A"]) == pytest.approx(
+        (cruce_2a, 0.0), abs=1e-9
+    )
+    assert nucleo._cruce_de_ejes(ejes["2"], ejes["B"]) == pytest.approx(
+        (cruce_2b, 3.0), abs=1e-9
+    )
     assert _plano(nucleo, columna) == pytest.approx((cruce_2b, 3.0), abs=1e-9)
     assert nucleo.propiedades(muro)["psets"]["OPENRVT_Muro"]["Longitud"] == pytest.approx(
         cruce_2a, abs=1e-9
@@ -209,7 +224,7 @@ def test_rpc_crea_muro_enlazado_y_lo_gira() -> None:
 
     servidor.despachar(
         "ejes.girar",
-        {"globalid": ejes["2"], "angulo": 10.0, "centro": [4.0, 1.5]},
+        {"globalid": ejes["2"], "angulo": math.radians(10.0), "centro": [4.0, 1.5]},
     )
     assert nucleo.propiedades(muro)["psets"]["OPENRVT_Muro"]["Longitud"] == pytest.approx(
         4.0 + 1.5 * math.tan(math.radians(10.0)), abs=1e-9

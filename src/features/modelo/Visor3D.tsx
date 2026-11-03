@@ -7190,6 +7190,18 @@ export function Visor3D({
               >
                 Ocultar globo fin
               </button>
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="eje-menu-girar"
+                className="w-full rounded px-2 py-1 text-left hover:bg-muted"
+                onClick={() => {
+                  useModelo.getState().iniciarGiroEje(menuEje.globalid);
+                  setMenuEje(null);
+                }}
+              >
+                Girar…
+              </button>
             </>
           )}
           <button
