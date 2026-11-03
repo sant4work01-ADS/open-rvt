@@ -301,6 +301,19 @@ class Servidor:
                 params.get("dy", 0.0),
                 params.get("dz", 0.0),
             )
+        if metodo in ("elementos.recortar_extender", "elementos.recortar-extender"):
+            return self._exigir().elementos_recortar_extender(
+                str(params.get("globalid") or ""),
+                str(params.get("referencia") or ""),
+                params.get("punto_conservar"),
+            )
+        if metodo in ("elementos.recortar_esquina", "elementos.recortar-esquina"):
+            return self._exigir().elementos_recortar_esquina(
+                str(params.get("globalid_a") or ""),
+                str(params.get("globalid_b") or ""),
+                params.get("punto_a"),
+                params.get("punto_b"),
+            )
         if metodo == "elementos.borrar":
             return self._exigir().elementos_borrar(
                 params.get("globalids"), bool(params.get("dependientes", True))
@@ -311,6 +324,27 @@ class Servidor:
                 params.get("dx", 0.0),
                 params.get("dy", 0.0),
                 params.get("dz", 0.0),
+            )
+        if metodo in ("elementos.espejo", "muros.espejo"):
+            return self._exigir().elementos_espejo(
+                params.get("globalids"),
+                params.get("p1"),
+                params.get("p2"),
+                bool(params.get("copiar", True)),
+            )
+        if metodo in ("elementos.matriz_lineal", "elementos.matriz"):
+            return self._exigir().elementos_matriz_lineal(
+                params.get("globalids"),
+                params.get("vector"),
+                params.get("numero", 2),
+                str(params.get("modo") or "al_segundo"),
+            )
+        if metodo == "elementos.matriz_polar":
+            return self._exigir().elementos_matriz_polar(
+                params.get("globalids"),
+                params.get("centro"),
+                params.get("angulo_total", 360.0),
+                params.get("numero", 2),
             )
         if metodo == "elementos.editar":
             return self._exigir().elemento_editar(

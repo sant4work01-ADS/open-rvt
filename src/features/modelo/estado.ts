@@ -36,6 +36,7 @@ import {
 import {
   areaPoligono,
   colocarAbertura,
+  ejeBajoPunto,
   ejeConDistancia,
   ejeOrtogonal,
   muroBajoPunto,
@@ -51,6 +52,7 @@ import {
   type Referencias,
 } from "./herramientas";
 import { estilosPorDefecto, normalizarEstilos, type Estilos } from "./estilos";
+import { cortarRectas, recortarRecta } from "./planta";
 import { construirAberturas } from "./aberturas";
 import { normalizarAjusteEje } from "./ejesVista";
 import {
@@ -81,8 +83,24 @@ export type Herramienta =
   | "cerramiento"
   | "dala"
   | "alinear"
-  | "nivel";
+  | "nivel"
+  | "recortar_extender"
+  | "espejo"
+  | "matriz";
 export type AlineacionMuro = "centro" | "interior" | "exterior";
+/** ED1: modos de la herramienta Recortar/Extender. */
+export type ModoRecorte = "esquina" | "elemento" | "varios";
+export interface LineaRecorte {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+export interface ReferenciaRecorte {
+  tipo: "elemento" | "eje";
+  globalid: string;
+  linea: LineaRecorte;
+}
 
 /** O026: referencia de la herramienta Alinear (eje, nivel o cara de elemento). */
 export interface ReferenciaAlinear {
@@ -175,6 +193,21 @@ export interface OpcionesNivel {
   elevacionTexto: string;
 }
 
+/** ED2: casilla «Copiar» de la herramienta Espejo (marcada por omisión). */
+export interface OpcionesEspejo {
+  copiar: boolean;
+}
+
+/** ED2: barra de opciones de la herramienta Matriz. */
+export interface OpcionesMatriz {
+  modo: "lineal" | "polar";
+  /** Número total de elementos, incluido el original. */
+  numero: number;
+  alUltimo: boolean;
+  /** Ángulo total en grados para la matriz polar. */
+  angulo: number;
+}
+
 /** O006d: un bloque de la retícula (vertical u horizontal). */
 export interface BloqueEjesReticula {
   separaciones: number[];
@@ -255,10 +288,28 @@ interface EstadoModelo {
   /** O026: referencia elegida y alineación con candado de la herramienta Alinear. */
   referenciaAlinear: ReferenciaAlinear | null;
   alineando: AlineacionActiva | null;
+  /** ED1: modo y referencias de Recortar/Extender. */
+  modoRecorte: ModoRecorte;
+  referenciaRecorte: ReferenciaRecorte | null;
+  recorteInicial: (ReferenciaRecorte & { punto: Punto2 }) | null;
+  vistaPreviaRecorte: (LineaRecorte & { globalid: string }) | null;
+  fijarModoRecorte: (modo: ModoRecorte) => void;
+  clicRecorte: (objetivo: {
+    tipo: "elemento" | "eje";
+    globalid: string;
+    punto: Punto2;
+  }) => Promise<void>;
+  previsualizarRecorte: (globalid: string, punto: Punto2) => void;
+  terminarRecorteExtender: () => void;
   opcionesMuro: OpcionesMuro;
   /** O029: nombre automático, vista de planta y elevación exacta del nivel nuevo. */
   opcionesNivel: OpcionesNivel;
   fijarOpcionesNivel: (cambios: Partial<OpcionesNivel>) => void;
+  /** ED2: espejo y matriz lineales/polares. */
+  opcionesEspejo: OpcionesEspejo;
+  fijarOpcionesEspejo: (cambios: Partial<OpcionesEspejo>) => void;
+  opcionesMatriz: OpcionesMatriz;
+  fijarOpcionesMatriz: (cambios: Partial<OpcionesMatriz>) => void;
   /** O029: cotas temporales del nivel bajo el cursor. */
   cotasNivel: { inferior: NivelRef | null; superior: NivelRef | null } | null;
   /** O029: clic en alzado/corte: [posición horizontal, elevación]. */
@@ -891,6 +942,29 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     return (await ejecutarResultado(metodo, params)) !== null;
   };
 
+  /** ED1: línea de ubicación de un elemento lineal ya teselado. */
+  const lineaDeElemento = (globalid: string): LineaRecorte | null => {
+    const malla = get().mallas.find((m) => m.globalid === globalid);
+    if (!malla) return null;
+    if (malla.eje) {
+      const [x1, y1, x2, y2] = malla.eje;
+      return { x1, y1, x2, y2 };
+    }
+    const datos = malla.estructura?.datos as Record<string, unknown> | undefined;
+    if (!datos || datos.X2 === undefined || datos.Y2 === undefined) return null;
+    const x1 = Number(datos.X1 ?? datos.X);
+    const y1 = Number(datos.Y1 ?? datos.Y);
+    const x2 = Number(datos.X2);
+    const y2 = Number(datos.Y2);
+    if (![x1, y1, x2, y2].every((v) => Number.isFinite(v))) return null;
+    return { x1, y1, x2, y2 };
+  };
+
+  const lineaDeEje = (globalid: string): LineaRecorte | null => {
+    const eje = get().referencias.ejes.find((e) => e.globalid === globalid);
+    return eje ? { x1: eje.x1, y1: eje.y1, x2: eje.x2, y2: eje.y2 } : null;
+  };
+
   /** O033: tras un rechazo, recarga las propiedades sin borrar el aviso. */
   const refrescarPropiedades = async (globalid: string) => {
     const error = get().error;
@@ -1161,6 +1235,10 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     herramienta: null,
     referenciaAlinear: null,
     alineando: null,
+    modoRecorte: "esquina",
+    referenciaRecorte: null,
+    recorteInicial: null,
+    vistaPreviaRecorte: null,
     opcionesMuro: {
       tipo: "",
       altura: 2.6,
@@ -1171,6 +1249,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     opcionesLosa: { lado: "exterior", desfase: 0 },
     opcionesCerramiento: { nivel: "", desfase: "" },
     opcionesNivel: { nombre: "", nombreAutomatico: true, crearPlanta: true, elevacionTexto: "" },
+    opcionesEspejo: { copiar: true },
+    opcionesMatriz: { modo: "lineal", numero: 3, alUltimo: false, angulo: 360 },
     cotasNivel: null,
     tiposMuro: [],
     tiposHerramienta: [],
@@ -1660,13 +1740,23 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         dala: "Dala de desplante: clic sobre un muro.",
         alinear: "Alinear: clic en la referencia (eje, nivel o cara) y luego en la cara del elemento.",
         nivel: "Nivel: dos clics horizontales; la elevación se engancha o se teclea.",
+        recortar_extender: "Recortar/Extender: haga clic en el primer elemento.",
+        espejo: "Espejo: clic en un eje o en un elemento lineal; o dos puntos del eje.",
+        matriz: "Matriz: lineal con dos puntos o polar con un clic en el centro.",
       };
       const conservarSeleccion =
-        herramienta === "mover" || herramienta === "copiar" || herramienta === "losa";
+        herramienta === "mover" ||
+        herramienta === "copiar" ||
+        herramienta === "losa" ||
+        herramienta === "espejo" ||
+        herramienta === "matriz";
       set({
         herramienta,
         referenciaAlinear: null,
         alineando: null,
+        referenciaRecorte: null,
+        recorteInicial: null,
+        vistaPreviaRecorte: null,
         puntosHerramienta: [],
         ratonHerramienta: null,
         engancheHerramienta: null,
@@ -1690,6 +1780,9 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         nivelSeleccionado: null,
         referenciaAlinear: null,
         alineando: null,
+        referenciaRecorte: null,
+        recorteInicial: null,
+        vistaPreviaRecorte: null,
         puntosHerramienta: [],
         ratonHerramienta: null,
         engancheHerramienta: null,
@@ -1757,6 +1850,168 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       bitacoraHerramienta("alinear", bloquear ? "bloquear" : "desbloquear");
     },
 
+    fijarModoRecorte: (modo) => {
+      const avisos: Record<ModoRecorte, string> = {
+        esquina: "A esquina: haga clic en dos elementos lineales.",
+        elemento: "Un elemento: clic en la referencia (elemento o eje) y luego en el elemento.",
+        varios: "Varios elementos: clic en la referencia y luego en cada elemento. Enter o Esc termina.",
+      };
+      set({
+        modoRecorte: modo,
+        referenciaRecorte: null,
+        recorteInicial: null,
+        vistaPreviaRecorte: null,
+        aviso: avisos[modo],
+      });
+    },
+
+    clicRecorte: async (objetivo) => {
+      const { tipo, globalid, punto } = objetivo;
+      const modo = get().modoRecorte;
+      if (tipo === "eje") {
+        if (modo === "esquina") {
+          set({ aviso: "A esquina: haga clic en dos elementos lineales." });
+          return;
+        }
+        const linea = lineaDeEje(globalid);
+        if (!linea) return;
+        set({
+          referenciaRecorte: { tipo: "eje", globalid, linea },
+          vistaPreviaRecorte: null,
+          aviso:
+            modo === "varios"
+              ? "Varios elementos: clic en cada elemento a ajustar. Enter o Esc termina."
+              : "Un elemento: clic en el elemento a recortar o extender.",
+        });
+        bitacoraHerramienta("recortar_extender", "referencia");
+        return;
+      }
+      const linea = lineaDeElemento(globalid);
+      if (!linea) {
+        set({
+          aviso:
+            "Solo se recortan o extienden muros, contratrabes, trabes, dalas, " +
+            "cerramientos y zapatas corridas.",
+        });
+        return;
+      }
+      if (modo === "esquina") {
+        const inicial = get().recorteInicial;
+        if (!inicial) {
+          set({
+            recorteInicial: { tipo: "elemento", globalid, linea, punto },
+            vistaPreviaRecorte: null,
+            aviso: "A esquina: clic en el segundo elemento.",
+          });
+          bitacoraHerramienta("recortar_extender", "punto", { x: punto[0], y: punto[1] });
+          return;
+        }
+        if (inicial.globalid === globalid) {
+          set({ aviso: "Elija otro elemento para formar la esquina." });
+          return;
+        }
+        const resultado = await ejecutarResultado("elementos.recortar_esquina", {
+          globalid_a: inicial.globalid,
+          globalid_b: globalid,
+          punto_a: inicial.punto,
+          punto_b: punto,
+        });
+        if (!resultado) return;
+        set({ recorteInicial: null, vistaPreviaRecorte: null });
+        bitacoraHerramienta("recortar_extender", "terminar");
+        return;
+      }
+      const referencia = get().referenciaRecorte;
+      if (!referencia) {
+        set({
+          referenciaRecorte: { tipo: "elemento", globalid, linea },
+          vistaPreviaRecorte: null,
+          aviso:
+            modo === "varios"
+              ? "Varios elementos: clic en cada elemento a ajustar. Enter o Esc termina."
+              : "Un elemento: clic en el elemento a recortar o extender.",
+        });
+        bitacoraHerramienta("recortar_extender", "referencia");
+        return;
+      }
+      if (referencia.globalid === globalid) {
+        set({ aviso: "Elija un elemento distinto de la referencia." });
+        return;
+      }
+      const resultado = await ejecutarResultado("elementos.recortar_extender", {
+        globalid,
+        referencia: referencia.globalid,
+        punto_conservar: punto,
+      });
+      if (!resultado) return;
+      set({
+        vistaPreviaRecorte: null,
+        ...(modo === "elemento" ? { referenciaRecorte: null } : {}),
+      });
+      bitacoraHerramienta("recortar_extender", "terminar");
+    },
+
+    previsualizarRecorte: (globalid, punto) => {
+      if (get().herramienta !== "recortar_extender") return;
+      const previa = get().vistaPreviaRecorte;
+      const linea = lineaDeElemento(globalid);
+      const referencia =
+        get().modoRecorte === "esquina"
+          ? get().recorteInicial?.linea
+          : get().referenciaRecorte?.linea;
+      if (!linea || !referencia) {
+        if (previa) set({ vistaPreviaRecorte: null });
+        return;
+      }
+      const corte = cortarRectas(
+        [linea.x1, linea.y1, linea.x2, linea.y2],
+        [referencia.x1, referencia.y1, referencia.x2, referencia.y2],
+      );
+      if (!corte) {
+        if (previa) set({ vistaPreviaRecorte: null });
+        return;
+      }
+      const nuevo = recortarRecta(
+        [linea.x1, linea.y1, linea.x2, linea.y2],
+        corte.punto,
+        punto,
+      );
+      if (!nuevo) {
+        if (previa) set({ vistaPreviaRecorte: null });
+        return;
+      }
+      if (
+        previa &&
+        previa.globalid === globalid &&
+        Math.abs(previa.x1 - nuevo.x1) < 1e-9 &&
+        Math.abs(previa.y1 - nuevo.y1) < 1e-9 &&
+        Math.abs(previa.x2 - nuevo.x2) < 1e-9 &&
+        Math.abs(previa.y2 - nuevo.y2) < 1e-9
+      ) {
+        return;
+      }
+      set({
+        vistaPreviaRecorte: {
+          globalid,
+          x1: nuevo.x1,
+          y1: nuevo.y1,
+          x2: nuevo.x2,
+          y2: nuevo.y2,
+        },
+      });
+    },
+
+    terminarRecorteExtender: () => {
+      if (get().herramienta !== "recortar_extender") return;
+      set({
+        referenciaRecorte: null,
+        recorteInicial: null,
+        vistaPreviaRecorte: null,
+        aviso: "Recortar/Extender: haga clic en la referencia.",
+      });
+      bitacoraHerramienta("recortar_extender", "terminar");
+    },
+
     cancelarTrazo: () => {
       const herramienta = get().herramienta;
       if (!herramienta) return false;
@@ -1781,6 +2036,10 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       set({ opcionesMuro: { ...get().opcionesMuro, ...cambios } }),
     fijarOpcionesLosa: (cambios) =>
       set({ opcionesLosa: { ...get().opcionesLosa, ...cambios } }),
+    fijarOpcionesEspejo: (cambios) =>
+      set({ opcionesEspejo: { ...get().opcionesEspejo, ...cambios } }),
+    fijarOpcionesMatriz: (cambios) =>
+      set({ opcionesMatriz: { ...get().opcionesMatriz, ...cambios } }),
     fijarOpcionesCerramiento: (cambios) =>
       set({ opcionesCerramiento: { ...get().opcionesCerramiento, ...cambios } }),
     voltearMuro: async (globalid) => {
@@ -2089,6 +2348,71 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       );
       const p = enganche.punto;
       bitacoraHerramienta(herramienta, "punto", { x: p[0], y: p[1] });
+      if (herramienta === "espejo") {
+        if (get().seleccionados.length === 0) {
+          set({ aviso: "Seleccione uno o varios elementos antes de reflejarlos." });
+          return;
+        }
+        const elegido = puntos.length === 0 ? ejeBajoPunto(get().referencias, p) : null;
+        const origen = elegido ? elegido.p1 : puntos[0];
+        const fin = elegido ? elegido.p2 : p;
+        if (!elegido && puntos.length === 0) {
+          set({
+            puntosHerramienta: [p],
+            aviso: "Espejo: segundo punto del eje o clic sobre un eje/arista.",
+          });
+          return;
+        }
+        const ok = await ejecutar("elementos.espejo", {
+          globalids: get().seleccionados,
+          p1: origen,
+          p2: fin,
+          copiar: get().opcionesEspejo.copiar,
+        });
+        if (ok) {
+          set({ puntosHerramienta: [], ...limpiarTrazoExtra() });
+          bitacoraHerramienta("espejo", "terminar", { x: p[0], y: p[1] });
+        }
+        return;
+      }
+      if (herramienta === "matriz") {
+        if (get().seleccionados.length === 0) {
+          set({ aviso: "Seleccione uno o varios elementos antes de crear la matriz." });
+          return;
+        }
+        const opciones = get().opcionesMatriz;
+        if (opciones.modo === "polar") {
+          const ok = await ejecutar("elementos.matriz_polar", {
+            globalids: get().seleccionados,
+            centro: p,
+            angulo_total: opciones.angulo,
+            numero: opciones.numero,
+          });
+          if (ok) {
+            set({ puntosHerramienta: [], ...limpiarTrazoExtra() });
+            bitacoraHerramienta("matriz", "terminar", { x: p[0], y: p[1] });
+          }
+          return;
+        }
+        if (puntos.length === 0) {
+          set({
+            puntosHerramienta: [p],
+            aviso: "Matriz lineal: segundo punto del vector.",
+          });
+          return;
+        }
+        const ok = await ejecutar("elementos.matriz_lineal", {
+          globalids: get().seleccionados,
+          vector: [p[0] - puntos[0][0], p[1] - puntos[0][1]],
+          numero: opciones.numero,
+          modo: opciones.alUltimo ? "al_ultimo" : "al_segundo",
+        });
+        if (ok) {
+          set({ puntosHerramienta: [], ...limpiarTrazoExtra() });
+          bitacoraHerramienta("matriz", "terminar", { x: p[0], y: p[1] });
+        }
+        return;
+      }
       if (herramienta === "castillo") {
         const bajo = muroBajoPunto(get().referencias, p, 0.35);
         if (bajo) {
