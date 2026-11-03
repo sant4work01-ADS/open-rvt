@@ -628,3 +628,46 @@ export function areaPoligono(puntos: Punto2[]): number {
 export function formatearMetros(valor: number): string {
   return `${valor.toFixed(2)} m`;
 }
+
+/**
+ * O043: nivel y desfase con los que se crea un cerramiento desde la vista activa.
+ *
+ * En una planta manda el nivel de la planta (desfase 0) salvo que la barra de
+ * opciones haya elegido otro nivel o desfase. En alzado, corte y 3D se conserva la
+ * regla de O041: sin datos explícitos, el núcleo cuelga el cerramiento del tope del
+ * muro.
+ */
+export function opcionesCerramientoEnVista(
+  vista: { tipo: string; nivel?: string } | undefined,
+  opciones: { nivel: string; desfase: string },
+  niveles: readonly { globalid: string; elevacion: number }[] = [],
+): { nivel?: string; desfase?: number } {
+  if (vista?.tipo !== "planta") return {};
+  const desfase = Number(opciones.desfase.replace(",", "."));
+  const desfaseValido =
+    opciones.desfase.trim() !== "" && Number.isFinite(desfase);
+  // O043: en la planta más baja no se fuerza su nivel (el cerramiento quedaría a
+  // ras de suelo); ahí sigue mandando la regla de O041 salvo elección expresa.
+  if (!plantaTomaNivelPropio(vista, niveles)) {
+    return {
+      ...(opciones.nivel ? { nivel: opciones.nivel } : {}),
+      ...(desfaseValido ? { desfase } : {}),
+    };
+  }
+  const nivel = opciones.nivel || vista.nivel;
+  return {
+    ...(nivel ? { nivel } : {}),
+    desfase: desfaseValido ? desfase : 0,
+  };
+}
+
+/** O043: ¿la planta activa tiene algún nivel por debajo (nivel intermedio)? */
+export function plantaTomaNivelPropio(
+  vista: { tipo: string; nivel?: string } | undefined,
+  niveles: readonly { globalid: string; elevacion: number }[],
+): boolean {
+  if (vista?.tipo !== "planta" || !vista.nivel) return false;
+  const propio = niveles.find((n) => n.globalid === vista.nivel);
+  if (!propio) return false;
+  return niveles.some((n) => n.elevacion < propio.elevacion - 1e-9);
+}

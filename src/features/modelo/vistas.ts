@@ -614,3 +614,29 @@ export function migrarNivelesVisibles(
   });
   return { vistas: migradas, cambiadas };
 }
+
+/**
+ * O043: qué elementos entran en una planta como corte horizontal.
+ *
+ * Con «Niveles visibles» vacío se ve todo (como antes). Si el nivel de la propia
+ * planta está marcado, manda el rango de vista: se ve lo que corta el plano o
+ * queda por debajo hasta la profundidad, aunque su nivel base sea otro (un muro
+ * del Nivel 0 que sube a 3.60 aparece en la planta de 2.20). Los demás niveles
+ * marcados funcionan como filtro adicional por nivel base.
+ */
+export function elementoVisibleEnPlanta(
+  vista: Vista,
+  nivelGlobalid: string | undefined,
+  minZ: number,
+  maxZ: number,
+): boolean {
+  const visibles = vista.nivelesVisibles;
+  if (visibles.length === 0) return true;
+  if (nivelGlobalid && visibles.includes(nivelGlobalid)) return true;
+  if (!vista.nivel || !visibles.includes(vista.nivel)) return false;
+  if (!Number.isFinite(minZ) || !Number.isFinite(maxZ)) return false;
+  const corte = vista.alturaPlano;
+  if (corte === undefined) return true;
+  const fondo = vista.profundidad ?? -Infinity;
+  return minZ <= corte + 1e-4 && maxZ >= fondo - 1e-4;
+}

@@ -10,7 +10,11 @@ import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
 import { Text, configureTextBuilder } from "troika-three-text";
 import type { Abertura, AjusteEjeVista, Caja, ElementoMalla, Nivel, Vista } from "./tipos";
-import { categoriaVisible, dibujaSiluetaSobreCorte } from "./vistas";
+import {
+  categoriaVisible,
+  dibujaSiluetaSobreCorte,
+  elementoVisibleEnPlanta,
+} from "./vistas";
 import { useModelo } from "./estado";
 import {
   calcularPlantaMuros,
@@ -2037,7 +2041,20 @@ export function Visor3D({
         return false;
       }
       const gid = nivelGlobalidPorNombre.get(malla.nivel);
-      if (nivelesVisibles.size > 0 && gid && !nivelesVisibles.has(gid)) return false;
+      if (vista.tipo === "planta") {
+        // O043: la planta es un corte horizontal; se ve lo que cruza el plano o
+        // queda dentro de la profundidad de vista, venga del nivel que venga.
+        let minZ = Infinity;
+        let maxZ = -Infinity;
+        for (let i = 2; i < malla.vertices.length; i += 3) {
+          const z = malla.vertices[i];
+          if (z < minZ) minZ = z;
+          if (z > maxZ) maxZ = z;
+        }
+        if (!elementoVisibleEnPlanta(vista, gid, minZ, maxZ)) return false;
+      } else if (nivelesVisibles.size > 0 && gid && !nivelesVisibles.has(gid)) {
+        return false;
+      }
       return true;
     });
 
@@ -4125,6 +4142,10 @@ export function Visor3D({
         cotasInteraccion.current.filter((c) => c.tipo !== "total").length,
       );
       nodoVisor.dataset.mallasDibujadas = String(visibles.length);
+      // O043: qué mallas entraron en la vista (para comprobar el corte horizontal).
+      nodoVisor.dataset.mallasVisibles = visibles
+        .map((elemento) => elemento.globalid)
+        .join(",");
       nodoVisor.dataset.seccionPolilineas = String(polilineasSeccion);
       nodoVisor.dataset.capasPlanta = String(lineasCapasPlanta);
       nodoVisor.dataset.capas3d = String(mallasCapas3D);

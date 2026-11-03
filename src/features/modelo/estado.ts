@@ -40,6 +40,8 @@ import {
   ejeConDistancia,
   ejeOrtogonal,
   muroBajoPunto,
+  opcionesCerramientoEnVista,
+  plantaTomaNivelPropio,
   puntoConLongitud,
   proyectarSobreSegmento,
   puntoDibujo,
@@ -1341,12 +1343,19 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     },
 
     fijarVista: (id) => {
+      const vista = get().vistas.find((v) => v.id === id);
+      const opciones = get().opcionesCerramiento;
+      // O043: la elección de nivel de cerramiento solo manda en planta; al pasar
+      // a alzado, corte o 3D vuelve la regla de O041 (tope del muro).
+      const limpiarNivel =
+        vista !== undefined && vista.tipo !== "planta" && opciones.nivel !== "";
       set({
         vistaActivaId: id,
         modoCorte: false,
         puntoCorte: null,
         ejeSeleccionado: null,
         nivelSeleccionado: null,
+        ...(limpiarNivel ? { opcionesCerramiento: { ...opciones, nivel: "" } } : {}),
       });
     },
 
@@ -2440,21 +2449,38 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         if (bajo) {
           const tipo = tipoEstructural(herramienta);
           if (!tipo) return;
-          const extras: { nivel?: string; desfase?: number } = {};
+          const extras: {
+            nivel?: string;
+            desfase?: number;
+            desde_planta?: boolean;
+          } = {};
           if (herramienta === "cerramiento") {
-            const opciones = get().opcionesCerramiento;
-            if (opciones.nivel) extras.nivel = opciones.nivel;
-            const desfase = Number(opciones.desfase.replace(",", "."));
-            if (opciones.desfase.trim() !== "" && Number.isFinite(desfase)) {
-              extras.desfase = desfase;
+            const vistaActiva = get().vistas.find(
+              (v) => v.id === get().vistaActivaId,
+            );
+            Object.assign(
+              extras,
+              opcionesCerramientoEnVista(
+                vistaActiva,
+                get().opcionesCerramiento,
+                get().niveles,
+              ),
+            );
+            if (plantaTomaNivelPropio(vistaActiva, get().niveles)) {
+              extras.desde_planta = true;
             }
           }
-          await ejecutar(
+          const resultado = await ejecutarResultado(
             herramienta === "cerramiento"
               ? "cerramientos.crear_en_muro"
               : "dalas.crear_en_muro",
             { tipo: tipo.nombre, muro: bajo.muro.globalid, ...extras },
           );
+          // O043: el rechazo del núcleo (muro con cerramiento en ese nivel) se
+          // muestra como aviso, no solo como error, junto al modelo sin tocar.
+          if (!resultado && herramienta === "cerramiento" && get().error) {
+            set({ aviso: get().error });
+          }
           return;
         }
       }

@@ -8,6 +8,7 @@ import {
   useModelo,
   type ModoRecorte,
 } from "./estado";
+import { plantaTomaNivelPropio } from "./herramientas";
 import type { LineaUbicacion } from "./tipos";
 
 export function BarraHerramienta() {
@@ -237,7 +238,11 @@ export function BarraHerramienta() {
                 <span className="text-muted-foreground">Nivel</span>
                 <select
                   data-testid="cerramiento-nivel"
-                  value={opcionesCerramiento.nivel}
+                  value={
+                    plantaTomaNivelPropio(vistaActiva, niveles)
+                      ? opcionesCerramiento.nivel || vistaActiva?.nivel || ""
+                      : opcionesCerramiento.nivel
+                  }
                   onChange={(e) =>
                     fijarOpcionesCerramiento({ nivel: e.target.value })
                   }
