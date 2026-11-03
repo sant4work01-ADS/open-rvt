@@ -234,3 +234,6 @@ def test_flujo_servidor_guarda_y_reabre_el_recorte(tmp_path: Path) -> None:
     assert (datos["x1"], datos["y1"], datos["x2"], datos["y2"]) == pytest.approx(
         (0, 0, 4, 0), abs=1e-9
     )
+    partidas = otro.medicion_calcular()["partidas"]
+    muro_m2 = next(p for p in partidas if p["unidad"] == "m2")
+    assert muro_m2["total"] == pytest.approx(10.40, abs=1e-9)
