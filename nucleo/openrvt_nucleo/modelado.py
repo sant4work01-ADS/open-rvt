@@ -5521,9 +5521,15 @@ class ModeladoMixin:
         if entidad.is_a("IfcWall"):
             return "muro"
         try:
-            return self._estructura_de_tipo(self._tipo_entidad(entidad))
+            alias = self._estructura_de_tipo(self._tipo_entidad(entidad))
         except Exception:
             return None
+        return (
+            alias
+            if alias
+            in ("contratrabe", "trabe", "dala", "cerramiento", "zapata_corrida")
+            else None
+        )
 
     def _linea_de_recorte(self, entidad: Any) -> tuple[float, float, float, float]:
         if entidad.is_a("IfcWall"):

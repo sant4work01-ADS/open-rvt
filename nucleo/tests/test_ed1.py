@@ -237,3 +237,36 @@ def test_flujo_servidor_guarda_y_reabre_el_recorte(tmp_path: Path) -> None:
     partidas = otro.medicion_calcular()["partidas"]
     muro_m2 = next(p for p in partidas if p["unidad"] == "m2")
     assert muro_m2["total"] == pytest.approx(10.40, abs=1e-9)
+
+
+def test_solo_acepta_elementos_lineales() -> None:
+    nucleo = _nuevo()
+    nivel = _nivel(nucleo)
+    muro = nucleo.muro_crear("Block 15", nivel, 0, 0, 4, 0)["creados"][0]
+    columna = nucleo.columna_crear(
+        "C-1 Columna 30×30", nivel, 0, 0
+    )["creados"][0]
+
+    with pytest.raises(ErrorNucleo) as error:
+        nucleo.elementos_recortar_extender(columna, muro, [0, 0])
+    assert "Solo se recortan o extienden" in error.value.mensaje
+
+    with pytest.raises(ErrorNucleo) as error:
+        nucleo.elementos_recortar_extender(muro, columna, [1, 0])
+    assert "La referencia debe ser un elemento lineal o un eje" in error.value.mensaje
+
+
+def test_punto_conservar_invalido_no_cambia_nada() -> None:
+    nucleo = _nuevo()
+    nivel = _nivel(nucleo)
+    eje = nucleo.eje_crear("A", 4, -2, 4, 8)["creados"][0]
+    muro = nucleo.muro_crear("Block 15", nivel, 0, 0, 6, 0)["creados"][0]
+    antes = _linea_muro(nucleo, muro)
+    historial = len(nucleo._deshacer)
+
+    with pytest.raises(ErrorNucleo) as error:
+        nucleo.elementos_recortar_extender(muro, eje, [])
+
+    assert error.value.mensaje == "Falta el punto del lado que se conserva."
+    assert _linea_muro(nucleo, muro) == antes
+    assert len(nucleo._deshacer) == historial
