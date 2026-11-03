@@ -86,6 +86,8 @@ Con la app Tauri y WebDriver:
 4. Recorta M3 contra el eje x=4 conservando el clic en (1,6).
 5. Extiende la contratrabe hasta el muro en x=5.
 6. Deshacer (Ctrl+Z) y Rehacer (Ctrl+Y), comprobando los extremos tras cada paso.
+7. Modo «Varios elementos»: referencia en el eje x=4 y dos muros ajustados; Enter
+   termina la secuencia y la barra vuelve a pedir la referencia.
 
 Capturas: `docs/progreso/ED1/ed1-antes.png`, `ed1-previa.png`, `ed1-despues.png`.
 
@@ -93,7 +95,7 @@ Capturas: `docs/progreso/ED1/ed1-antes.png`, `ed1-previa.png`, `ed1-despues.png`
 $ OPENRVT_PYTHON=… OPENRVT_NUCLEO_DIR=…/nucleo \
   CARGO_TARGET_DIR=$HOME/.cache/pp-target/openrvt-ed1 \
   npx node --test e2e/ed1.test.js
-✔ ED1: recortar y extender con clics reales (10.0 s)
+✔ ED1: recortar y extender con clics reales (13.6 s)
 ```
 
 Antes de construir el binario se ejecutó `herramientas/preparar_python.sh windows`

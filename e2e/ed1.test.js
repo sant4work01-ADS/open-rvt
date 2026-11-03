@@ -299,6 +299,8 @@ test("ED1: recortar y extender con clics reales", async () => {
     const m2 = await crearMuro(4, 1, 4, 5);
     const m3 = await crearMuro(0, 6, 6, 6);
     const m4 = await crearMuro(5, 8, 5, 12);
+    const m5 = await crearMuro(0, 7, 6, 7);
+    const m6 = await crearMuro(0, 13, 6, 13);
     const eje = (
       await invocar(ses, "ejes.crear", {
         etiqueta: "A",
@@ -385,6 +387,26 @@ test("ED1: recortar y extender con clics reales", async () => {
     await esperar(500);
     const c3 = await estructura(ses, contratrabe);
     assert.ok(cerca(c3.x2, 5), "Rehacer no volvió a extender la contratrabe a x=5");
+
+    // 5. Modo «Varios elementos»: una referencia y dos ajustes; Enter termina.
+    // Deshacer/Rehacer recarga el modelo y sale de la herramienta: se reactiva.
+    await escribir(ses, "tr");
+    await esperarHerramienta(ses, "recortar_extender");
+    await elegirModo(ses, "varios");
+    await clicMundo(ses, 4, 11);
+    await clicMundo(ses, 1, 7);
+    await clicMundo(ses, 1, 13);
+    const r5 = await muro(ses, m5);
+    const r6 = await muro(ses, m6);
+    assert.ok(cerca(r5.x1, 0) && cerca(r5.x2, 4) && cerca(r5.y2, 7));
+    assert.ok(cerca(r6.x1, 0) && cerca(r6.x2, 4) && cerca(r6.y2, 13));
+    await tecla(ses, "Enter", "Enter");
+    assert.equal(
+      await ses.driver.executeScript(
+        () => document.querySelector('[data-testid="recorte-paso"]').textContent.trim(),
+      ),
+      "Clic en la referencia (elemento o eje)",
+    );
 
     await tecla(ses, "Escape", "Escape");
     await tecla(ses, "Escape", "Escape");
