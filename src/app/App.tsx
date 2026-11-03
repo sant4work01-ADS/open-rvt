@@ -278,6 +278,8 @@ export function App() {
         al: () => estado.activarHerramienta("alinear"),
         mv: () => estado.activarHerramienta("mover"),
         co: () => estado.activarHerramienta("copiar"),
+        mm: () => estado.activarHerramienta("espejo"),
+        ar: () => estado.activarHerramienta("matriz"),
       };
       const accion = acciones[buffer.texto];
       if (accion) {
@@ -352,6 +354,8 @@ export function App() {
         herramientaPuerta: () => useModelo.getState().activarHerramienta("puerta"),
         herramientaVentana: () => useModelo.getState().activarHerramienta("ventana"),
         herramientaMover: () => useModelo.getState().activarHerramienta("mover"),
+        herramientaEspejo: () => useModelo.getState().activarHerramienta("espejo"),
+        herramientaMatriz: () => useModelo.getState().activarHerramienta("matriz"),
         girarEje: () => useModelo.getState().iniciarGiroEje(),
         herramientaCopiar: () => useModelo.getState().activarHerramienta("copiar"),
         herramientaAlinear: () => useModelo.getState().activarHerramienta("alinear"),

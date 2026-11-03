@@ -107,6 +107,80 @@ export function proyectarSobreSegmento(
   return { punto, t, distancia: distancia(p, punto) };
 }
 
+/** ED2: reflexión de un punto respecto a la recta a-b. */
+export function reflejarPunto(punto: Punto2, a: Punto2, b: Punto2): Punto2 {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const largo2 = dx * dx + dy * dy;
+  if (largo2 <= 1e-18) return [punto[0], punto[1]];
+  const t = ((punto[0] - a[0]) * dx + (punto[1] - a[1]) * dy) / largo2;
+  const px = a[0] + dx * t;
+  const py = a[1] + dy * t;
+  return [Number((2 * px - punto[0]).toFixed(9)), Number((2 * py - punto[1]).toFixed(9))];
+}
+
+/**
+ * ED2: paso de una matriz lineal. «Al segundo» usa el vector tal cual; «Al
+ * último» lo reparte entre las N−1 copias.
+ */
+export function vectorMatrizLineal(
+  vector: Punto2,
+  numero: number,
+  modo: "al_segundo" | "al_ultimo",
+): Punto2 {
+  if (numero < 2) return [0, 0];
+  if (modo === "al_ultimo") {
+    return [vector[0] / (numero - 1), vector[1] / (numero - 1)];
+  }
+  return [vector[0], vector[1]];
+}
+
+/**
+ * ED2: ángulos (radianes) de las copias polares, sin incluir el original. Con
+ * 360° se reparte entre N para no duplicar la primera copia al cerrar.
+ */
+export function angulosMatrizPolar(anguloTotal: number, numero: number): number[] {
+  if (numero < 2) return [];
+  const total = (anguloTotal * Math.PI) / 180;
+  const divisor = Math.abs(Math.abs(anguloTotal) - 360) <= 1e-9 ? numero : numero - 1;
+  const paso = total / divisor;
+  return Array.from({ length: numero - 1 }, (_v, i) => paso * (i + 1));
+}
+
+export interface EjeDeSimetria {
+  p1: Punto2;
+  p2: Punto2;
+  tipo: "eje" | "muro";
+}
+
+/** ED2: eje del modelo o eje de un elemento lineal más cercano al clic. */
+export function ejeBajoPunto(
+  refs: Referencias,
+  punto: Punto2,
+  tolerancia = 0.35,
+): EjeDeSimetria | null {
+  let mejor: EjeDeSimetria | null = null;
+  let distanciaMejor = Infinity;
+  for (const eje of refs.ejes) {
+    const proy = proyectarSobreSegmento(punto, [eje.x1, eje.y1], [eje.x2, eje.y2]);
+    if (proy.distancia > tolerancia) continue;
+    if (proy.distancia < distanciaMejor) {
+      distanciaMejor = proy.distancia;
+      mejor = { p1: [eje.x1, eje.y1], p2: [eje.x2, eje.y2], tipo: "eje" };
+    }
+  }
+  for (const muro of refs.muros) {
+    const proy = proyectarSobreSegmento(punto, [muro.x1, muro.y1], [muro.x2, muro.y2]);
+    const alcance = Math.max(tolerancia, muro.espesor / 2 + 0.12);
+    if (proy.distancia > alcance) continue;
+    if (proy.distancia < distanciaMejor) {
+      distanciaMejor = proy.distancia;
+      mejor = { p1: [muro.x1, muro.y1], p2: [muro.x2, muro.y2], tipo: "muro" };
+    }
+  }
+  return mejor;
+}
+
 /**
  * O007b: cruces de ejes calculados a partir de los ejes (no depende de que el núcleo
  * los haya publicado ya). Es el enganche de columnas, castillos y zapatas.

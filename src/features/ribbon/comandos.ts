@@ -15,6 +15,7 @@ import {
   Columns3,
   Copy,
   DoorOpen,
+  FlipHorizontal2,
   FolderOpen,
   Frame,
   Grid3X3,
@@ -108,6 +109,9 @@ export interface AccionesRibbon {
   herramientaPuerta: () => void;
   herramientaVentana: () => void;
   herramientaMover: () => void;
+  /** ED2: espejo y matriz de la selección. */
+  herramientaEspejo?: () => void;
+  herramientaMatriz?: () => void;
   /** O036: gira el eje seleccionado alrededor de un centro. */
   girarEje?: () => void;
   herramientaCopiar: () => void;
@@ -515,6 +519,32 @@ export function construirComandosRibbon(a: AccionesRibbon): ComandoRibbon[] {
       activo: a.herramientaActiva === "mover",
       descripcion: "Mover la selección entre dos puntos",
       accion: a.herramientaMover,
+    },
+    {
+      id: "espejo",
+      texto: "Espejo",
+      icono: FlipHorizontal2,
+      atajo: "MM",
+      grupo: "Modificar",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      activo: a.herramientaActiva === "espejo",
+      descripcion: "Reflejar la selección respecto a un eje o a una arista",
+      accion: () => a.herramientaEspejo?.(),
+    },
+    {
+      id: "matriz",
+      texto: "Matriz",
+      icono: Grid3X3,
+      atajo: "AR",
+      grupo: "Modificar",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      activo: a.herramientaActiva === "matriz",
+      descripcion: "Copiar la selección en matriz lineal o polar",
+      accion: () => a.herramientaMatriz?.(),
     },
     {
       id: "girar-eje",

@@ -28,6 +28,10 @@ export function BarraHerramienta() {
   const losaDesdeMuros = useModelo((s) => s.losaDesdeMuros);
   const opcionesLosa = useModelo((s) => s.opcionesLosa);
   const fijarOpcionesLosa = useModelo((s) => s.fijarOpcionesLosa);
+  const opcionesEspejo = useModelo((s) => s.opcionesEspejo);
+  const fijarOpcionesEspejo = useModelo((s) => s.fijarOpcionesEspejo);
+  const opcionesMatriz = useModelo((s) => s.opcionesMatriz);
+  const fijarOpcionesMatriz = useModelo((s) => s.fijarOpcionesMatriz);
   const etiquetaEje = useModelo((s) => s.etiquetaEje);
   const opcionesNivel = useModelo((s) => s.opcionesNivel);
   const fijarOpcionesNivel = useModelo((s) => s.fijarOpcionesNivel);
@@ -364,6 +368,99 @@ export function BarraHerramienta() {
         <span className="text-muted-foreground">
           Selección: {seleccionados.length} · {puntos.length === 0 ? "punto base" : "punto destino"}
         </span>
+      )}
+      {herramienta === "espejo" && (
+        <>
+          <label className="flex items-center gap-1">
+            <input
+              type="checkbox"
+              data-testid="espejo-copiar"
+              checked={opcionesEspejo.copiar}
+              onChange={(e) => fijarOpcionesEspejo({ copiar: e.target.checked })}
+            />
+            <span>Copiar</span>
+          </label>
+          <span className="text-muted-foreground">
+            Selección: {seleccionados.length} ·{" "}
+            {puntos.length === 0
+              ? "clic en un eje/arista o primer punto del eje"
+              : "segundo punto del eje"}
+          </span>
+        </>
+      )}
+      {herramienta === "matriz" && (
+        <>
+          <label className="flex items-center gap-1">
+            <span className="text-muted-foreground">Tipo</span>
+            <select
+              data-testid="matriz-modo"
+              value={opcionesMatriz.modo}
+              onChange={(e) =>
+                fijarOpcionesMatriz({
+                  modo: e.target.value === "polar" ? "polar" : "lineal",
+                })
+              }
+              className="rounded border bg-background px-1 py-0.5"
+            >
+              <option value="lineal">Lineal</option>
+              <option value="polar">Polar</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-1">
+            <span className="text-muted-foreground">Número</span>
+            <input
+              data-testid="matriz-numero"
+              type="number"
+              min={2}
+              step={1}
+              value={opcionesMatriz.numero}
+              onChange={(e) =>
+                fijarOpcionesMatriz({
+                  numero: Math.max(2, Number(e.target.value) || 2),
+                })
+              }
+              className="w-16 rounded border bg-background px-1 py-0.5"
+            />
+          </label>
+          {opcionesMatriz.modo === "lineal" ? (
+            <label className="flex items-center gap-1">
+              <span className="text-muted-foreground">Reparto</span>
+              <select
+                data-testid="matriz-reparto"
+                value={opcionesMatriz.alUltimo ? "al_ultimo" : "al_segundo"}
+                onChange={(e) =>
+                  fijarOpcionesMatriz({ alUltimo: e.target.value === "al_ultimo" })
+                }
+                className="rounded border bg-background px-1 py-0.5"
+              >
+                <option value="al_segundo">Al segundo</option>
+                <option value="al_ultimo">Al último</option>
+              </select>
+            </label>
+          ) : (
+            <label className="flex items-center gap-1">
+              <span className="text-muted-foreground">Ángulo total</span>
+              <input
+                data-testid="matriz-angulo"
+                type="number"
+                step="any"
+                value={opcionesMatriz.angulo}
+                onChange={(e) =>
+                  fijarOpcionesMatriz({ angulo: Number(e.target.value) || 0 })
+                }
+                className="w-20 rounded border bg-background px-1 py-0.5"
+              />
+            </label>
+          )}
+          <span className="text-muted-foreground">
+            Selección: {seleccionados.length} ·{" "}
+            {opcionesMatriz.modo === "polar"
+              ? "clic en el centro"
+              : puntos.length === 0
+                ? "primer punto del vector"
+                : "segundo punto del vector"}
+          </span>
+        </>
       )}
       {herramienta === "muro" && (
         <span className="text-muted-foreground">

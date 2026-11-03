@@ -318,6 +318,27 @@ class Servidor:
                 params.get("dy", 0.0),
                 params.get("dz", 0.0),
             )
+        if metodo in ("elementos.espejo", "muros.espejo"):
+            return self._exigir().elementos_espejo(
+                params.get("globalids"),
+                params.get("p1"),
+                params.get("p2"),
+                bool(params.get("copiar", True)),
+            )
+        if metodo in ("elementos.matriz_lineal", "elementos.matriz"):
+            return self._exigir().elementos_matriz_lineal(
+                params.get("globalids"),
+                params.get("vector"),
+                params.get("numero", 2),
+                str(params.get("modo") or "al_segundo"),
+            )
+        if metodo == "elementos.matriz_polar":
+            return self._exigir().elementos_matriz_polar(
+                params.get("globalids"),
+                params.get("centro"),
+                params.get("angulo_total", 360.0),
+                params.get("numero", 2),
+            )
         if metodo == "elementos.editar":
             return self._exigir().elemento_editar(
                 str(params.get("globalid") or ""), params.get("cambios")
