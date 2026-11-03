@@ -377,6 +377,14 @@ test("Cerramientos en la planta de un nivel intermedio: uno por cada clic, en su
     const nivel220 = niveles.find((n) => n.nombre === "N 2.20");
     const referencias = await invocar(ses, "modelo.referencias");
     await activar(ses, "cmd-cerramiento");
+    const nivelBarra = await ses.driver.executeScript(
+      () => document.querySelector('[data-testid="cerramiento-nivel"]')?.value,
+    );
+    assert.equal(
+      nivelBarra,
+      nivel220.globalid,
+      "la barra de la herramienta no preselecciona el nivel de la planta",
+    );
     const clics = [[2, 0], [6, 3], [2, 6], [0, 1.5], [4, 1.5], [8, 4.5]];
     const creados = [];
     const hechos = [];
