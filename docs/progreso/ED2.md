@@ -69,7 +69,7 @@ opciones y atajos) sobre el binario debug de Tauri en Windows.
 - `npx vitest run --maxWorkers=3`: 637 pasan; falla solo
   `actualizaciones.test.tsx` «CA-8 · Linux descarga aparte», que asume Linux y
   en Windows recibe «Actualizar ahora». Es ajena a ED2 y ya fallaba en Windows.
-- `pytest nucleo/tests -q`: **284 pasan, 6 omitidos**.
+- `pytest nucleo/tests -q`: **286 pasan, 6 omitidos**.
 - E2E `o004` (con `src-tauri/recursos/python` y `OPENRVT_PYTHON` sin definir),
   `o028` y `o041`: los tres pasan con el binario debug.
 - `herramientas/preparar_python.sh windows` ejecutado antes de los E2E
