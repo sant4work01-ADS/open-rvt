@@ -110,7 +110,7 @@ Antes de construir el binario se ejecutó `herramientas/preparar_python.sh windo
   `actualizaciones.test.tsx > CA-8 · Linux descarga aparte`, que espera detectar Linux
   en el `navigator` del navegador de pruebas; en esta máquina Windows siempre da
   «Actualizar ahora». No toca nada de ED1 y no se modificó.
-- pytest completo: **277 pasan, 6 omitidas, 5 fallan**. Las 5 fallas son de
+- pytest completo: **280 pasan, 6 omitidas, 5 fallan**. Las 5 fallas son de
   `test_o035.py` y vienen de `pytest.approx()` sobre listas de tuplas (el pytest actual
   del entorno ya no admite estructuras anidadas); las pruebas de ED1 pasan todas. No se
   tocaron esas pruebas.
