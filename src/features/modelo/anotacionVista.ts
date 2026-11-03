@@ -34,6 +34,10 @@ export interface LineaAnotacion {
   elevacion?: number;
   /** Punto sobre la línea del nivel donde arranca la guía (referencia). */
   punto?: [number, number];
+  /** O042: parte del eje que conserva el patrón trazo-punto (hasta V1). */
+  puntosEje?: Array<[number, number]>;
+  /** O042: tramos continuos y finos V1 → V2 → globo. */
+  puntosSolidos?: Array<Array<[number, number]>>;
 }
 
 export interface CabezaNivelCalc {
@@ -463,7 +467,9 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
     // O031 (regresión de O025b): si el eje tiene codos o extremo manual, el globo
     // y la línea los siguen; antes se ignoraban y «Agregar codo» no movía el globo.
     const geo = ajuste
-      ? geometriaEje(ajuste, [eje.s, zBajo], [eje.s, zGloboInferior])
+      ? geometriaEje(ajuste, [eje.s, zBajo], [eje.s, zGloboInferior], {
+          diametroGlobo: radio * 2,
+        })
       : null;
     let t = geo ? geo.globoFin[0] : eje.s;
     const zGloboEje = geo ? geo.globoFin[1] + radio : zGlobo;
@@ -485,7 +491,18 @@ export function calcularLayoutAlzado(entrada: EntradaLayoutAlzado): LayoutAlzado
         puntos[puntos.length - 1] = [eje.s, zGloboInferior];
       }
     }
-    ejesLineas.push({ tipo: "eje", puntos });
+    ejesLineas.push({
+      tipo: "eje",
+      puntos,
+      ...(geo
+        ? {
+            puntosEje: geo.ejeDiscontinuo.map(([x, z]) => [x, z] as [number, number]),
+            puntosSolidos: geo.tramosSolidos.map((tramo) =>
+              tramo.map(([x, z]) => [x, z] as [number, number]),
+            ),
+          }
+        : {}),
+    });
     globos.push({ globalid: eje.globalid, etiqueta: eje.etiqueta, t, z: zGloboEje, radio });
     cajas.push({
       tipo: "eje",

@@ -135,6 +135,7 @@ import {
   candadoArrastreAsa,
   desplazamientoArrastreNivel,
   destinoArrastreAsa,
+  destinoArrastreCodo,
   puntoAsaEje,
   puntoAsaCodoNuevo,
   type DireccionEjeArrastre,
@@ -1093,6 +1094,8 @@ export function Visor3D({
     tipo: "globo" | "codo" | "codo-nuevo" | "base";
     pantallaInicio: { x: number; y: number };
     codoCreado: boolean;
+    /** O042: dirección elegida para el arrastre de V2, fija hasta soltar. */
+    modoCodo: "eje" | "perpendicular" | null;
   } | null>(null);
   // O027: píxeles de mundo del último dibujo y diámetro de globo de la vista, para
   // imanes y cotas temporales sin recalcular la cámara en cada movimiento.
@@ -1492,8 +1495,11 @@ export function Visor3D({
     const bases = contextoEje.current?.bases[globalid];
     if (!eje || !bases) return;
     const ajuste = ajusteActualEje(globalid);
-    // O011b: el globo vigente sale de la geometría (último codo si no hay extremo).
-    const g = geometriaEje(ajuste, bases.inicio, bases.fin, { globoInicio: true });
+    // O042: el codo parte del extremo de la línea (o del globo libre).
+    const g = geometriaEje(ajuste, bases.inicio, bases.fin, {
+      globoInicio: true,
+      diametroGlobo: mmPapelAMetros(8, vista.escala),
+    });
     const globo = lado === "inicio" ? (g.globoInicio ?? bases.inicio) : g.globoFin;
     const dx = bases.fin[0] - bases.inicio[0];
     const dy = bases.fin[1] - bases.inicio[1];
@@ -1502,13 +1508,12 @@ export function Visor3D({
     // Sentido hacia afuera del eje: del interior al extremo que se anota.
     const direccion: Punto2 =
       lado === "inicio" ? [-dx / largo, -dy / largo] : [dx / largo, dy / largo];
-    // O011b: 3 mm de avance y un diámetro de globo (8 mm) de desplazamiento.
+    // O042: V1 a 2·D del extremo, V2 a D afuera y D de lado.
     const nuevo = agregarCodoEje(
       ajuste,
       lado,
       globo,
       direccion,
-      mmPapelAMetros(3, vista.escala),
       mmPapelAMetros(8, vista.escala),
     );
     persistirAjusteEje(globalid, nuevo);
@@ -2858,11 +2863,19 @@ export function Visor3D({
           registro,
           mundoPorPx,
         });
-        // O037: material continuo para el trazo-punto dibujado por segmentos y para
-        // las asas (cuadros) y el trazo lleno de cada vértice; antes las asas usaban
-        // el material discontinuo y quedaban partidas.
+        // O037: material continuo para el trazo-punto dibujado por segmentos; antes
+        // las asas usaban el material discontinuo y quedaban partidas.
         const materialEjeContinuo = crearMaterialLinea({
           mm: mmEjes,
+          escala: vista.escala,
+          color: colorEje,
+          profundidad: false,
+          registro,
+          mundoPorPx,
+        });
+        // O042: tramo continuo y fino del codo (V1 → V2 → borde del globo).
+        const materialEjeSolido = crearMaterialLinea({
+          mm: Math.max(mmEjes * 0.7, 0.15),
           escala: vista.escala,
           color: colorEje,
           profundidad: false,
@@ -2893,12 +2906,12 @@ export function Visor3D({
           const tocaInicio = !!ajuste && (!!ajuste.extremoInicio || !!ajuste.codosInicio?.length);
           const g = geometriaEje(ajuste, [eje.x1, eje.y1], [eje.x2, eje.y2], {
             globoInicio: tocaInicio,
+            diametroGlobo: altoBurbuja,
           });
           const puntos = g.puntos.map(([x, y]) => [x, y, zEje] as [number, number, number]);
-          // O037: trazo-punto continuo a lo largo de toda la polilínea (la distancia
-          // acumulada sigue en cada vértice), dibujado por segmentos para poder incluir
-          // el punto del patrón; antes LineMaterial solo hacía guion/hueco.
-          for (const [a, b] of segmentosTrazoPunto(g.puntos, vista.escala)) {
+          // O042: el patrón trazo-punto llega hasta V1; de V1 al globo el tramo es
+          // continuo y fino. Sin codos se dibuja toda la línea con su patrón.
+          for (const [a, b] of segmentosTrazoPunto(g.ejeDiscontinuo, vista.escala)) {
             lineaCerrada(
               [[a[0], a[1], zEje], [b[0], b[1], zEje]],
               materialEjeContinuo,
@@ -2906,27 +2919,12 @@ export function Visor3D({
               grupoLocal,
             );
           }
-          // Trazo lleno en cada vértice interior (codo), para que el quiebre no quede
-          // hueco cuando el patrón cae en un hueco justo en el vértice.
-          const mediaDado = mmAMundo(1.5, vista.escala);
-          for (let i = 1; i < g.puntos.length - 1; i += 1) {
-            const a = g.puntos[i - 1];
-            const v = g.puntos[i];
-            const b = g.puntos[i + 1];
-            const hacia = (p: Punto2, q: Punto2): Punto2 => {
-              const d: Punto2 = [q[0] - p[0], q[1] - p[1]];
-              const m = Math.hypot(d[0], d[1]) || 1;
-              return [d[0] / m, d[1] / m];
-            };
-            const ua = hacia(v, a);
-            const ub = hacia(v, b);
+          for (const tramo of g.tramosSolidos) {
+            if (tramo.length < 2) continue;
             lineaCerrada(
-              [
-                [v[0] + ua[0] * mediaDado, v[1] + ua[1] * mediaDado, zEje],
-                [v[0] + ub[0] * mediaDado, v[1] + ub[1] * mediaDado, zEje],
-              ],
-              materialEjeContinuo,
-              1.6,
+              tramo.map(([x, y]) => [x, y, zEje] as [number, number, number]),
+              materialEjeSolido,
+              1.7,
               grupoLocal,
             );
           }
@@ -2949,69 +2947,60 @@ export function Visor3D({
               grupoLocal.add(burbuja);
               burbujasEje.current.push({ etiqueta: eje.etiqueta, grupo: burbuja });
             }
-            ejesInteraccion.current.push({
-              globalid: eje.globalid,
-              etiqueta: eje.etiqueta,
-              lado,
-              tipo: "globo",
-              indice: null,
-              punto: [punto[0], punto[1], zEje],
-            });
-          }
-          // Asas de los codos (se dibujan como cuadraditos para poder arrastrarlas).
-          for (const [lado, clave] of [
-            ["inicio", "codosInicio"],
-            ["fin", "codosFin"],
-          ] as const) {
-            const codos = ajuste?.[clave] ?? [];
-            codos.forEach((codo, indice) => {
-              const ladoMundo = Math.max(altoBurbuja * 0.09, 0.04);
-              lineaCerrada(
-                [
-                  [codo[0] - ladoMundo, codo[1] - ladoMundo, zEje],
-                  [codo[0] + ladoMundo, codo[1] - ladoMundo, zEje],
-                  [codo[0] + ladoMundo, codo[1] + ladoMundo, zEje],
-                  [codo[0] - ladoMundo, codo[1] + ladoMundo, zEje],
-                  [codo[0] - ladoMundo, codo[1] - ladoMundo, zEje],
-                ],
-                materialEjeContinuo,
-                1.6,
-                grupoLocal,
-              );
+            // O042: con codo el globo se deriva de V2 y no tiene pinzamiento.
+            const codosLado = (lado === "inicio" ? ajuste?.codosInicio : ajuste?.codosFin) ?? [];
+            if (codosLado.length === 0) {
               ejesInteraccion.current.push({
                 globalid: eje.globalid,
                 etiqueta: eje.etiqueta,
                 lado,
-                tipo: "codo",
-                indice,
-                punto: [codo[0], codo[1], zEje],
+                tipo: "globo",
+                indice: null,
+                punto: [punto[0], punto[1], zEje],
               });
+            }
+          }
+          // O042: V1 y V2 se ven como puntos pequeños (como en la referencia), pero
+          // solo V2 es pinzamiento. Nada de cuadros alrededor de los nodos.
+          const radioNodo = mmAMundo(0.55, vista.escala);
+          for (const codo of [
+            ...(ajuste?.codosInicio ?? []),
+            ...(ajuste?.codosFin ?? []),
+          ]) {
+            const nodo = new THREE.Mesh(
+              new THREE.CircleGeometry(radioNodo, 12),
+              new THREE.MeshBasicMaterial({
+                color: new THREE.Color(colorEje),
+                side: THREE.DoubleSide,
+                depthTest: false,
+                depthWrite: false,
+              }),
+            );
+            nodo.position.set(codo[0], codo[1], zEje + 0.02);
+            nodo.renderOrder = 19;
+            grupoLocal.add(nodo);
+          }
+          for (const asaCodo of asasCodoVista(ajuste)) {
+            ejesInteraccion.current.push({
+              globalid: eje.globalid,
+              etiqueta: eje.etiqueta,
+              lado: asaCodo.lado,
+              tipo: "codo",
+              indice: asaCodo.indice,
+              punto: [asaCodo.punto[0], asaCodo.punto[1], zEje],
             });
           }
-          // O021: asa de codo junto a cada globo (arrastrarla crea el codo) y asas
-          // circulares en los extremos reales de la línea para no perderlos de vista.
+          // O021: sin codo, un asa junto al globo para crearlo arrastrando.
           for (const { lado } of globos) {
+            const codosLado = (lado === "inicio" ? ajuste?.codosInicio : ajuste?.codosFin) ?? [];
+            if (codosLado.length > 0) continue;
             const separacionCodo = altoBurbuja * 0.9;
-            // O037: el asa va sobre el último tramo de la polilínea, no a lo largo de
-            // la línea base; con un codo, la base ya no pasa por el globo.
             const asaCodo = puntoAsaCodoNuevo(
               ajuste,
               { inicio: [eje.x1, eje.y1], fin: [eje.x2, eje.y2] },
               lado,
               separacionCodo,
-            );
-            const ladoMundo = Math.max(altoBurbuja * 0.09, 0.04);
-            lineaCerrada(
-              [
-                [asaCodo[0] - ladoMundo, asaCodo[1] - ladoMundo, zEje],
-                [asaCodo[0] + ladoMundo, asaCodo[1] - ladoMundo, zEje],
-                [asaCodo[0] + ladoMundo, asaCodo[1] + ladoMundo, zEje],
-                [asaCodo[0] - ladoMundo, asaCodo[1] + ladoMundo, zEje],
-                [asaCodo[0] - ladoMundo, asaCodo[1] - ladoMundo, zEje],
-              ],
-              materialEjeContinuo,
-              1.6,
-              grupoLocal,
+              altoBurbuja,
             );
             ejesInteraccion.current.push({
               globalid: eje.globalid,
@@ -3579,6 +3568,15 @@ export function Visor3D({
           mundoPorPx,
           profundidad: false,
         });
+        // O042: tramo continuo y fino del codo en alzado y corte.
+        const materialEjeSolidoAlzado = crearMaterialLinea({
+          mm: Math.max(estiloEje.grosor * factorEscala(vista.escala) * 0.7, 0.15),
+          escala: vista.escala,
+          color: colorEje,
+          registro,
+          mundoPorPx,
+          profundidad: false,
+        });
         const materialCota = crearMaterialLinea({
           mm: estiloCota.grosor * factorEscala(vista.escala),
           escala: vista.escala,
@@ -3838,7 +3836,7 @@ export function Visor3D({
             });
           }
           if (patronEjeNivel === "trazo-punto") {
-            for (const [a, b] of segmentosTrazoPunto(linea.puntos, vista.escala)) {
+            for (const [a, b] of segmentosTrazoPunto(linea.puntosEje ?? linea.puntos, vista.escala)) {
               lineaCerrada(
                 [puntoHZ(a[0], a[1]), puntoHZ(b[0], b[1])],
                 materialEjeNivel,
@@ -3851,6 +3849,15 @@ export function Visor3D({
               linea.puntos.map(([t, z]) => puntoHZ(t, z)),
               materialEjeNivel,
               2.9,
+              grupoLocal,
+            );
+          }
+          for (const tramo of linea.puntosSolidos ?? []) {
+            if (tramo.length < 2) continue;
+            lineaCerrada(
+              tramo.map(([t, z]) => puntoHZ(t, z)),
+              materialEjeSolidoAlzado,
+              3.1,
               grupoLocal,
             );
           }
@@ -5074,7 +5081,10 @@ export function Visor3D({
       const bases = ctx.bases[asa.globalid];
       const ajuste = inicial[asa.globalid];
       if (!bases) return;
-      const g = geometriaEje(ajuste, bases.inicio, bases.fin, { globoInicio: true });
+      const g = geometriaEje(ajuste, bases.inicio, bases.fin, {
+        globoInicio: true,
+        diametroGlobo: mmPapelAMetros(8, vista.escala),
+      });
       const globo = asa.lado === "inicio" ? (g.globoInicio ?? bases.inicio) : g.globoFin;
       const dx = bases.fin[0] - bases.inicio[0];
       const dy = bases.fin[1] - bases.inicio[1];
@@ -5087,7 +5097,6 @@ export function Visor3D({
         asa.lado,
         globo,
         direccion,
-        mmPapelAMetros(3, vista.escala),
         mmPapelAMetros(8, vista.escala),
       );
     };
@@ -5231,6 +5240,7 @@ export function Visor3D({
               tipo: asa.tipo,
               pantallaInicio: { x: evento.clientX, y: evento.clientY },
               codoCreado: false,
+              modoCodo: null,
             };
             ajusteEnCursoRef.current = inicialConCambios;
             setAjusteEnCurso(inicialConCambios);
@@ -5361,15 +5371,15 @@ export function Visor3D({
             );
             arrEje.originales = inicial;
             arrEje.codoCreado = true;
-            // El codo desplazó el globo: el arrastre sigue desde su lugar nuevo.
-            const basesCodo = ctx.bases[arrEje.globalid];
-            if (basesCodo) {
-              arrEje.asaInicio = puntoAsaEje(
-                inicial[arrEje.globalid],
-                basesCodo,
-                arrEje.lado,
-                "globo",
-              );
+            // O042: el codo ya tiene sus dos nodos; el arrastre sigue sobre V2.
+            const creado = inicial[arrEje.globalid];
+            const codosCreados =
+              (arrEje.lado === "inicio" ? creado?.codosInicio : creado?.codosFin) ?? [];
+            if (codosCreados.length >= 2) {
+              arrEje.tipo = "codo";
+              arrEje.indice = 1;
+              arrEje.asaInicio = [codosCreados[1][0], codosCreados[1][1]];
+              arrEje.modoCodo = null;
             }
             const conCodo = { ...(ajusteEnCursoRef.current ?? {}), ...inicial };
             ajusteEnCursoRef.current = conCodo;
@@ -5392,16 +5402,37 @@ export function Visor3D({
         else if (arrEje.tipo === "codo") tipoAsa = "codo";
         else tipoAsa = codosLado.length > 0 ? "globo" : "extremo";
 
-        // El destino parte del asa, no del puntero: pulsar fuera del centro ya no
-        // hace saltar el punto ni lo saca de su línea de restricción.
-        const destino = destinoArrastreAsa(
-          arrEje.asaInicio,
-          arrEje.inicio,
-          punto,
-          tipoAsa,
-          direccion,
-          evento.shiftKey,
-        );
+        // O042: V2 se mueve a lo largo del eje o perpendicular a él. La dirección
+        // se elige con el primer movimiento y queda fija hasta soltar.
+        let modoCodo = arrEje.modoCodo;
+        let destino: Punto2;
+        if (arrEje.tipo === "codo" && arrEje.indice !== null) {
+          const paso = mmPapelAMetros(1, vista.escala);
+          const r = destinoArrastreCodo(
+            arrEje.asaInicio,
+            arrEje.asaInicio,
+            punto,
+            direccion,
+            modoCodo ?? "auto",
+            paso,
+          );
+          destino = r.punto;
+          if (!modoCodo) {
+            modoCodo = r.modo;
+            arrEje.modoCodo = r.modo;
+          }
+        } else {
+          // El destino parte del asa, no del puntero: pulsar fuera del centro ya no
+          // hace saltar el punto ni lo saca de su línea de restricción.
+          destino = destinoArrastreAsa(
+            arrEje.asaInicio,
+            arrEje.inicio,
+            punto,
+            tipoAsa,
+            direccion,
+            evento.shiftKey,
+          );
+        }
 
         // Imanes: extremos a la alineación de los demás ejes (o a los niveles en
         // alzado); globos desplazados a múltiplos de un diámetro.
@@ -5451,7 +5482,13 @@ export function Visor3D({
           destino[1] - arrEje.asaInicio[1],
         );
         const guiaVertical =
-          tipoAsa === "globo" ? direccion === "vertical" : direccion === "horizontal";
+          arrEje.tipo === "codo" && modoCodo
+            ? modoCodo === "eje"
+              ? direccion === "vertical"
+              : direccion === "horizontal"
+            : tipoAsa === "globo"
+              ? direccion === "vertical"
+              : direccion === "horizontal";
         const px = evento.clientX - rect.left;
         const py = evento.clientY - rect.top;
         setGuiaArrastre({

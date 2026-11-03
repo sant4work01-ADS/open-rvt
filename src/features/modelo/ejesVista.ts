@@ -4,6 +4,7 @@ import type { AjusteEjeVista } from "./tipos";
 import type { Punto2 } from "./herramientas";
 
 export type LadoEje = "inicio" | "fin";
+/** O042: un codo son dos nodos (V1 sobre el eje y V2 desplazado), uno por extremo. */
 export const MAXIMO_CODOS = 2;
 
 const esPunto = (valor: unknown): valor is [number, number] =>
@@ -76,6 +77,21 @@ export interface GeometriaEje {
   /** Puntos donde se apoya la línea antes de los codos (sin extremos libres). */
   baseInicio: Punto2;
   baseFin: Punto2;
+  /** O042: tramo del eje con su patrón trazo-punto. Termina en V1 en los lados
+   *  con codo y en el globo/extremo en los demás. */
+  ejeDiscontinuo: [Punto2, Punto2];
+  /** O042: tramos continuos y finos de cada codo (V1 → V2 → globo). */
+  tramosSolidos: Punto2[][];
+}
+
+/** Sentido hacia afuera del eje (del interior al extremo que se anota). */
+function afueraEje(inicio: Punto2, fin: Punto2, lado: LadoEje): Punto2 {
+  const dir = normalizar([fin[0] - inicio[0], fin[1] - inicio[1]]);
+  return lado === "inicio" ? [-dir[0], -dir[1]] : dir;
+}
+
+function desplazar(p: Punto2, v: Punto2, k: number): Punto2 {
+  return [p[0] + v[0] * k, p[1] + v[1] * k];
 }
 
 /**
@@ -87,84 +103,113 @@ export function geometriaEje(
   ajuste: AjusteEjeVista | undefined,
   inicio: Punto2,
   fin: Punto2,
-  opciones: { globoInicio?: boolean } = {},
+  opciones: { globoInicio?: boolean; diametroGlobo?: number } = {},
 ): GeometriaEje {
   const limpio = normalizarAjusteEje(ajuste);
-  // O011b: sin extremo libre el globo vive en el último codo; así el globo sigue
-  // a los vértices al arrastrarlos y vuelve al codo cuando se cierra el candado.
   const codosInicio = limpio?.codosInicio ?? [];
   const codosFin = limpio?.codosFin ?? [];
+  const diametro = opciones.diametroGlobo ?? 0;
+  // O042: con el codo completo (V1 y V2) el globo se apoya D más afuera de V2 y el
+  // tramo final queda paralelo al eje. Los archivos viejos guardaban el centro en
+  // `extremo`; si no hay dos nodos se respeta el extremo.
+  const globoDerivado = (codos: Punto2[], lado: LadoEje): Punto2 | null => {
+    if (codos.length < 2 || !(diametro > 1e-12)) return null;
+    return desplazar(codos[1], afueraEje(inicio, fin, lado), diametro);
+  };
   const globoInicio =
-    limpio?.extremoInicio ?? codosInicio[codosInicio.length - 1] ?? inicio;
-  const globoFin = limpio?.extremoFin ?? codosFin[codosFin.length - 1] ?? fin;
-  const tramoInicio = [inicio, ...codosInicio, globoInicio];
-  const tramoFin = [fin, ...codosFin, globoFin];
-  const puntos = deduplicar([
-    ...tramoInicio.slice().reverse(),
-    ...tramoFin,
-  ]);
+    globoDerivado(codosInicio, "inicio") ??
+    limpio?.extremoInicio ??
+    codosInicio[codosInicio.length - 1] ??
+    inicio;
+  const globoFin =
+    globoDerivado(codosFin, "fin") ??
+    limpio?.extremoFin ??
+    codosFin[codosFin.length - 1] ??
+    fin;
+  const igual = (a: Punto2, b: Punto2) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= 1e-9;
+  // O042: con codo el extremo bruto del IfcGrid ya no se visita; la línea pasa por
+  // V1 y V2. Sin codo se conserva el recorrido de siempre (incluido el extremo libre).
+  const parteInicio =
+    codosInicio.length > 0
+      ? [globoInicio, ...codosInicio.slice().reverse()]
+      : igual(globoInicio, inicio)
+        ? [inicio]
+        : [globoInicio, inicio];
+  const parteFin =
+    codosFin.length > 0
+      ? [...codosFin, globoFin]
+      : igual(globoFin, fin)
+        ? [fin]
+        : [fin, globoFin];
+  const puntos = deduplicar([...parteInicio, ...parteFin]);
+  // El eje discontinuo llega hasta V1 (el primer nodo del codo) de cada lado.
+  const ejeDiscontinuo: [Punto2, Punto2] = [
+    codosInicio.length > 0 ? codosInicio[0] : globoInicio,
+    codosFin.length > 0 ? codosFin[0] : globoFin,
+  ];
+  const tramosSolidos: Punto2[][] = [];
+  if (codosInicio.length > 0) {
+    tramosSolidos.push([globoInicio, ...codosInicio.slice().reverse()]);
+  }
+  if (codosFin.length > 0) {
+    tramosSolidos.push([...codosFin, globoFin]);
+  }
   return {
     puntos,
     globoInicio: opciones.globoInicio ? globoInicio : undefined,
     globoFin,
     baseInicio: inicio,
     baseFin: fin,
+    ejeDiscontinuo,
+    tramosSolidos,
   };
 }
 
 /**
- * O011b: agrega un codo al extremo como el «Add elbow» de Revit.
+ * O042: «Agregar codo» crea el codo completo (V1 y V2) de una vez.
  *
- * - El primer codo avanza `avance` (3 mm de papel) por la línea y desplaza el
- *   globo `lateral` (un diámetro de globo) hacia un lado. El tramo queda:
- *   avance, diagonal hasta el desplazamiento y globo.
- * - El segundo codo añade el tramo recto final: avance, diagonal, avance y globo.
- * - La línea base sigue terminando en el extremo original; el globo ya no vuelve
- *   a él, sino que se dibuja al final de los codos.
+ * - V1 queda a 2·D antes del extremo, sobre el eje.
+ * - V2 está D más afuera que V1 y D de lado (perpendicular).
+ * - El tramo final mide D/2 hasta el borde del globo; el centro queda a D de V2,
+ *   paralelo al eje, de modo que la línea dibujada no se superpone con V2.
  *
- * `direccion` es el sentido hacia afuera del eje (del interior al extremo).
+ * `extremo` es el extremo de la línea del eje (o el globo libre si se había
+ * arrastrado) y `direccion` el sentido hacia afuera. Un archivo viejo con un solo
+ * nodo se completa: el nodo existente es V1.
  */
 export function agregarCodoEje(
   ajuste: AjusteEjeVista | undefined,
   lado: LadoEje,
-  globo: Punto2,
+  extremo: Punto2,
   direccion: Punto2,
-  avance: number,
-  lateral: number,
+  diametroGlobo: number,
 ): AjusteEjeVista {
   const base = normalizarAjusteEje(ajuste) ?? {};
   const claveCodos = lado === "inicio" ? "codosInicio" : "codosFin";
   const claveExtremo = lado === "inicio" ? "extremoInicio" : "extremoFin";
   const codos = [...(base[claveCodos] ?? [])];
-  if (codos.length >= MAXIMO_CODOS) return base;
+  if (codos.length >= MAXIMO_CODOS || !(diametroGlobo > 1e-12)) return base;
   const afuera = normalizar(direccion);
-  const ladoPerpendicular: Punto2 = [afuera[1], -afuera[0]];
-  if (codos.length === 0) {
-    // Primer codo: recto 3 mm y la diagonal que desplaza el globo un diámetro.
-    const primero: Punto2 = [
-      globo[0] + afuera[0] * avance,
-      globo[1] + afuera[1] * avance,
-    ];
-    const nuevoGlobo: Punto2 = [
-      primero[0] + ladoPerpendicular[0] * lateral + afuera[0] * avance,
-      primero[1] + ladoPerpendicular[1] * lateral + afuera[1] * avance,
-    ];
-    return { ...base, [claveCodos]: [primero], [claveExtremo]: nuevoGlobo };
-  }
-  // Segundo codo: el globo desplazado pasa a ser vértice y se añade el tramo
-  // recto final de 3 mm hasta el borde del globo. El centro queda 3 mm más el
-  // radio (medio diámetro), para que el asa del codo no quede dentro del círculo.
-  const segundo: Punto2 = [globo[0], globo[1]];
-  const hastaElCentro = avance + lateral / 2;
-  const nuevoGlobo: Punto2 = [
-    segundo[0] + afuera[0] * hastaElCentro,
-    segundo[1] + afuera[1] * hastaElCentro,
+  const perpendicular: Punto2 = [-afuera[1], afuera[0]];
+  const D = diametroGlobo;
+  const v1 =
+    codos.length > 0
+      ? ([codos[0][0], codos[0][1]] as Punto2)
+      : desplazar(extremo, afuera, -2 * D);
+  const v2: Punto2 = [
+    v1[0] + afuera[0] * D + perpendicular[0] * D,
+    v1[1] + afuera[1] * D + perpendicular[1] * D,
   ];
-  codos.push(segundo);
-  return { ...base, [claveCodos]: codos, [claveExtremo]: nuevoGlobo };
+  const salida: AjusteEjeVista = { ...base, [claveCodos]: [v1, v2] };
+  // El globo se deriva de V2; un extremo libre guardado ya no aplica.
+  delete salida[claveExtremo];
+  return normalizarAjusteEje(salida) ?? {};
 }
 
-/** Quita un codo por su índice; conserva el resto del ajuste. */
+/**
+ * O042: quitar el codo deja la línea recta y el globo en el extremo. Como hay un
+ * solo codo por extremo, pulsar V1 o V2 quita el codo completo de ese lado.
+ */
 export function quitarCodoEje(
   ajuste: AjusteEjeVista | undefined,
   lado: LadoEje,
@@ -173,16 +218,11 @@ export function quitarCodoEje(
   const base = normalizarAjusteEje(ajuste);
   if (!base) return undefined;
   const clave = lado === "inicio" ? "codosInicio" : "codosFin";
-  const codos = [...(base[clave] ?? [])];
+  const codos = base[clave] ?? [];
   if (indice < 0 || indice >= codos.length) return base;
-  codos.splice(indice, 1);
   const salida: AjusteEjeVista = { ...base };
-  if (codos.length > 0) salida[clave] = codos;
-  else {
-    // O011b: sin codos el extremo vuelve a la línea, como antes de agregarlos.
-    delete salida[clave];
-    delete salida[lado === "inicio" ? "extremoInicio" : "extremoFin"];
-  }
+  delete salida[clave];
+  delete salida[lado === "inicio" ? "extremoInicio" : "extremoFin"];
   return normalizarAjusteEje(salida);
 }
 
@@ -314,6 +354,38 @@ export function restablecerExtremoEje(
 // la vista: en planta la de la línea y en alzado/corte siempre «vertical».
 export type TipoAsaArrastre = "extremo" | "globo" | "codo" | "nivel-cabeza" | "nivel-extremo";
 export type DireccionEjeArrastre = "vertical" | "horizontal";
+
+/**
+ * O042: arrastre de V2. La dirección se elige una vez, por el componente mayor
+ * del primer movimiento: a lo largo del eje o perpendicular a él, y queda fija
+ * hasta soltar. El destino se redondea a `paso` (1 mm de papel).
+ */
+export function destinoArrastreCodo(
+  v2: Punto2,
+  inicioArrastre: Punto2,
+  cursor: Punto2,
+  direccionEje: DireccionEjeArrastre,
+  modo: "auto" | "eje" | "perpendicular" = "auto",
+  paso = 0,
+): { punto: Punto2; modo: "eje" | "perpendicular" } {
+  const eje: Punto2 = direccionEje === "vertical" ? [0, 1] : [1, 0];
+  const perpendicular: Punto2 = direccionEje === "vertical" ? [1, 0] : [0, 1];
+  const d: Punto2 = [cursor[0] - inicioArrastre[0], cursor[1] - inicioArrastre[1]];
+  const aLoLargo = d[0] * eje[0] + d[1] * eje[1];
+  const aLado = d[0] * perpendicular[0] + d[1] * perpendicular[1];
+  const elegido =
+    modo === "auto" ? (Math.abs(aLoLargo) >= Math.abs(aLado) ? "eje" : "perpendicular") : modo;
+  const redondear = (v: number) => (paso > 1e-12 ? Math.round(v / paso) * paso : v);
+  const destino: Punto2 = [v2[0], v2[1]];
+  if (elegido === "eje") {
+    const indice = direccionEje === "vertical" ? 1 : 0;
+    destino[indice] = redondear(v2[indice] + aLoLargo);
+    return { punto: destino, modo: "eje" };
+  }
+  const indice = direccionEje === "vertical" ? 0 : 1;
+  destino[indice] = redondear(v2[indice] + aLado);
+  return { punto: destino, modo: "perpendicular" };
+}
 
 /**
  * O027: devuelve el delta permitido para cada asa. El extremo y el quiebre del codo
@@ -472,8 +544,12 @@ export function puntoAsaCodoNuevo(
   bases: { inicio: Punto2; fin: Punto2 },
   lado: LadoEje,
   separacion: number,
+  diametroGlobo = 0,
 ): Punto2 {
-  const g = geometriaEje(ajuste, bases.inicio, bases.fin, { globoInicio: true });
+  const g = geometriaEje(ajuste, bases.inicio, bases.fin, {
+    globoInicio: true,
+    diametroGlobo,
+  });
   const globo = lado === "inicio" ? (g.globoInicio ?? bases.inicio) : g.globoFin;
   // El punto de la polilínea contiguo al globo, hacia el interior del eje.
   const adyacente =
@@ -491,9 +567,9 @@ export function puntoAsaCodoNuevo(
 }
 
 /**
- * O031 (regresión de O025b): asas de los codos que hay que dibujar en una vista.
- * El alzado dejó de crearlas al reescribir la anotación; sin ellas el codo no se
- * puede arrastrar ni quitar desde el menú contextual (O011).
+ * O042: asas de los codos que se dibujan en una vista. Solo V2 tiene pinzamiento;
+ * V1 queda fijo sobre el eje y el globo tampoco se arrastra. Un archivo viejo con
+ * un único nodo aún lo muestra para poder quitarlo.
  */
 export function asasCodoVista(ajuste: AjusteEjeVista | undefined): AsaCodoVista[] {
   const limpio = normalizarAjusteEje(ajuste);
@@ -502,9 +578,8 @@ export function asasCodoVista(ajuste: AjusteEjeVista | undefined): AsaCodoVista[
     ["inicio", "codosInicio"],
     ["fin", "codosFin"],
   ] as const) {
-    (limpio?.[clave] ?? []).forEach((punto, indice) => {
-      asas.push({ lado, indice, punto });
-    });
+    const codos = limpio?.[clave] ?? [];
+    if (codos.length >= 2) asas.push({ lado, indice: 1, punto: codos[1] });
   }
   return asas;
 }
