@@ -156,6 +156,7 @@ def test_el_vano_que_queda_fuera_se_borra_con_aviso() -> None:
     puerta = next(
         e for e in nucleo.modelo.by_type("IfcDoor") if e.GlobalId == creados[1]
     )
+    puerta.Name = "P-1"
 
     resultado = nucleo.elementos_recortar_extender(muro, eje, [1, 0])
 
@@ -163,8 +164,7 @@ def test_el_vano_que_queda_fuera_se_borra_con_aviso() -> None:
     assert len(nucleo.modelo.by_type("IfcDoor")) == 0
     assert len(nucleo.modelo.by_type("IfcOpeningElement")) == 0
     assert puerta.GlobalId in resultado["borrados"]
-    assert "Se borró la puerta" in resultado["mensaje"]
-    assert "quedó fuera del muro" in resultado["mensaje"]
+    assert resultado["mensaje"] == "Se borró la puerta P-1: quedó fuera del muro"
 
 
 def test_el_extremo_ajustado_pierde_su_enlace_y_el_otro_lo_conserva() -> None:

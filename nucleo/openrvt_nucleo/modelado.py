@@ -5631,7 +5631,7 @@ class ModeladoMixin:
                 borrados.extend(self._borrar_vano(vano))
                 avisos.append(
                     f"Se borró la {clase} {nombre or 'sin nombre'}: "
-                    "quedó fuera del muro."
+                    "quedó fuera del muro"
                 )
         return borrados, avisos
 
@@ -5693,9 +5693,7 @@ class ModeladoMixin:
         self._aplicar_planta(entidad, nx1, ny1, nx2, ny2)
         self._quitar_enlace_extremo(entidad, inicio_ajustado)
         self._recalcular_uniones_estructura()
-        mensaje = "Elemento recortado o extendido."
-        if avisos:
-            mensaje = " ".join([mensaje, *avisos])
+        mensaje = " ".join(avisos) if avisos else "Elemento recortado o extendido."
         return self._resultado(
             modificados=[entidad],
             borrados=borrados,
