@@ -66,14 +66,23 @@ describe("escala y zoom", () => {
     expect(factorEscala(200)).toBe(0.7);
   });
 
-  it("convierte mm de papel a píxeles con escala y zoom exactos", () => {
-    // 10 m de alto en 900 px: 0,5 mm a 1:100 son 0,05 m → 4,5 px.
-    expect(mmAPx(0.5, 100, 10 / 900)).toBeCloseTo(4.5, 9);
-    // Al acercar (5 m en 900 px) el mismo trazo mide el doble.
-    expect(mmAPx(0.5, 100, 5 / 900)).toBeCloseTo(9, 9);
-    // 1:50 engrosa 1,4 veces.
-    expect(mmAPx(0.5, 50, 10 / 900)).toBeCloseTo(6.3, 9);
-    expect(mmAPx(0.5, 200, 10 / 900)).toBeCloseTo(3.15, 9);
+  it("O044: el grosor en pantalla no depende del zoom ni de la escala", () => {
+    // Regla de la spec: px = max(1, mm × 2.2). Un muro cortado de 0.5 mm mide
+    // 1.1 px y una proyección de 0.18 mm queda en el mínimo de 1 px.
+    expect(mmAPx(0.5, 100, 10 / 900)).toBeCloseTo(1.1, 9);
+    expect(mmAPx(0.18, 100, 10 / 900)).toBeCloseTo(1, 9);
+    // Los mismos valores con zoom 0.5×, 1× y 8× (mundoPorPx 0.02, 0.01 y 0.00125)
+    // y con otra escala de vista.
+    for (const mundoPorPx of [0.02, 0.01, 0.00125]) {
+      for (const escala of [50, 100, 200] as const) {
+        expect(mmAPx(0.5, escala, mundoPorPx)).toBeCloseTo(1.1, 9);
+        expect(mmAPx(0.18, escala, mundoPorPx)).toBeCloseTo(1, 9);
+      }
+    }
+    // Nunca por debajo de 1 px, ni con mm inválidos.
+    expect(mmAPx(0.01, 100, 0.01)).toBe(1);
+    expect(mmAPx(0, 100, 0.01)).toBe(1);
+    expect(mmAPx(-0.5, 100, 0.01)).toBe(1);
   });
 
   it("O006b: el texto de cota no baja de 11 px ni las marcas de 6 px", () => {
