@@ -199,10 +199,15 @@ const dentroDe = (v, esperado, tolerancia, mensaje) =>
 // Arrastra un asa con dos movimientos; opciones: shift y cancelar (Escape antes de soltar).
 async function arrastrarAsa(ses, etiqueta, lado, dx, dy, opciones = {}) {
   const inicio = await ses.driver.executeScript(
-    (etiqueta, lado) =>
-      document.querySelector('[data-testid="visor"]').__openrvtEjeAPantalla(etiqueta, lado),
+    (etiqueta, lado, indiceCodo) =>
+      document.querySelector('[data-testid="visor"]').__openrvtEjeAPantalla(
+        etiqueta,
+        lado,
+        indiceCodo,
+      ),
     etiqueta,
     lado,
+    opciones.indiceCodo,
   );
   assert.ok(inicio, `no se encontró el asa ${etiqueta}/${lado}`);
   await ses.driver.executeScript(
@@ -324,25 +329,25 @@ test("O027: asas de ejes y niveles con movimiento restringido", async () => {
     assert.equal(ajustes[eje1.globalid]?.extremoFin, undefined, "Deshacer no quitó el extremo");
     assert.equal(ajustes[eje2.globalid]?.extremoFin, undefined, "Deshacer no revirtió el grupo");
 
-    // 3) Globo con codo: al arrastrarlo en diagonal solo se mueve en horizontal.
+    // 3) O042: V2 con codo; el arrastre diagonal elige la dirección por el
+    // componente mayor. Con (70,50) manda la horizontal: solo cambia x.
     await seleccionarEjeEn(ses, 4);
     await activar(ses, "eje-codo-fin-agregar");
     ajustes = (await ajustesVista(ses)).ejes;
-    assert.equal(ajustes[eje2.globalid].codosFin?.length, 1, "no se creó el codo");
-    const yGlobo = ajustes[eje2.globalid].extremoFin[1];
-    const xGlobo = ajustes[eje2.globalid].extremoFin[0];
-    await arrastrarAsa(ses, "2", "fin", 70, 50);
+    assert.equal(ajustes[eje2.globalid].codosFin?.length, 2, "no se creó el codo");
+    const v2Antes = ajustes[eje2.globalid].codosFin[1];
+    await arrastrarAsa(ses, "2", "fin", 70, 50, { indiceCodo: 1 });
     ajustes = (await ajustesVista(ses)).ejes;
-    dentroDe(ajustes[eje2.globalid].extremoFin[1], yGlobo, 0.001, "el globo cambió de altura");
+    dentroDe(ajustes[eje2.globalid].codosFin[1][1], v2Antes[1], 0.001, "V2 cambió de altura");
     assert.ok(
-      Math.abs(ajustes[eje2.globalid].extremoFin[0] - xGlobo) > 0.2,
-      "el globo no se desplazó perpendicular",
+      Math.abs(ajustes[eje2.globalid].codosFin[1][0] - v2Antes[0]) > 0.2,
+      "V2 no se desplazó perpendicular",
     );
     await ses.captura(path.join(PROGRESO, "o027-globo-codo.png"));
 
     // 4) Escape cancela: el arrastre no deja nada escrito.
     const antesEscape = JSON.stringify((await ajustesVista(ses)).ejes[eje2.globalid]);
-    await arrastrarAsa(ses, "2", "fin", -90, 120, { cancelar: true });
+    await arrastrarAsa(ses, "2", "fin", -90, 120, { cancelar: true, indiceCodo: 1 });
     const trasEscape = JSON.stringify((await ajustesVista(ses)).ejes[eje2.globalid]);
     assert.equal(trasEscape, antesEscape, "Escape no restauró el acomodo");
 

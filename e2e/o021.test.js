@@ -302,17 +302,19 @@ test("O021: candado, globos, codo y copia de acomodo entre plantas", async () =>
     await seleccionarEjeEn(ses, 8);
     await activar(ses, "eje-codo-fin-agregar");
     ({ ejes: ajustes } = await ajustesVista(ses));
-    assert.equal(ajustes[gid3].codosFin?.length, 1, "no se creó el codo del eje 3");
-    assert.ok(ajustes[gid3].extremoFin, "el codo no desplazó el globo");
+    // O042: el codo son dos nodos (V1 y V2) y el globo se deriva de V2.
+    assert.equal(ajustes[gid3].codosFin?.length, 2, "no se creó el codo del eje 3");
+    assert.equal(ajustes[gid3].extremoFin, undefined, "el codo no debe guardar extremo libre");
     const acomodo3 = JSON.parse(JSON.stringify(ajustes[gid3]));
 
     // 5) Copiar el acomodo a la otra planta con el menú contextual.
-    const globo3 = await ses.driver.executeScript(
+    // O042: con codo el globo no tiene asa; el menú se abre sobre V2.
+    const nodoCodo3 = await ses.driver.executeScript(
       (etiqueta) =>
-        document.querySelector('[data-testid="visor"]').__openrvtEjeAPantalla(etiqueta, "fin"),
+        document.querySelector('[data-testid="visor"]').__openrvtEjeAPantalla(etiqueta, "fin", 1),
       "3",
     );
-    assert.ok(globo3, "no se encontró el globo del eje 3");
+    assert.ok(nodoCodo3, "no se encontró el pinzamiento V2 del eje 3");
     await ses.driver.executeScript(
       (punto) => {
         document.querySelector('[data-testid="visor"] canvas').dispatchEvent(
@@ -324,7 +326,7 @@ test("O021: candado, globos, codo y copia de acomodo entre plantas", async () =>
           }),
         );
       },
-      globo3,
+      nodoCodo3,
     );
     await esperar(300);
     await activar(ses, "eje-menu-copiar");
