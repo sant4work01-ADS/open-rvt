@@ -27,7 +27,6 @@ import {
   Ruler,
   RectangleHorizontal,
   Redo2,
-  RotateCw,
   Save,
   SaveAll,
   Scissors,
@@ -108,8 +107,6 @@ export interface AccionesRibbon {
   herramientaPuerta: () => void;
   herramientaVentana: () => void;
   herramientaMover: () => void;
-  /** O036: gira el eje seleccionado alrededor de un centro. */
-  girarEje?: () => void;
   herramientaCopiar: () => void;
   herramientaAlinear: () => void;
   /** O007b: herramientas de estructura (un clic o dos, según el elemento). */
@@ -515,18 +512,6 @@ export function construirComandosRibbon(a: AccionesRibbon): ComandoRibbon[] {
       activo: a.herramientaActiva === "mover",
       descripcion: "Mover la selección entre dos puntos",
       accion: a.herramientaMover,
-    },
-    {
-      id: "girar-eje",
-      texto: "Girar",
-      icono: RotateCw,
-      grupo: "Modificar",
-      pestana: "modelar",
-      tamano: "chico",
-      habilitado: true,
-      activo: a.herramientaActiva === "girar_eje",
-      descripcion: "Girar el eje seleccionado alrededor de un centro",
-      accion: a.girarEje,
     },
     {
       id: "copiar",

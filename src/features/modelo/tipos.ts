@@ -254,6 +254,8 @@ export interface RespuestaInfo {
   elementos: number;
   por_clase: Record<string, number>;
   nombre: string;
+  /** O036b: avisos de la carga (por ejemplo, ejes oblicuos de archivos viejos). */
+  avisos?: string[];
 }
 
 export interface PropiedadesElemento {

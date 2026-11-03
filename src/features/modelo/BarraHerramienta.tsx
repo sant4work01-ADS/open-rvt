@@ -43,11 +43,6 @@ export function BarraHerramienta() {
   const niveles = useModelo((s) => s.niveles);
   const vistaActivaId = useModelo((s) => s.vistaActivaId);
   const vistas = useModelo((s) => s.vistas);
-  // O036: giro de un eje con centro elegido y ángulo tecleado.
-  const centroGiro = useModelo((s) => s.centroGiro);
-  const anguloGiro = useModelo((s) => s.anguloGiro);
-  const fijarAnguloGiro = useModelo((s) => s.fijarAnguloGiro);
-  const aplicarGiroEje = useModelo((s) => s.aplicarGiroEje);
   if (!herramienta) return null;
   const vistaActiva = vistas.find((v) => v.id === vistaActivaId);
   const esAlzadoOCorte =
@@ -65,55 +60,7 @@ export function BarraHerramienta() {
       data-herramienta={herramienta}
       className="flex h-9 shrink-0 items-center gap-3 overflow-hidden whitespace-nowrap border-b bg-muted/30 px-3 text-xs"
     >
-      <span className="font-semibold capitalize">
-        {herramienta === "girar_eje" ? "Girar eje" : herramienta}
-      </span>
-      {herramienta === "girar_eje" && (
-        <>
-          <label className="flex items-center gap-1">
-            <span className="text-muted-foreground">Ángulo</span>
-            <input
-              data-testid="giro-angulo"
-              type="text"
-              inputMode="decimal"
-              value={anguloGiro}
-              onChange={(e) => fijarAnguloGiro(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void aplicarGiroEje();
-                } else if (e.key === "Escape") {
-                  e.preventDefault();
-                  cancelar();
-                }
-              }}
-              className="w-20 rounded border bg-background px-1 py-0.5 text-right"
-            />
-            <span>°</span>
-          </label>
-          <span data-testid="giro-centro" className="text-muted-foreground">
-            {centroGiro
-              ? `Centro (${centroGiro[0].toFixed(2)}, ${centroGiro[1].toFixed(2)})`
-              : "Centro: punto medio del eje"}
-          </span>
-          <button
-            type="button"
-            data-testid="giro-aplicar"
-            onClick={() => void aplicarGiroEje()}
-            className="rounded border px-2 py-0.5 hover:bg-muted"
-          >
-            Aplicar
-          </button>
-          <button
-            type="button"
-            data-testid="giro-cancelar"
-            onClick={cancelar}
-            className="rounded border px-2 py-0.5 hover:bg-muted"
-          >
-            Cancelar
-          </button>
-        </>
-      )}
+      <span className="font-semibold capitalize">{herramienta}</span>
       {herramienta === "muro" && (
         <>
           <label className="flex items-center gap-1">
