@@ -57,6 +57,8 @@ interface Props {
   onPlegar?: () => void;
   /** O039: árbol del presupuesto (modo Obra). */
   arbolObra?: ArbolObra | null;
+  /** O039: avisa el modo para calcular el árbol de Obra solo cuando se ve. */
+  onCambiarModo?: (modo: "modelo" | "obra") => void;
   onMoverPartidaObra?: (partida: PartidaObra, capitulo: CapituloObra) => void;
   onCrearCapituloObra?: (nombre: string) => void;
   onRenombrarCapituloObra?: (identificacion: string, nombre: string) => void;
@@ -130,6 +132,7 @@ export function ArbolProyecto({
   onRenombrarCapituloObra,
   onMoverCapituloObra,
   onBorrarCapituloObra,
+  onCambiarModo,
 }: Props) {
   const [consulta, setConsulta] = useState("");
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
@@ -137,6 +140,11 @@ export function ArbolProyecto({
   const contenedor = useRef<HTMLDivElement>(null);
   // O039: modo del árbol y edición de capítulos.
   const [modo, setModo] = useState<"modelo" | "obra">("modelo");
+  // El árbol de Obra se pide al núcleo solo mientras este modo está abierto.
+  useEffect(() => {
+    onCambiarModo?.(modo);
+    return () => onCambiarModo?.("modelo");
+  }, [modo, onCambiarModo]);
   const [plegadosObra, setPlegadosObra] = useState<Set<string>>(new Set());
   const [menuObra, setMenuObra] = useState<{
     tipo: "capitulo" | "partida";

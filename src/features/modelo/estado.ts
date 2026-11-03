@@ -217,6 +217,9 @@ interface EstadoModelo {
   arbol: NodoArbol | null;
   /** O039: árbol del presupuesto (modo Obra) devuelto por `modelo.arbol_obra`. */
   arbolObra: ArbolObra | null;
+  /** O039: el árbol de Obra solo se calcula con el modo Obra abierto (medir todo es caro). */
+  arbolObraActivo: boolean;
+  fijarArbolObraActivo: (activo: boolean) => void;
   /** O038: contador que el árbol incrementa para pedir «Ajustar» al visor. */
   ajustarToken: number;
   vistaActivaId: string | null;
@@ -687,7 +690,9 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         rpc<unknown>("estilos.leer").catch(() => null),
         cargarTiposEstructura(),
         rpc<NodoArbol>("modelo.arbol").catch(() => null),
-        rpc<ArbolObra>("modelo.arbol_obra").catch(() => null),
+        get().arbolObraActivo
+          ? rpc<ArbolObra>("modelo.arbol_obra").catch(() => null)
+          : Promise.resolve(null),
       ]);
     const mallas = teselado.elementos.map(decodificarMalla);
     const caja = cajaDeMallas(mallas);
@@ -827,7 +832,9 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         ? rpc<RespuestaTeselado>("geometria.teselar", { globalids: tocados })
         : Promise.resolve(null),
       rpc<NodoArbol>("modelo.arbol").catch(() => get().arbol),
-      rpc<ArbolObra>("modelo.arbol_obra").catch(() => get().arbolObra),
+      get().arbolObraActivo
+        ? rpc<ArbolObra>("modelo.arbol_obra").catch(() => get().arbolObra)
+        : Promise.resolve(null),
       ]);
     let mallas = get().mallas.filter(
       (m) => !borrados.has(m.globalid) && !tocados.includes(m.globalid),
@@ -1126,6 +1133,18 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     aberturas: [],
     arbol: null,
     arbolObra: null,
+    arbolObraActivo: false,
+    fijarArbolObraActivo: (activo) => {
+      if (get().arbolObraActivo === activo) return;
+      set({ arbolObraActivo: activo, ...(activo ? {} : { arbolObra: null }) });
+      if (activo) {
+        void rpc<ArbolObra>("modelo.arbol_obra")
+          .then((arbolObra) => {
+            if (get().arbolObraActivo) set({ arbolObra });
+          })
+          .catch(() => undefined);
+      }
+    },
     ajustarToken: 0,
     vistaActivaId: null,
     ejeSeleccionado: null,

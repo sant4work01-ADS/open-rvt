@@ -57,6 +57,7 @@ export function ModeloView() {
   // O039: árbol del presupuesto (modo Obra).
   const arbolObra = useModelo((s) => s.arbolObra);
   const moverPartidaObra = useModelo((s) => s.moverPartidaObra);
+  const fijarArbolObraActivo = useModelo((s) => s.fijarArbolObraActivo);
   const crearCapituloObra = useModelo((s) => s.crearCapituloObra);
   const renombrarCapituloObra = useModelo((s) => s.renombrarCapituloObra);
   const moverCapituloObra = useModelo((s) => s.moverCapituloObra);
@@ -162,6 +163,7 @@ export function ModeloView() {
                 onAjustar={pedirAjustar}
                 onPlegar={() => fijarPanelIzquierdoPlegado(true)}
                 arbolObra={arbolObra}
+                onCambiarModo={(modo) => fijarArbolObraActivo(modo === "obra")}
                 onMoverPartidaObra={(partida, capitulo) =>
                   void moverPartidaObra(partida, capitulo.identificacion)
                 }
