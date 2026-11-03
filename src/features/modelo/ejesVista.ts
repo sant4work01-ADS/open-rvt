@@ -246,24 +246,22 @@ export function agregarCodoEje(
   const codos = [...(base[claveCodos] ?? [])];
   if (codos.length >= MAXIMO_CODOS || !(diametroGlobo > 1e-12)) return base;
   const afuera = normalizar(direccion);
-  // O044: el codo se dibuja hacia el lado contrario a las agujas del reloj visto
-  // desde el eje (en un eje horizontal que va a la derecha, V2 baja), como el azul.
-  const perpendicular: Punto2 = [afuera[1], -afuera[0]];
+  // O044: V2 se corre al lado izquierdo del sentido del eje (en un eje horizontal
+  // que va a la derecha, V2 sube), como el azul del dibujo del dueño.
+  const perpendicular: Punto2 = [-afuera[1], afuera[0]];
   const D = diametroGlobo;
   const D_ = (k: number): Punto2 => [afuera[0] * k * D, afuera[1] * k * D];
   const L_ = (k: number): Punto2 => [perpendicular[0] * k * D, perpendicular[1] * k * D];
   const sumar = (a: Punto2, b: Punto2): Punto2 => [a[0] + b[0], a[1] + b[1]];
-  let globo: Punto2;
   let v2: Punto2;
   let v1: Punto2;
   if (codos.length > 0) {
     // Archivo viejo con un solo nodo: ese nodo es V1 y el codo se completa.
     v1 = [codos[0][0], codos[0][1]];
     v2 = sumar(sumar(v1, D_(0.5)), L_(0.55));
-    globo = sumar(v2, D_(1.3));
   } else {
     // El globo no cambia su posición a lo largo del eje: solo se separa de lado.
-    globo = sumar(extremo, L_(0.55));
+    const globo = sumar(extremo, L_(0.55));
     v2 = sumar(globo, D_(-1.3));
     v1 = sumar(sumar(v2, D_(-0.5)), L_(-0.55));
   }
@@ -278,7 +276,6 @@ export function agregarCodoEje(
       const delta = D_(corrimiento / D);
       v1 = sumar(v1, delta);
       v2 = sumar(v2, delta);
-      globo = sumar(globo, delta);
     }
   }
   const salida: AjusteEjeVista = {

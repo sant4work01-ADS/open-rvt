@@ -550,7 +550,11 @@ export function factorEscala(escala: EscalaVista): number {
  * pasa por aquí. `escala` y `mundoPorPx` se conservan en la firma para no tocar las
  * llamadas de la vista.
  */
-export function mmAPx(mm: number, _escala: EscalaVista, _mundoPorPx: number): number {
+export function mmAPx(mm: number, escala: EscalaVista, mundoPorPx: number): number {
+  // O044: la escala y el zoom ya no intervienen en pantalla; se leen solo para
+  // conservar la firma que usan todas las llamadas de la vista.
+  void escala;
+  void mundoPorPx;
   if (!(mm > 0)) return 1;
   return Math.max(1, mm * 2.2);
 }
