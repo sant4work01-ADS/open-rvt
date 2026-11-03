@@ -40,11 +40,11 @@ opciones y atajos) sobre el binario debug de Tauri en Windows.
 
 ## Pruebas
 
-- `nucleo/tests/test_ed2.py` (11 pruebas): espejo de muro exterior en x=0 y y=1,
+- `nucleo/tests/test_ed2.py` (12 pruebas): espejo de muro exterior en x=0 y y=1,
   puerta copiada en el muro reflejado con giro invertido, GlobalId conservados
   sin copia, enlaces a ejes quitados con aviso, matriz lineal en los dos modos,
   matriz polar 360°/4, muro con ventana en matriz de 3, deshacer en un paso y
-  las tres puertas del servidor y los bordes (eje nulo, número < 2, selección vacía).
+  las tres puertas del servidor, la hoja de una puerta copiada dentro del cuerpo del muro exterior y los bordes (eje nulo, número < 2, selección vacía).
 - E2E `e2e/ed2.test.js` con clics reales, ejecutado en Windows:
 
   ```

@@ -5243,8 +5243,7 @@ class ModeladoMixin:
         # O005c: centro del cuerpo del muro en el eje local Y, para que el marco no
         # sobresalga cuando la alineación es interior o exterior.
         desfase = (
-            self._desfase_alineacion(self._datos_muro(muro)["alineacion"], espesor)
-            + espesor / 2.0
+            self._desfase_de_muro(muro, espesor) + espesor / 2.0
             if muro is not None
             else 0.0
         )
@@ -5347,7 +5346,7 @@ class ModeladoMixin:
             datos_muro["espesor"],
             antepecho,
             distancia,
-            self._desfase_alineacion(datos_muro["alineacion"], datos_muro["espesor"]),
+            self._desfase_de_muro(muro_entidad, datos_muro["espesor"]),
         )
         geometry_api.assign_representation(self.modelo, product=vano, representation=cuerpo_vano)
         geometry_api.edit_object_placement(
@@ -6632,7 +6631,7 @@ class ModeladoMixin:
                 info_muro["espesor"],
                 datos["antepecho"],
                 datos["distancia"],
-                self._desfase_alineacion(info_muro["alineacion"], info_muro["espesor"]),
+                self._desfase_de_muro(muro, info_muro["espesor"]),
             ),
         )
         modificados = [entidad]

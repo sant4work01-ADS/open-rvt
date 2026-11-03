@@ -285,3 +285,21 @@ def test_bordes_rechazan_eje_degenerado_numero_menor_que_dos_y_seleccion_vacia()
     # Ningún rechazo dejó copias ni consumió el historial.
     assert len(nucleo.modelo.by_type("IfcColumn")) == 1
     assert len(nucleo._deshacer) == historial
+
+
+def test_espejo_de_muro_exterior_con_puerta_deja_la_hoja_dentro_del_cuerpo() -> None:
+    nucleo, nivel = _nuevo()
+    muro = _muro(nucleo, nivel, 0, 0, 4, 0, alineacion="exterior")
+    nucleo.abertura_crear("IfcDoor", muro.GlobalId, 1.0, 0.9, 2.1, 0.0, False)
+    resultado = nucleo.elementos_espejo([muro.GlobalId], (0, 0), (0, 1), True)
+    copia_muro = nucleo._entidad_por_gid(resultado["creados"][0])
+    puerta = next(
+        p for p in nucleo.modelo.by_type("IfcDoor")
+        if p.GlobalId != next(iter(muro.HasOpenings)).RelatedOpeningElement.HasFillings[0].RelatedBuildingElement.GlobalId
+    )
+    x0, x1, y0, y1 = _caja(nucleo, puerta)
+    xm0, xm1, ym0, ym1 = _caja(nucleo, copia_muro)
+    # La hoja copiada queda dentro del cuerpo del muro copiado (y entre −0,15 y 0).
+    assert xm0 <= x0 <= x1 <= xm1
+    assert ym0 - 1e-6 <= y0 and y1 <= ym1 + 1e-6
+    assert (round(ym0, 6), round(ym1, 6)) == (-0.15, 0.0)
