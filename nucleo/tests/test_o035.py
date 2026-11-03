@@ -118,6 +118,9 @@ def test_muro_sobre_contratrabe_baja_a_la_cara_superior() -> None:
     # El desplazamiento del muro no cambia: la base baja solo al modelar.
     assert _datos(nucleo, muro)["z"] == pytest.approx(0.0, abs=1e-9)
     assert _bajadas(nucleo, muro) == pytest.approx([(0.0, 4.0, -0.30)], abs=1e-9)
+    assert nucleo._limites_verticales_muro(
+        _entidad(nucleo, muro), _datos(nucleo, muro)
+    ) == pytest.approx((-0.30, 2.60), abs=1e-9)
 
     x0, x1, _y0, _y1, z0, z1 = _caja(nucleo, muro)
     assert (x0, x1) == pytest.approx((0.0, 4.0), abs=1e-9)

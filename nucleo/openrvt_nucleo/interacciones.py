@@ -1580,7 +1580,7 @@ class InteraccionesMixin:
             rot = math.atan2(uy, ux)
             nx, ny = -uy * centro, ux * centro
             cx, cy = (x1 + x2) / 2.0 + nx, (y1 + y2) / 2.0 + ny
-            z0, z1 = self._limites_verticales_muro(elemento, datos)
+            z0, z1 = self._limites_verticales_muro_nivel(elemento, datos)
             from shapely.geometry import Polygon as _Polygon
 
             coseno, seno = math.cos(rot), math.sin(rot)

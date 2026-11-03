@@ -2696,7 +2696,7 @@ class ModeladoMixin:
         """
         datos = self._datos_muro(muro)
         poligonos = self._huellas_muro(muro, datos)
-        base, cima = self._limites_verticales_muro(muro, datos)
+        base, cima = self._limites_verticales_muro_nivel(muro, datos)
         # O035: la base baja por tramos hasta la cara superior de la zapata
         # corrida o la contratrabe que esté debajo en planta.
         bajadas = self._tramos_bajada_muro(muro, datos)
@@ -3011,7 +3011,20 @@ class ModeladoMixin:
     def _limites_verticales_muro(
         self, muro: Any, datos: dict[str, Any] | None = None
     ) -> tuple[float, float]:
-        """(base, cima) del muro después de apoyarse y cubrirse con otros elementos."""
+        """(base, cima) efectivas; si baja por tramos devuelve la base más baja."""
+        datos = datos or self._datos_muro(muro)
+        base, cima = self._limites_verticales_muro_nivel(muro, datos)
+        bajadas = self._tramos_bajada_muro(muro, datos)
+        if base > float(datos["z"]) + TOLERANCIA_CALCULO:
+            return (base, cima)
+        if bajadas:
+            return (min(cara for _u0, _u1, cara in bajadas), cima)
+        return (base, cima)
+
+    def _limites_verticales_muro_nivel(
+        self, muro: Any, datos: dict[str, Any] | None = None
+    ) -> tuple[float, float]:
+        """(base, cima) del nivel: apoyos y cubiertas, sin la bajada O035."""
         from shapely.geometry import Polygon
 
         datos = datos or self._datos_muro(muro)
