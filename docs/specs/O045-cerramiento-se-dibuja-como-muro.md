@@ -1,4 +1,4 @@
-# O045: el cerramiento se dibuja igual que el muro
+# O045: el cerramiento se dibuja igual que el muro y va embebido en él (no lo corta)
 
 ## Reporte del dueño (3-nov, con la 0.5.26)
 «Simplemente no se dibuja. El modo en que se dibuja es lo que no sirve: no es como el muro, el cerramiento tiene otra
@@ -20,18 +20,31 @@ resultado no corresponde a sus clics.
    - la misma vista previa mientras se mueve el cursor;
    - el doble clic termina.
    - Ya no hay modo de «un clic = todo el muro».
-2. **Se liga solo al muro que tiene debajo.** Si el tramo dibujado es colineal con el eje de un muro (tolerancia: la
-   mitad del espesor del muro) y cae dentro de su largo, el cerramiento queda ligado a ese muro con las reglas de O041 y
-   O043:
-   - el muro termina en la cara inferior del cerramiento;
-   - el cerramiento sigue al muro en planta.
-
-   Puede cubrir solo una parte del muro, por ejemplo sobre una puerta. En ese caso solo esa parte del muro queda a la
-   altura del cerramiento; si eso no es posible hoy, el muro no cambia de altura y se avisa una vez «Cerramiento
-   parcial: el muro conserva su altura».
-
-   Si el tramo abarca varios muros colineales seguidos, se crea un cerramiento por muro, cortado en las juntas. Si no
-   está sobre ningún muro, queda libre, sin liga.
+2. **Se liga solo al muro que tiene debajo, y va EMBEBIDO en el muro (corrección del dueño, 3-nov: «¿por qué el
+   cerramiento corta el muro? Va embebido en el muro, recubierto por sus recubrimientos; lo mismo los castillos»).**
+   - **Liga:** si el tramo dibujado es colineal con el eje de un muro (tolerancia: la mitad del espesor del muro) y cae
+     dentro de su largo, el cerramiento queda ligado a ese muro solo en planta: sigue su eje y su largo. Puede cubrir solo
+     una parte del muro, por ejemplo encima de una puerta. Si abarca varios muros colineales seguidos, se crea un
+     cerramiento por muro, cortado en las juntas. Si no está sobre ningún muro, queda libre, sin liga.
+   - **El muro NO se corta ni se acorta.** Se quita la regla de O041 «el muro ligado termina en la cara inferior del
+     cerramiento»:
+     - el muro conserva su altura según sus propias restricciones (base y tope);
+     - el cerramiento queda dentro del muro, como los castillos;
+     - en planta, alzado y 3D el muro se ve continuo y el cerramiento, dentro de él;
+     - el núcleo deja de cambiar la altura del muro al crear, mover o cambiar de nivel un cerramiento;
+     - los castillos también llegan a la altura que les toca y no recortan el muro.
+   - **Cantidades (embebido):**
+     - **volumen y área de block del muro:** se descuenta la parte que ocupan los cerramientos y castillos embebidos (su
+       sección dentro del espesor del muro). Si el cerramiento o el castillo es más ancho que el muro, solo se descuenta
+       la parte que está dentro del espesor;
+     - **aplanados, yeso, pintura y recubrimientos del muro:** se miden sobre la cara completa del muro, sin descontar
+       cerramientos ni castillos, porque el recubrimiento los cubre;
+     - **concreto y acero:** van completos en el cerramiento y en el castillo.
+     Revisa cómo se mide hoy en CantidadesView o en el módulo de cantidades y ajústalo con esta regla.
+   - **Archivos ya hechos con la regla vieja** (como `e2e/datos/cerramiento-dueno.ifc`, donde un muro mide 2.00 por su
+     cerramiento en 2.20 aunque su tope es Nivel 4): al abrirlos, cada muro recupera la altura de sus propias
+     restricciones (en ese archivo, de 0 a 3.60). Lo hace una vez, en un solo paso, y sin aviso molesto: solo una línea en
+     la bitácora.
 3. **Nivel y desfase** como en O043:
    - nivel de la planta activa con desfase 0, salvo que el usuario elija otro en la barra de opciones;
    - en alzado, corte y 3D, la regla de O041.
@@ -46,10 +59,14 @@ resultado no corresponde a sus clics.
   - Abre `e2e/datos/cerramiento-dueno.ifc`.
   - En la Planta Nivel 1, dibuja con la herramienta, en una sola cadena, sobre el muro izquierdo: inicio en una esquina
     y fin en la otra. Debe quedar un cerramiento nuevo ligado a ese muro, en el Nivel 1, y sin duplicados en los otros
-    3.
+    3. Al abrir el archivo, los 4 muros miden de 0 a 3.60 (su tope); ninguno quedó cortado por su cerramiento.
   - En un modelo nuevo con un rectángulo de 4 muros de 7 × 5 m: cadena de 5 clics que recorra las 4 esquinas y cierre.
-    Deben salir 4 cerramientos, uno por muro, ligados a su muro, y cada muro debe terminar en la cara inferior de su
-    cerramiento.
+    Deben salir 4 cerramientos, uno por muro, ligados a su muro, y cada muro debe conservar su altura completa, con el
+    cerramiento dentro.
+  - Cantidades de un muro de 7 × 2.60 de block de 15 cm con un cerramiento de 15 × 20 y dos castillos de 15 × 15
+    (calculado a mano en el comentario):
+    - área de block = 7 × 2.60 − (7 − 2 × 0.15) × 0.20 − 2 × 0.15 × 2.60 = 18.20 − 1.34 − 0.78 = 16.08 m²;
+    - aplanado por cada cara = 18.20 m².
   - Un tramo de 2 m sobre un muro de 7 m: un cerramiento de 2 m.
   - Un tramo libre, fuera de muros: un cerramiento sin liga.
   - Repetir la cadena sobre los mismos muros: aviso y sin duplicados.
@@ -57,7 +74,7 @@ resultado no corresponde a sus clics.
   - Capturas en `docs/progreso/O045/`, leídas como imagen.
 - **Actualiza las E2E que usaban un clic sobre el muro:** `o041.test.js`, `cerramiento-niveles.test.js`,
   `cerramiento-rectangulo.test.js` y `cerramiento-dueno.test.js`. Pasan a dibujar con inicio y fin y conservan sus
-  aserciones de nivel, liga y altura del muro. No las borres.
+  aserciones de nivel y liga; las de «el muro termina bajo el cerramiento» se cambian a «el muro conserva su altura». No las borres.
 - **vitest:** detección de colinealidad con un muro (dentro y fuera de la tolerancia), corte por juntas de muros
   colineales y nivel por omisión de la planta activa.
 - **pytest:** crear un cerramiento por dos puntos sobre un muro lo liga; sobre medio muro, es parcial; fuera de muros,
