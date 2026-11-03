@@ -708,7 +708,7 @@ class ModeladoMixin:
             restriccion = self._restricciones_de(elemento)
             if (
                 restriccion["NivelBase"] in niveles
-                or restriccion["NivelTope"] in niveles
+                or restriccion.get("NivelTope") in niveles
             ):
                 self._aplicar_restriccion(elemento, restriccion)
                 modificados.append(elemento)
@@ -1430,7 +1430,7 @@ class ModeladoMixin:
             + self.modelo.by_type("IfcFooting")
         ):
             restriccion = self._restricciones_de(elemento)
-            if gid_nivel in (restriccion["NivelBase"], restriccion["NivelTope"]):
+            if gid_nivel in (restriccion.get("NivelBase"), restriccion.get("NivelTope")):
                 ligados.append(_nombre(elemento) or elemento.is_a())
         if ligados:
             raise self._error(
