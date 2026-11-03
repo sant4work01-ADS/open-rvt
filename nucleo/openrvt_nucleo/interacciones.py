@@ -487,9 +487,15 @@ class InteraccionesMixin:
         muro: str,
         nivel: str | None = None,
         desfase: float | None = None,
+        desde_planta: bool = False,
     ) -> dict[str, Any]:
         return self._lineal_en_muro(
-            tipo, muro, "cerramiento", nivel_elegido=nivel, desfase_elegido=desfase
+            tipo,
+            muro,
+            "cerramiento",
+            nivel_elegido=nivel,
+            desfase_elegido=desfase,
+            desde_planta=desde_planta,
         )
 
     def dala_crear_en_muro(self, tipo: str, muro: str) -> dict[str, Any]:
@@ -502,6 +508,7 @@ class InteraccionesMixin:
         esperado: str,
         nivel_elegido: str | None = None,
         desfase_elegido: float | None = None,
+        desde_planta: bool = False,
     ) -> dict[str, Any]:
         self._exigir_modelo()
         tipo_entidad = self._tipo_estructura(tipo, ("IfcBeamType",))
@@ -513,6 +520,42 @@ class InteraccionesMixin:
         _, seccion, _ = self._seccion_y_armado(tipo_entidad)
         alto = float(seccion.get("H") or 0.20)
         nucleo, _centro = self._capas_nucleo(muro_entidad)
+        restriccion_cerramiento: dict[str, Any] | None = None
+        explicito = False
+        if esperado == "cerramiento":
+            # O043: el nivel del cerramiento sale del elegido o del tope del muro,
+            # y nunca se crea otro cerramiento en el mismo nivel del mismo muro.
+            restriccion_cerramiento = self._restricciones_cerramiento_ligado(
+                muro_entidad
+            )
+            explicito = bool(nivel_elegido) or desfase_elegido is not None
+            if explicito:
+                if nivel_elegido:
+                    restriccion_cerramiento["NivelBase"] = _gid(
+                        self._nivel_por_gid(str(nivel_elegido))
+                    )
+                if desfase_elegido is not None:
+                    try:
+                        restriccion_cerramiento["DesfaseBase"] = float(desfase_elegido)
+                    except (TypeError, ValueError) as exc:
+                        raise self._error("El desfase no es un número.", -32602) from exc
+            nivel_destino = _texto(restriccion_cerramiento.get("NivelBase"))
+            if nivel_destino:
+                for dependiente in self._dependientes_de(muro_entidad):
+                    if (
+                        self._estructura_de_tipo(self._tipo_entidad(dependiente))
+                        != "cerramiento"
+                    ):
+                        continue
+                    existente = _texto(
+                        self._restricciones_de(dependiente).get("NivelBase")
+                    )
+                    if existente == nivel_destino:
+                        nivel_entidad = self._nivel_por_gid(nivel_destino)
+                        raise self._error(
+                            f"Ese muro ya tiene cerramiento en {_nombre(nivel_entidad)}.",
+                            -32602,
+                        )
         self._instantanea()
         if esperado == "cerramiento":
             desfase = datos["z"] + datos["altura"]
@@ -538,20 +581,11 @@ class InteraccionesMixin:
         self._regenerar_estructura(viga)
         self._guardar_liga(viga, {"Muro": _gid(muro_entidad)})
         if esperado == "cerramiento":
-            restriccion = self._restricciones_cerramiento_ligado(muro_entidad)
-            explicito = bool(nivel_elegido) or desfase_elegido is not None
-            if explicito:
-                # O041: la barra de opciones deja elegir nivel y desfase antes
-                # del clic; el desfase se mide del nivel a la cara superior.
-                if nivel_elegido:
-                    restriccion["NivelBase"] = _gid(
-                        self._nivel_por_gid(str(nivel_elegido))
-                    )
-                if desfase_elegido is not None:
-                    try:
-                        restriccion["DesfaseBase"] = float(desfase_elegido)
-                    except (TypeError, ValueError) as exc:
-                        raise self._error("El desfase no es un número.", -32602) from exc
+            restriccion = restriccion_cerramiento or self._restricciones_cerramiento_ligado(
+                muro_entidad
+            )
+            # O041: la barra de opciones deja elegir nivel y desfase antes del
+            # clic; el desfase se mide del nivel a la cara superior.
             self._guardar_pset(viga, PSET_RESTRICCIONES, restriccion)
             self._guardar_pset(
                 viga,
@@ -563,9 +597,12 @@ class InteraccionesMixin:
                 },
             )
             if explicito:
-                # Recalcula Z y coloca el muro bajo la cara inferior, en la
-                # misma instantánea (un solo paso de Deshacer).
+                # Recalcula Z en la misma instantánea (un solo paso de Deshacer).
                 self._aplicar_restriccion(viga, restriccion)
+                if desde_planta:
+                    # O043: al crear desde una planta el muro no sube hasta la
+                    # cara superior: termina en la cara inferior del cerramiento.
+                    self._muro_sigue_cerramiento(viga, cara_inferior=True)
         self._conectar(viga, muro_entidad)
         if esperado == "cerramiento":
             self._actualizar_castillos(muro_entidad)
@@ -611,10 +648,13 @@ class InteraccionesMixin:
         self._regenerar_estructura(elemento)
         self._muro_sigue_cerramiento(elemento)
 
-    def _muro_sigue_cerramiento(self, cerramiento: Any) -> None:
+    def _muro_sigue_cerramiento(
+        self, cerramiento: Any, cara_inferior: bool = False
+    ) -> None:
         """O041: la altura la manda el cerramiento; el muro ligado termina en su cara
         inferior y los castillos llegan a esa cara. Al subir el cerramiento el muro
-        crece; al bajar, se acorta."""
+        crece; al bajar, se acorta. O043: al crearlo desde una planta se usa la cara
+        inferior (el tope de la pieza es el nivel de la planta)."""
         muro_gid = _texto(self._leer_liga(cerramiento).get("Muro"))
         if not muro_gid:
             return
@@ -625,7 +665,7 @@ class InteraccionesMixin:
         datos = self._datos_muro(muro)
         peralte = self._peralte_de(cerramiento)
         z = float(self._leer_pset(cerramiento, "OPENRVT_Estructura").get("Z") or 0.0)
-        tope = z + peralte / 2.0
+        tope = z - peralte / 2.0 if cara_inferior else z + peralte / 2.0
         nueva_altura = tope - datos["z"]
         if nueva_altura <= TOLERANCIA_CALCULO:
             return
@@ -648,7 +688,11 @@ class InteraccionesMixin:
             tipo = self._tipo_entidad(cerramientos[0])
             _, seccion, _ = self._seccion_y_armado(tipo)
             alto = float(pset.get("H") or seccion.get("H") or 0.20)
-            altura = datos["altura"] - alto
+            # O043: los castillos llegan a la cara inferior real del cerramiento,
+            # que sale de su centro y peralte (no de la altura del muro, que puede
+            # terminar justo en esa cara).
+            centro = float(pset.get("Z") or 0.0)
+            altura = centro - alto / 2.0 - datos["z"]
         for castillo in self._dependientes_de(muro):
             if self._estructura_de_tipo(self._tipo_entidad(castillo)) != "castillo":
                 continue
