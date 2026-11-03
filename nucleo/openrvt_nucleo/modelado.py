@@ -684,6 +684,10 @@ class ModeladoMixin:
                 and self._estructura_de_tipo(self._tipo_entidad(elemento)) == "cerramiento"
             ):
                 self._muro_sigue_cerramiento(elemento)
+            # O035: al cambiar el desplante o la posición de la cimentación, los
+            # muros que se apoyan en ella recalculan su base.
+            if self._es_cimentacion_bajo_muro(elemento):
+                self._actualizar_muros_sobre_cimentacion()
 
     def _recalcular_restricciones(self, niveles: set[str]) -> list[Any]:
         """Recalcula los elementos ligados a cualquiera de esos niveles."""
@@ -2598,6 +2602,9 @@ class ModeladoMixin:
             "linea_ubicacion": self._linea_de_muro(muro, datos),
             "desfase_ubicacion": float(datos.get("DesfaseUbicacion") or 0.0),
             "volteado": datos.get("Volteado") in (True, "True", "true", 1, "1"),
+            # O035: por omisión la base baja hasta la cimentación de debajo.
+            "bajar_a_cimentacion": datos.get("BajarACimentacion", True)
+            not in (False, "False", "false", 0, "0"),
             "x2": x + dx * largo,
             "y2": y + dy * largo,
         }
@@ -2690,21 +2697,28 @@ class ModeladoMixin:
         datos = self._datos_muro(muro)
         poligonos = self._huellas_muro(muro, datos)
         base, cima = self._limites_verticales_muro(muro, datos)
-        offset_z = base - datos["z"]
-        alto = max(cima - base, 0.001)
+        # O035: la base baja por tramos hasta la cara superior de la zapata
+        # corrida o la contratrabe que esté debajo en planta.
+        bajadas = self._tramos_bajada_muro(muro, datos)
+        if base > float(datos["z"]) + TOLERANCIA_CALCULO:
+            # El muro ya se apoya en algo por encima de su nivel: no se baja.
+            bajadas = []
         items = []
         temporales = []
         for poligono in poligonos:
-            rep = geometry_api.add_slab_representation(
-                self.modelo,
-                context=self._contexto(),
-                depth=alto,
-                direction_sense="POSITIVE",
-                offset=offset_z,
-                polyline=poligono,
-            )
-            temporales.append(rep)
-            items.extend(rep.Items)
+            for pieza, z0 in self._partir_por_bajadas(poligono, base, bajadas):
+                offset_z = z0 - datos["z"]
+                alto = max(cima - z0, 0.001)
+                rep = geometry_api.add_slab_representation(
+                    self.modelo,
+                    context=self._contexto(),
+                    depth=alto,
+                    direction_sense="POSITIVE",
+                    offset=offset_z,
+                    polyline=pieza,
+                )
+                temporales.append(rep)
+                items.extend(rep.Items)
         # La representación final es una sola con todos los tramos del muro.
         context = self._contexto()
         cuerpo = self.modelo.create_entity(
@@ -2836,6 +2850,163 @@ class ModeladoMixin:
             if len(anillo) >= 3:
                 salida.append(anillo)
         return salida or [poligono]
+
+    def _bajar_a_cimentacion(self, muro: Any, datos: dict[str, Any]) -> bool:
+        """O035: ¿la base del muro debe bajar hasta la cimentación de debajo?
+
+        La casilla viene activada por omisión; un desfase de base puesto a mano
+        distinto de cero manda y el muro nace en su nivel.
+        """
+        valor = datos.get("bajar_a_cimentacion", True)
+        if valor in (False, "False", "false", 0, "0"):
+            return False
+        restriccion = self._restricciones_de(muro)
+        try:
+            desfase = float(restriccion.get("DesfaseBase") or 0.0)
+        except (TypeError, ValueError):
+            desfase = 0.0
+        return abs(desfase) <= TOLERANCIA_CALCULO
+
+    def _huellas_cimentacion_bajo_muro(
+        self,
+    ) -> list[tuple[list[tuple[float, float]], float]]:
+        """(huella en planta, cara superior) de contratrabes y zapatas corridas."""
+        salida: list[tuple[list[tuple[float, float]], float]] = []
+        for elemento in self.modelo.by_type("IfcElement"):
+            predef = _texto(getattr(elemento, "PredefinedType", ""))
+            alias = self._estructura_de_tipo(self._tipo_entidad(elemento))
+            if elemento.is_a("IfcFooting") and predef == "STRIP_FOOTING":
+                datos = self._leer_pset(elemento, "OPENRVT_Estructura")
+                if not datos:
+                    continue
+                _alias, seccion, _armado = self._seccion_y_armado(
+                    self._tipo_entidad(elemento)
+                )
+                x1 = float(datos.get("X1") or 0.0)
+                y1 = float(datos.get("Y1") or 0.0)
+                x2 = float(datos.get("X2") or 0.0)
+                y2 = float(datos.get("Y2") or 0.0)
+                largo = math.hypot(x2 - x1, y2 - y1)
+                if largo <= TOLERANCIA_CALCULO:
+                    continue
+                ux, uy = (x2 - x1) / largo, (y2 - y1) / largo
+                pi = float(datos.get("ProlongacionInicio") or 0.0)
+                pf = float(datos.get("ProlongacionFin") or 0.0)
+                peralte = float(seccion.get("Peralte") or 0.20)
+                z = float(datos.get("Z") or 0.0)
+                barra = uniones.Barra(
+                    gid=_gid(elemento),
+                    tipo="viga",
+                    x1=x1 - ux * pi,
+                    y1=y1 - uy * pi,
+                    x2=x2 + ux * pf,
+                    y2=y2 + uy * pf,
+                    ancho=float(seccion.get("Ancho") or 0.60),
+                    z0=z - peralte / 2.0,
+                    z1=z + peralte / 2.0,
+                )
+                salida.append((uniones.huella(barra), barra.z1))
+            elif alias == "contratrabe":
+                barra = self._barra_de_elemento(elemento)
+                if barra is None:
+                    continue
+                salida.append((uniones.huella(barra), barra.z1))
+        return salida
+
+    def _tramos_bajada_muro(
+        self, muro: Any, datos: dict[str, Any]
+    ) -> list[tuple[float, float, float]]:
+        """Tramos (u0, u1, base) donde el muro baja hasta la cimentación."""
+        if not self._bajar_a_cimentacion(muro, datos):
+            return []
+        base = float(datos["z"])
+        largo = float(datos["longitud"])
+        if largo <= TOLERANCIA_CALCULO:
+            return []
+        origen = (float(datos["x1"]), float(datos["y1"]))
+        direccion = (float(datos["dx"]), float(datos["dy"]))
+        candidatos: list[tuple[float, float, float]] = []
+        for huella, cara in self._huellas_cimentacion_bajo_muro():
+            if cara >= base - TOLERANCIA_CALCULO:
+                # Por encima de la base, o al ras: lo resuelve el apoyo normal.
+                continue
+            try:
+                intervalo = uniones.intervalo_en_huella(origen, direccion, huella)
+            except Exception:
+                continue
+            if intervalo is None:
+                continue
+            u0 = max(0.0, float(intervalo[0]))
+            u1 = min(largo, float(intervalo[1]))
+            if u1 - u0 <= TOLERANCIA_CALCULO:
+                continue
+            candidatos.append((u0, u1, float(cara)))
+        if not candidatos:
+            return []
+        cortes = {0.0, largo}
+        for u0, u1, _cara in candidatos:
+            cortes.update((u0, u1))
+        ordenados = sorted(cortes)
+        salida: list[tuple[float, float, float]] = []
+        for u0, u1 in zip(ordenados, ordenados[1:]):
+            if u1 - u0 <= TOLERANCIA_CALCULO:
+                continue
+            medio = (u0 + u1) / 2.0
+            caras = [
+                cara
+                for a, b, cara in candidatos
+                if a < medio < b
+            ]
+            if not caras:
+                continue
+            z0 = max(caras)
+            if z0 < base - TOLERANCIA_CALCULO:
+                salida.append((u0, u1, z0))
+        return salida
+
+    def _partir_por_bajadas(
+        self,
+        poligono: list[tuple[float, float]],
+        base: float,
+        bajadas: list[tuple[float, float, float]],
+    ) -> list[tuple[list[tuple[float, float]], float]]:
+        """Parte una huella local en tramos con su cota de base."""
+        if not bajadas:
+            return [(poligono, base)]
+        from shapely.geometry import LineString, Polygon
+        from shapely.ops import split
+
+        piezas: list[Any] = [Polygon(poligono)]
+        for u in sorted({u for a, b, _z in bajadas for u in (a, b)}):
+            if u <= TOLERANCIA_CALCULO:
+                continue
+            corte = LineString([(u, -1e5), (u, 1e5)])
+            nuevas: list[Any] = []
+            for pieza in piezas:
+                if pieza.is_empty or not corte.intersects(pieza):
+                    nuevas.append(pieza)
+                    continue
+                try:
+                    nuevas.extend(list(split(pieza, corte).geoms))
+                except Exception:
+                    nuevas.append(pieza)
+            piezas = nuevas
+        salida: list[tuple[list[tuple[float, float]], float]] = []
+        for pieza in piezas:
+            if pieza.is_empty or pieza.area <= TOLERANCIA_CALCULO:
+                continue
+            punto = pieza.representative_point()
+            z0 = base
+            for u0, u1, cara in bajadas:
+                if u0 < punto.x < u1:
+                    z0 = cara
+                    break
+            anillo = _limpiar_anillo(
+                [(x, y) for x, y in list(pieza.exterior.coords)[:-1]]
+            )
+            if len(anillo) >= 3:
+                salida.append((anillo, z0))
+        return salida or [(poligono, base)]
 
     def _limites_verticales_muro(
         self, muro: Any, datos: dict[str, Any] | None = None
@@ -3243,6 +3414,7 @@ class ModeladoMixin:
                 "LineaUbicacion": linea_ubicacion,
                 "DesfaseUbicacion": desfase_ubicacion,
                 "Volteado": bool(volteado),
+                "BajarACimentacion": True,
             },
         )
         self._guardar_pset(muro, PSET_RESTRICCIONES, restriccion)
@@ -5070,6 +5242,9 @@ class ModeladoMixin:
                 # O007c: castillos, cerramientos y dalas siguen al muro.
                 self._actualizar_dependientes_muro(producto)
         self._recalcular_uniones_estructura()
+        # O035: mover la cimentación recalcula la base de los muros encima.
+        if any(self._es_cimentacion_bajo_muro(p) for p in afectados):
+            self._actualizar_muros_sobre_cimentacion()
         # O026: al mover una referencia, los elementos con candado la siguen.
         movidos = {_gid(p) for p in afectados}
         for gid in gids:
@@ -5153,6 +5328,7 @@ class ModeladoMixin:
                 )
         self._instantanea()
         borrados: list[str] = []
+        cimentacion_borrada = False
         # GlobalId en lugar de id(): los envoltorios de IfcOpenShell se liberan al
         # borrarlos y Python puede reutilizar su dirección de memoria.
         vistos: set[str] = set()
@@ -5161,6 +5337,8 @@ class ModeladoMixin:
                 entidad = self._entidad_por_gid(gid)
             except Exception:
                 continue
+            if self._es_cimentacion_bajo_muro(entidad):
+                cimentacion_borrada = True
             productos = self._productos_de(_gid(entidad))
             # De relleno a vano y de vano a muro, para no dejar relaciones colgando.
             for producto in reversed(productos):
@@ -5181,6 +5359,9 @@ class ModeladoMixin:
                 except Exception:
                     LOG.warning("no se pudo borrar %s", _gid(producto), exc_info=True)
         self._recalcular_uniones_estructura()
+        # O035: al borrar la cimentación, los muros vuelven a nacer en su nivel.
+        if cimentacion_borrada:
+            self._actualizar_muros_sobre_cimentacion()
         self.con_cambios = True
         return self._resultado(borrados=borrados, mensaje=f"{len(borrados)} elemento(s) borrado(s).")
 
@@ -5416,6 +5597,14 @@ class ModeladoMixin:
                 datos["volteado"] = bool(cambios.get("volteado", cambios.get("Volteado")))
             if cambios.get("voltear"):
                 datos["volteado"] = not bool(datos.get("volteado"))
+            # O035: casilla «Bajar hasta la cimentación».
+            if "bajar_a_cimentacion" in cambios or "BajarACimentacion" in cambios:
+                valor = cambios.get(
+                    "bajar_a_cimentacion", cambios.get("BajarACimentacion")
+                )
+                datos["bajar_a_cimentacion"] = valor not in (
+                    False, "False", "false", 0, "0"
+                )
             if (
                 altura is not None
                 or longitud is not None
@@ -5424,6 +5613,8 @@ class ModeladoMixin:
                 or "DesfaseUbicacion" in cambios
                 or "volteado" in cambios
                 or "Volteado" in cambios
+                or "bajar_a_cimentacion" in cambios
+                or "BajarACimentacion" in cambios
                 or cambios.get("voltear")
             ):
                 self._guardar_pset(
@@ -5437,6 +5628,9 @@ class ModeladoMixin:
                         "LineaUbicacion": datos["linea_ubicacion"],
                         "DesfaseUbicacion": datos["desfase_ubicacion"],
                         "Volteado": bool(datos["volteado"]),
+                        "BajarACimentacion": bool(
+                            datos.get("bajar_a_cimentacion", True)
+                        ),
                     },
                 )
             # O007c: el castillo, el cerramiento y la dala se recalculan con el muro.
@@ -5602,6 +5796,9 @@ class ModeladoMixin:
                 restriccion["AlturaSinConexion"] = float(datos.get("Altura") or 0.0)
                 self._guardar_pset(entidad, PSET_RESTRICCIONES, restriccion)
             self._regenerar_estructura(entidad)
+            # O035: editar la cimentación recalcula la base de los muros encima.
+            if self._es_cimentacion_bajo_muro(entidad):
+                self._actualizar_muros_sobre_cimentacion()
             if entidad.is_a("IfcColumn"):
                 dx = float(datos.get("X") or 0.0) - antes_x
                 dy = float(datos.get("Y") or 0.0) - antes_y

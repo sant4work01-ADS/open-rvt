@@ -1027,6 +1027,17 @@ export function PropiedadesElemento() {
   const atributos = propiedades.atributos;
   const ancho = Number(atributos.OverallWidth ?? 0);
   const alto = Number(atributos.OverallHeight ?? 0);
+  // O035: la casilla viene activada por omisión en los muros.
+  const psetMuro = propiedades.psets?.OPENRVT_Muro as
+    | Record<string, unknown>
+    | undefined;
+  const bajarCimentacion = !(
+    psetMuro?.BajarACimentacion === false ||
+    psetMuro?.BajarACimentacion === "False" ||
+    psetMuro?.BajarACimentacion === "false" ||
+    psetMuro?.BajarACimentacion === 0 ||
+    psetMuro?.BajarACimentacion === "0"
+  );
   return (
     <div data-testid="propiedades-elemento" className="flex flex-col gap-3 p-3 text-xs">
       <div>
@@ -1114,6 +1125,20 @@ export function PropiedadesElemento() {
             >
               ⇄ Voltear lados
             </button>
+            <label
+              className="flex items-center gap-2 text-xs"
+              title="Baja la base del muro hasta la cara superior de la zapata corrida o contratrabe que quede debajo; un desfase de base distinto de cero manda."
+            >
+              <input
+                type="checkbox"
+                data-testid="elemento-bajar-cimentacion"
+                checked={bajarCimentacion}
+                onChange={(e) =>
+                  void editar(gid, { bajar_a_cimentacion: e.target.checked })
+                }
+              />
+              <span>Bajar hasta la cimentación</span>
+            </label>
             <RestriccionesNivel
               globalid={gid}
               testidAltura="elemento-altura"

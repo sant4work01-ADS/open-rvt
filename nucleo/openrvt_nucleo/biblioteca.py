@@ -1364,6 +1364,10 @@ class BibliotecaMixin:
             for instancia in modificados:
                 self._regenerar_estructura(instancia)
                 self._recolocar_cerramiento_vertical(instancia)
+            # O035: si cambia el peralte de la cimentación, los muros encima
+            # vuelven a calcular su base.
+            if cambio_geometria and alias in ("contratrabe", "zapata_corrida"):
+                self._actualizar_muros_sobre_cimentacion()
         else:
             if parametros:
                 self._guardar_pset(tipo, "OPENRVT_Tipo", parametros)

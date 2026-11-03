@@ -660,6 +660,34 @@ class InteraccionesMixin:
             self._guardar_pset(castillo, "OPENRVT_Estructura", pset)
             self._regenerar_estructura(castillo)
 
+    def _es_cimentacion_bajo_muro(self, elemento: Any) -> bool:
+        """O035: ¿es una zapata corrida o una contratrabe?"""
+        if elemento is None:
+            return False
+        predef = _texto(getattr(elemento, "PredefinedType", ""))
+        if elemento.is_a("IfcFooting") and predef == "STRIP_FOOTING":
+            return True
+        try:
+            return self._estructura_de_tipo(self._tipo_entidad(elemento)) == "contratrabe"
+        except Exception:
+            return False
+
+    def _actualizar_muros_sobre_cimentacion(self) -> list[Any]:
+        """O035: recalcula la base de todos los muros al cambiar la cimentación.
+
+        Es el mismo mecanismo de dependientes que castillos y cerramientos: en lote,
+        una sola regeneración por muro.
+        """
+        modificados: list[Any] = []
+        for muro in list(self.modelo.by_type("IfcWall")):
+            if not self._leer_pset(muro, "OPENRVT_Muro"):
+                continue
+            self._actualizar_dependientes_muro(muro)
+            self._regenerar_muro(muro)
+            self._anotar_rebote(muro)
+            modificados.append(_gid(muro))
+        return modificados
+
     def _actualizar_dependientes_muro(self, muro: Any) -> list[Any]:
         """Recoloca castillos, cerramientos y dalas cuando el muro cambia."""
         datos = self._datos_muro(muro)
@@ -1375,6 +1403,57 @@ class InteraccionesMixin:
             "union_m3": round(union_total, 6),
         }
 
+    def _partir_base_muro_por_bajadas(
+        self,
+        base: Any,
+        z0: float,
+        bajadas: list[tuple[float, float, float]],
+        datos: dict[str, Any],
+    ) -> list[tuple[Any, float]]:
+        """O035: parte la huella del muro en tramos con su cota de base."""
+        if not bajadas:
+            return [(base, z0)]
+        from shapely.geometry import LineString
+        from shapely.ops import split
+
+        ux, uy = float(datos["dx"]), float(datos["dy"])
+        nx, ny = -uy, ux
+        x1, y1 = float(datos["x1"]), float(datos["y1"])
+        piezas = [base]
+        for u in sorted({u for a, b, _z in bajadas for u in (a, b)}):
+            if u <= TOLERANCIA_CALCULO:
+                continue
+            px, py = x1 + ux * u, y1 + uy * u
+            corte = LineString(
+                [
+                    (px - nx * 1e5, py - ny * 1e5),
+                    (px + nx * 1e5, py + ny * 1e5),
+                ]
+            )
+            nuevas: list[Any] = []
+            for pieza in piezas:
+                if pieza.is_empty or not corte.intersects(pieza):
+                    nuevas.append(pieza)
+                    continue
+                try:
+                    nuevas.extend(list(split(pieza, corte).geoms))
+                except Exception:
+                    nuevas.append(pieza)
+            piezas = nuevas
+        salida: list[tuple[Any, float]] = []
+        for pieza in piezas:
+            if pieza.is_empty or pieza.area <= TOLERANCIA_CALCULO:
+                continue
+            punto = pieza.representative_point()
+            u, _v = self._punto_en_local(datos, punto.x, punto.y)
+            z = z0
+            for u0, u1, cara in bajadas:
+                if u0 < u < u1:
+                    z = cara
+                    break
+            salida.append((pieza, z))
+        return salida or [(base, z0)]
+
     def _piezas_de_elemento(self, elemento: Any) -> dict[str, Any] | None:
         from shapely.geometry import Polygon
 
@@ -1528,60 +1607,89 @@ class InteraccionesMixin:
             if base.is_empty:
                 base = _Polygon(puntos)
             vanos = self._aberturas_del_muro(elemento)
-            bruto = base.area * (z1 - z0)
+            # O035: por tramos, la base puede bajar hasta la cimentación.
+            bajadas = self._tramos_bajada_muro(elemento, datos)
+            if z0 > float(datos["z"]) + TOLERANCIA_CALCULO:
+                bajadas = []
+            subtramos = self._partir_base_muro_por_bajadas(base, z0, bajadas, datos)
+            bruto = sum(b.area * (z1 - z) for b, z in subtramos)
             # Los vanos se descuentan del cuerpo y también del volumen bruto.
             for _vano, info in vanos:
                 bruto -= info["ancho"] * info["alto"] * nucleo
-                vz0 = z0 + info["antepecho"]
-                vz1 = vz0 + info["alto"]
-                vx = x1 + ux * (info["distancia"] + info["ancho"] / 2.0)
-                vy = y1 + uy * (info["distancia"] + info["ancho"] / 2.0)
-                vcos, vsen = math.cos(rot), math.sin(rot)
-                vp = []
-                for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
-                    lx, ly = sx * info["ancho"] / 2.0, sy * (nucleo + 0.02) / 2.0
-                    vp.append((vx + lx * vcos - ly * vsen, vy + lx * vsen + ly * vcos))
-                hueco = _Polygon(vp)
-                piezas.append(
-                    {
-                        "poligono": (lambda p=base, h=hueco: p.difference(h)),
-                        "z0": max(z0, vz0), "z1": min(z1, vz1),
-                        "prioridad": PRIORIDAD["muro"],
-                        "volumen": None,
-                    }
-                )
-            # Rebanadas fuera de los vanos: el polígono completo.
-            fronteras = sorted({
-                z0, z1,
-                *[max(z0, min(z1, z0 + info["antepecho"])) for _v, info in vanos],
-                *[max(z0, min(z1, z0 + info["antepecho"] + info["alto"])) for _v, info in vanos],
-            })
-            for a, b in zip(fronteras, fronteras[1:]):
-                if b - a <= TOLERANCIA_CALCULO:
-                    continue
-                medio = (a + b) / 2.0
-                cubierto = any(
-                    z0 + info["antepecho"] < medio < z0 + info["antepecho"] + info["alto"]
-                    for _v, info in vanos
-                )
-                if cubierto:
-                    continue
-                piezas.append(
-                    {
-                        "poligono": (lambda p=base: p),
-                        "z0": a, "z1": b,
-                        "prioridad": PRIORIDAD["muro"],
-                        "volumen": None,
-                    }
-                )
+            for sub, z_base in subtramos:
+                for _vano, info in vanos:
+                    vz0 = float(datos["z"]) + info["antepecho"]
+                    vz1 = vz0 + info["alto"]
+                    a, b = max(z_base, vz0), min(z1, vz1)
+                    if b - a <= TOLERANCIA_CALCULO:
+                        continue
+                    vx = x1 + ux * (info["distancia"] + info["ancho"] / 2.0)
+                    vy = y1 + uy * (info["distancia"] + info["ancho"] / 2.0)
+                    vcos, vsen = math.cos(rot), math.sin(rot)
+                    vp = []
+                    for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+                        lx, ly = sx * info["ancho"] / 2.0, sy * (nucleo + 0.02) / 2.0
+                        vp.append((vx + lx * vcos - ly * vsen, vy + lx * vsen + ly * vcos))
+                    hueco = _Polygon(vp)
+                    piezas.append(
+                        {
+                            "poligono": (lambda p=sub, h=hueco: p.difference(h)),
+                            "z0": a, "z1": b,
+                            "prioridad": PRIORIDAD["muro"],
+                            "volumen": None,
+                        }
+                    )
+                # Rebanadas fuera de los vanos: el polígono completo.
+                fronteras = sorted({
+                    z_base, z1,
+                    *[
+                        max(z_base, min(z1, float(datos["z"]) + info["antepecho"]))
+                        for _v, info in vanos
+                    ],
+                    *[
+                        max(
+                            z_base,
+                            min(
+                                z1,
+                                float(datos["z"])
+                                + info["antepecho"]
+                                + info["alto"],
+                            ),
+                        )
+                        for _v, info in vanos
+                    ],
+                })
+                for a, b in zip(fronteras, fronteras[1:]):
+                    if b - a <= TOLERANCIA_CALCULO:
+                        continue
+                    medio = (a + b) / 2.0
+                    cubierto = any(
+                        float(datos["z"]) + info["antepecho"]
+                        < medio
+                        < float(datos["z"]) + info["antepecho"] + info["alto"]
+                        for _v, info in vanos
+                    )
+                    if cubierto:
+                        continue
+                    piezas.append(
+                        {
+                            "poligono": (lambda p=sub: p),
+                            "z0": a, "z1": b,
+                            "prioridad": PRIORIDAD["muro"],
+                            "volumen": None,
+                        }
+                    )
             # Área neta del núcleo: largo efectivo del sólido recortado por la altura
             # también recortada, menos los vanos.
-            largo_neto = base.area / nucleo if nucleo > TOLERANCIA_CALCULO else largo
-            area_neta = largo_neto * (z1 - z0)
+            area_neta = (
+                sum(b.area * (z1 - z) for b, z in subtramos) / nucleo
+                if nucleo > TOLERANCIA_CALCULO
+                else sum(b.area * (z1 - z) for b, z in subtramos)
+            )
             for _vano, info in vanos:
                 area_neta -= info["ancho"] * info["alto"]
             detalle["area_neta_m2"] = round(max(area_neta, 0.0), 6)
-            detalle["base_m"] = round(z0, 6)
+            detalle["base_m"] = round(min(z for _b, z in subtramos), 6)
             detalle["cima_m"] = round(z1, 6)
         elif alias == "losa":
             datos = self._leer_pset(elemento, "OPENRVT_Losa")
