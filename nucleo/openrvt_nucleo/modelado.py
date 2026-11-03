@@ -152,8 +152,19 @@ class ModeladoMixin:
         mensaje: str = "",
         **extra: Any,
     ) -> dict[str, Any]:
+        extra_creados = getattr(self, "_creados_de_rebote", None) or []
+        self._creados_de_rebote = []
+        todos_creados: list[Any] = list(creados or []) + list(extra_creados)
+        vistos_creados: set[str] = set()
+        creados_limpios: list[Any] = []
+        for entidad in todos_creados:
+            gid = _gid(entidad) if not isinstance(entidad, str) else entidad
+            if gid in vistos_creados:
+                continue
+            vistos_creados.add(gid)
+            creados_limpios.append(gid)
         salida: dict[str, Any] = {
-            "creados": [_gid(e) if not isinstance(e, str) else e for e in (creados or [])],
+            "creados": creados_limpios,
             "modificados": [
                 _gid(e) if not isinstance(e, str) else e for e in (modificados or [])
             ],
@@ -5727,6 +5738,11 @@ class ModeladoMixin:
             datos["volteado"] = not bool(datos["volteado"])
         self._guardar_vano(copia, datos)
         self._regenerar_vano(copia, muro, datos)
+        extras = getattr(self, "_creados_de_rebote", None)
+        if extras is None:
+            extras = []
+            self._creados_de_rebote = extras
+        extras.append(copia)
         relleno = self._relleno_de(vano)
         if relleno is not None:
             copia_relleno = self._copiar_entidad(relleno)
@@ -5735,6 +5751,7 @@ class ModeladoMixin:
             feature_api.add_filling(
                 self.modelo, opening=copia, element=copia_relleno
             )
+            extras.append(copia_relleno)
         return copia
 
     def _transformar_vano_en_sitio(self, vano: Any, espejo: bool) -> None:

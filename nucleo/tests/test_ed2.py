@@ -117,6 +117,8 @@ def test_espejo_puerta_copia_en_el_muro_reflejado_y_giro_invertido() -> None:
     assert _posicion(puerta)[0] == pytest.approx(1.0, abs=1e-9)
 
     resultado = nucleo.elementos_espejo([muro.GlobalId], (0, 0), (0, 1), True)
+    # Se reportan muro, vano y puerta para que la app teselele los tres.
+    assert len(resultado["creados"]) == 3
     copia_muro = next(
         e for e in nucleo.modelo.by_type("IfcWall") if e.GlobalId == resultado["creados"][0]
     )
@@ -180,7 +182,8 @@ def test_matriz_muro_con_ventana_copia_los_vanos() -> None:
     nucleo, nivel = _nuevo()
     muro = _muro(nucleo, nivel, 0, 0, 4, 0)
     nucleo.abertura_crear("IfcWindow", muro.GlobalId, 1.5, 1.2, 1.2, 0.9)
-    nucleo.elementos_matriz_lineal([muro.GlobalId], (5.0, 0.0), 3, "al_segundo")
+    resultado = nucleo.elementos_matriz_lineal([muro.GlobalId], (5.0, 0.0), 3, "al_segundo")
+    assert len(resultado["creados"]) == 6  # dos copias × (muro + vano + ventana)
     assert len(nucleo.modelo.by_type("IfcWall")) == 3
     assert len(nucleo.modelo.by_type("IfcWindow")) == 3
     for pared in nucleo.modelo.by_type("IfcWall"):
@@ -236,3 +239,30 @@ def test_servidor_expone_las_tres_puertas_del_nucleo() -> None:
         {"globalids": [columna], "centro": [0, 0], "angulo_total": 180, "numero": 2},
     )
     assert len(polar["creados"]) == 1
+
+
+def test_espejo_quita_los_enlaces_a_ejes_con_aviso() -> None:
+    nucleo, nivel = _nuevo()
+    for etiqueta, x1, y1, x2, y2 in (
+        ("1", 0, -2, 0, 5),
+        ("2", 4, -2, 4, 5),
+        ("A", -2, 0, 6, 0),
+        ("B", -2, 3, 6, 3),
+    ):
+        nucleo.eje_crear(etiqueta, x1, y1, x2, y2)
+    muro = _muro(nucleo, nivel, 0, 0, 4, 0)
+    assert nucleo._enlace_de(muro)["tipo"] == "tramo"
+
+    resultado = nucleo.elementos_espejo([muro.GlobalId], (0, -2), (0, 5), False)
+    assert nucleo._enlace_de(muro) == {}
+    assert resultado["enlaces_quitados"] == 1
+    assert "enlaces" in resultado["mensaje"]
+
+    # La copia tampoco nace con enlace, aunque el original lo tuviera.
+    nucleo.deshacer()
+    copia_resultado = nucleo.elementos_espejo(
+        [muro.GlobalId], (0, -2), (0, 5), True
+    )
+    copia = nucleo._entidad_por_gid(copia_resultado["creados"][0])
+    assert nucleo._enlace_de(copia) == {}
+    assert nucleo._enlace_de(nucleo._entidad_por_gid(muro.GlobalId))["tipo"] == "tramo"

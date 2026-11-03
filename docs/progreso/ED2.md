@@ -1,7 +1,7 @@
 # ED2 — espejo y matriz de elementos
 
-Estado: **en curso** (núcleo y frontend listos; falta E2E con la app real y la
-batería final).
+Estado: **completo**. Probado con la interfaz real (clics en planta, barra de
+opciones y atajos) sobre el binario debug de Tauri en Windows.
 
 ## Núcleo (`nucleo/openrvt_nucleo/modelado.py`)
 
@@ -40,15 +40,41 @@ batería final).
 
 ## Pruebas
 
-- `nucleo/tests/test_ed2.py` (9 pruebas): espejo de muro exterior en x=0 y y=1,
+- `nucleo/tests/test_ed2.py` (10 pruebas): espejo de muro exterior en x=0 y y=1,
   puerta copiada en el muro reflejado con giro invertido, GlobalId conservados
-  sin copia, matriz lineal en los dos modos, matriz polar 360°/4, muro con
-  ventana en matriz de 3, deshacer en un paso y las tres puertas del servidor.
+  sin copia, enlaces a ejes quitados con aviso, matriz lineal en los dos modos,
+  matriz polar 360°/4, muro con ventana en matriz de 3, deshacer en un paso y
+  las tres puertas del servidor.
+- E2E `e2e/ed2.test.js` con clics reales, ejecutado en Windows:
+
+  ```
+  CARGO_TARGET_DIR=... OPENRVT_PYTHON=... npx node --test e2e/ed2.test.js
+  ✔ ED2: espejo con puerta, matriz lineal y polar, deshacer y capturas
+  ```
+
+  Comprueba muro de 0–4 m con puerta reflejado a −4–0 con su puerta, matriz
+  lineal 10/13/16/19, matriz polar de radio 10 cada 60°, Ctrl+Z en un paso y
+  los atajos MM/AR. Capturas leídas como imagen:
+  [`01-espejo.png`](ED2/01-espejo.png),
+  [`02-matriz-lineal.png`](ED2/02-matriz-lineal.png),
+  [`03-matriz-polar.png`](ED2/03-matriz-polar.png) y
+  [`04-deshacer.png`](ED2/04-deshacer.png).
 - `src/features/modelo/ed2.test.ts` (5 pruebas): reflexión de puntos, selección
   de eje/arista, vectores de matriz lineal, ángulos polares y atajos MM/AR.
 
+## Batería final
+
+- `npx tsc --noEmit`: sin errores.
+- `npm run lint`: 0 errores (16 avisos previos de fast-refresh y hooks).
+- `npx vitest run --maxWorkers=3`: 637 pasan; falla solo
+  `actualizaciones.test.tsx` «CA-8 · Linux descarga aparte», que asume Linux y
+  en Windows recibe «Actualizar ahora». Es ajena a ED2 y ya fallaba en Windows.
+- `pytest nucleo/tests -q`: **284 pasan, 6 omitidos**.
+- E2E `o004` (con `src-tauri/recursos/python` y `OPENRVT_PYTHON` sin definir),
+  `o028` y `o041`: los tres pasan con el binario debug.
+- `herramientas/preparar_python.sh windows` ejecutado antes de los E2E
+  (Python 3.12.9 embebido, 163 MiB sueltos).
+
 ## Pendiente
 
-- E2E `e2e/ed2.test.js` con clics reales (espejo de muro con puerta, matriz
-  lineal de 4 columnas, matriz polar de 6 columnas, deshacer y capturas).
-- Batería final: tsc, lint, vitest completo, pytest completo y E2E o004/o028/o041.
+Nada.
