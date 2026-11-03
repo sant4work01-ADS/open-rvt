@@ -275,3 +275,18 @@ def test_punto_conservar_invalido_no_cambia_nada() -> None:
     assert error.value.mensaje == "Falta el punto del lado que se conserva."
     assert _linea_muro(nucleo, muro) == antes
     assert len(nucleo._deshacer) == historial
+
+
+def test_al_recortar_el_inicio_el_vano_conservado_se_rebasa() -> None:
+    nucleo = _nuevo()
+    nivel = _nivel(nucleo)
+    eje = nucleo.eje_crear("A", 4, -2, 4, 8)["creados"][0]
+    muro = nucleo.muro_crear("Block 15", nivel, 0, 0, 6, 0)["creados"][0]
+    creados = nucleo.abertura_crear("IfcDoor", muro, 5.0, 0.9, 2.1, 0.0)["creados"]
+
+    nucleo.elementos_recortar_extender(muro, eje, [5, 0])
+
+    assert _linea_muro(nucleo, muro) == pytest.approx((4, 0, 6, 0), abs=1e-9)
+    datos = _pset(nucleo, creados[0], "OPENRVT_Abertura")
+    assert datos["Distancia"] == pytest.approx(1.0, abs=1e-9)
+    assert len(nucleo.modelo.by_type("IfcDoor")) == 1

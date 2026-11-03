@@ -42,7 +42,7 @@ cerramientos y zapatas corridas.
 
 ## Pruebas
 
-### pytest `nucleo/tests/test_ed1.py` — 10 pruebas
+### pytest `nucleo/tests/test_ed1.py` — 11 pruebas
 
 Valores escritos a mano en la cabecera del archivo:
 
@@ -58,7 +58,8 @@ Valores escritos a mano en la cabecera del archivo:
 - Flujo por el servidor JSON-RPC: recorte → guardar IFC → reabrir → coordenadas exactas y
   medición de muros 10.40 m².
 - Bordes: columnas y referencias no lineales se rechazan; un `punto_conservar` vacío no
-  cambia el modelo ni deja instantánea.
+  cambia el modelo ni deja instantánea; al recortar el inicio de un muro, el vano que
+  queda dentro se rebasa a la nueva distancia (1.00 m) y sigue existiendo.
 
 ```
 $ uv run --with pytest --with ifcopenshell==0.9.0.post1 --with numpy --python 3.12 \
