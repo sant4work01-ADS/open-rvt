@@ -6062,7 +6062,8 @@ export function Visor3D({
       const camera = camara.current;
       if (!camera) return null;
       const asa = ejesInteraccion.current.find((a) => {
-        if (indiceCodo !== undefined) {
+        // WebDriver envía `undefined` como null: ambos significan «sin codo».
+        if (indiceCodo !== undefined && indiceCodo !== null) {
           return (
             a.etiqueta === etiqueta &&
             a.lado === lado &&
@@ -6090,12 +6091,12 @@ export function Visor3D({
     ) => {
       const camera = camara.current;
       if (!camera) return null;
-      const asa = ejesInteraccion.current.find(
-        (a) => a.etiqueta === etiqueta && a.tipo === "globo",
-      );
-      if (!asa) return null;
+      // O042: el globo con codo ya no tiene asa; se mide su grupo dibujado para
+      // que las capturas y las pruebas sigan viendo el centro real.
+      const burbuja = burbujasEje.current.find((b) => b.etiqueta === etiqueta);
+      if (!burbuja) return null;
       camera.updateMatrixWorld();
-      const centro = new THREE.Vector3(...asa.punto);
+      const centro = burbuja.grupo.position.clone();
       const radioMundo = mmAMundo(8, vista.escala) / 2;
       const derecha = new THREE.Vector3()
         .setFromMatrixColumn(camera.matrixWorld, 0)

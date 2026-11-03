@@ -478,41 +478,32 @@ test("O011-2: dos codos, tercero deshabilitado, candado, guardar/reabrir y desha
     await seleccionarEje(ses, "1");
     await activar(ses, "eje-codo-fin-agregar");
     let a = await ajustes(ses);
-    assert.equal(a[eje1.globalid].codosFin.length, 1);
-    // O011b: primer codo con avance 3 mm = 0.3 m y desplazamiento lateral de un
-    // globo (8 mm = 0.8 m). La línea termina en `fin`; el globo va al final:
-    //   codo = fin + dir*0.3
-    //   globo = codo + perp*0.8 + dir*0.3  (perp = [dir.y, -dir.x])
+    // O042: un codo = dos nodos. Con D = 0.8 m (globo de 8 mm a 1:100) y el eje
+    // vertical (0,0)→(0,10): V1 = fin - 2D = (0, 8.4); V2 = V1 + D afuera + D de
+    // lado = (-0.8, 9.2). El globo se deriva en V2 + D afuera = (-0.8, 10).
+    assert.equal(a[eje1.globalid].codosFin.length, 2);
     const fin = [eje1.x2, eje1.y2];
     const interior = [eje1.x1, eje1.y1];
     const largo = Math.hypot(fin[0] - interior[0], fin[1] - interior[1]);
     const dir = [(fin[0] - interior[0]) / largo, (fin[1] - interior[1]) / largo];
-    const perp = [dir[1], -dir[0]];
-    const esperado1 = [fin[0] + dir[0] * 0.3, fin[1] + dir[1] * 0.3];
-    const globo1 = [
-      esperado1[0] + perp[0] * 0.8 + dir[0] * 0.3,
-      esperado1[1] + perp[1] * 0.8 + dir[1] * 0.3,
+    const perp = [-dir[1], dir[0]];
+    const esperado1 = [fin[0] - dir[0] * 1.6, fin[1] - dir[1] * 1.6];
+    const esperado2 = [
+      esperado1[0] + dir[0] * 0.8 + perp[0] * 0.8,
+      esperado1[1] + dir[1] * 0.8 + perp[1] * 0.8,
     ];
     const cerca = (p, q) => Math.abs(p[0] - q[0]) < 1e-6 && Math.abs(p[1] - q[1]) < 1e-6;
     assert.ok(
       cerca(a[eje1.globalid].codosFin[0], esperado1),
-      `el primer codo no está a 3 mm: ${JSON.stringify(a[eje1.globalid].codosFin[0])} vs ${esperado1}`,
+      `V1 no está a 2D del extremo: ${JSON.stringify(a[eje1.globalid].codosFin[0])} vs ${esperado1}`,
     );
     assert.ok(
-      a[eje1.globalid].extremoFin && cerca(a[eje1.globalid].extremoFin, globo1),
-      `el globo no se desplazó un diámetro: ${JSON.stringify(a[eje1.globalid].extremoFin)} vs ${globo1}`,
+      cerca(a[eje1.globalid].codosFin[1], esperado2),
+      `V2 no está a D afuera y D de lado: ${JSON.stringify(a[eje1.globalid].codosFin[1])} vs ${esperado2}`,
     );
-
-    await activar(ses, "eje-codo-fin-agregar");
-    a = await ajustes(ses);
-    assert.equal(a[eje1.globalid].codosFin.length, 2);
-    // El segundo codo es el globo anterior; hay 3 mm hasta el borde del globo y
-    // 4 mm más hasta su centro (radio): el globo sube 0.7 m.
-    assert.ok(cerca(a[eje1.globalid].codosFin[1], globo1), "el segundo codo no continúa el tramo");
-    const globo2 = [globo1[0] + dir[0] * 0.7, globo1[1] + dir[1] * 0.7];
-    assert.ok(cerca(a[eje1.globalid].extremoFin, globo2), "el globo no siguió al segundo codo");
+    assert.equal(a[eje1.globalid].extremoFin, undefined, "el codo no debe guardar extremo libre");
     const boton = await ses.porTestid("eje-codo-fin-agregar");
-    assert.equal(await boton.getAttribute("disabled"), "true", "el tercer codo debe estar deshabilitado");
+    assert.equal(await boton.getAttribute("disabled"), "true", "el segundo codo debe estar deshabilitado");
     await activar(ses, "visor-ajustar");
     // Un poco más de aire para que los codos y el globo desplazado no queden bajo
     // la barra flotante del eje seleccionado.
@@ -525,7 +516,7 @@ test("O011-2: dos codos, tercero deshabilitado, candado, guardar/reabrir y desha
     // Abrir el candado del fin y arrastrarlo 1 m: solo ese eje cambia.
     await activar(ses, "eje-candado-fin");
     assert.equal(await (await ses.porTestid("eje-candado-fin")).getAttribute("aria-pressed"), "true");
-    const antesArrastre = a[eje1.globalid].extremoFin;
+    const codosAntes = JSON.stringify(a[eje1.globalid].codosFin);
     await arrastrarExtremo(ses, "1", "fin", [fin[0], fin[1] + 1]);
     a = await ajustes(ses);
     assert.deepEqual(Object.keys(a), [eje1.globalid], "el arrastre con candado abierto tocó otros ejes");
@@ -538,10 +529,8 @@ test("O011-2: dos codos, tercero deshabilitado, candado, guardar/reabrir y desha
     // Ctrl+Z: una entrada por arrastre y vuelve al globo de los codos.
     await tecla(ses, "z", "KeyZ", { ctrlKey: true });
     a = await ajustes(ses);
-    assert.ok(
-      a[eje1.globalid]?.extremoFin && cerca(a[eje1.globalid].extremoFin, antesArrastre),
-      "Ctrl+Z no devolvió el globo al extremo de los codos",
-    );
+    assert.equal(a[eje1.globalid]?.extremoFin, undefined, "Ctrl+Z no quitó el extremo libre");
+    assert.equal(JSON.stringify(a[eje1.globalid].codosFin), codosAntes, "Ctrl+Z tocó los codos");
 
     // Cerrar el candado devuelve el extremo a la alineación.
     await activar(ses, "eje-candado-fin");
@@ -658,11 +647,11 @@ test("O011-3: cotas .15 por la pantalla y niveles/globos del alzado", async () =
     const eje3 = referencias.ejes.find((e) => e.etiqueta === "3");
     assert.equal(
       ajustesAlzado[eje3.globalid]?.codosFin?.length,
-      1,
+      2,
       "el codo del alzado no se guardó",
     );
     const codoPunto = await ses.driver.executeScript(() =>
-      document.querySelector('[data-testid="visor"]').__openrvtEjeAPantalla("3", "fin", 0),
+      document.querySelector('[data-testid="visor"]').__openrvtEjeAPantalla("3", "fin", 1),
     );
     assert.ok(codoPunto, "no se proyectó el asa del codo");
     await ses.driver.executeScript(
@@ -755,7 +744,7 @@ test("O011-3: cotas .15 por la pantalla y niveles/globos del alzado", async () =
     );
     // Se quita el codo para que la captura de entrega siga limpia.
     const codo4 = await ses.driver.executeScript(() =>
-      document.querySelector('[data-testid="visor"]').__openrvtEjeAPantalla("4", "fin", 0),
+      document.querySelector('[data-testid="visor"]').__openrvtEjeAPantalla("4", "fin", 1),
     );
     await ses.driver.executeScript(
       (punto) => {

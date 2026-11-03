@@ -302,8 +302,9 @@ test("O021: candado, globos, codo y copia de acomodo entre plantas", async () =>
     await seleccionarEjeEn(ses, 8);
     await activar(ses, "eje-codo-fin-agregar");
     ({ ejes: ajustes } = await ajustesVista(ses));
-    assert.equal(ajustes[gid3].codosFin?.length, 1, "no se creó el codo del eje 3");
-    assert.ok(ajustes[gid3].extremoFin, "el codo no desplazó el globo");
+    // O042: el codo son dos nodos (V1 y V2) y el globo se deriva de V2.
+    assert.equal(ajustes[gid3].codosFin?.length, 2, "no se creó el codo del eje 3");
+    assert.equal(ajustes[gid3].extremoFin, undefined, "el codo no debe guardar extremo libre");
     const acomodo3 = JSON.parse(JSON.stringify(ajustes[gid3]));
 
     // 5) Copiar el acomodo a la otra planta con el menú contextual.
