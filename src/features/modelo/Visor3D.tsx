@@ -1047,6 +1047,8 @@ export function Visor3D({
   const fijarRaton = useModelo((s) => s.fijarRatonHerramienta);
   const clicEnPlanta = useModelo((s) => s.clicEnPlanta);
   const clicNivel = useModelo((s) => s.clicNivel);
+  const vistaPreviaRecorte = useModelo((s) => s.vistaPreviaRecorte);
+  const clicRecorte = useModelo((s) => s.clicRecorte);
   const opcionesNivel = useModelo((s) => s.opcionesNivel);
   const cotasNivel = useModelo((s) => s.cotasNivel);
   const dobleClicEnPlanta = useModelo((s) => s.dobleClicEnPlanta);
@@ -4480,6 +4482,24 @@ export function Visor3D({
       }
     }
 
+    if (herramienta === "recortar_extender" && vistaPreviaRecorte) {
+      const geometria = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(vistaPreviaRecorte.x1, vistaPreviaRecorte.y1, z + 0.05),
+        new THREE.Vector3(vistaPreviaRecorte.x2, vistaPreviaRecorte.y2, z + 0.05),
+      ]);
+      const linea = new THREE.Line(
+        geometria,
+        new THREE.LineBasicMaterial({
+          color: 0xf59e0b,
+          transparent: true,
+          opacity: 0.55,
+          depthTest: false,
+        }),
+      );
+      linea.renderOrder = 20;
+      grupoLocal.add(linea);
+    }
+
     if (engancheHerramienta) {
       const [x, y] = engancheHerramienta.punto;
       // O006e: símbolo de 10 px de pantalla, independiente del zoom.
@@ -4552,6 +4572,7 @@ export function Visor3D({
     ejeLibre,
     trazoEjePrevio,
     metrosPorPixelActual,
+    vistaPreviaRecorte,
   ]);
 
   // Ajustar la cámara a la vista (botón y F). Es la única acción que reencuadra.
@@ -5163,6 +5184,34 @@ export function Visor3D({
         if (punto) void clicNivel(punto);
         return;
       }
+      if (herramienta === "recortar_extender" && vista.tipo === "planta") {
+        const punto = puntoPlanta(falso);
+        if (!punto) return;
+        const estado = useModelo.getState();
+        const pendiente =
+          estado.modoRecorte === "esquina"
+            ? !estado.recorteInicial
+            : !estado.referenciaRecorte;
+        let objetivo: { tipo: "eje" | "elemento"; globalid: string } | null = null;
+        if (pendiente && estado.modoRecorte !== "esquina") {
+          const linea = lineaEjeEn(clientX, clientY);
+          if (linea) objetivo = { tipo: "eje", globalid: linea };
+        }
+        if (!objetivo) {
+          const rect = nodo.getBoundingClientRect();
+          const raton = new THREE.Vector2(
+            ((clientX - rect.left) / rect.width) * 2 - 1,
+            -((clientY - rect.top) / rect.height) * 2 + 1,
+          );
+          const rayo = new THREE.Raycaster();
+          rayo.setFromCamera(raton, camera);
+          const impacto = rayo.intersectObjects(meshes.current, false)[0];
+          const gid = impacto?.object.userData.globalid as string | undefined;
+          if (gid) objetivo = { tipo: "elemento", globalid: gid };
+        }
+        if (objetivo) void clicRecorte({ ...objetivo, punto });
+        return;
+      }
       if (herramienta && vista.tipo === "planta") {
         const punto = puntoPlanta(falso);
         if (punto) {
@@ -5493,6 +5542,31 @@ export function Visor3D({
           resaltadoRef.current = gid;
           setResaltado(gid);
           fijarPistaTab(textoPistaTab(siguiente));
+        }
+      }
+      if (
+        herramienta === "recortar_extender" &&
+        vista.tipo === "planta" &&
+        evento.buttons === 0
+      ) {
+        const estado = useModelo.getState();
+        const hayReferencia =
+          estado.modoRecorte === "esquina"
+            ? !!estado.recorteInicial
+            : !!estado.referenciaRecorte;
+        if (hayReferencia) {
+          const punto = puntoPlanta(evento);
+          const rect = nodo.getBoundingClientRect();
+          const raton = new THREE.Vector2(
+            ((evento.clientX - rect.left) / rect.width) * 2 - 1,
+            -((evento.clientY - rect.top) / rect.height) * 2 + 1,
+          );
+          const rayo = new THREE.Raycaster();
+          rayo.setFromCamera(raton, camera);
+          const impacto = rayo.intersectObjects(meshes.current, false)[0];
+          const gid = impacto?.object.userData.globalid as string | undefined;
+          if (punto && gid) estado.previsualizarRecorte(gid, punto);
+          else if (estado.vistaPreviaRecorte) estado.previsualizarRecorte("", [0, 0]);
         }
       }
       // O034: el borde de la losa sigue al puntero en su normal exterior.
@@ -6309,6 +6383,7 @@ export function Visor3D({
     fijarRaton,
     clicEnPlanta,
     clicNivel,
+    clicRecorte,
     dobleClicEnPlanta,
     ventanaSeleccion,
     fijarAviso,
@@ -6828,6 +6903,7 @@ export function Visor3D({
       data-largo-tecleado={longitudTecleada || undefined}
       data-eje-seleccionado={ejeSeleccionado ?? undefined}
       data-seleccion={seleccion ?? undefined}
+      data-recorte-preview={vistaPreviaRecorte ? "si" : "no"}
       data-ejes-ajustes={JSON.stringify(vista.ejes ?? {})}
       className="relative min-h-0 flex-1 overflow-hidden bg-background"
     >

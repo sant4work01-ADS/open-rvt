@@ -301,6 +301,19 @@ class Servidor:
                 params.get("dy", 0.0),
                 params.get("dz", 0.0),
             )
+        if metodo in ("elementos.recortar_extender", "elementos.recortar-extender"):
+            return self._exigir().elementos_recortar_extender(
+                str(params.get("globalid") or ""),
+                str(params.get("referencia") or ""),
+                params.get("punto_conservar"),
+            )
+        if metodo in ("elementos.recortar_esquina", "elementos.recortar-esquina"):
+            return self._exigir().elementos_recortar_esquina(
+                str(params.get("globalid_a") or ""),
+                str(params.get("globalid_b") or ""),
+                params.get("punto_a"),
+                params.get("punto_b"),
+            )
         if metodo == "elementos.borrar":
             return self._exigir().elementos_borrar(
                 params.get("globalids"), bool(params.get("dependientes", True))

@@ -961,3 +961,88 @@ export function contornoCerramientoPlanta(
   ];
   return [...esquinas, esquinas[0]];
 }
+
+export interface CorteRectas {
+  /** Punto de intersección de las dos rectas infinitas. */
+  punto: [number, number];
+  /** Parámetro 0…1 del corte sobre la primera línea. */
+  t: number;
+  /** Parámetro 0…1 del corte sobre la segunda línea. */
+  s: number;
+}
+
+export interface RecorteRecta {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  /** Extremo que se mantiene. */
+  conservado: "inicio" | "fin";
+  /** Extremo que se lleva al corte (y pierde su enlace a eje). */
+  ajustado: "inicio" | "fin";
+}
+
+/**
+ * ED1: intersección de las rectas infinitas de dos líneas de ubicación. Devuelve
+ * null cuando son paralelas o casi paralelas (seno del ángulo menor que la
+ * tolerancia); en ese caso el recorte no tiene una esquina válida.
+ */
+export function cortarRectas(
+  a: LineaMuro,
+  b: LineaMuro,
+  tolerancia = 1e-6,
+): CorteRectas | null {
+  const [ax1, ay1, ax2, ay2] = a;
+  const [bx1, by1, bx2, by2] = b;
+  const ux = ax2 - ax1;
+  const uy = ay2 - ay1;
+  const vx = bx2 - bx1;
+  const vy = by2 - by1;
+  const la = Math.hypot(ux, uy);
+  const lb = Math.hypot(vx, vy);
+  if (la <= 1e-12 || lb <= 1e-12) return null;
+  const den = ux * vy - uy * vx;
+  if (Math.abs(den) <= tolerancia * la * lb) return null;
+  const t = ((bx1 - ax1) * vy - (by1 - ay1) * vx) / den;
+  const punto: [number, number] = [ax1 + ux * t, ay1 + uy * t];
+  const s = ((punto[0] - bx1) * vx + (punto[1] - by1) * vy) / (lb * lb);
+  return { punto, t, s };
+}
+
+/**
+ * ED1: lleva un extremo de la línea al punto de corte y conserva el lado donde
+ * se hizo el clic. Si el corte queda detrás del extremo inicial, se conserva el
+ * final (el segmento resultante sigue conteniendo el punto del clic).
+ */
+export function recortarRecta(
+  a: LineaMuro,
+  corte: [number, number],
+  puntoConservar: [number, number],
+): RecorteRecta | null {
+  const [x1, y1, x2, y2] = a;
+  const ux = x2 - x1;
+  const uy = y2 - y1;
+  if (Math.hypot(ux, uy) <= 1e-9) return null;
+  const tClic = (puntoConservar[0] - x1) * ux + (puntoConservar[1] - y1) * uy;
+  const tCorte = (corte[0] - x1) * ux + (corte[1] - y1) * uy;
+  const salida: RecorteRecta =
+    tClic <= tCorte
+      ? {
+          x1,
+          y1,
+          x2: corte[0],
+          y2: corte[1],
+          conservado: "inicio",
+          ajustado: "fin",
+        }
+      : {
+          x1: corte[0],
+          y1: corte[1],
+          x2,
+          y2,
+          conservado: "fin",
+          ajustado: "inicio",
+        };
+  if (Math.hypot(salida.x2 - salida.x1, salida.y2 - salida.y1) <= 1e-9) return null;
+  return salida;
+}
