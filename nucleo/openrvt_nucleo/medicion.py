@@ -53,6 +53,20 @@ NOMBRES = {
     "piezas": "Piezas",
 }
 
+# O039: capítulos del modo Obra. La identificación es el orden (01, 02, …) y el
+# nombre es el que se ve en el árbol. Se guardan en el IFC como IfcClassification
+# «OPEN-RVT Obra» con una IfcClassificationReference por capítulo.
+CAPITULOS_OBRA: tuple[tuple[str, str], ...] = (
+    ("01", "Preliminares"),
+    ("02", "Cimentación"),
+    ("03", "Estructura"),
+    ("04", "Albañilería"),
+    ("05", "Acabados"),
+    ("06", "Cancelería"),
+    ("07", "Instalaciones"),
+)
+CLASIFICACION_OBRA = "OPEN-RVT Obra"
+
 
 def _crit_orden(criterio: str) -> int:
     orden = {
@@ -81,6 +95,14 @@ def _nombre_capa(material: str, lado: str) -> str:
     else:
         base = base.split("(")[0].strip()
     return f"{base} {lado}"
+
+
+def _llave_partida(partida: dict[str, Any]) -> tuple[str, str, str]:
+    """Llave de agrupación de una partida: clave PP o nombre, y unidad."""
+    clave = _texto(partida.get("ClavePP", partida.get("clave"))).strip()
+    unidad = _texto(partida.get("Unidad", partida.get("unidad")))
+    nombre = _texto(partida.get("Nombre", partida.get("nombre")))
+    return ("clave", clave, unidad) if clave else ("nombre", nombre, unidad)
 
 
 class MedicionMixin:
@@ -288,16 +310,387 @@ class MedicionMixin:
                 capas = self.capas_de_tipo(tipo) if tipo is not None else []
                 if not capas:
                     raise self._error("El tipo no tiene capas para medir.", -32602)
+            capitulo = _texto(
+                entrada.get("Capitulo") or entrada.get("capitulo")
+            ).strip()
+            fila = {
+                "Nombre": nombre,
+                "ClavePP": clave,
+                "Unidad": UNIDADES[criterio],
+                "Criterio": criterio,
+                "Capa": capa,
+            }
+            if capitulo:
+                fila["Capitulo"] = capitulo
+            salida.append(fila)
+        return salida
+
+    # ------------------------------------------------------------------ obra O039
+    def _clasificacion_obra(self) -> Any:
+        for clasificacion in self.modelo.by_type("IfcClassification"):
+            if _texto(getattr(clasificacion, "Name", "")) == CLASIFICACION_OBRA:
+                return clasificacion
+        return None
+
+    def _referencias_obra(self) -> list[Any]:
+        clasificacion = self._clasificacion_obra()
+        if clasificacion is None:
+            return []
+        referencias = [
+            ref
+            for ref in self.modelo.by_type("IfcClassificationReference")
+            if getattr(ref, "ReferencedSource", None) == clasificacion
+        ]
+
+        def orden(ref: Any) -> tuple[int, str]:
+            texto = _texto(getattr(ref, "Identification", "")).strip()
+            try:
+                return (int(texto), texto)
+            except ValueError:
+                return (10**9, texto)
+
+        return sorted(referencias, key=orden)
+
+    def _asegurar_capitulos_obra(self) -> None:
+        """Crea la clasificación y los siete capítulos por omisión si faltan."""
+        modelo = self._exigir_modelo()
+        clasificacion = self._clasificacion_obra()
+        if clasificacion is None:
+            clasificacion = modelo.create_entity(
+                "IfcClassification", Name=CLASIFICACION_OBRA
+            )
+        existentes = {
+            _texto(getattr(ref, "Identification", "")).strip()
+            for ref in self._referencias_obra()
+        }
+        for identificacion, nombre in CAPITULOS_OBRA:
+            if identificacion in existentes:
+                continue
+            modelo.create_entity(
+                "IfcClassificationReference",
+                Identification=identificacion,
+                Name=nombre,
+                ReferencedSource=clasificacion,
+            )
+
+    def _capitulos_obra(self) -> list[dict[str, Any]]:
+        self._exigir_modelo()
+        referencias = self._referencias_obra()
+        if not referencias:
+            # Modelo antiguo sin clasificación: se muestran los de omisión sin
+            # escribir en el IFC (la escritura ocurre al abrir o al editar).
+            return [
+                {
+                    "globalid": "",
+                    "identificacion": identificacion,
+                    "nombre": nombre,
+                    "orden": indice + 1,
+                }
+                for indice, (identificacion, nombre) in enumerate(CAPITULOS_OBRA)
+            ]
+        salida: list[dict[str, Any]] = []
+        for indice, ref in enumerate(referencias):
             salida.append(
                 {
-                    "Nombre": nombre,
-                    "ClavePP": clave,
-                    "Unidad": UNIDADES[criterio],
-                    "Criterio": criterio,
-                    "Capa": capa,
+                    "globalid": _texto(getattr(ref, "GlobalId", "")),
+                    "identificacion": _texto(getattr(ref, "Identification", "")).strip(),
+                    "nombre": _texto(getattr(ref, "Name", "")),
+                    "orden": indice + 1,
                 }
             )
         return salida
+
+    def _guardar_partidas_tipo(self, tipo: Any, partidas: list[dict[str, Any]]) -> None:
+        self._guardar_pset(
+            tipo, PSET, {PROPIEDAD: json.dumps(partidas, ensure_ascii=False)}
+        )
+
+    def _tipos_con_partidas(self) -> list[Any]:
+        return list(self.modelo.by_type("IfcTypeObject"))
+
+    def _renumerar_capitulos(self, referencias: list[Any]) -> None:
+        """Asigna 01…N en orden y remapea el capítulo guardado en cada partida."""
+        anteriores = [
+            _texto(getattr(ref, "Identification", "")).strip() for ref in referencias
+        ]
+        nuevos = [f"{i:02d}" for i in range(1, len(referencias) + 1)]
+        mapa = {viejo: nuevo for viejo, nuevo in zip(anteriores, nuevos)}
+        for ref, nuevo in zip(referencias, nuevos):
+            ref.Identification = nuevo
+        if not mapa:
+            return
+        for tipo in self._tipos_con_partidas():
+            partidas = self._partidas_leidas(tipo)
+            if partidas is None:
+                continue
+            cambio = False
+            for partida in partidas:
+                capitulo = _texto(partida.get("Capitulo")).strip()
+                if capitulo and capitulo in mapa and mapa[capitulo] != capitulo:
+                    partida["Capitulo"] = mapa[capitulo]
+                    cambio = True
+            if cambio:
+                self._guardar_partidas_tipo(tipo, partidas)
+
+    def _capitulo_omision(
+        self, tipo: Any, partida: dict[str, Any], elemento: Any = None
+    ) -> str:
+        clase = self._clase_medicion(tipo=tipo, elemento=elemento)
+        alias = self._estructura_de_tipo(tipo) if tipo is not None else None
+        criterio = _texto(partida.get("Criterio"))
+        if clase == "zapata" or alias == "contratrabe":
+            return "02"
+        if clase == "losa" or clase == "estructura":
+            return "03"
+        if clase == "muro":
+            return "05" if criterio == "area_capa" else "04"
+        if clase in ("puerta", "ventana"):
+            return "06"
+        return "01"
+
+    def _mapa_capitulos_partidas(self) -> dict[tuple[str, str, str], str]:
+        """Capítulo efectivo por partida: el guardado o, si falta, el de omisión."""
+        capitulos = {c["identificacion"] for c in self._capitulos_obra()}
+        primero = next(iter(sorted(capitulos)), "01")
+        explicitos: dict[tuple[str, str, str], str] = {}
+        omision: dict[tuple[str, str, str], str] = {}
+        for tipo in self._tipos_con_partidas():
+            for partida in self._partidas_de_tipo(tipo):
+                llave = _llave_partida(partida)
+                capitulo = _texto(partida.get("Capitulo")).strip()
+                if capitulo in capitulos:
+                    explicitos.setdefault(llave, capitulo)
+                omision.setdefault(llave, self._capitulo_omision(tipo, partida))
+        # Elementos sin tipo (por ejemplo una losa suelta) también aportan partidas.
+        for elemento in self._elementos_ordenados():
+            partidas, tipo = self._partidas_de_elemento(elemento)
+            for partida in partidas:
+                llave = _llave_partida(partida)
+                omision.setdefault(
+                    llave, self._capitulo_omision(tipo, partida, elemento=elemento)
+                )
+        salida: dict[tuple[str, str, str], str] = {}
+        for llave in set(explicitos) | set(omision):
+            capitulo = explicitos.get(llave) or omision.get(llave) or primero
+            if capitulo not in capitulos:
+                capitulo = primero
+            salida[llave] = capitulo
+        return salida
+
+    def arbol_obra(self) -> dict[str, Any]:
+        """Árbol del presupuesto: capítulo → partida → renglón.
+
+        Las partidas y sus totales salen de ``medicion_calcular`` sin volver a medir.
+        Un elemento puede aparecer en varias partidas (block, aplanado, pintura…).
+        """
+        self._exigir_modelo()
+        capitulos = self._capitulos_obra()
+        mapa = self._mapa_capitulos_partidas()
+        por_capitulo: dict[str, list[dict[str, Any]]] = {
+            c["identificacion"]: [] for c in capitulos
+        }
+        for partida in self.medicion_calcular()["partidas"]:
+            llave = _llave_partida(partida)
+            identificacion = mapa.get(llave) or (
+                capitulos[0]["identificacion"] if capitulos else "01"
+            )
+            renglones: list[dict[str, Any]] = []
+            for renglon in partida["renglones"]:
+                gid = _texto(renglon.get("globalid"))
+                elemento = ""
+                if gid:
+                    try:
+                        entidad = self.modelo.by_guid(gid)
+                        elemento = _nombre(entidad) or entidad.is_a()
+                    except Exception:
+                        elemento = ""
+                renglones.append(
+                    {
+                        "clave": f"renglon:{gid}:{renglon.get('descripcion', '')}",
+                        "globalid": gid,
+                        "elemento": elemento or _texto(renglon.get("descripcion")),
+                        "descripcion": _texto(renglon.get("descripcion")),
+                        "resultado": renglon.get("resultado"),
+                    }
+                )
+            por_capitulo.setdefault(identificacion, []).append(
+                {
+                    "clave": "partida:" + "|".join(llave),
+                    "clave_pp": _texto(partida.get("clave")),
+                    "nombre": _texto(partida.get("nombre")),
+                    "unidad": _texto(partida.get("unidad")),
+                    "total": partida.get("total"),
+                    "conteo": len(renglones),
+                    "renglones": renglones,
+                }
+            )
+        salida = []
+        for indice, capitulo in enumerate(capitulos):
+            partidas = por_capitulo.get(capitulo["identificacion"], [])
+            salida.append(
+                {
+                    "clave": "capitulo:"
+                    + (capitulo["globalid"] or capitulo["identificacion"]),
+                    "globalid": capitulo["globalid"],
+                    "identificacion": capitulo["identificacion"],
+                    "nombre": capitulo["nombre"],
+                    "orden": indice + 1,
+                    "conteo": len(partidas),
+                    "partidas": partidas,
+                }
+            )
+        return {
+            "tipo": "obra",
+            "clave": "obra",
+            "nombre": "Obra",
+            "conteo": len(salida),
+            "capitulos": salida,
+        }
+
+    def obra_capitulo_crear(self, nombre: str) -> dict[str, Any]:
+        self._exigir_modelo()
+        nombre = _texto(nombre).strip()
+        if not nombre:
+            raise self._error("El capítulo necesita un nombre.", -32602)
+        self._instantanea()
+        self._asegurar_capitulos_obra()
+        referencias = self._referencias_obra()
+        numeros = []
+        for ref in referencias:
+            try:
+                numeros.append(int(_texto(ref.Identification)))
+            except (TypeError, ValueError):
+                continue
+        identificacion = f"{(max(numeros) if numeros else 0) + 1:02d}"
+        ref = self.modelo.create_entity(
+            "IfcClassificationReference",
+            Identification=identificacion,
+            Name=nombre,
+            ReferencedSource=self._clasificacion_obra(),
+        )
+        self.con_cambios = True
+        return self._resultado(
+            creados=[ref],
+            mensaje=f"Capítulo «{nombre}» creado.",
+            capitulos=self._capitulos_obra(),
+        )
+
+    def _referencia_capitulo(self, identificacion: str) -> Any:
+        buscado = _texto(identificacion).strip()
+        if self._clasificacion_obra() is None:
+            self._asegurar_capitulos_obra()
+        for ref in self._referencias_obra():
+            if _texto(ref.Identification).strip() == buscado:
+                return ref
+        raise self._error(f"No existe el capítulo {buscado}.", -32005)
+
+    def obra_capitulo_renombrar(
+        self, identificacion: str, nombre: str
+    ) -> dict[str, Any]:
+        self._exigir_modelo()
+        ref = self._referencia_capitulo(identificacion)
+        nombre = _texto(nombre).strip()
+        if not nombre:
+            raise self._error("El capítulo necesita un nombre.", -32602)
+        self._instantanea()
+        ref.Name = nombre
+        self.con_cambios = True
+        return self._resultado(
+            modificados=[ref],
+            mensaje=f"Capítulo renombrado a «{nombre}».",
+            capitulos=self._capitulos_obra(),
+        )
+
+    def obra_capitulo_mover(
+        self, identificacion: str, direccion: str
+    ) -> dict[str, Any]:
+        self._exigir_modelo()
+        ref = self._referencia_capitulo(identificacion)
+        direccion = _texto(direccion).strip().lower()
+        if direccion not in ("subir", "bajar"):
+            raise self._error("La dirección debe ser «subir» o «bajar».", -32602)
+        referencias = self._referencias_obra()
+        indice = referencias.index(ref)
+        destino = indice - 1 if direccion == "subir" else indice + 1
+        if destino < 0 or destino >= len(referencias):
+            return self._resultado(
+                mensaje="El capítulo ya está en el extremo.",
+                capitulos=self._capitulos_obra(),
+            )
+        self._instantanea()
+        referencias[indice], referencias[destino] = (
+            referencias[destino],
+            referencias[indice],
+        )
+        self._renumerar_capitulos(referencias)
+        self.con_cambios = True
+        return self._resultado(
+            modificados=[ref],
+            mensaje=f"Capítulo «{_texto(ref.Name)}» movido.",
+            capitulos=self._capitulos_obra(),
+        )
+
+    def obra_capitulo_borrar(self, identificacion: str) -> dict[str, Any]:
+        self._exigir_modelo()
+        ref = self._referencia_capitulo(identificacion)
+        referencias = self._referencias_obra()
+        if len(referencias) <= 1:
+            raise self._error("No se puede borrar el único capítulo.", -32024)
+        self._instantanea()
+        borrado = _texto(ref.Identification).strip()
+        nombre = _texto(ref.Name)
+        self.modelo.remove(ref)
+        for tipo in self._tipos_con_partidas():
+            partidas = self._partidas_leidas(tipo)
+            if partidas is None:
+                continue
+            cambio = False
+            for partida in partidas:
+                if _texto(partida.get("Capitulo")).strip() == borrado:
+                    partida.pop("Capitulo", None)
+                    cambio = True
+            if cambio:
+                self._guardar_partidas_tipo(tipo, partidas)
+        self._renumerar_capitulos(self._referencias_obra())
+        self.con_cambios = True
+        return self._resultado(
+            borrados=[ref],
+            mensaje=(
+                f"Capítulo «{nombre}» borrado; sus partidas vuelven a su capítulo "
+                "por omisión."
+            ),
+            capitulos=self._capitulos_obra(),
+        )
+
+    def obra_partida_mover(
+        self, clave: str, nombre: str, unidad: str, capitulo: str
+    ) -> dict[str, Any]:
+        self._exigir_modelo()
+        ref = self._referencia_capitulo(capitulo)
+        destino = _texto(ref.Identification).strip()
+        objetivo = _llave_partida(
+            {"ClavePP": clave, "Nombre": nombre, "Unidad": unidad}
+        )
+        self._instantanea()
+        tocados = 0
+        for tipo in self._tipos_con_partidas():
+            partidas = self._partidas_de_tipo(tipo)
+            cambio = False
+            for partida in partidas:
+                if _llave_partida(partida) != objetivo:
+                    continue
+                partida["Capitulo"] = destino
+                cambio = True
+                tocados += 1
+            if cambio:
+                self._guardar_partidas_tipo(tipo, partidas)
+        if tocados == 0:
+            raise self._error("No se encontró la partida que se quiere mover.", -32005)
+        self.con_cambios = True
+        return self._resultado(
+            mensaje=f"Partida movida a «{_texto(ref.Name)}».",
+            capitulos=self._capitulos_obra(),
+        )
 
     def medicion_partidas_omision(self, globalid: str) -> list[dict[str, Any]]:
         """Partidas por omisión del tipo, sin tocar el modelo."""
@@ -689,11 +1082,7 @@ class MedicionMixin:
                 clave = _texto(partida.get("ClavePP")).strip()
                 unidad = _texto(partida.get("Unidad"))
                 nombre = _texto(partida.get("Nombre"))
-                llave = (
-                    ("clave", clave, unidad)
-                    if clave
-                    else ("nombre", nombre, unidad)
-                )
+                llave = _llave_partida(partida)
                 grupo = grupos.setdefault(
                     llave,
                     {

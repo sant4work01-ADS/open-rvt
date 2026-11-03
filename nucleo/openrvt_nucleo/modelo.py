@@ -278,6 +278,7 @@ class ModeloNucleo(
         self.crear_tipos_muro()
         self.crear_tipos_ejemplo()
         self.crear_tipos_estructura()
+        self._asegurar_capitulos_obra()
         return self.info()
 
     def abrir(self, ruta: str) -> dict[str, Any]:
@@ -301,6 +302,7 @@ class ModeloNucleo(
         # O012: los archivos anteriores pueden traer vigas encimadas; se recortan
         # al abrir sin perder elementos.
         self._recalcular_uniones_estructura()
+        self._asegurar_capitulos_obra()
         return self.info()
 
     def guardar(self, ruta: str | None = None) -> dict[str, Any]:
