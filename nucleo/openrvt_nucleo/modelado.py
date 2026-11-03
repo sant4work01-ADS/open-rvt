@@ -2308,6 +2308,8 @@ class ModeladoMixin:
             rad = float(angulo)
         except (TypeError, ValueError) as exc:
             raise self._error("El ángulo del giro no es un número.", -32602) from exc
+        if abs(rad) <= TOLERANCIA_CALCULO:
+            raise self._error("El ángulo de giro debe ser distinto de cero.", -32602)
         grid, eje = self._eje_por_gid(globalid)
         x1, y1, x2, y2, _ux, _uy, _largo = self._direccion_eje(eje)
         if centro is None:
@@ -5577,6 +5579,12 @@ class ModeladoMixin:
         copia.GlobalId = ifcopenshell.guid.new()
         return copia
 
+    def _copiar_restricciones(self, original: Any, copia: Any) -> None:
+        """O036: copiar un elemento enlazado conserva su enlace y sus niveles."""
+        datos = self._leer_pset(original, PSET_RESTRICCIONES)
+        if datos:
+            self._guardar_pset(copia, PSET_RESTRICCIONES, datos)
+
     def elementos_copiar(self, globalids: Any, dx: float, dy: float, dz: float) -> dict[str, Any]:
         self._exigir_modelo()
         gids = self._todos_los_gids(globalids)
@@ -5620,6 +5628,7 @@ class ModeladoMixin:
                         "Alineacion": datos["alineacion"],
                     },
                 )
+                self._copiar_restricciones(original, copia)
                 geometry_api.assign_representation(
                     self.modelo, product=copia, representation=self._cuerpo_muro(copia)
                 )
@@ -5672,6 +5681,7 @@ class ModeladoMixin:
                     "OPENRVT_Estructura",
                     dict(self._leer_pset(original, "OPENRVT_Estructura")),
                 )
+                self._copiar_restricciones(original, copia)
                 geometry_api.edit_object_placement(
                     self.modelo,
                     product=copia,
@@ -5689,6 +5699,7 @@ class ModeladoMixin:
                 creados.append(copia)
             else:
                 copia = self._copiar_entidad(original)
+                self._copiar_restricciones(original, copia)
                 geometry_api.edit_object_placement(
                     self.modelo,
                     product=copia,

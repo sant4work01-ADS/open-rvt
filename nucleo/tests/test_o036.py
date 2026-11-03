@@ -157,6 +157,41 @@ def test_giro_que_deja_un_eje_paralelo_se_rechaza_sin_cambios() -> None:
     assert len(nucleo._deshacer) == historial_antes
 
 
+def test_copiar_un_muro_enlazado_conserva_el_enlace() -> None:
+    nucleo = _nuevo()
+    ejes = _reticula(nucleo)
+    muro = nucleo.muro_crear("Block 15", _nivel(nucleo), 0, 0, 4, 0)["creados"][0]
+    copia = nucleo.elementos_copiar([muro], 0.0, 5.0, 0.0)["creados"][0]
+    datos = _pset(nucleo, copia)
+    assert datos["EnlaceTipo"] == "tramo"
+    assert datos["EnlaceEjeGuia"] == ejes["A"]
+    assert datos["EnlaceEjeInicio"] == ejes["1"]
+    assert datos["EnlaceEjeFin"] == ejes["2"]
+
+
+def test_giro_negativo_horario_acorta_el_muro_hasta_el_cruce() -> None:
+    nucleo = _nuevo()
+    ejes = _reticula(nucleo)
+    muro = nucleo.muro_crear("Block 15", _nivel(nucleo), 0, 0, 4, 0)["creados"][0]
+    # −10° (horario): el cruce 2-A pasa a 4 − 1.5·tan 10° = 3.7355095289.
+    nucleo.ejes_girar(ejes["2"], math.radians(-10.0), [4.0, 1.5])
+    esperado = 4.0 - 1.5 * math.tan(math.radians(10.0))
+    assert nucleo.propiedades(muro)["psets"]["OPENRVT_Muro"]["Longitud"] == pytest.approx(
+        esperado, abs=1e-9
+    )
+
+
+def test_giro_de_cero_se_rechaza_sin_tocar_el_historial() -> None:
+    nucleo = _nuevo()
+    ejes = _reticula(nucleo)
+    antes = _extremos_eje(nucleo, ejes["2"])
+    historial_antes = len(nucleo._deshacer)
+    with pytest.raises(Exception, match="distinto de cero"):
+        nucleo.ejes_girar(ejes["2"], 0.0, [4.0, 1.5])
+    assert _extremos_eje(nucleo, ejes["2"]) == pytest.approx(antes)
+    assert len(nucleo._deshacer) == historial_antes
+
+
 def test_giro_valido_mueve_cruces_muro_y_columna_y_deshace_en_un_paso() -> None:
     nucleo = _nuevo()
     ejes = _reticula(nucleo)

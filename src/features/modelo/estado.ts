@@ -1703,13 +1703,9 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     cancelarTrazo: () => {
       const herramienta = get().herramienta;
       if (!herramienta) return false;
-      const giroEnCurso =
-        herramienta === "girar_eje" && (!!get().centroGiro || get().anguloGiro !== "");
-      if (
-        get().puntosHerramienta.length === 0 &&
-        !get().longitudTecleada &&
-        !giroEnCurso
-      ) {
+      // O036: Esc cancela el comando Girar entero (el primer Esc sale de la herramienta).
+      if (herramienta === "girar_eje") return false;
+      if (get().puntosHerramienta.length === 0 && !get().longitudTecleada) {
         return false;
       }
       set({
