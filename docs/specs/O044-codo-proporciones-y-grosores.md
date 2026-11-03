@@ -1,36 +1,44 @@
-# O044: proporciones del codo del eje como la referencia y grosores de línea en planta
+# O044: codo del eje como lo dibujó el dueño (V1 a lo largo, V2 en X o Y) y grosores de línea en planta
 
 ## Reporte del dueño (3-nov)
 1. «Los codos de ejes aún se ven feos, no como mi referencia los pedía.»
 2. «Las líneas de los elementos en planta son demasiado gruesas, de manera desproporcionada.»
 
-## 1. Codo con las proporciones de la referencia
-Antes de empezar, lee como imagen `docs/specs/O042/referencia.png` y la captura actual
-`docs/progreso/O042/casos-referencia.png`.
+## 1. Codo como lo dibujó el dueño
+Antes de empezar, lee como imagen `docs/specs/O044/dueno-codo.png`. Es la indicación más reciente y **manda sobre
+O042**. Lee también `docs/specs/O042/referencia.png`.
+- **En rojo, lo que está mal hoy en el eje B:** la diagonal sale justo del cruce con el eje 2, sin tramo recto, y sube
+  larga y pegada hasta el globo. El codo no se distingue del resto del eje.
+- **En azul, cómo debe verse:**
+  - el eje sigue **recto** sobre su dirección más allá del cruce hasta el nodo **V1**;
+  - de V1 sale una diagonal **corta**, de unos 45°, hasta **V2**;
+  - de V2 sale un tramo recto **paralelo al eje** hasta el borde del globo.
+- **En verde, cómo se mueve cada nodo:**
+  - **V1** se mueve solo **a lo largo del eje**: flecha horizontal en un eje horizontal y vertical en uno vertical. Nunca
+    se sale de la línea del eje.
+  - **V2** se mueve **en X o en Y**, una dirección por arrastre. Se elige por el componente mayor de los primeros 4 px y
+    queda fija hasta soltar. El siguiente arrastre, desde el mismo nodo, puede usar la otra. Así se ajusta paso a paso.
+  - El globo y el tramo final siguen a V2. El tramo final siempre queda paralelo al eje y conserva su largo.
 
-**Hoy:** el codo es diminuto. La diagonal es corta y el tramo final hacia el globo casi no existe (D/2, según O042). El
-globo queda pegado a V2 y el codo se ve como un quiebre accidental.
-
-**Medidas tomadas de la referencia** (D = diámetro del globo, 108 px en la imagen):
-- caso 1, sin codo: la línea llega al borde del globo;
-- casos 2 y 3, codo recién agregado:
-  - de V1 a V2: 0.85·D a lo largo del eje y 0.60·D de lado (la diagonal queda a unos 35° del eje);
-  - de V2 al borde del globo: 0.95·D, paralelo al eje;
-  - **el globo queda en la misma posición a lo largo del eje que sin codo**: solo se corre de lado. V1 queda
-    1.80·D antes del borde del globo.
-
-**Decisiones (no las cambies):**
-- «Agregar codo» crea exactamente esa forma: V1 a 1.80·D del borde del globo, medido sobre el eje; V2 a 0.85·D a lo
-  largo y 0.60·D de lado; tramo final de 0.95·D. Cambia las constantes de O042 en `ejesVista.ts` (`agregarCodoEje`).
-- El lado del codo por omisión es hacia afuera del grupo de ejes, como ya decide O042. El menú lo deja invertir, si ya
-  existe esa opción.
-- Ancho de línea:
-  - de V1 al globo, igual al del eje y continua;
-  - nodos dibujados como puntos sólidos pequeños de 2.5 px de diámetro en pantalla, como en la referencia, solo con el
-    eje seleccionado;
-  - sin cuadros ni pinzamientos extra.
-- El arrastre de V2 de O042 no cambia: solo V2, una dirección por arrastre y el tramo final siempre paralelo.
-- Un codo viejo guardado con las medidas anteriores se respeta tal cual; solo los nuevos usan las proporciones nuevas.
+**Decisiones (no las cambies).** Con D = diámetro del globo:
+- «Agregar codo» crea la forma azul. El globo queda en la misma posición a lo largo del eje que sin codo y solo se corre
+  de lado:
+  - V2 a 0.80·D del borde del globo, medido sobre el eje;
+  - V1 a 0.50·D antes de V2 sobre el eje, con V2 corrido 0.55·D de lado;
+  - si V1 quedara a menos de 0.30·D de un cruce con otro eje (o más atrás), el codo se recorre hacia afuera, con todo y
+    globo, hasta dejar al menos 0.30·D de tramo recto pasado el cruce. Así nunca sale la diagonal del cruce, como en el
+    rojo.
+- **Pinzamientos:** con el eje seleccionado hay dos, redondos y pequeños (2.5 px de radio en pantalla), en V1 y en V2.
+  Al pasar el cursor encima se ve la guía de la flecha:
+  - en V1, solo la del sentido del eje;
+  - en V2, las dos.
+  - Nada de cuadros ni pinzamientos sueltos.
+- **Dibujo:** el eje conserva su patrón de trazo y punto hasta V1. De V1 al globo la línea es continua, del mismo
+  grosor y color. No hay huecos.
+- **Arrastre:** cada arrastre es un paso de Deshacer; Esc cancela y se redondea a 1 mm de papel.
+- **Codo viejo:** uno guardado con las medidas anteriores se respeta tal cual. Solo los nuevos usan esta forma.
+- **«Quitar codo»** del menú contextual sigue igual.
+- Es anotación de la vista; nunca modifica el IfcGrid.
 
 ## 2. Grosores de línea en pantalla independientes del zoom
 **Hoy:** `mmAPx` en `estilos.ts:550` convierte los mm de papel con `mundoPorPx`. Al acercar, la línea engorda en
@@ -50,12 +58,17 @@ proporción: un muro cortado de 0.5 mm se vuelve una franja gruesa y todo se ve 
 - **vitest:**
   - `agregarCodoEje` da V1, V2 y el globo con las medidas de arriba en un eje horizontal y en uno vertical (valores
     calculados a mano en el comentario);
+  - con un cruce cerca del extremo, el codo se recorre para dejar 0.30·D de tramo recto pasado el cruce;
+  - arrastrar V1 con el mouse en diagonal solo lo mueve a lo largo del eje;
+  - arrastrar V2 en diagonal lo mueve solo en el componente mayor;
+  - dos arrastres seguidos de V2, uno en X y otro en Y, dan el punto esperado;
   - un codo viejo cargado no cambia;
   - el grosor en px de 0.5 mm y de 0.18 mm es el mismo con zoom 0.5×, 1× y 8×.
 - **E2E (actualiza `e2e/o042.test.js`):**
-  - agrega un codo en un eje horizontal y en uno vertical y mide en pantalla las proporciones: tolerancia ±10 %;
-  - captura `docs/progreso/O044/codos.png`, a la misma escala que la referencia, con los 4 casos de la referencia
-    (recto, codo a un lado, codo al otro lado, codo con V2 arrastrado más lejos);
+  - recrea la retícula de la captura del dueño (ejes 1, 2, A y B) y agrega un codo en el extremo derecho de B;
+  - mide en pantalla las proporciones (tolerancia ±10 %) y comprueba que hay tramo recto pasado el cruce con el eje 2;
+  - arrastra V1 y V2 con eventos reales de puntero;
+  - captura `docs/progreso/O044/codos.png` de la misma retícula que la del dueño: debe verse como su línea azul;
   - captura `docs/progreso/O044/planta-grosores.png` de la retícula de 6 muros de o041, con zoom normal y con zoom
     cercano. Las líneas deben verse finas en las dos.
   - Lee las capturas como imagen y compáralas con la referencia antes de entregar.
