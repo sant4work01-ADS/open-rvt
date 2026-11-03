@@ -1124,6 +1124,9 @@ export function Visor3D({
     movido: boolean;
     pantallaInicio: { x: number; y: number };
   } | null>(null);
+  // O034: Escape cancela el arrastre; el pointerup que llega después no debe
+  // reinterpretarse como un clic de selección (descartaría la losa).
+  const soltarLosaCancelado = useRef(false);
   const [previewLosaPx, setPreviewLosaPx] = useState<
     Array<{ x: number; y: number }> | null
   >(null);
@@ -4094,7 +4097,6 @@ export function Visor3D({
       );
       nodoVisor.dataset.rellenoLosaPatron = String(rellenosLosaPatron);
       nodoVisor.dataset.rellenoLosaProyeccion = String(rellenosLosaProyeccion);
-      nodoVisor.dataset.asasLosa = String(asasLosa.current.length);
       nodoVisor.dataset.estiloVista = vista.estilo;
       nodoVisor.dataset.redibujo = String(
         Number(nodoVisor.dataset.redibujo ?? "0") + 1,
@@ -4161,6 +4163,9 @@ export function Visor3D({
         grupoLocal.add(asaMalla);
         asasLosa.current.push({ ...asa, punto: [mx, my, zAsa] });
       }
+    }
+    if (contenedor.current) {
+      contenedor.current.dataset.asasLosa = String(asasLosa.current.length);
     }
 
     // Trazas de los cortes sobre las plantas, con flechas en los extremos.
@@ -5273,7 +5278,8 @@ export function Visor3D({
       if (izquierdo && !paneable && !herramienta && !modoCorte && vista.tipo === "planta") {
         const asaLosa = asaLosaEn(evento.clientX, evento.clientY);
         if (asaLosa) {
-          const punto = puntoVistaDesdeEvento(evento.clientX, evento.clientY);
+          soltarLosaCancelado.current = false;
+          const punto = puntoPlanta(evento);
           if (punto) {
             const props = useModelo.getState().propiedades;
             const pset = props?.psets?.OPENRVT_Losa as
@@ -5447,7 +5453,7 @@ export function Visor3D({
           if (recorrido < 3) return;
           arrLosa.movido = true;
         }
-        const punto = puntoVistaDesdeEvento(evento.clientX, evento.clientY);
+        const punto = puntoPlanta(evento);
         if (!punto) return;
         const delta: Punto2 = [
           punto[0] - arrLosa.inicio[0],
@@ -5493,12 +5499,16 @@ export function Visor3D({
         const despues = pantallaDePunto([medioNuevo[0], medioNuevo[1], z]);
         if (antes && despues) {
           const signo = nuevo > 0 ? "+" : "";
+          // Dos decimales como en la cota de Revit («+0.20»); solo se añade el
+          // tercero cuando el paso de 0.005 m lo necesita.
+          const decimales =
+            Math.abs(Math.round(nuevo * 1000) % 10) < 1e-9 ? 2 : 3;
           setGuiaArrastre({
             x1: antes.x - rect.left,
             y1: antes.y - rect.top,
             x2: despues.x - rect.left,
             y2: despues.y - rect.top,
-            texto: `${signo}${nuevo.toFixed(3)} m`,
+            texto: `${signo}${nuevo.toFixed(decimales)} m`,
             enganchado: true,
           });
         }
@@ -5901,6 +5911,12 @@ export function Visor3D({
         }
         return;
       }
+      if (soltarLosaCancelado.current) {
+        soltarLosaCancelado.current = false;
+        setPreviewLosaPx(null);
+        setGuiaArrastre(null);
+        return;
+      }
       const arrLosa = arrastreLosa.current;
       if (arrLosa) {
         arrastreLosa.current = null;
@@ -6060,6 +6076,7 @@ export function Visor3D({
         evento.key === "Escape" &&
         (arrastreEje.current || arrastreNivel.current || arrastreLosa.current)
       ) {
+        if (arrastreLosa.current) soltarLosaCancelado.current = true;
         arrastreEje.current = null;
         arrastreNivel.current = null;
         arrastreLosa.current = null;
@@ -6069,7 +6086,9 @@ export function Visor3D({
         setPreviewLosaPx(null);
         setGuiaArrastre(null);
         evento.preventDefault();
-        evento.stopPropagation();
+        // El atajo global de App (mismo `window`) deseleccionaría la losa con Esc:
+        // hay que cortar también los demás oyentes del mismo nodo.
+        evento.stopImmediatePropagation();
         return;
       }
       if (evento.key === "Escape" && (menuEje || ejeSeleccionado)) {
@@ -6168,7 +6187,9 @@ export function Visor3D({
     nodo.addEventListener("contextmenu", alMenuContextual);
     window.addEventListener("pointermove", alMover);
     window.addEventListener("pointerup", alSoltar);
-    window.addEventListener("keydown", alTecla);
+    // O034: en captura para que Escape cancele el arrastre antes de que el atajo
+    // global de App (burbuja en el mismo `window`) deseleccione la losa.
+    window.addEventListener("keydown", alTecla, true);
     window.addEventListener("keyup", alSoltarTecla);
     return () => {
       nodo.removeEventListener("pointerdown", alBajar);
@@ -6176,7 +6197,7 @@ export function Visor3D({
       nodo.removeEventListener("contextmenu", alMenuContextual);
       window.removeEventListener("pointermove", alMover);
       window.removeEventListener("pointerup", alSoltar);
-      window.removeEventListener("keydown", alTecla);
+      window.removeEventListener("keydown", alTecla, true);
       window.removeEventListener("keyup", alSoltarTecla);
     };
   }, [
