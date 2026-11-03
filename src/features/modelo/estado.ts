@@ -18,7 +18,12 @@ import {
   type AjusteEjeVista,
   type LineaUbicacion,
 } from "./tipos";
-import { clavesParaAislar, type NodoArbol } from "./arbol";
+import {
+  clavesParaAislar,
+  type ArbolObra,
+  type NodoArbol,
+  type PartidaObra,
+} from "./arbol";
 import {
   cajaDeMallas,
   completarVistasEstandar,
@@ -208,6 +213,8 @@ interface EstadoModelo {
   aberturas: Abertura[];
   /** O038: jerarquía del proyecto (modo Modelo) devuelta por `modelo.arbol`. */
   arbol: NodoArbol | null;
+  /** O039: árbol del presupuesto (modo Obra) devuelto por `modelo.arbol_obra`. */
+  arbolObra: ArbolObra | null;
   /** O038: contador que el árbol incrementa para pedir «Ajustar» al visor. */
   ajustarToken: number;
   vistaActivaId: string | null;
@@ -450,6 +457,19 @@ interface EstadoModelo {
   aislarNodoArbol: (clave: string) => Promise<void>;
   /** O038: muestra todos los nodos de la vista activa. */
   mostrarTodoArbol: () => Promise<void>;
+  /** O039: mueve una partida al capítulo indicado (un solo paso de deshacer). */
+  moverPartidaObra: (partida: PartidaObra, capitulo: string) => Promise<void>;
+  /** O039: crea un capítulo nuevo al final. */
+  crearCapituloObra: (nombre: string) => Promise<void>;
+  /** O039: renombra un capítulo por su identificación. */
+  renombrarCapituloObra: (identificacion: string, nombre: string) => Promise<void>;
+  /** O039: sube o baja un capítulo en el orden. */
+  moverCapituloObra: (
+    identificacion: string,
+    direccion: "subir" | "bajar",
+  ) => Promise<void>;
+  /** O039: borra un capítulo; sus partidas vuelven al capítulo por omisión. */
+  borrarCapituloObra: (identificacion: string) => Promise<void>;
   /** O038: pide al visor que ajuste el encuadre a la selección. */
   pedirAjustar: () => void;
   fijarEjeSeleccionado: (globalid: string | null) => void;
@@ -644,7 +664,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
   const cargar = async (info: RespuestaInfo) => {
     const inicio = performance.now();
     const [niveles, elementos, teselado, vistasCrudas, tipos, referenciasCrudas, estilosCrudos,
-      tiposEstructura, arbol] = await Promise.all([
+      tiposEstructura, arbol, arbolObra] = await Promise.all([
         rpc<Nivel[]>("modelo.niveles"),
         rpc<Elemento[]>("modelo.elementos"),
         rpc<RespuestaTeselado>("geometria.teselar", { globalids: null }),
@@ -656,6 +676,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         rpc<unknown>("estilos.leer").catch(() => null),
         cargarTiposEstructura(),
         rpc<NodoArbol>("modelo.arbol").catch(() => null),
+        rpc<ArbolObra>("modelo.arbol_obra").catch(() => null),
       ]);
     const mallas = teselado.elementos.map(decodificarMalla);
     const caja = cajaDeMallas(mallas);
@@ -694,6 +715,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       estilos: normalizarEstilos(estilosCrudos),
       aberturas,
       arbol,
+      arbolObra,
       vistasPersistidas: persistidas,
       vistaActivaId: activa?.id ?? null,
       seleccion: null,
@@ -784,7 +806,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
   const refrescarDeComando = async (resultado: RespuestaComando) => {
     const tocados = [...new Set([...(resultado.creados ?? []), ...(resultado.modificados ?? [])])];
     const borrados = new Set(resultado.borrados ?? []);
-    const [info, niveles, elementos, referenciasCrudas, teselado, arbol] = await Promise.all([
+    const [info, niveles, elementos, referenciasCrudas, teselado, arbol, arbolObra] =
+      await Promise.all([
       rpc<RespuestaInfo>("proyecto.info"),
       rpc<Nivel[]>("modelo.niveles"),
       rpc<Elemento[]>("modelo.elementos"),
@@ -793,7 +816,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         ? rpc<RespuestaTeselado>("geometria.teselar", { globalids: tocados })
         : Promise.resolve(null),
       rpc<NodoArbol>("modelo.arbol").catch(() => get().arbol),
-    ]);
+      rpc<ArbolObra>("modelo.arbol_obra").catch(() => get().arbolObra),
+      ]);
     let mallas = get().mallas.filter(
       (m) => !borrados.has(m.globalid) && !tocados.includes(m.globalid),
     );
@@ -813,6 +837,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       caja: cajaDeMallas(mallas),
       aberturas,
       arbol,
+      arbolObra,
       seleccion,
       seleccionados,
       propiedades: seleccion ? get().propiedades : null,
@@ -1089,6 +1114,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     estilos: estilosPorDefecto(),
     aberturas: [],
     arbol: null,
+    arbolObra: null,
     ajustarToken: 0,
     vistaActivaId: null,
     ejeSeleccionado: null,
@@ -1482,6 +1508,31 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       );
       set({ vistas, conCambios: true });
       await persistirVistas(vistas);
+    },
+
+    moverPartidaObra: async (partida, capitulo) => {
+      await ejecutar("obra.partida_mover", {
+        clave: partida.clave_pp,
+        nombre: partida.nombre,
+        unidad: partida.unidad,
+        capitulo,
+      });
+    },
+
+    crearCapituloObra: async (nombre) => {
+      await ejecutar("obra.capitulo_crear", { nombre });
+    },
+
+    renombrarCapituloObra: async (identificacion, nombre) => {
+      await ejecutar("obra.capitulo_renombrar", { identificacion, nombre });
+    },
+
+    moverCapituloObra: async (identificacion, direccion) => {
+      await ejecutar("obra.capitulo_mover", { identificacion, direccion });
+    },
+
+    borrarCapituloObra: async (identificacion) => {
+      await ejecutar("obra.capitulo_borrar", { identificacion });
     },
 
     pedirAjustar: () => set({ ajustarToken: get().ajustarToken + 1 }),
