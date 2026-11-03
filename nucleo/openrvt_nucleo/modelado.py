@@ -5655,7 +5655,7 @@ class ModeladoMixin:
             raise self._error("El elemento no tiene una línea de ubicación.", -32602)
         den = ux * vy - uy * vx
         if abs(den) <= TOLERANCIA_CALCULO * la * lr:
-            raise self._error("Los elementos son paralelos.", -32027)
+            raise self._error("Los elementos son paralelos", -32027)
         t = ((rx1 - ax1) * vy - (ry1 - ay1) * vx) / den
         cx, cy = ax1 + ux * t, ay1 + uy * t
         t_clic = ((px - ax1) * ux + (py - ay1) * uy) / la

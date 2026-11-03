@@ -140,7 +140,7 @@ def test_paralelos_se_rechazan_sin_tocar_el_modelo() -> None:
     with pytest.raises(ErrorNucleo) as error:
         nucleo.elementos_recortar_extender(m1, m2, [1, 0])
 
-    assert error.value.mensaje == "Los elementos son paralelos."
+    assert error.value.mensaje == "Los elementos son paralelos"
     assert (_linea_muro(nucleo, m1), _linea_muro(nucleo, m2)) == antes
     assert len(nucleo._deshacer) == historial
 
