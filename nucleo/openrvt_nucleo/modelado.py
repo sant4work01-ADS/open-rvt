@@ -1680,6 +1680,93 @@ class ModeladoMixin:
         y1 = float(datos.get("Y1") or datos.get("Y") or 0.0)
         return x1, y1, float(datos.get("X2") or x1), float(datos.get("Y2") or y1)
 
+    def _ejes_que_pasan_por(self, x: float, y: float) -> list[str]:
+        """O036: ejes que pasan por el punto, con la tolerancia de columnas y zapatas."""
+        salida: list[str] = []
+        for grid in self.modelo.by_type("IfcGrid"):
+            for eje in self._ejes(grid):
+                try:
+                    x1, y1, x2, y2, ux, uy, largo = self._direccion_eje(eje)
+                except Exception:
+                    continue
+                t = (x - x1) * ux + (y - y1) * uy
+                if t < -TOLERANCIA or t > largo + TOLERANCIA:
+                    continue
+                separacion = abs((x - x1) * -uy + (y - y1) * ux)
+                if separacion <= TOLERANCIA:
+                    salida.append(self._id_eje(grid, eje))
+        return salida
+
+    def _enlace_auto_tramo(
+        self, x1: float, y1: float, x2: float, y2: float
+    ) -> tuple[str, str, str] | None:
+        """O036: dos extremos en cruces que comparten un eje guía."""
+        inicio_ejes = self._ejes_que_pasan_por(x1, y1)
+        fin_ejes = self._ejes_que_pasan_por(x2, y2)
+        if len(inicio_ejes) < 2 or len(fin_ejes) < 2:
+            return None
+        comunes = [gid for gid in inicio_ejes if gid in fin_ejes]
+        if not comunes:
+            return None
+        guia = comunes[0]
+        inicio = next((gid for gid in inicio_ejes if gid != guia), None)
+        fin = next((gid for gid in fin_ejes if gid != guia), None)
+        if not inicio or not fin or inicio == fin:
+            return None
+        return guia, inicio, fin
+
+    def _escribir_enlace_tramo(
+        self,
+        elemento: Any,
+        guia: str,
+        inicio: str,
+        fin: str,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+        desfase: float | None = None,
+        desfase_inicio: float | None = None,
+        desfase_fin: float | None = None,
+    ) -> None:
+        """O036: escribe el enlace de tramo sin abrir otra instantánea."""
+        gx, gy, ux, uy = self._direccion_de_eje(guia)
+        nx, ny = -uy, ux
+        cruce_inicio = self._cruce_de_ejes(guia, inicio)
+        cruce_fin = self._cruce_de_ejes(guia, fin)
+        if desfase is None:
+            desfase = ((x1 + x2) / 2.0 - gx) * nx + ((y1 + y2) / 2.0 - gy) * ny
+        if desfase_inicio is None:
+            desfase_inicio = (x1 - cruce_inicio[0]) * ux + (y1 - cruce_inicio[1]) * uy
+        if desfase_fin is None:
+            desfase_fin = (x2 - cruce_fin[0]) * ux + (y2 - cruce_fin[1]) * uy
+        datos = self._leer_pset(elemento, PSET_RESTRICCIONES)
+        datos.update(
+            {
+                "EnlaceTipo": "tramo",
+                "EnlaceEjeGuia": _texto(guia),
+                "EnlaceEjeInicio": _texto(inicio),
+                "EnlaceEjeFin": _texto(fin),
+                "EnlaceDesfase": float(desfase),
+                "EnlaceDesfaseInicio": float(desfase_inicio),
+                "EnlaceDesfaseFin": float(desfase_fin),
+            }
+        )
+        self._guardar_pset(elemento, PSET_RESTRICCIONES, datos)
+
+    def _enlazar_auto_tramo(
+        self, elemento: Any, x1: float, y1: float, x2: float, y2: float
+    ) -> bool:
+        """O036: enlaza el lineal recién creado si sus dos extremos son cruces."""
+        enlace = self._enlace_auto_tramo(x1, y1, x2, y2)
+        if enlace is None:
+            return False
+        guia, inicio, fin = enlace
+        self._escribir_enlace_tramo(
+            elemento, guia, inicio, fin, x1, y1, x2, y2
+        )
+        return True
+
     def _aplicar_planta(
         self, elemento: Any, x1: float, y1: float, x2: float, y2: float
     ) -> None:
@@ -1823,32 +1910,22 @@ class ModeladoMixin:
             str(globalid), ("IfcWall", "IfcBeam", "IfcFooting")
         )
         self._validar_enlace(entidad)
-        gx, gy, ux, uy = self._direccion_de_eje(str(eje_guia))
-        nx, ny = -uy, ux
-        inicio = self._cruce_de_ejes(str(eje_guia), str(eje_inicio))
-        fin = self._cruce_de_ejes(str(eje_guia), str(eje_fin))
         x1, y1, x2, y2 = self._extremos_de_elemento(entidad)
-        if desfase is None:
-            desfase = ((x1 + x2) / 2.0 - gx) * nx + ((y1 + y2) / 2.0 - gy) * ny
-        if desfase_inicio is None:
-            desfase_inicio = (x1 - inicio[0]) * ux + (y1 - inicio[1]) * uy
-        if desfase_fin is None:
-            desfase_fin = (x2 - fin[0]) * ux + (y2 - fin[1]) * uy
         self._instantanea()
         try:
-            datos = self._leer_pset(entidad, PSET_RESTRICCIONES)
-            datos.update(
-                {
-                    "EnlaceTipo": "tramo",
-                    "EnlaceEjeGuia": _texto(eje_guia),
-                    "EnlaceEjeInicio": _texto(eje_inicio),
-                    "EnlaceEjeFin": _texto(eje_fin),
-                    "EnlaceDesfase": float(desfase),
-                    "EnlaceDesfaseInicio": float(desfase_inicio),
-                    "EnlaceDesfaseFin": float(desfase_fin),
-                }
+            self._escribir_enlace_tramo(
+                entidad,
+                str(eje_guia),
+                str(eje_inicio),
+                str(eje_fin),
+                x1,
+                y1,
+                x2,
+                y2,
+                desfase,
+                desfase_inicio,
+                desfase_fin,
             )
-            self._guardar_pset(entidad, PSET_RESTRICCIONES, datos)
             self._aplicar_enlace(entidad)
         except Exception:
             self._revertir_instantanea()
@@ -2167,6 +2244,120 @@ class ModeladoMixin:
         return self._resultado(
             modificados=modificados,
             mensaje=f"Eje desplazado {desplazamiento:.2f} m.",
+        )
+
+    def _validar_giro_enlaces(self, globalid: str) -> None:
+        """O036: ningún enlace del eje puede quedar sin cruce tras el giro."""
+        elementos = (
+            self.modelo.by_type("IfcWall")
+            + self.modelo.by_type("IfcColumn")
+            + self.modelo.by_type("IfcBeam")
+            + self.modelo.by_type("IfcFooting")
+        )
+        for entidad in elementos:
+            enlace = self._enlace_de(entidad)
+            if not enlace:
+                continue
+            if enlace["tipo"] == "cruce":
+                pares = [
+                    (
+                        _texto(enlace.get("EnlaceEjeA")),
+                        _texto(enlace.get("EnlaceEjeB")),
+                    )
+                ]
+            else:
+                pares = [
+                    (
+                        _texto(enlace.get("EnlaceEjeGuia")),
+                        _texto(enlace.get("EnlaceEjeInicio")),
+                    ),
+                    (
+                        _texto(enlace.get("EnlaceEjeGuia")),
+                        _texto(enlace.get("EnlaceEjeFin")),
+                    ),
+                ]
+            for eje_a, eje_b in pares:
+                if globalid not in (eje_a, eje_b):
+                    continue
+                try:
+                    self._cruce_de_ejes(eje_a, eje_b)
+                except Exception as exc:
+                    _grid, eje = self._eje_por_gid(globalid)
+                    otro = eje_b if eje_a == globalid else eje_a
+                    try:
+                        _grid_otro, entidad_otro = self._eje_por_gid(otro)
+                        etiqueta_otro = _etiqueta_eje(entidad_otro)
+                    except Exception:
+                        etiqueta_otro = otro
+                    raise self._error(
+                        "El giro dejaría el eje "
+                        f"«{_etiqueta_eje(eje)}» paralelo a «{etiqueta_otro}»: "
+                        "los elementos enlazados se quedarían sin cruce.",
+                        -32027,
+                    ) from exc
+
+    def ejes_girar(
+        self,
+        globalid: str,
+        angulo: float,
+        centro: Any = None,
+    ) -> dict[str, Any]:
+        """O036: gira un eje en el IfcGrid; lo enlazado sigue sus cruces nuevos."""
+        self._exigir_modelo()
+        try:
+            rad = float(angulo)
+        except (TypeError, ValueError) as exc:
+            raise self._error("El ángulo del giro no es un número.", -32602) from exc
+        if abs(rad) <= TOLERANCIA_CALCULO:
+            raise self._error("El ángulo de giro debe ser distinto de cero.", -32602)
+        grid, eje = self._eje_por_gid(globalid)
+        x1, y1, x2, y2, _ux, _uy, _largo = self._direccion_eje(eje)
+        if centro is None:
+            cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+        else:
+            try:
+                cx, cy = float(centro[0]), float(centro[1])
+            except (TypeError, ValueError, IndexError) as exc:
+                raise self._error("El centro de giro no es un punto.", -32602) from exc
+        coseno, seno = math.cos(rad), math.sin(rad)
+
+        def girar(px: float, py: float) -> tuple[float, float]:
+            dx, dy = px - cx, py - cy
+            return cx + dx * coseno - dy * seno, cy + dx * seno + dy * coseno
+
+        nuevos = [girar(x1, y1), girar(x2, y2)]
+        puntos = self._puntos_curva_eje(eje)
+        viejos = [tuple(getattr(p, "Coordinates", ()) or ()) for p in puntos]
+        # Se valida con la geometría nueva puesta y se restaura antes de la instantánea.
+        try:
+            for punto, (px, py) in zip(puntos, nuevos):
+                coords = list(getattr(punto, "Coordinates", ()) or ())
+                coords[0], coords[1] = px, py
+                punto.Coordinates = tuple(coords)
+            self._validar_giro_enlaces(globalid)
+        except Exception:
+            for punto, coords in zip(puntos, viejos):
+                punto.Coordinates = coords
+            raise
+        for punto, coords in zip(puntos, viejos):
+            punto.Coordinates = coords
+        self._instantanea()
+        for punto, (px, py) in zip(puntos, nuevos):
+            coords = list(getattr(punto, "Coordinates", ()) or ())
+            coords[0], coords[1] = px, py
+            punto.Coordinates = tuple(coords)
+        modificados = [globalid]
+        propagados = self._propagar_enlaces_de_eje(globalid)
+        modificados.extend(_gid(e) for e in propagados)
+        self._regenerar_losas_de_bordes(
+            {globalid} | {_gid(e) for e in propagados if e.is_a("IfcWall")}
+        )
+        self.con_cambios = True
+        return self._resultado(
+            modificados=modificados,
+            mensaje=f"Eje girado {math.degrees(rad):.2f}° alrededor de ({cx:.2f}, {cy:.2f}).",
+            centro=[cx, cy],
+            angulo=rad,
         )
 
     def ejes_separacion(
@@ -3431,6 +3622,8 @@ class ModeladoMixin:
             },
         )
         self._guardar_pset(muro, PSET_RESTRICCIONES, restriccion)
+        # O036: dos clics sobre cruces de ejes enlazan el muro al eje común.
+        self._enlazar_auto_tramo(muro, x1, y1, x2, y2)
         cuerpo = self._cuerpo_muro(muro)
         geometry_api.assign_representation(self.modelo, product=muro, representation=cuerpo)
         ux, uy = (x2 - x1) / largo, (y2 - y1) / largo
@@ -4081,6 +4274,9 @@ class ModeladoMixin:
                 "Desfase": desfase, "Z": centro, "Nivel": nivel,
             },
         )
+        # O036: contratrabes y trabes trazados entre cruces quedan enlazados.
+        if alias in ("contratrabe", "trabe"):
+            self._enlazar_auto_tramo(viga, x1, y1, x2, y2)
         self._regenerar_estructura(viga)
         spatial_api.assign_container(
             self.modelo, products=[viga], relating_structure=nivel_entidad
@@ -5383,6 +5579,12 @@ class ModeladoMixin:
         copia.GlobalId = ifcopenshell.guid.new()
         return copia
 
+    def _copiar_restricciones(self, original: Any, copia: Any) -> None:
+        """O036: copiar un elemento enlazado conserva su enlace y sus niveles."""
+        datos = self._leer_pset(original, PSET_RESTRICCIONES)
+        if datos:
+            self._guardar_pset(copia, PSET_RESTRICCIONES, datos)
+
     def elementos_copiar(self, globalids: Any, dx: float, dy: float, dz: float) -> dict[str, Any]:
         self._exigir_modelo()
         gids = self._todos_los_gids(globalids)
@@ -5426,6 +5628,7 @@ class ModeladoMixin:
                         "Alineacion": datos["alineacion"],
                     },
                 )
+                self._copiar_restricciones(original, copia)
                 geometry_api.assign_representation(
                     self.modelo, product=copia, representation=self._cuerpo_muro(copia)
                 )
@@ -5478,6 +5681,7 @@ class ModeladoMixin:
                     "OPENRVT_Estructura",
                     dict(self._leer_pset(original, "OPENRVT_Estructura")),
                 )
+                self._copiar_restricciones(original, copia)
                 geometry_api.edit_object_placement(
                     self.modelo,
                     product=copia,
@@ -5495,6 +5699,7 @@ class ModeladoMixin:
                 creados.append(copia)
             else:
                 copia = self._copiar_entidad(original)
+                self._copiar_restricciones(original, copia)
                 geometry_api.edit_object_placement(
                     self.modelo,
                     product=copia,
