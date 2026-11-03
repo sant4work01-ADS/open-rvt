@@ -266,3 +266,22 @@ def test_espejo_quita_los_enlaces_a_ejes_con_aviso() -> None:
     copia = nucleo._entidad_por_gid(copia_resultado["creados"][0])
     assert nucleo._enlace_de(copia) == {}
     assert nucleo._enlace_de(nucleo._entidad_por_gid(muro.GlobalId))["tipo"] == "tramo"
+
+
+def test_bordes_rechazan_eje_degenerado_numero_menor_que_dos_y_seleccion_vacia() -> None:
+    from openrvt_nucleo.modelo import ErrorNucleo
+
+    nucleo, nivel = _nuevo()
+    columna = nucleo.columna_crear("C-1 Columna 30×30", nivel, 0.0, 0.0)["creados"][0]
+    historial = len(nucleo._deshacer)
+    with pytest.raises(ErrorNucleo):
+        nucleo.elementos_espejo([columna], (2, 2), (2, 2), True)
+    with pytest.raises(ErrorNucleo):
+        nucleo.elementos_matriz_lineal([columna], (3, 0), 1, "al_segundo")
+    with pytest.raises(ErrorNucleo):
+        nucleo.elementos_matriz_polar([columna], (0, 0), 360, 0)
+    with pytest.raises(ErrorNucleo):
+        nucleo.elementos_espejo([], (0, 0), (0, 1), True)
+    # Ningún rechazo dejó copias ni consumió el historial.
+    assert len(nucleo.modelo.by_type("IfcColumn")) == 1
+    assert len(nucleo._deshacer) == historial
