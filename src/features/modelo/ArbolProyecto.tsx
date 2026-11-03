@@ -141,10 +141,16 @@ export function ArbolProyecto({
   // O039: modo del árbol y edición de capítulos.
   const [modo, setModo] = useState<"modelo" | "obra">("modelo");
   // El árbol de Obra se pide al núcleo solo mientras este modo está abierto.
+  // La función llega nueva en cada render: se guarda en una ref para que el efecto
+  // dependa solo del modo y no apague y encienda el árbol de Obra en cada render.
+  const cambiarModo = useRef(onCambiarModo);
   useEffect(() => {
-    onCambiarModo?.(modo);
-    return () => onCambiarModo?.("modelo");
-  }, [modo, onCambiarModo]);
+    cambiarModo.current = onCambiarModo;
+  });
+  useEffect(() => {
+    cambiarModo.current?.(modo);
+    return () => cambiarModo.current?.("modelo");
+  }, [modo]);
   const [plegadosObra, setPlegadosObra] = useState<Set<string>>(new Set());
   const [menuObra, setMenuObra] = useState<{
     tipo: "capitulo" | "partida";
