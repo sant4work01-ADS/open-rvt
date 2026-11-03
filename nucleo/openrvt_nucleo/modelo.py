@@ -303,13 +303,7 @@ class ModeloNucleo(
         # al abrir sin perder elementos.
         self._recalcular_uniones_estructura()
         self._asegurar_capitulos_obra()
-        resultado = self.info()
-        # O036b: un archivo viejo puede traer ejes oblicuos; se abren sin tocarlos
-        # y se avisa una sola vez, al cargarlos.
-        avisos = self.ejes_avisos_oblicuos()
-        if avisos:
-            resultado["avisos"] = avisos
-        return resultado
+        return self.info()
 
     def guardar(self, ruta: str | None = None) -> dict[str, Any]:
         modelo = self._exigir_modelo()

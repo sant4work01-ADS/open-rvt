@@ -724,7 +724,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       propiedades: null,
       cargando: false,
       error: null,
-      aviso: info.avisos?.length ? info.avisos.join(" ") : null,
+      aviso: null,
       pistaTab: null,
       modoCorte: false,
       puntoCorte: null,

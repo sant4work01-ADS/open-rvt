@@ -19,15 +19,14 @@ los ejes son rectos, solo en 2 direcciones».
    - **«Ejes por separaciones».** Ya es ortogonal; compruébalo.
    - **Mover un eje o arrastrar sus extremos** conserva su dirección: uno horizontal sigue horizontal y uno vertical
      sigue vertical.
-   - **Núcleo (`ejes_crear`, `ejes_mover` o como se llamen).** Rechaza un eje oblicuo (|dx| > 1e-9 y |dy| > 1e-9) con el
-     mensaje «Los ejes solo pueden ser horizontales o verticales». Así vale para cualquier puerta de entrada.
-   - **Archivo viejo con un eje oblicuo:** se abre sin error y sin tocarlo. En la carga se avisa una vez: «El eje X no
-     es horizontal ni vertical».
+   - **Núcleo: NO rechaza ejes oblicuos.** El usuario aclaró que los ejes especiales (oblicuos) pueden existir y vendrán
+     después («vamos de menos a más»). Solo la herramienta de dibujo y la edición en la interfaz fuerzan horizontal o
+     vertical; el núcleo sigue aceptando cualquier dirección.
+   - **Archivo con un eje oblicuo:** se abre y se dibuja sin aviso ni cambio.
 
 ## Pruebas obligatorias
 - **pytest:**
-  - crear un eje de (0,0) a (3,4): se rechaza;
-  - de (0,0) a (5,0): se acepta;
+  - crear un eje de (0,0) a (3,4) por el núcleo sigue funcionando (oblicuos permitidos en el núcleo);
   - mover un eje horizontal 2 m en y: sigue horizontal;
   - el auto-enlace de O036 sigue pasando.
 - **vitest:** dibujar un eje con clics en (0,0) y (5, 0.8) lo deja horizontal de (0,0) a (5,0); con (0.6, 5) lo deja

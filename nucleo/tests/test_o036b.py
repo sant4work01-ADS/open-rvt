@@ -1,15 +1,16 @@
-"""O036b: los ejes solo pueden ser horizontales o verticales.
+"""O036b: la interfaz dibuja ejes solo horizontales o verticales.
+
+El núcleo sigue admitiendo cualquier dirección (los ejes especiales oblicuos
+vendrán después); la restricción vive en la herramienta de dibujo de la interfaz.
 
 Valores calculados a mano, sin copiarlos del código:
 
-- un eje de (0,0) a (3,4) es oblicuo: |dx| = 3 > 1e-9 y |dy| = 4 > 1e-9.
-- un eje de (0,0) a (5,0) es horizontal y mide 5.00 m.
-- el eje horizontal (0,−2)-(5,−2), desplazado +2 m en perpendicular, pasa a
+- un eje de (0,0) a (3,4) es oblicuo y el núcleo lo conserva tal cual: mide
+  exactamente 5.00 m (3-4-5).
+- un eje horizontal (0,−2)-(5,−2), desplazado +2 m en perpendicular, pasa a
   (0,−4)-(5,−4): sigue horizontal y ambos extremos bajan exactamente 2 m.
-- el eje vertical (2,−2)-(2,5), desplazado +2 m en perpendicular, pasa a
+- un eje vertical (2,−2)-(2,5), desplazado +2 m en perpendicular, pasa a
   (4,−2)-(4,5): sigue vertical y ambos extremos se mueven exactamente 2 m en x.
-- un archivo viejo con el eje X de (0,0) a (5,3) se abre sin error, conserva sus
-  extremos y devuelve el aviso «El eje X no es horizontal ni vertical.».
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ import pytest
 RAIZ = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(RAIZ / "nucleo"))
 
-from openrvt_nucleo.modelo import ErrorNucleo, ModeloNucleo  # noqa: E402
+from openrvt_nucleo.modelo import ModeloNucleo  # noqa: E402
 from openrvt_nucleo.servidor import Servidor  # noqa: E402
 
 
@@ -37,13 +38,33 @@ def _extremos(nucleo: ModeloNucleo, gid: str) -> tuple[float, float, float, floa
     return nucleo._direccion_eje(eje)[:4]
 
 
-def test_crear_eje_oblicuo_se_rechaza_sin_tocar_historial() -> None:
+def test_el_nucleo_conserva_un_eje_oblicuo() -> None:
     nucleo = _nuevo()
-    historial_antes = len(nucleo._deshacer)
-    with pytest.raises(ErrorNucleo, match="Los ejes solo pueden ser horizontales o verticales"):
-        nucleo.eje_crear("X", 0, 0, 3, 4)
-    assert nucleo.ejes_listar() == []
-    assert len(nucleo._deshacer) == historial_antes
+    gid = nucleo.eje_crear("X", 0, 0, 3, 4)["creados"][0]
+    x1, y1, x2, y2 = _extremos(nucleo, gid)
+    assert (x1, y1, x2, y2) == pytest.approx((0.0, 0.0, 3.0, 4.0))
+    # 3-4-5: la longitud es exactamente 5.00 m.
+    assert nucleo._direccion_eje(nucleo._eje_por_gid(gid)[1])[6] == pytest.approx(5.0)
+
+
+def test_abrir_un_eje_oblicuo_lo_conserva_sin_aviso(tmp_path: Path) -> None:
+    nucleo = _nuevo()
+    gid = nucleo.eje_crear("X", 0, 0, 3, 4)["creados"][0]
+    ruta = tmp_path / "eje-oblicuo.ifc"
+    nucleo.guardar(str(ruta))
+
+    otro = ModeloNucleo()
+    resultado = otro.abrir(str(ruta))
+    assert "avisos" not in resultado
+    abierto = otro.ejes_listar()
+    assert len(abierto) == 1
+    assert abierto[0]["globalid"] == gid
+    assert (
+        abierto[0]["x1"],
+        abierto[0]["y1"],
+        abierto[0]["x2"],
+        abierto[0]["y2"],
+    ) == (0.0, 0.0, 3.0, 4.0)
 
 
 def test_crear_eje_horizontal_se_acepta_con_sus_dos_puntos() -> None:
@@ -96,42 +117,13 @@ def test_ejes_por_separaciones_son_ortogonales() -> None:
         assert ejes[etiqueta]["x2"] == pytest.approx(10.0)
 
 
-def test_abrir_archivo_viejo_con_eje_oblicuo_avisa_una_vez_y_no_lo_toca(
-    tmp_path: Path,
-) -> None:
-    nucleo = _nuevo()
-    gid = nucleo.eje_crear("X", 0, 0, 5, 0)["creados"][0]
-    _grid, eje = nucleo._eje_por_gid(gid)
-    punto = nucleo._puntos_curva_eje(eje)[-1]
-    coords = list(punto.Coordinates)
-    coords[1] = 3.0
-    punto.Coordinates = tuple(coords)
-    ruta = tmp_path / "eje-oblicuo.ifc"
-    nucleo.guardar(str(ruta))
-
-    otro = ModeloNucleo()
-    resultado = otro.abrir(str(ruta))
-    assert resultado["avisos"] == ["El eje X no es horizontal ni vertical."]
-    abierto = otro.ejes_listar()
-    assert len(abierto) == 1
-    assert (abierto[0]["x1"], abierto[0]["y1"], abierto[0]["x2"], abierto[0]["y2"]) == (
-        pytest.approx(0.0),
-        pytest.approx(0.0),
-        pytest.approx(5.0),
-        pytest.approx(3.0),
-    )
-    # El aviso es de la carga: las consultas posteriores no lo repiten.
-    assert "avisos" not in otro.info()
-
-
-def test_rpc_rechaza_eje_oblicuo_y_acepta_horizontal() -> None:
+def test_rpc_acepta_eje_oblicuo_y_horizontal() -> None:
     servidor = Servidor()
     servidor.despachar("proyecto.nuevo", {"nombre": "RPC O036b"})
-    with pytest.raises(ErrorNucleo, match="Los ejes solo pueden ser horizontales o verticales"):
-        servidor.despachar(
-            "ejes.crear", {"etiqueta": "X", "x1": 0, "y1": 0, "x2": 3, "y2": 4}
-        )
-    creados = servidor.despachar(
+    oblicuo = servidor.despachar(
+        "ejes.crear", {"etiqueta": "X", "x1": 0, "y1": 0, "x2": 3, "y2": 4}
+    )["creados"]
+    horizontal = servidor.despachar(
         "ejes.crear", {"etiqueta": "A", "x1": 0, "y1": 0, "x2": 5, "y2": 0}
     )["creados"]
-    assert creados
+    assert oblicuo and horizontal

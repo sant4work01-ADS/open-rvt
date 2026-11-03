@@ -2091,28 +2091,6 @@ class ModeladoMixin:
         salida.sort(key=lambda e: (not e["vertical"], e["etiqueta"]))
         return salida
 
-    def ejes_avisos_oblicuos(self) -> list[str]:
-        """O036b: avisos de ejes viejos que no son horizontales ni verticales."""
-        self._exigir_modelo()
-        avisos: list[str] = []
-        for grid in self.modelo.by_type("IfcGrid"):
-            for eje in self._ejes(grid):
-                puntos = self._puntos_curva_eje(eje)
-                if len(puntos) < 2:
-                    continue
-                c1 = list(getattr(puntos[0], "Coordinates", ()) or ())
-                c2 = list(getattr(puntos[-1], "Coordinates", ()) or ())
-                if len(c1) < 2 or len(c2) < 2:
-                    continue
-                if (
-                    abs(float(c2[0]) - float(c1[0])) > 1e-9
-                    and abs(float(c2[1]) - float(c1[1])) > 1e-9
-                ):
-                    avisos.append(
-                        f"El eje {_etiqueta_eje(eje)} no es horizontal ni vertical."
-                    )
-        return avisos
-
     def eje_crear(
         self, etiqueta: str, x1: float, y1: float, x2: float, y2: float
     ) -> dict[str, Any]:
@@ -2123,10 +2101,6 @@ class ModeladoMixin:
             raise self._error("Las coordenadas del eje no son números.", -32602) from exc
         if math.hypot(x2 - x1, y2 - y1) <= TOLERANCIA_CALCULO:
             raise self._error("El eje necesita dos puntos distintos.", -32602)
-        if abs(x2 - x1) > 1e-9 and abs(y2 - y1) > 1e-9:
-            raise self._error(
-                "Los ejes solo pueden ser horizontales o verticales", -32602
-            )
         self._instantanea()
         vertical = abs(x2 - x1) < abs(y2 - y1)
         etiqueta = (etiqueta or "").strip()
