@@ -37,6 +37,7 @@ import {
   areaPoligono,
   colocarAbertura,
   ejeConDistancia,
+  ejeOrtogonal,
   muroBajoPunto,
   puntoConLongitud,
   proyectarSobreSegmento,
@@ -52,7 +53,6 @@ import {
 import { estilosPorDefecto, normalizarEstilos, type Estilos } from "./estilos";
 import { construirAberturas } from "./aberturas";
 import { normalizarAjusteEje } from "./ejesVista";
-import { anguloGiroGrados, gradosARadianes } from "./giro";
 import {
   cotasTemporalesNivel,
   elevacionDesdeCota,
@@ -81,8 +81,7 @@ export type Herramienta =
   | "cerramiento"
   | "dala"
   | "alinear"
-  | "nivel"
-  | "girar_eje";
+  | "nivel";
 export type AlineacionMuro = "centro" | "interior" | "exterior";
 
 /** O026: referencia de la herramienta Alinear (eje, nivel o cara de elemento). */
@@ -225,10 +224,6 @@ interface EstadoModelo {
   vistaActivaId: string | null;
   /** O021: eje seleccionado en el visor (para el panel de propiedades). */
   ejeSeleccionado: string | null;
-  /** O036: centro de giro elegido con un clic; sin él se usa el punto medio. */
-  centroGiro: Punto2 | null;
-  /** O036: ángulo de giro en grados tal como se escribe (positivo = antihorario). */
-  anguloGiro: string;
   /** O029: nivel seleccionado en el alzado para copiar/desfasar. */
   nivelSeleccionado: string | null;
   seleccion: string | null;
@@ -345,11 +340,6 @@ interface EstadoModelo {
   editarEje: (globalid: string, etiqueta: string) => Promise<void>;
   /** O026: desplaza un eje entero (lo usa la prueba E2E de la propagación). */
   moverEje: (globalid: string, desplazamiento: number) => Promise<boolean>;
-  /** O036: comando Girar sobre el eje seleccionado (o el indicado). */
-  iniciarGiroEje: (globalid?: string | null) => void;
-  fijarAnguloGiro: (texto: string) => void;
-  /** O036: aplica el giro con el ángulo tecleado y el centro elegido. */
-  aplicarGiroEje: () => Promise<boolean>;
   borrarEje: (globalid: string) => Promise<void>;
   /** O006a: retícula completa desde separaciones (una sola operación). */
   crearEjesPorSeparaciones: (
@@ -1063,15 +1053,16 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     // O006d: con ejes previos y sin Ctrl/Alt, el eje se fuerza paralelo a la familia
     // más cercana y toma sus extremos; el segundo punto solo fija la distancia.
     const restriccion = restringirEje(origen, destino, get().referencias.ejes, libre);
+    // O036b: sin familia, el eje se fuerza a la dirección dominante desde el
+    // primer punto; nunca se crea un eje oblicuo.
+    const forzado = restriccion ? null : ejeOrtogonal(origen, destino);
     const inicio = restriccion?.inicio ?? origen;
-    const fin = restriccion?.fin ?? destino;
+    const fin = restriccion?.fin ?? forzado!.fin;
     if (Math.hypot(fin[0] - inicio[0], fin[1] - inicio[1]) < 0.01) {
       set({ aviso: "El eje necesita dos puntos distintos." });
       return false;
     }
-    const vertical =
-      restriccion?.vertical ??
-      Math.abs(fin[0] - inicio[0]) < Math.abs(fin[1] - inicio[1]);
+    const vertical = restriccion?.vertical ?? forzado!.vertical;
     // La etiqueta depende de la orientación del eje (números o letras), no de la
     // etiqueta que se mostrara para el eje anterior.
     const etiqueta = siguienteEtiquetaEje(get().referencias.ejes, vertical);
@@ -1148,8 +1139,6 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     ajustarToken: 0,
     vistaActivaId: null,
     ejeSeleccionado: null,
-    centroGiro: null,
-    anguloGiro: "",
     nivelSeleccionado: null,
     seleccion: null,
     seleccionados: [],
@@ -1670,7 +1659,6 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         dala: "Dala de desplante: clic sobre un muro.",
         alinear: "Alinear: clic en la referencia (eje, nivel o cara) y luego en la cara del elemento.",
         nivel: "Nivel: dos clics horizontales; la elevación se engancha o se teclea.",
-        girar_eje: "Girar eje: clic en el centro y escriba el ángulo; Enter aplica, Esc cancela.",
       };
       const conservarSeleccion =
         herramienta === "mover" || herramienta === "copiar" || herramienta === "losa";
@@ -1707,8 +1695,6 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         longitudTecleada: "",
         ejeLibre: false,
         etiquetaEje: "",
-        centroGiro: null,
-        anguloGiro: "",
         opcionesNivel: { ...get().opcionesNivel, elevacionTexto: "" },
         cotasNivel: null,
         aviso: null,
@@ -1773,8 +1759,6 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     cancelarTrazo: () => {
       const herramienta = get().herramienta;
       if (!herramienta) return false;
-      // O036: Esc cancela el comando Girar entero (el primer Esc sale de la herramienta).
-      if (herramienta === "girar_eje") return false;
       if (get().puntosHerramienta.length === 0 && !get().longitudTecleada) {
         return false;
       }
@@ -1785,8 +1769,6 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         longitudTecleada: "",
         ejeLibre: false,
         etiquetaEje: "",
-        centroGiro: null,
-        anguloGiro: "",
         opcionesNivel: { ...get().opcionesNivel, elevacionTexto: "" },
         cotasNivel: null,
       });
@@ -1917,7 +1899,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         punto,
         get().referencias,
         puntos.length > 0 ? puntos[puntos.length - 1] : null,
-        shift,
+        // O036b: el eje no se ajusta a 15°; su dirección la decide la dominante.
+        herramienta === "eje" ? true : shift,
         metrosPorPixel,
       );
       set({ ratonHerramienta: enganche.punto, engancheHerramienta: enganche });
@@ -1926,19 +1909,6 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     teclearLongitud: (tecla) => {
       const herramienta = get().herramienta;
       if (!herramienta || herramienta === "puerta" || herramienta === "ventana") return;
-      if (herramienta === "girar_eje") {
-        const campo = get().anguloGiro;
-        let siguiente = campo;
-        if (tecla === "Backspace") siguiente = campo.slice(0, -1);
-        else if (tecla === "," || tecla === ".") {
-          if (!campo.includes(".")) siguiente = `${campo || "0"}.`;
-        } else if (tecla === "-" && campo === "") siguiente = "-";
-        else if (/^\d$/.test(tecla)) {
-          siguiente = `${campo}${tecla}`.replace(/^(-?)0(?=\d)/, "$1");
-        }
-        set({ anguloGiro: siguiente });
-        return;
-      }
       // O029: con un nivel seleccionado en el alzado, Copiar/Mover acepta el
       // desfase vertical tecleado sin pedir puntos en planta.
       if (
@@ -1992,10 +1962,6 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
     confirmarLongitud: async (shift = false) => {
       const herramienta = get().herramienta;
-      if (herramienta === "girar_eje") {
-        await get().aplicarGiroEje();
-        return;
-      }
       const puntos = get().puntosHerramienta;
       // O029: nivel seleccionado en el alzado + Copiar/Mover + desfase tecleado.
       if (
@@ -2116,36 +2082,12 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         punto,
         get().referencias,
         puntos.length > 0 ? puntos[puntos.length - 1] : null,
-        shift,
+        // O036b: el eje no se ajusta a 15°; su dirección la decide la dominante.
+        herramienta === "eje" ? true : shift,
         metrosPorPixel,
       );
       const p = enganche.punto;
       bitacoraHerramienta(herramienta, "punto", { x: p[0], y: p[1] });
-      if (herramienta === "girar_eje") {
-        const centro = get().centroGiro;
-        if (!centro) {
-          set({
-            centroGiro: p,
-            aviso:
-              "Girar: escriba el ángulo en grados y Enter, o un segundo clic para marcarlo.",
-          });
-          return;
-        }
-        const eje = get().referencias.ejes.find(
-          (e) => e.globalid === get().ejeSeleccionado,
-        );
-        if (!eje) return;
-        const inicio: Punto2 = [eje.x1, eje.y1];
-        const fin: Punto2 = [eje.x2, eje.y2];
-        const referencia =
-          Math.hypot(inicio[0] - centro[0], inicio[1] - centro[1]) > 1e-6
-            ? inicio
-            : fin;
-        const grados = anguloGiroGrados(centro, referencia, p);
-        set({ anguloGiro: String(Number(grados.toFixed(6))) });
-        await get().aplicarGiroEje();
-        return;
-      }
       if (herramienta === "castillo") {
         const bajo = muroBajoPunto(get().referencias, p, 0.35);
         if (bajo) {
@@ -2233,7 +2175,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
             puntosHerramienta: [p],
             ejeLibre: agregar,
             aviso: agregar
-              ? "Eje libre: segundo punto."
+              ? "Eje sin familia: segundo punto (seguirá siendo horizontal o vertical)."
               : "Eje: segundo punto, longitud y Enter, o doble clic.",
           });
           return;
@@ -2604,69 +2546,6 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
     moverEje: async (globalid, desplazamiento) => {
       return ejecutar("ejes.mover", { globalid, desplazamiento });
-    },
-
-    iniciarGiroEje: (globalid) => {
-      const gid = globalid ?? get().ejeSeleccionado;
-      if (!gid) {
-        set({ aviso: "Seleccione un eje para girarlo." });
-        return;
-      }
-      const vista = get().vistas.find((v) => v.id === get().vistaActivaId);
-      if (vista && vista.tipo !== "planta") {
-        set({ aviso: "El giro de ejes se hace en una vista de planta." });
-        return;
-      }
-      const eje = get().referencias.ejes.find((e) => e.globalid === gid);
-      set({
-        herramienta: "girar_eje",
-        ejeSeleccionado: gid,
-        centroGiro: null,
-        anguloGiro: "",
-        puntosHerramienta: [],
-        ratonHerramienta: null,
-        engancheHerramienta: null,
-        longitudTecleada: "",
-        aviso:
-          `Girar eje «${eje?.etiqueta ?? ""}»: clic en el centro (por omisión, ` +
-          "el punto medio) y escriba el ángulo en grados; Enter aplica, Esc cancela.",
-      });
-      bitacoraHerramienta("girar_eje", "activar");
-    },
-
-    fijarAnguloGiro: (texto) => set({ anguloGiro: texto }),
-
-    aplicarGiroEje: async () => {
-      const gid = get().ejeSeleccionado;
-      if (get().herramienta !== "girar_eje" || !gid) return false;
-      const texto = get().anguloGiro.replace(",", ".").trim();
-      const angulo = Number(texto);
-      if (texto === "" || !Number.isFinite(angulo)) {
-        set({ aviso: "Escriba un ángulo en grados." });
-        return false;
-      }
-      if (Math.abs(angulo) < 1e-9) {
-        set({ aviso: "El ángulo de giro debe ser distinto de cero." });
-        return false;
-      }
-      const centro = get().centroGiro;
-      const ok = await ejecutar("ejes.girar", {
-        globalid: gid,
-        angulo: gradosARadianes(angulo),
-        ...(centro ? { centro } : {}),
-      });
-      if (!ok) return false;
-      set({
-        herramienta: null,
-        centroGiro: null,
-        anguloGiro: "",
-        puntosHerramienta: [],
-        ratonHerramienta: null,
-        engancheHerramienta: null,
-        aviso: `Eje girado ${angulo}°.`,
-      });
-      bitacoraHerramienta("girar_eje", "terminar");
-      return true;
     },
 
     borrarEje: async (globalid) => {

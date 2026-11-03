@@ -208,7 +208,7 @@ describe("herramienta Eje", () => {
     });
   });
 
-  it("con Ctrl el eje se dibuja libre, sin forzar la familia", async () => {
+  it("con Ctrl el eje sigue siendo ortogonal: no se fuerza la familia pero sí la dirección", async () => {
     useModelo.getState().activarHerramienta("eje");
     await useModelo.getState().clicEnPlanta([0, 0]);
     useModelo.getState().fijarRatonHerramienta([0, 10]);
@@ -218,12 +218,44 @@ describe("herramienta Eje", () => {
     await useModelo.getState().clicEnPlanta([4, 2.5], false, true);
 
     const llamadas = nucleo.mock.calls.filter(([metodo]) => metodo === "ejes.crear");
-    const params = llamadas[llamadas.length - 1][1] as Record<string, number>;
-    expect(params.x1).not.toBe(params.x2);
-    expect(params.y1).not.toBe(params.y2);
-    // Sin Ctrl el mismo trazo habría quedado vertical en x = 4.
-    expect(params.x2).toBeCloseTo(3.989, 2);
-    expect(params.y2).toBeCloseTo(2.532, 2);
+    // |dx| = 2 domina sobre |dy| = 0.5: el eje termina horizontal en y = 2.
+    expect(llamadas[llamadas.length - 1][1]).toEqual({
+      etiqueta: "A",
+      x1: 2,
+      y1: 2,
+      x2: 4,
+      y2: 2,
+    });
+  });
+
+  it("dibujar de (0,0) a (5, 0.8) deja el eje horizontal de (0,0) a (5,0)", async () => {
+    useModelo.getState().activarHerramienta("eje");
+    await useModelo.getState().clicEnPlanta([0, 0]);
+    useModelo.getState().fijarRatonHerramienta([5, 0.8]);
+    await useModelo.getState().clicEnPlanta([5, 0.8]);
+
+    expect(nucleo).toHaveBeenCalledWith("ejes.crear", {
+      etiqueta: "A",
+      x1: 0,
+      y1: 0,
+      x2: 5,
+      y2: 0,
+    });
+  });
+
+  it("dibujar de (0,0) a (0.6, 5) deja el eje vertical de (0,0) a (0,5)", async () => {
+    useModelo.getState().activarHerramienta("eje");
+    await useModelo.getState().clicEnPlanta([0, 0]);
+    useModelo.getState().fijarRatonHerramienta([0.6, 5]);
+    await useModelo.getState().clicEnPlanta([0.6, 5]);
+
+    expect(nucleo).toHaveBeenCalledWith("ejes.crear", {
+      etiqueta: "1",
+      x1: 0,
+      y1: 0,
+      x2: 0,
+      y2: 5,
+    });
   });
 });
 

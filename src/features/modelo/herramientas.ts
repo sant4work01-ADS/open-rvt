@@ -350,6 +350,23 @@ export interface EjeRestringido {
 const TOLERANCIA_PARALELO_EJE = (15 * Math.PI) / 180;
 
 /**
+ * O036b: los ejes solo son horizontales o verticales. El segundo punto se
+ * proyecta sobre la dirección dominante medida desde el primer punto:
+ * |dx| ≥ |dy| → horizontal; si no, vertical.
+ */
+export function ejeOrtogonal(
+  origen: Punto2,
+  destino: Punto2,
+): { fin: Punto2; vertical: boolean } {
+  const dx = destino[0] - origen[0];
+  const dy = destino[1] - origen[1];
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    return { fin: [destino[0], origen[1]], vertical: false };
+  }
+  return { fin: [origen[0], destino[1]], vertical: true };
+}
+
+/**
  * O006d: si el trazo forma menos de 15° con una familia existente, devuelve el eje
  * forzado paralelo, con los extremos de esa familia y la posición perpendicular del
  * cursor. Con `libre` (Ctrl o Alt) no restringe. Sin ejes previos tampoco.

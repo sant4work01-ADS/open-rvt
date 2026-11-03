@@ -246,7 +246,6 @@ export function App() {
         estado.herramienta !== "puerta" &&
         estado.herramienta !== "ventana" &&
         (estado.puntosHerramienta.length > 0 ||
-          estado.herramienta === "girar_eje" ||
           ((estado.herramienta === "copiar" || estado.herramienta === "mover") &&
             !!estado.nivelSeleccionado &&
             estado.seleccionados.length === 0))
@@ -352,7 +351,6 @@ export function App() {
         herramientaPuerta: () => useModelo.getState().activarHerramienta("puerta"),
         herramientaVentana: () => useModelo.getState().activarHerramienta("ventana"),
         herramientaMover: () => useModelo.getState().activarHerramienta("mover"),
-        girarEje: () => useModelo.getState().iniciarGiroEje(),
         herramientaCopiar: () => useModelo.getState().activarHerramienta("copiar"),
         herramientaAlinear: () => useModelo.getState().activarHerramienta("alinear"),
         // O007b: herramientas de estructura.

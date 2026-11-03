@@ -1,4 +1,4 @@
-// O036: auto-enlace de lineales y giro de ejes con la app real.
+// O036b: auto-enlace de lineales y ejes solo ortogonales con la app real.
 // Retícula 2×2 con la herramienta Eje: 1 (x=0), 2 (x=4), A (y=0), B (y=3).
 // Muro de (0,0) a (4,0): debe quedar enlazado al eje A, de 1 a 2.
 // Giro de 10° del eje 2 alrededor de su punto medio (4, 1.5):
@@ -12,7 +12,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const zlib = require("node:zlib");
-const { Sesion, esperar, By, until, Key } = require("./arnes");
+const { Sesion, esperar, By, until } = require("./arnes");
 
 const RAIZ = path.resolve(__dirname, "..");
 const CAPTURAS = path.join(RAIZ, "docs", "progreso", "O036");
@@ -225,31 +225,7 @@ async function dibujarEjes(ses, tramos) {
   await esperar(700);
 }
 
-async function abrirMenuEje(ses, etiqueta) {
-  const punto = await ses.driver.executeScript(
-    (etiqueta) =>
-      document.querySelector('[data-testid="visor"]').__openrvtEjeAPantalla(etiqueta, "fin"),
-    etiqueta,
-  );
-  assert.ok(punto, `no se encontró el asa del eje ${etiqueta}`);
-  await ses.driver.executeScript(
-    (punto) => {
-      document.querySelector('[data-testid="visor"] canvas').dispatchEvent(
-        new MouseEvent("contextmenu", {
-          bubbles: true,
-          cancelable: true,
-          button: 2,
-          clientX: punto.x,
-          clientY: punto.y,
-        }),
-      );
-    },
-    punto,
-  );
-  await esperar(350);
-}
-
-test("O036: reticula, muro enlazado, giro del eje y deshacer", async () => {
+test("O036: reticula, eje ortogonal y muro enlazado", async () => {
   const ses = await Sesion.abrir({
     prueba: "o036",
     tamano: { ancho: 1600, alto: 900 },
@@ -274,6 +250,29 @@ test("O036: reticula, muro enlazado, giro del eje y deshacer", async () => {
     }, 20_000, "el modelo nuevo no cargó");
     await cambiarPestana(ses, "Modelar");
     await elegirVista(ses, "Planta Nivel 0");
+
+    // 0) O036b: un segundo clic algo inclinado no crea un eje chueco: |dx| = 5
+    // domina sobre |dy| = 0.8 y el eje queda horizontal de (0,0) a (5,0).
+    await activar(ses, "cmd-eje");
+    await clicMundo(ses, 0, 0);
+    await clicMundo(ses, 5, 0.8);
+    await tecla(ses, "Escape", "Escape");
+    await tecla(ses, "Escape", "Escape");
+    const inclinado = await invocar(ses, "modelo.referencias");
+    assert.equal(inclinado.ejes.length, 1, "el eje inclinado debía quedar creado");
+    const ejeOrtogonalCreado = inclinado.ejes[0];
+    assert.equal(ejeOrtogonalCreado.y1, 0, `el eje no quedó horizontal: ${JSON.stringify(ejeOrtogonalCreado)}`);
+    assert.equal(ejeOrtogonalCreado.y2, 0, `el eje no quedó horizontal: ${JSON.stringify(ejeOrtogonalCreado)}`);
+    assert.ok(Math.abs(ejeOrtogonalCreado.x1 - 0) < 1e-6);
+    assert.ok(Math.abs(ejeOrtogonalCreado.x2 - 5) < 1e-6);
+    await activar(ses, "visor-ajustar");
+    await esperar(700);
+    const ejeCaptura = path.join(CAPTURAS, "o036b-eje-horizontal.png");
+    await ses.captura(ejeCaptura);
+    // Deshacer refresca el estado de la interfaz y deja el modelo vacío para
+    // dibujar la retícula 2×2 con las etiquetas 1, 2, A y B.
+    await activar(ses, "cmd-deshacer");
+    await esperar(1200);
 
     // 1) Retícula 2×2 con la herramienta Eje.
     await dibujarEjes(ses, [
@@ -330,49 +329,8 @@ test("O036: reticula, muro enlazado, giro del eje y deshacer", async () => {
     const enlace = path.join(CAPTURAS, "o036-enlace.png");
     await ses.captura(enlace);
 
-    // 3) Girar el eje 2 10° con el comando (centro por omisión, punto medio).
-    await abrirMenuEje(ses, "2");
-    await activar(ses, "eje-menu-girar");
-    assert.equal(await textoDom(ses, '[data-testid="giro-centro"]'), "Centro: punto medio del eje");
-    await fijarValor(ses, "giro-angulo", "10");
-    const campo = await ses.porTestid("giro-angulo");
-    await campo.sendKeys(Key.ENTER);
-    await esperar(1600);
-
-    const largoEsperado = 4 + 1.5 * Math.tan((10 * Math.PI) / 180);
-    const largo = Number((await props(ses, muro)).psets.OPENRVT_Muro.Longitud);
-    assert.ok(
-      Math.abs(largo - largoEsperado) < 1e-6,
-      `el muro no siguió al eje: ${largo} ≠ ${largoEsperado}`,
-    );
-    const rotado = (await invocar(ses, "modelo.referencias")).ejes.find(
-      (e) => e.globalid === eje("2"),
-    );
-    // Extremo superior (4, 5) girado 10° alrededor de (4, 1.5):
-    // x = 4 − 3.5·sen 10°, y = 1.5 + 3.5·cos 10°.
-    const rad = (10 * Math.PI) / 180;
-    assert.ok(Math.abs(rotado.x2 - (4 - 3.5 * Math.sin(rad))) < 1e-6);
-    assert.ok(Math.abs(rotado.y2 - (1.5 + 3.5 * Math.cos(rad))) < 1e-6);
-    const giro = path.join(CAPTURAS, "o036-giro.png");
-    await ses.captura(giro);
-
-    // 4) Deshacer: eje, muro y enlace vuelven exactos.
-    await activar(ses, "cmd-deshacer");
-    await esperar(1600);
-    const vuelta = Number((await props(ses, muro)).psets.OPENRVT_Muro.Longitud);
-    assert.ok(Math.abs(vuelta - 4) < 1e-6, `Deshacer no devolvió el muro a 4 m: ${vuelta}`);
-    const ejeVuelta = (await invocar(ses, "modelo.referencias")).ejes.find(
-      (e) => e.globalid === eje("2"),
-    );
-    assert.ok(Math.abs(ejeVuelta.x1 - 4) < 1e-6 && Math.abs(ejeVuelta.x2 - 4) < 1e-6);
-    const psetVuelta = (await props(ses, muro)).psets.OPENRVT_Restricciones;
-    assert.equal(psetVuelta.EnlaceEjeGuia, eje("A"));
-    assert.equal(psetVuelta.EnlaceEjeFin, eje("2"));
-    const deshacer = path.join(CAPTURAS, "o036-deshacer.png");
-    await ses.captura(deshacer);
-
     // 5) Las capturas se leen como imagen (tamaño y contenido).
-    for (const ruta of [reticula, enlace, giro, deshacer]) {
+    for (const ruta of [ejeCaptura, reticula, enlace]) {
       const img = comprobarCaptura(ruta);
       assert.ok(fs.statSync(ruta).size > 5000, `PNG vacío: ${ruta}`);
       assert.ok(img.datos.length === img.ancho * img.alto * img.canales);

@@ -1,24 +1,14 @@
-"""O036: auto-enlace de lineales en cruces y giro de ejes.
+"""O036: auto-enlace de lineales en cruces (la parte de giro se retiró en O036b).
 
 Valores calculados a mano (spec O036), con ejes 1 (x=0), 2 (x=4), A (y=0)
 y B (y=3):
 
 - muro de (0,0) a (4,0): cruces 1-A y 2-A comparten el eje A; guía A,
   inicio 1, fin 2. Al mover el eje 2 de x=4 a x=5 el muro mide 5.00 m.
-- giro de 10° del eje 2 alrededor de (4, 1.5):
-  - el eje gira a la izquierda (antihorario); su dirección pasa de (0,1) a
-    (-sen 10°, cos 10°).
-  - cruce 2-A: la recta corta y=0 a x = 4 + 1.5·tan 10° = 4.2644904711.
-  - cruce 2-B: corta y=3 a x = 4 − 1.5·tan 10° = 3.7355095289.
-  - el muro enlazado termina en (4.2644904711, 0): mide 4.2644904711 m.
-  - la columna en 2-B pasa de (4, 3) a (3.7355095289, 3).
-- girar el eje A 90° alrededor de (0,0) lo deja paralelo a los ejes 1 y 2:
-  se rechaza sin tocar el modelo ni el historial.
 """
 
 from __future__ import annotations
 
-import math
 import sys
 from pathlib import Path
 
@@ -70,11 +60,6 @@ def _reticula(nucleo: ModeloNucleo) -> dict[str, str]:
 
 def _nivel(nucleo: ModeloNucleo) -> str:
     return nucleo.niveles()[0]["globalid"]
-
-
-def _extremos_eje(nucleo: ModeloNucleo, gid: str) -> tuple[float, float, float, float]:
-    _grid, eje = nucleo._eje_por_gid(gid)
-    return nucleo._direccion_eje(eje)[:4]
 
 
 def test_muro_de_dos_clics_sobre_cruces_queda_enlazado_y_sigue_al_eje() -> None:
@@ -140,23 +125,6 @@ def test_contratrabe_y_trabe_de_dos_clics_sobre_cruces_se_enlazan() -> None:
         assert datos["EnlaceEjeFin"] == ejes["2"]
 
 
-def test_giro_que_deja_un_eje_paralelo_se_rechaza_sin_cambios() -> None:
-    nucleo = _nuevo()
-    ejes = _reticula(nucleo)
-    muro = nucleo.muro_crear("Block 15", _nivel(nucleo), 0, 0, 4, 0)["creados"][0]
-    antes = _extremos_eje(nucleo, ejes["A"])
-    largo_antes = nucleo.propiedades(muro)["psets"]["OPENRVT_Muro"]["Longitud"]
-    historial_antes = len(nucleo._deshacer)
-    with pytest.raises(Exception, match="paralelo"):
-        nucleo.ejes_girar(ejes["A"], math.radians(90.0), [0.0, 0.0])
-    assert _extremos_eje(nucleo, ejes["A"]) == pytest.approx(antes)
-    assert (
-        nucleo.propiedades(muro)["psets"]["OPENRVT_Muro"]["Longitud"]
-        == pytest.approx(largo_antes)
-    )
-    assert len(nucleo._deshacer) == historial_antes
-
-
 def test_copiar_un_muro_enlazado_conserva_el_enlace() -> None:
     nucleo = _nuevo()
     ejes = _reticula(nucleo)
@@ -169,74 +137,7 @@ def test_copiar_un_muro_enlazado_conserva_el_enlace() -> None:
     assert datos["EnlaceEjeFin"] == ejes["2"]
 
 
-def test_giro_negativo_horario_acorta_el_muro_hasta_el_cruce() -> None:
-    nucleo = _nuevo()
-    ejes = _reticula(nucleo)
-    muro = nucleo.muro_crear("Block 15", _nivel(nucleo), 0, 0, 4, 0)["creados"][0]
-    # −10° (horario): el cruce 2-A pasa a 4 − 1.5·tan 10° = 3.7355095289.
-    nucleo.ejes_girar(ejes["2"], math.radians(-10.0), [4.0, 1.5])
-    esperado = 4.0 - 1.5 * math.tan(math.radians(10.0))
-    assert nucleo.propiedades(muro)["psets"]["OPENRVT_Muro"]["Longitud"] == pytest.approx(
-        esperado, abs=1e-9
-    )
-
-
-def test_giro_de_cero_se_rechaza_sin_tocar_el_historial() -> None:
-    nucleo = _nuevo()
-    ejes = _reticula(nucleo)
-    antes = _extremos_eje(nucleo, ejes["2"])
-    historial_antes = len(nucleo._deshacer)
-    with pytest.raises(Exception, match="distinto de cero"):
-        nucleo.ejes_girar(ejes["2"], 0.0, [4.0, 1.5])
-    assert _extremos_eje(nucleo, ejes["2"]) == pytest.approx(antes)
-    assert len(nucleo._deshacer) == historial_antes
-
-
-def test_giro_valido_mueve_cruces_muro_y_columna_y_deshace_en_un_paso() -> None:
-    nucleo = _nuevo()
-    ejes = _reticula(nucleo)
-    nivel = _nivel(nucleo)
-    muro = nucleo.muro_crear("Block 15", nivel, 0, 0, 4, 0)["creados"][0]
-    columna = nucleo.columna_crear(
-        _tipo(nucleo, "IfcColumnType", "C-1 Columna 30×30"),
-        nivel,
-        4,
-        3,
-        eje_a=ejes["2"],
-        eje_b=ejes["B"],
-    )["creados"][0]
-
-    # 4 ± 1.5·tan 10°.
-    cruce_2a = 4.0 + 1.5 * math.tan(math.radians(10.0))
-    cruce_2b = 4.0 - 1.5 * math.tan(math.radians(10.0))
-    nucleo.ejes_girar(ejes["2"], math.radians(10.0), [4.0, 1.5])
-
-    # Cruces calculados a mano: 2-A = (4 + 1.5·tan 10°, 0) y 2-B = (4 − 1.5·tan 10°, 3).
-    assert nucleo._cruce_de_ejes(ejes["2"], ejes["A"]) == pytest.approx(
-        (cruce_2a, 0.0), abs=1e-9
-    )
-    assert nucleo._cruce_de_ejes(ejes["2"], ejes["B"]) == pytest.approx(
-        (cruce_2b, 3.0), abs=1e-9
-    )
-    assert _plano(nucleo, columna) == pytest.approx((cruce_2b, 3.0), abs=1e-9)
-    assert nucleo.propiedades(muro)["psets"]["OPENRVT_Muro"]["Longitud"] == pytest.approx(
-        cruce_2a, abs=1e-9
-    )
-    assert _pset(nucleo, muro)["EnlaceEjeGuia"] == ejes["A"]
-    assert _pset(nucleo, columna)["EnlaceEjeA"] == ejes["2"]
-
-    # Un solo paso de Deshacer devuelve eje, muro y columna exactos (±1e-9).
-    assert nucleo.deshacer()["hecho"] is True
-    assert _extremos_eje(nucleo, ejes["2"]) == pytest.approx((4, -2, 4, 5), abs=1e-9)
-    assert nucleo.propiedades(muro)["psets"]["OPENRVT_Muro"]["Longitud"] == pytest.approx(
-        4.0, abs=1e-9
-    )
-    assert _plano(nucleo, columna) == pytest.approx((4.0, 3.0), abs=1e-9)
-    assert _pset(nucleo, muro)["EnlaceEjeFin"] == ejes["2"]
-    assert _pset(nucleo, columna)["EnlaceEjeB"] == ejes["B"]
-
-
-def test_rpc_crea_muro_enlazado_y_lo_gira() -> None:
+def test_rpc_crea_muro_enlazado() -> None:
     servidor = Servidor()
     servidor.despachar("proyecto.nuevo", {"nombre": "RPC O036"})
     nivel = servidor.despachar("modelo.niveles", {})[0]["globalid"]
@@ -256,11 +157,5 @@ def test_rpc_crea_muro_enlazado_y_lo_gira() -> None:
     )["creados"][0]
     nucleo = servidor._exigir()
     assert _pset(nucleo, muro)["EnlaceEjeGuia"] == ejes["A"]
-
-    servidor.despachar(
-        "ejes.girar",
-        {"globalid": ejes["2"], "angulo": math.radians(10.0), "centro": [4.0, 1.5]},
-    )
-    assert nucleo.propiedades(muro)["psets"]["OPENRVT_Muro"]["Longitud"] == pytest.approx(
-        4.0 + 1.5 * math.tan(math.radians(10.0)), abs=1e-9
-    )
+    assert _pset(nucleo, muro)["EnlaceEjeInicio"] == ejes["1"]
+    assert _pset(nucleo, muro)["EnlaceEjeFin"] == ejes["2"]

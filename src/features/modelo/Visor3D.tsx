@@ -46,6 +46,7 @@ import {
   colocarAbertura,
   describirEnganche,
   distanciaAEjeParalelo,
+  ejeOrtogonal,
   restringirEje,
   type Punto2,
 } from "./herramientas";
@@ -1653,6 +1654,21 @@ export function Visor3D({
         : null,
     [restriccionPrevia, ratonHerramienta, referencias.ejes],
   );
+  // O036b: sin familia el trazo también se previsualiza horizontal o vertical.
+  const trazoEjePrevio = useMemo(() => {
+    if (herramienta !== "eje" || puntosHerramienta.length === 0 || !ratonHerramienta) {
+      return null;
+    }
+    if (restriccionPrevia) {
+      return {
+        inicio: restriccionPrevia.inicio,
+        fin: restriccionPrevia.fin,
+        vertical: restriccionPrevia.vertical,
+      };
+    }
+    const forzado = ejeOrtogonal(puntosHerramienta[0], ratonHerramienta);
+    return { inicio: puntosHerramienta[0], fin: forzado.fin, vertical: forzado.vertical };
+  }, [herramienta, puntosHerramienta, ratonHerramienta, restriccionPrevia]);
 
   // O005c: los ejes también encuadran la planta (burbujas incluidas).
   const cajaVista = useMemo(() => {
@@ -4340,18 +4356,27 @@ export function Visor3D({
             ejeLibre,
           )
         : null;
-    if (restriccionEje) {
-      polilinea([restriccionEje.inicio, restriccionEje.fin]);
+    const trazoEje =
+      restriccionEje ??
+      (trazoEjePrevio
+        ? {
+            inicio: trazoEjePrevio.inicio,
+            fin: trazoEjePrevio.fin,
+            vertical: trazoEjePrevio.vertical,
+          }
+        : null);
+    if (trazoEje) {
+      polilinea([trazoEje.inicio, trazoEje.fin]);
       const cercano = distanciaAEjeParalelo(
-        ratonHerramienta ?? restriccionEje.fin,
+        ratonHerramienta ?? trazoEje.fin,
         referencias.ejes,
-        restriccionEje.vertical,
+        trazoEje.vertical,
       );
       if (cercano && cercano.distancia > 0.02) {
-        const medio: Punto2 = restriccionEje.vertical
-          ? [restriccionEje.inicio[0], (restriccionEje.inicio[1] + restriccionEje.fin[1]) / 2]
-          : [(restriccionEje.inicio[0] + restriccionEje.fin[0]) / 2, restriccionEje.inicio[1]];
-        const enEje: Punto2 = restriccionEje.vertical
+        const medio: Punto2 = trazoEje.vertical
+          ? [trazoEje.inicio[0], (trazoEje.inicio[1] + trazoEje.fin[1]) / 2]
+          : [(trazoEje.inicio[0] + trazoEje.fin[0]) / 2, trazoEje.inicio[1]];
+        const enEje: Punto2 = trazoEje.vertical
           ? [cercano.referencia.x1, medio[1]]
           : [medio[0], cercano.referencia.y1];
         polilinea([enEje, medio]);
@@ -4525,6 +4550,7 @@ export function Visor3D({
     cajaVista,
     oscuro,
     ejeLibre,
+    trazoEjePrevio,
     metrosPorPixelActual,
   ]);
 
@@ -7190,18 +7216,6 @@ export function Visor3D({
               >
                 Ocultar globo fin
               </button>
-              <button
-                type="button"
-                role="menuitem"
-                data-testid="eje-menu-girar"
-                className="w-full rounded px-2 py-1 text-left hover:bg-muted"
-                onClick={() => {
-                  useModelo.getState().iniciarGiroEje(menuEje.globalid);
-                  setMenuEje(null);
-                }}
-              >
-                Girar…
-              </button>
             </>
           )}
           <button
@@ -7617,7 +7631,7 @@ export function Visor3D({
             </span>
           )}
           {herramienta === "eje" && (
-            <span data-testid="pista-eje-libre">Ctrl/Alt: eje libre</span>
+            <span data-testid="pista-eje-libre">Ctrl/Alt: sin familia</span>
           )}
           {herramienta === "eje" && distanciaParalelo && (
             <span data-testid="pista-distancia-eje" className="font-semibold text-sky-600">
@@ -7626,10 +7640,10 @@ export function Visor3D({
           )}
           {puntosHerramienta.length > 0 && ratonHerramienta && herramienta !== "losa" && (
             <span data-testid="pista-longitud">
-              {herramienta === "eje" && restriccionPrevia
+              {herramienta === "eje" && trazoEjePrevio
                 ? Math.hypot(
-                    restriccionPrevia.fin[0] - restriccionPrevia.inicio[0],
-                    restriccionPrevia.fin[1] - restriccionPrevia.inicio[1],
+                    trazoEjePrevio.fin[0] - trazoEjePrevio.inicio[0],
+                    trazoEjePrevio.fin[1] - trazoEjePrevio.inicio[1],
                   ).toFixed(2)
                 : Math.hypot(
                     ratonHerramienta[0] - puntosHerramienta[puntosHerramienta.length - 1][0],
