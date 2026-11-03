@@ -136,6 +136,7 @@ class InteraccionesMixin:
         y: float,
         rotacion: float,
         altura: float,
+        recalcular: bool = True,
     ) -> tuple[Any, float]:
         elevacion = float(nivel_entidad.Elevation or 0.0)
         if altura <= 0:
@@ -159,7 +160,9 @@ class InteraccionesMixin:
         spatial_api.assign_container(
             self.modelo, products=[columna], relating_structure=nivel_entidad
         )
-        self._recalcular_uniones_estructura()
+        # O041: en lotes se recalcula una sola vez al final.
+        if recalcular:
+            self._recalcular_uniones_estructura()
         return columna, elevacion
 
     def _viga_nueva(
@@ -234,6 +237,7 @@ class InteraccionesMixin:
         muro: Any,
         distancia: float,
         corregir_existente: bool = True,
+        recalcular: bool = True,
     ) -> Any:
         datos = self._datos_muro(muro)
         x, y, rotacion = self._punto_en_muro(muro, distancia)
@@ -258,7 +262,8 @@ class InteraccionesMixin:
             altura = datos["altura"]
         elevacion = datos["z"]
         castillo, _ = self._columna_nueva(
-            tipo_entidad, nivel_entidad, x, y, rotacion, max(altura, 0.05)
+            tipo_entidad, nivel_entidad, x, y, rotacion, max(altura, 0.05),
+            recalcular=recalcular,
         )
         pset = {
             **self._leer_pset(castillo, "OPENRVT_Estructura"),
@@ -271,7 +276,9 @@ class InteraccionesMixin:
         self._guardar_liga(castillo, {"Muro": _gid(muro), "Distancia": distancia})
         self._conectar(castillo, muro)
         # O012b: con B/H del muro ya fijados, se recortan las vigas y el muro vecino.
-        self._recalcular_uniones_estructura()
+        # O041: en la colocación por lotes se recalcula una sola vez al final.
+        if recalcular:
+            self._recalcular_uniones_estructura()
         return castillo
 
     def castillos_automaticos(
@@ -327,7 +334,7 @@ class InteraccionesMixin:
                 ) < 0.05:
                     omitidos.append(castillo)
                     return
-            creados.append(self._castillo_en(tipo_entidad, muro, distancia))
+            creados.append(self._castillo_en(tipo_entidad, muro, distancia, recalcular=False))
 
         # 1. Esquinas: un solo castillo por cruce, centrado en la intersección.
         esquinas: list[tuple[float, float, Any, float]] = []
@@ -399,6 +406,9 @@ class InteraccionesMixin:
                 if any(abs(distancia - e) < 0.05 for e in existentes):
                     continue
                 colocar(muro, distancia)
+        # O041: todos los castillos creados; una sola regeneración de los muros
+        # afectados y sus dependientes (antes se hacía por cada castillo).
+        self._recalcular_uniones_estructura()
         self.con_cambios = True
         return self._resultado(
             creados,
@@ -471,13 +481,28 @@ class InteraccionesMixin:
             )
         return {"NivelBase": nivel, "DesfaseBase": desfase}
 
-    def cerramiento_crear_en_muro(self, tipo: str, muro: str) -> dict[str, Any]:
-        return self._lineal_en_muro(tipo, muro, "cerramiento")
+    def cerramiento_crear_en_muro(
+        self,
+        tipo: str,
+        muro: str,
+        nivel: str | None = None,
+        desfase: float | None = None,
+    ) -> dict[str, Any]:
+        return self._lineal_en_muro(
+            tipo, muro, "cerramiento", nivel_elegido=nivel, desfase_elegido=desfase
+        )
 
     def dala_crear_en_muro(self, tipo: str, muro: str) -> dict[str, Any]:
         return self._lineal_en_muro(tipo, muro, "dala")
 
-    def _lineal_en_muro(self, tipo: str, muro: str, esperado: str) -> dict[str, Any]:
+    def _lineal_en_muro(
+        self,
+        tipo: str,
+        muro: str,
+        esperado: str,
+        nivel_elegido: str | None = None,
+        desfase_elegido: float | None = None,
+    ) -> dict[str, Any]:
         self._exigir_modelo()
         tipo_entidad = self._tipo_estructura(tipo, ("IfcBeamType",))
         if self._estructura_de_tipo(tipo_entidad) != esperado:
@@ -514,6 +539,19 @@ class InteraccionesMixin:
         self._guardar_liga(viga, {"Muro": _gid(muro_entidad)})
         if esperado == "cerramiento":
             restriccion = self._restricciones_cerramiento_ligado(muro_entidad)
+            explicito = bool(nivel_elegido) or desfase_elegido is not None
+            if explicito:
+                # O041: la barra de opciones deja elegir nivel y desfase antes
+                # del clic; el desfase se mide del nivel a la cara superior.
+                if nivel_elegido:
+                    restriccion["NivelBase"] = _gid(
+                        self._nivel_por_gid(str(nivel_elegido))
+                    )
+                if desfase_elegido is not None:
+                    try:
+                        restriccion["DesfaseBase"] = float(desfase_elegido)
+                    except (TypeError, ValueError) as exc:
+                        raise self._error("El desfase no es un número.", -32602) from exc
             self._guardar_pset(viga, PSET_RESTRICCIONES, restriccion)
             self._guardar_pset(
                 viga,
@@ -524,6 +562,10 @@ class InteraccionesMixin:
                     "Desfase": restriccion["DesfaseBase"],
                 },
             )
+            if explicito:
+                # Recalcula Z y coloca el muro bajo la cara inferior, en la
+                # misma instantánea (un solo paso de Deshacer).
+                self._aplicar_restriccion(viga, restriccion)
         self._conectar(viga, muro_entidad)
         if esperado == "cerramiento":
             self._actualizar_castillos(muro_entidad)
@@ -549,22 +591,14 @@ class InteraccionesMixin:
         return self._resultado([entidad], mensaje="Soltado del muro.")
 
     def _recolocar_cerramiento_vertical(self, elemento: Any) -> None:
-        """O040: re-deriva la cota de un cerramiento tras cambiar tipo o peralte.
+        """O041: re-deriva la cota de un cerramiento tras cambiar tipo o peralte.
 
-        Ligado: sigue la corona del muro (recalcula muro y castillos). Suelto:
-        conserva el tope guardado en la restricción y mueve el fondo con el peralte.
+        El tope sale de la restricción (nivel + desfase) y no cambia; el fondo se
+        mueve con el peralte. Si está ligado a un muro, el muro y los castillos lo
+        siguen.
         """
         if self._estructura_de_tipo(self._tipo_entidad(elemento)) != "cerramiento":
             return
-        muro_gid = _texto(self._leer_liga(elemento).get("Muro"))
-        if muro_gid:
-            try:
-                muro = self._entidad_por_gid(muro_gid, ("IfcWall",))
-            except Exception:
-                muro = None
-            if muro is not None:
-                self._actualizar_dependientes_muro(muro)
-                return
         restriccion = self._restricciones_de(elemento)
         nivel = self._nivel_por_gid(_texto(restriccion.get("NivelBase")))
         tope = float(nivel.Elevation or 0.0) + float(
@@ -575,6 +609,32 @@ class InteraccionesMixin:
         datos["Z"] = tope - peralte / 2.0
         self._guardar_pset(elemento, "OPENRVT_Estructura", datos)
         self._regenerar_estructura(elemento)
+        self._muro_sigue_cerramiento(elemento)
+
+    def _muro_sigue_cerramiento(self, cerramiento: Any) -> None:
+        """O041: la altura la manda el cerramiento; el muro ligado termina en su cara
+        inferior y los castillos llegan a esa cara. Al subir el cerramiento el muro
+        crece; al bajar, se acorta."""
+        muro_gid = _texto(self._leer_liga(cerramiento).get("Muro"))
+        if not muro_gid:
+            return
+        try:
+            muro = self._entidad_por_gid(muro_gid, ("IfcWall",))
+        except Exception:
+            return
+        datos = self._datos_muro(muro)
+        peralte = self._peralte_de(cerramiento)
+        z = float(self._leer_pset(cerramiento, "OPENRVT_Estructura").get("Z") or 0.0)
+        tope = z + peralte / 2.0
+        nueva_altura = tope - datos["z"]
+        if nueva_altura <= TOLERANCIA_CALCULO:
+            return
+        pset = self._leer_pset(muro, "OPENRVT_Muro")
+        if pset:
+            pset["Altura"] = nueva_altura
+            self._guardar_pset(muro, "OPENRVT_Muro", pset)
+        self._regenerar_muro(muro)
+        self._actualizar_castillos(muro)
 
     def _actualizar_castillos(self, muro: Any) -> None:
         datos = self._datos_muro(muro)
@@ -635,14 +695,10 @@ class InteraccionesMixin:
                         "Longitud": datos["longitud"], "B": nucleo,
                     }
                 )
-                if alias == "cerramiento":
-                    pset["Z"] = datos["z"] + datos["altura"] - alto / 2.0
-                    restriccion = self._restricciones_cerramiento_ligado(muro)
-                    self._guardar_pset(dependiente, PSET_RESTRICCIONES, restriccion)
-                    pset["Nivel"] = restriccion["NivelBase"]
-                    pset["Desfase"] = restriccion["DesfaseBase"]
-                else:
+                if alias == "dala":
                     pset["Z"] = datos["z"] + alto / 2.0
+                # O041: la altura la manda el cerramiento, no sigue la corona del
+                # muro; su Z y su restricción quedan como estaban.
             else:
                 continue
             self._guardar_pset(dependiente, "OPENRVT_Estructura", pset)

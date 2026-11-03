@@ -38,6 +38,9 @@ export function BarraHerramienta() {
   const tipoZapata = useModelo((s) => s.tipoZapata);
   const fijarTipoZapata = useModelo((s) => s.fijarTipoZapata);
   const columnasEnCruces = useModelo((s) => s.columnasEnCruces);
+  const opcionesCerramiento = useModelo((s) => s.opcionesCerramiento);
+  const fijarOpcionesCerramiento = useModelo((s) => s.fijarOpcionesCerramiento);
+  const niveles = useModelo((s) => s.niveles);
   const vistaActivaId = useModelo((s) => s.vistaActivaId);
   const vistas = useModelo((s) => s.vistas);
   if (!herramienta) return null;
@@ -189,6 +192,43 @@ export function BarraHerramienta() {
                   </button>
                 </>
               )}
+            </>
+          )}
+          {herramienta === "cerramiento" && (
+            <>
+              <label className="flex items-center gap-1">
+                <span className="text-muted-foreground">Nivel</span>
+                <select
+                  data-testid="cerramiento-nivel"
+                  value={opcionesCerramiento.nivel}
+                  onChange={(e) =>
+                    fijarOpcionesCerramiento({ nivel: e.target.value })
+                  }
+                  className="rounded border bg-background px-1 py-0.5"
+                >
+                  <option value="">Corona del muro</option>
+                  {niveles.map((nivel) => (
+                    <option key={nivel.globalid} value={nivel.globalid}>
+                      {nivel.nombre}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-1">
+                <span className="text-muted-foreground">Desfase</span>
+                <input
+                  data-testid="cerramiento-desfase"
+                  type="text"
+                  inputMode="decimal"
+                  value={opcionesCerramiento.desfase}
+                  onChange={(e) =>
+                    fijarOpcionesCerramiento({ desfase: e.target.value })
+                  }
+                  placeholder="Del muro"
+                  className="w-16 rounded border bg-background px-1 py-0.5 text-right"
+                />
+                <span>m</span>
+              </label>
             </>
           )}
           {(herramienta === "cerramiento" || herramienta === "dala") && (

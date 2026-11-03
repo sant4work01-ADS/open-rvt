@@ -5,7 +5,8 @@ import {
   calcularPlantaMuros,
   contarVertices,
   lineasCapas,
-  lineasCerramientoPlanta,
+  contornoCerramientoPlanta,
+  lineaEjeCerramientoPlanta,
   nucleoMuro,
   poligonosCapas,
   puntoDentroDeHuella,
@@ -481,35 +482,36 @@ describe("esquinas con línea de ubicación a paño (O032)", () => {
   });
 });
 
-describe("proyección del cerramiento en planta (O040)", () => {
-  test("son dos líneas abiertas, paralelas y separadas por el ancho", () => {
-    const lineas = lineasCerramientoPlanta([0, 0, 4, 0], 0.15);
-    expect(lineas).toHaveLength(2);
-    for (const linea of lineas) {
-      expect(linea).toHaveLength(2);
-    }
-    const [a, b] = lineas;
-    // Largo exacto del eje (sin cerrar ni acortar los cantos).
-    expect(Math.hypot(a[1][0] - a[0][0], a[1][1] - a[0][1])).toBeCloseTo(4, 9);
-    expect(Math.hypot(b[1][0] - b[0][0], b[1][1] - b[0][1])).toBeCloseTo(4, 9);
-    // Las dos líneas quedan a 0.15 una de otra (el ancho del cerramiento).
-    expect(Math.abs(a[0][1] - b[0][1])).toBeCloseTo(0.15, 9);
-    // Centradas sobre el eje.
-    expect((a[0][1] + b[0][1]) / 2).toBeCloseTo(0, 9);
+describe("cerramiento en planta (O041)", () => {
+  test("se dibuja una sola línea sobre el eje, del largo exacto", () => {
+    const linea = lineaEjeCerramientoPlanta([0, 0, 4, 0]);
+    expect(linea).not.toBeNull();
+    expect(linea).toEqual([
+      [0, 0],
+      [4, 0],
+    ]);
   });
 
-  test("una diagonal conserva el ancho perpendicular al eje", () => {
-    const lineas = lineasCerramientoPlanta([0, 0, 3, 4], 0.2);
-    expect(lineas).toHaveLength(2);
-    const [a, b] = lineas;
-    const largo = Math.hypot(3, 4);
-    expect(Math.hypot(a[1][0] - a[0][0], a[1][1] - a[0][1])).toBeCloseTo(largo, 9);
-    // Distancia perpendicular entre las dos rectas = ancho.
-    const d = Math.hypot(a[0][0] - b[0][0], a[0][1] - b[0][1]);
-    expect(d).toBeCloseTo(0.2, 9);
+  test("una diagonal conserva sus dos extremos", () => {
+    const linea = lineaEjeCerramientoPlanta([0, 0, 3, 4]);
+    expect(linea).not.toBeNull();
+    expect(Math.hypot(linea![1][0] - linea![0][0], linea![1][1] - linea![0][1])).toBeCloseTo(
+      5,
+      9,
+    );
   });
 
-  test("un eje degenerado no produce líneas", () => {
-    expect(lineasCerramientoPlanta([1, 1, 1, 1], 0.15)).toHaveLength(0);
+  test("un eje degenerado no produce línea", () => {
+    expect(lineaEjeCerramientoPlanta([1, 1, 1, 1])).toBeNull();
+  });
+
+  test("el contorno de la huella es un rectángulo cerrado de 0.15 de ancho", () => {
+    // Eje horizontal de 4 m y ancho 0.15: el rectángulo va de y = −0.075 a +0.075.
+    const contorno = contornoCerramientoPlanta([0, 0, 4, 0], 0.15);
+    expect(contorno).toHaveLength(5);
+    expect(contorno[0]).toEqual(contorno[4]);
+    const ys = contorno.slice(0, 4).map(([, y]) => y);
+    expect(Math.min(...ys)).toBeCloseTo(-0.075, 9);
+    expect(Math.max(...ys)).toBeCloseTo(0.075, 9);
   });
 });

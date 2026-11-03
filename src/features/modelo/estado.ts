@@ -153,6 +153,13 @@ export interface OpcionesLosa {
   desfase: number;
 }
 
+/** O041: nivel y desfase de la herramienta «Cerramiento». Vacío = por omisión
+ * (nivel de tope del muro y su desfase). */
+export interface OpcionesCerramiento {
+  nivel: string;
+  desfase: string;
+}
+
 /** O029: opciones de la herramienta «Nivel» (alzado/corte). */
 export interface OpcionesNivel {
   nombre: string;
@@ -214,6 +221,8 @@ interface EstadoModelo {
   cargando: boolean;
   error: string | null;
   aviso: string | null;
+  /** O041: pista de Tab bajo el cursor («Tab: siguiente (Cerramiento …)»). */
+  pistaTab: string | null;
   modoCorte: boolean;
   puntoCorte: [number, number] | null;
   preguntaGuardar: PreguntaGuardar | null;
@@ -358,6 +367,9 @@ interface EstadoModelo {
   losaDesdeMuros: () => Promise<void>;
   opcionesLosa: OpcionesLosa;
   fijarOpcionesLosa: (cambios: Partial<OpcionesLosa>) => void;
+  /** O041: nivel y desfase que se aplican al crear cerramientos. */
+  opcionesCerramiento: OpcionesCerramiento;
+  fijarOpcionesCerramiento: (cambios: Partial<OpcionesCerramiento>) => void;
   /** O032: voltea los lados exterior/interior del muro sin mover su línea. */
   voltearMuro: (globalid: string) => Promise<void>;
   /** O007c: castillos en esquinas, remates e intermedios de los muros elegidos. */
@@ -448,6 +460,7 @@ interface EstadoModelo {
   anadirPuntoCorte: (punto: [number, number]) => Promise<void>;
   limpiarAviso: () => void;
   fijarAviso: (texto: string) => void;
+  fijarPistaTab: (texto: string | null) => void;
   comprobarNucleo: () => Promise<void>;
 }
 
@@ -689,6 +702,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       cargando: false,
       error: null,
       aviso: null,
+      pistaTab: null,
       modoCorte: false,
       puntoCorte: null,
       tiposMuro: tipos,
@@ -1085,6 +1099,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     cargando: false,
     error: null,
     aviso: null,
+    pistaTab: null,
     modoCorte: false,
     puntoCorte: null,
     preguntaGuardar: null,
@@ -1106,6 +1121,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       desfaseUbicacion: 0,
     },
     opcionesLosa: { lado: "exterior", desfase: 0 },
+    opcionesCerramiento: { nivel: "", desfase: "" },
     opcionesNivel: { nombre: "", nombreAutomatico: true, crearPlanta: true, elevacionTexto: "" },
     cotasNivel: null,
     tiposMuro: [],
@@ -1528,6 +1544,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     limpiarAviso: () => set({ aviso: null }),
 
     fijarAviso: (texto) => set({ aviso: texto }),
+    fijarPistaTab: (texto) => set({ pistaTab: texto }),
 
     activarHerramienta: (herramienta) => {
       const vista = get().vistas.find((v) => v.id === get().vistaActivaId);
@@ -1689,6 +1706,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       set({ opcionesMuro: { ...get().opcionesMuro, ...cambios } }),
     fijarOpcionesLosa: (cambios) =>
       set({ opcionesLosa: { ...get().opcionesLosa, ...cambios } }),
+    fijarOpcionesCerramiento: (cambios) =>
+      set({ opcionesCerramiento: { ...get().opcionesCerramiento, ...cambios } }),
     voltearMuro: async (globalid) => {
       const ok = await ejecutar("muros.voltear", { globalid });
       if (ok) await get().seleccionar(globalid);
@@ -2020,11 +2039,20 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         if (bajo) {
           const tipo = tipoEstructural(herramienta);
           if (!tipo) return;
+          const extras: { nivel?: string; desfase?: number } = {};
+          if (herramienta === "cerramiento") {
+            const opciones = get().opcionesCerramiento;
+            if (opciones.nivel) extras.nivel = opciones.nivel;
+            const desfase = Number(opciones.desfase.replace(",", "."));
+            if (opciones.desfase.trim() !== "" && Number.isFinite(desfase)) {
+              extras.desfase = desfase;
+            }
+          }
           await ejecutar(
             herramienta === "cerramiento"
               ? "cerramientos.crear_en_muro"
               : "dalas.crear_en_muro",
-            { tipo: tipo.nombre, muro: bajo.muro.globalid },
+            { tipo: tipo.nombre, muro: bajo.muro.globalid, ...extras },
           );
           return;
         }

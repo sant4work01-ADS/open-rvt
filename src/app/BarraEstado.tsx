@@ -25,6 +25,7 @@ export function BarraEstado() {
   const vistaActivaId = useModelo((s) => s.vistaActivaId);
   const modoCorte = useModelo((s) => s.modoCorte);
   const aviso = useModelo((s) => s.aviso);
+  const pistaTab = useModelo((s) => s.pistaTab);
   const error = useModelo((s) => s.error);
   const cargando = useModelo((s) => s.cargando);
   const tiempoCargaMs = useModelo((s) => s.tiempoCargaMs);
@@ -73,6 +74,11 @@ export function BarraEstado() {
             {vista?.tipo === "planta"
               ? "Haga dos clics para el corte · Esc cancela"
               : "Abra una planta para crear el corte"}
+          </span>
+        )}
+        {pistaTab && (
+          <span data-testid="estado-pista-tab" className="truncate text-sky-600 dark:text-sky-400" title={pistaTab}>
+            {pistaTab}
           </span>
         )}
         {aviso && (

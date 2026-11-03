@@ -594,7 +594,7 @@ export function PropiedadesVista({ vista }: { vista: Vista }) {
 }
 
 /** Campo editable que guarda con Enter o al perder el foco (spec O003b). */
-function CampoEditable({
+export function CampoEditable({
   etiqueta,
   valor,
   testid,
@@ -612,6 +612,13 @@ function CampoEditable({
   onGuardar: (valor: string | number) => void;
 }) {
   const [texto, setTexto] = useState(String(valor ?? ""));
+  // Al cambiar la selección (p. ej. Tab muro → cerramiento) el campo muestra el valor nuevo,
+  // no el del elemento anterior.
+  const [previo, setPrevio] = useState(valor);
+  if (valor !== previo) {
+    setPrevio(valor);
+    setTexto(String(valor ?? ""));
+  }
   const guardar = (entrada: string) => {
     if (numerico) {
       const numero = Number(entrada);
@@ -855,9 +862,9 @@ function RestriccionesZapata({
   );
 }
 
-/** O040: el cerramiento cuelga de un nivel (o de la corona de su muro), sin
- * restricción de tope ni altura. Ligado se ve como texto con «Soltar del muro»;
- * suelto, el nivel y el desfase son editables. */
+/** O041: el cerramiento cuelga de un nivel (o de la corona de su muro), sin
+ * restricción de tope ni altura. El nivel y el desfase se pueden editar siempre,
+ * también si está ligado al muro; la liga es solo en planta. */
 function RestriccionesCerramiento({ globalid }: { globalid: string }) {
   const niveles = useModelo((s) => s.niveles);
   const restricciones = useModelo((s) => s.propiedades?.restricciones);
@@ -865,44 +872,22 @@ function RestriccionesCerramiento({ globalid }: { globalid: string }) {
   const editarRestricciones = useModelo((s) => s.editarRestricciones);
   const soltarDelMuro = useModelo((s) => s.soltarDelMuro);
   if (!restricciones) return null;
-  const nombreNivel = (gid: string) =>
-    niveles.find((n) => n.globalid === gid)?.nombre ?? "(nivel actual)";
-  if (muroLiga) {
-    return (
-      <div data-testid="cerramiento-ligado" className="flex flex-col gap-1 text-xs">
-        <div className="text-muted-foreground" data-testid="cerramiento-leyenda">
-          Sigue la corona del muro {muroLiga.nombre}
-        </div>
-        <label className="flex items-center justify-between gap-2">
-          <span className="text-muted-foreground">Nivel de referencia</span>
-          <span data-testid="cerramiento-nivel">{nombreNivel(restricciones.NivelBase)}</span>
-        </label>
-        <label className="flex items-center justify-between gap-2">
-          <span className="text-muted-foreground">Desfase (m)</span>
-          <span data-testid="cerramiento-desfase">
-            {Number(restricciones.DesfaseBase ?? 0).toFixed(2)}
-          </span>
-        </label>
-        <button
-          type="button"
-          data-testid="soltar-del-muro"
-          className="mt-1 self-start rounded border px-2 py-1 hover:bg-muted"
-          onClick={() => void soltarDelMuro(globalid)}
-        >
-          Soltar del muro
-        </button>
-      </div>
-    );
-  }
+  const cambiar = (cambios: Parameters<typeof editarRestricciones>[1]) =>
+    void editarRestricciones(globalid, cambios);
   return (
-    <>
-      <label className="flex items-center justify-between gap-2 text-xs">
+    <div data-testid={muroLiga ? "cerramiento-ligado" : "cerramiento-suelto"} className="flex flex-col gap-1 text-xs">
+      {muroLiga && (
+        <div className="text-muted-foreground" data-testid="cerramiento-leyenda">
+          Sigue el eje del muro {muroLiga.nombre}; la altura la manda el cerramiento.
+        </div>
+      )}
+      <label className="flex items-center justify-between gap-2">
         <span className="text-muted-foreground">Nivel de referencia</span>
         <select
           key={restricciones.NivelBase}
           data-testid="restriccion-base"
           defaultValue={restricciones.NivelBase}
-          onChange={(e) => void editarRestricciones(globalid, { nivel_base: e.target.value })}
+          onChange={(e) => cambiar({ nivel_base: e.target.value })}
           className="w-32 rounded border bg-background px-2 py-1"
         >
           {niveles.map((nivel) => (
@@ -921,11 +906,19 @@ function RestriccionesCerramiento({ globalid }: { globalid: string }) {
         numerico
         paso={0.05}
         valor={restricciones.DesfaseBase}
-        onGuardar={(desfase_base) =>
-          void editarRestricciones(globalid, { desfase_base: Number(desfase_base) })
-        }
+        onGuardar={(desfase_base) => cambiar({ desfase_base: Number(desfase_base) })}
       />
-    </>
+      {muroLiga && (
+        <button
+          type="button"
+          data-testid="soltar-del-muro"
+          className="mt-1 self-start rounded border px-2 py-1 hover:bg-muted"
+          onClick={() => void soltarDelMuro(globalid)}
+        >
+          Soltar del muro
+        </button>
+      )}
+    </div>
   );
 }
 

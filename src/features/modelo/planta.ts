@@ -921,19 +921,31 @@ export function contarVertices(poligono: PoligonoPlanta): number {
 }
 
 /**
- * O040: proyección superior del cerramiento en planta.
- *
- * Regla: el cerramiento queda por arriba del plano de corte (1.20 m, `vistas.ts`) y
- * en planta se dibuja como proyección superior: las dos líneas largas de su ancho,
- * en trazo discontinuo (línea oculta), finas y **sin relleno**, encima del muro y sin
- * taparle el achurado. Se devuelven las dos polilíneas abiertas (sin los cantos).
- * La dala de desplante, que queda abajo del corte y cubierta por el muro, no se
- * dibuja en planta.
+ * O041: el cerramiento en planta se dibuja como **una** línea discontinua sobre su
+ * eje, fina y encima del achurado del muro. Con el mismo ancho que el muro, las dos
+ * líneas de O040 quedaban tapadas por su contorno y el cerramiento «no se veía».
+ * Devuelve los dos extremos del eje (o null si es degenerado).
  */
-export function lineasCerramientoPlanta(
+export function lineaEjeCerramientoPlanta(
+  eje: LineaMuro,
+): [[number, number], [number, number]] | null {
+  const [x1, y1, x2, y2] = eje;
+  if (Math.hypot(x2 - x1, y2 - y1) <= 1e-6) return null;
+  return [
+    [x1, y1],
+    [x2, y2],
+  ];
+}
+
+/**
+ * O041: contorno completo de la huella del cerramiento, para resaltarlo al
+ * seleccionarlo y para dibujar un cerramiento suelto por arriba del corte (sin muro
+ * debajo). Se devuelve cerrado.
+ */
+export function contornoCerramientoPlanta(
   eje: LineaMuro,
   ancho: number,
-): Array<[[number, number], [number, number]]> {
+): Array<[number, number]> {
   const [x1, y1, x2, y2] = eje;
   const largo = Math.hypot(x2 - x1, y2 - y1);
   if (largo <= 1e-6) return [];
@@ -941,14 +953,11 @@ export function lineasCerramientoPlanta(
   const uy = (y2 - y1) / largo;
   const nx = (-uy * ancho) / 2;
   const ny = (ux * ancho) / 2;
-  return [
-    [
-      [x1 + nx, y1 + ny],
-      [x2 + nx, y2 + ny],
-    ],
-    [
-      [x1 - nx, y1 - ny],
-      [x2 - nx, y2 - ny],
-    ],
+  const esquinas: Array<[number, number]> = [
+    [x1 + nx, y1 + ny],
+    [x2 + nx, y2 + ny],
+    [x2 - nx, y2 - ny],
+    [x1 - nx, y1 - ny],
   ];
+  return [...esquinas, esquinas[0]];
 }
