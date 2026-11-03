@@ -36,6 +36,7 @@ import {
 import {
   areaPoligono,
   colocarAbertura,
+  ejeBajoPunto,
   ejeConDistancia,
   ejeOrtogonal,
   muroBajoPunto,
@@ -83,7 +84,9 @@ export type Herramienta =
   | "dala"
   | "alinear"
   | "nivel"
-  | "recortar_extender";
+  | "recortar_extender"
+  | "espejo"
+  | "matriz";
 export type AlineacionMuro = "centro" | "interior" | "exterior";
 /** ED1: modos de la herramienta Recortar/Extender. */
 export type ModoRecorte = "esquina" | "elemento" | "varios";
@@ -190,6 +193,21 @@ export interface OpcionesNivel {
   elevacionTexto: string;
 }
 
+/** ED2: casilla «Copiar» de la herramienta Espejo (marcada por omisión). */
+export interface OpcionesEspejo {
+  copiar: boolean;
+}
+
+/** ED2: barra de opciones de la herramienta Matriz. */
+export interface OpcionesMatriz {
+  modo: "lineal" | "polar";
+  /** Número total de elementos, incluido el original. */
+  numero: number;
+  alUltimo: boolean;
+  /** Ángulo total en grados para la matriz polar. */
+  angulo: number;
+}
+
 /** O006d: un bloque de la retícula (vertical u horizontal). */
 export interface BloqueEjesReticula {
   separaciones: number[];
@@ -287,6 +305,11 @@ interface EstadoModelo {
   /** O029: nombre automático, vista de planta y elevación exacta del nivel nuevo. */
   opcionesNivel: OpcionesNivel;
   fijarOpcionesNivel: (cambios: Partial<OpcionesNivel>) => void;
+  /** ED2: espejo y matriz lineales/polares. */
+  opcionesEspejo: OpcionesEspejo;
+  fijarOpcionesEspejo: (cambios: Partial<OpcionesEspejo>) => void;
+  opcionesMatriz: OpcionesMatriz;
+  fijarOpcionesMatriz: (cambios: Partial<OpcionesMatriz>) => void;
   /** O029: cotas temporales del nivel bajo el cursor. */
   cotasNivel: { inferior: NivelRef | null; superior: NivelRef | null } | null;
   /** O029: clic en alzado/corte: [posición horizontal, elevación]. */
@@ -1226,6 +1249,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     opcionesLosa: { lado: "exterior", desfase: 0 },
     opcionesCerramiento: { nivel: "", desfase: "" },
     opcionesNivel: { nombre: "", nombreAutomatico: true, crearPlanta: true, elevacionTexto: "" },
+    opcionesEspejo: { copiar: true },
+    opcionesMatriz: { modo: "lineal", numero: 3, alUltimo: false, angulo: 360 },
     cotasNivel: null,
     tiposMuro: [],
     tiposHerramienta: [],
@@ -1716,9 +1741,15 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         alinear: "Alinear: clic en la referencia (eje, nivel o cara) y luego en la cara del elemento.",
         nivel: "Nivel: dos clics horizontales; la elevación se engancha o se teclea.",
         recortar_extender: "Recortar/Extender: haga clic en el primer elemento.",
+        espejo: "Espejo: clic en un eje o en un elemento lineal; o dos puntos del eje.",
+        matriz: "Matriz: lineal con dos puntos o polar con un clic en el centro.",
       };
       const conservarSeleccion =
-        herramienta === "mover" || herramienta === "copiar" || herramienta === "losa";
+        herramienta === "mover" ||
+        herramienta === "copiar" ||
+        herramienta === "losa" ||
+        herramienta === "espejo" ||
+        herramienta === "matriz";
       set({
         herramienta,
         referenciaAlinear: null,
@@ -2005,6 +2036,10 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       set({ opcionesMuro: { ...get().opcionesMuro, ...cambios } }),
     fijarOpcionesLosa: (cambios) =>
       set({ opcionesLosa: { ...get().opcionesLosa, ...cambios } }),
+    fijarOpcionesEspejo: (cambios) =>
+      set({ opcionesEspejo: { ...get().opcionesEspejo, ...cambios } }),
+    fijarOpcionesMatriz: (cambios) =>
+      set({ opcionesMatriz: { ...get().opcionesMatriz, ...cambios } }),
     fijarOpcionesCerramiento: (cambios) =>
       set({ opcionesCerramiento: { ...get().opcionesCerramiento, ...cambios } }),
     voltearMuro: async (globalid) => {
@@ -2313,6 +2348,71 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       );
       const p = enganche.punto;
       bitacoraHerramienta(herramienta, "punto", { x: p[0], y: p[1] });
+      if (herramienta === "espejo") {
+        if (get().seleccionados.length === 0) {
+          set({ aviso: "Seleccione uno o varios elementos antes de reflejarlos." });
+          return;
+        }
+        const elegido = puntos.length === 0 ? ejeBajoPunto(get().referencias, p) : null;
+        const origen = elegido ? elegido.p1 : puntos[0];
+        const fin = elegido ? elegido.p2 : p;
+        if (!elegido && puntos.length === 0) {
+          set({
+            puntosHerramienta: [p],
+            aviso: "Espejo: segundo punto del eje o clic sobre un eje/arista.",
+          });
+          return;
+        }
+        const ok = await ejecutar("elementos.espejo", {
+          globalids: get().seleccionados,
+          p1: origen,
+          p2: fin,
+          copiar: get().opcionesEspejo.copiar,
+        });
+        if (ok) {
+          set({ puntosHerramienta: [], ...limpiarTrazoExtra() });
+          bitacoraHerramienta("espejo", "terminar", { x: p[0], y: p[1] });
+        }
+        return;
+      }
+      if (herramienta === "matriz") {
+        if (get().seleccionados.length === 0) {
+          set({ aviso: "Seleccione uno o varios elementos antes de crear la matriz." });
+          return;
+        }
+        const opciones = get().opcionesMatriz;
+        if (opciones.modo === "polar") {
+          const ok = await ejecutar("elementos.matriz_polar", {
+            globalids: get().seleccionados,
+            centro: p,
+            angulo_total: opciones.angulo,
+            numero: opciones.numero,
+          });
+          if (ok) {
+            set({ puntosHerramienta: [], ...limpiarTrazoExtra() });
+            bitacoraHerramienta("matriz", "terminar", { x: p[0], y: p[1] });
+          }
+          return;
+        }
+        if (puntos.length === 0) {
+          set({
+            puntosHerramienta: [p],
+            aviso: "Matriz lineal: segundo punto del vector.",
+          });
+          return;
+        }
+        const ok = await ejecutar("elementos.matriz_lineal", {
+          globalids: get().seleccionados,
+          vector: [p[0] - puntos[0][0], p[1] - puntos[0][1]],
+          numero: opciones.numero,
+          modo: opciones.alUltimo ? "al_ultimo" : "al_segundo",
+        });
+        if (ok) {
+          set({ puntosHerramienta: [], ...limpiarTrazoExtra() });
+          bitacoraHerramienta("matriz", "terminar", { x: p[0], y: p[1] });
+        }
+        return;
+      }
       if (herramienta === "castillo") {
         const bajo = muroBajoPunto(get().referencias, p, 0.35);
         if (bajo) {

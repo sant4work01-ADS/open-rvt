@@ -290,6 +290,8 @@ export function App() {
         mv: () => estado.activarHerramienta("mover"),
         co: () => estado.activarHerramienta("copiar"),
         tr: () => estado.activarHerramienta("recortar_extender"),
+        mm: () => estado.activarHerramienta("espejo"),
+        ar: () => estado.activarHerramienta("matriz"),
       };
       const accion = acciones[buffer.texto];
       if (accion) {
@@ -366,6 +368,8 @@ export function App() {
         herramientaMover: () => useModelo.getState().activarHerramienta("mover"),
         herramientaRecortarExtender: () =>
           useModelo.getState().activarHerramienta("recortar_extender"),
+        herramientaEspejo: () => useModelo.getState().activarHerramienta("espejo"),
+        herramientaMatriz: () => useModelo.getState().activarHerramienta("matriz"),
         herramientaCopiar: () => useModelo.getState().activarHerramienta("copiar"),
         herramientaAlinear: () => useModelo.getState().activarHerramienta("alinear"),
         // O007b: herramientas de estructura.
