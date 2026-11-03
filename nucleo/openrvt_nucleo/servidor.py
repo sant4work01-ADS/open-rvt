@@ -173,6 +173,12 @@ class Servidor:
             return self._exigir().ejes_mover(
                 str(params.get("globalid") or ""), params.get("desplazamiento", 0.0)
             )
+        if metodo == "ejes.girar":
+            return self._exigir().ejes_girar(
+                str(params.get("globalid") or ""),
+                params.get("angulo", 0.0),
+                params.get("centro"),
+            )
         if metodo == "ejes.separacion":
             return self._exigir().ejes_separacion(
                 str(params.get("referencia") or ""),
