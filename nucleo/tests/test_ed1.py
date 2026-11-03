@@ -187,6 +187,11 @@ def test_el_extremo_ajustado_pierde_su_enlace_y_el_otro_lo_conserva() -> None:
     assert "EnlaceDesfaseFin" not in datos
     assert _linea_muro(nucleo, muro) == pytest.approx((0, 0, 3, 0), abs=1e-9)
 
+    # El enlace conservado sigue mandando: al mover el eje 1 a x=1, el inicio
+    # del muro se va con él y el extremo libre se queda en x=3.
+    nucleo.ejes_mover(ejes["1"], 1.0)
+    assert _linea_muro(nucleo, muro) == pytest.approx((1, 0, 3, 0), abs=1e-9)
+
 
 def test_deshacer_devuelve_todo_exacto_en_un_solo_paso() -> None:
     nucleo = _nuevo()
