@@ -108,6 +108,8 @@ export interface AccionesRibbon {
   herramientaPuerta: () => void;
   herramientaVentana: () => void;
   herramientaMover: () => void;
+  /** ED1: recortar o extender elementos lineales en planta. */
+  herramientaRecortarExtender?: () => void;
   /** O036: gira el eje seleccionado alrededor de un centro. */
   girarEje?: () => void;
   herramientaCopiar: () => void;
@@ -515,6 +517,19 @@ export function construirComandosRibbon(a: AccionesRibbon): ComandoRibbon[] {
       activo: a.herramientaActiva === "mover",
       descripcion: "Mover la selección entre dos puntos",
       accion: a.herramientaMover,
+    },
+    {
+      id: "recortar-extender",
+      texto: "Recortar/Extender",
+      icono: Scissors,
+      atajo: "TR",
+      grupo: "Modificar",
+      pestana: "modelar",
+      tamano: "chico",
+      habilitado: true,
+      activo: a.herramientaActiva === "recortar_extender",
+      descripcion: "Recortar o extender elementos lineales en planta",
+      accion: a.herramientaRecortarExtender,
     },
     {
       id: "girar-eje",

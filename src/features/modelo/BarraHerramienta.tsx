@@ -6,6 +6,7 @@ import {
   esHerramientaLineal,
   esHerramientaPuntual,
   useModelo,
+  type ModoRecorte,
 } from "./estado";
 import type { LineaUbicacion } from "./tipos";
 
@@ -48,6 +49,10 @@ export function BarraHerramienta() {
   const anguloGiro = useModelo((s) => s.anguloGiro);
   const fijarAnguloGiro = useModelo((s) => s.fijarAnguloGiro);
   const aplicarGiroEje = useModelo((s) => s.aplicarGiroEje);
+  const modoRecorte = useModelo((s) => s.modoRecorte);
+  const fijarModoRecorte = useModelo((s) => s.fijarModoRecorte);
+  const referenciaRecorte = useModelo((s) => s.referenciaRecorte);
+  const recorteInicial = useModelo((s) => s.recorteInicial);
   if (!herramienta) return null;
   const vistaActiva = vistas.find((v) => v.id === vistaActivaId);
   const esAlzadoOCorte =
@@ -66,7 +71,11 @@ export function BarraHerramienta() {
       className="flex h-9 shrink-0 items-center gap-3 overflow-hidden whitespace-nowrap border-b bg-muted/30 px-3 text-xs"
     >
       <span className="font-semibold capitalize">
-        {herramienta === "girar_eje" ? "Girar eje" : herramienta}
+        {herramienta === "girar_eje"
+          ? "Girar eje"
+          : herramienta === "recortar_extender"
+            ? "Recortar/Extender"
+            : herramienta}
       </span>
       {herramienta === "girar_eje" && (
         <>
@@ -112,6 +121,32 @@ export function BarraHerramienta() {
           >
             Cancelar
           </button>
+        </>
+      )}
+      {herramienta === "recortar_extender" && (
+        <>
+          <label className="flex items-center gap-1">
+            <span className="text-muted-foreground">Modo</span>
+            <select
+              data-testid="recorte-modo"
+              value={modoRecorte}
+              onChange={(e) => fijarModoRecorte(e.target.value as ModoRecorte)}
+              className="rounded border bg-background px-1 py-0.5"
+            >
+              <option value="esquina">A esquina</option>
+              <option value="elemento">Un elemento</option>
+              <option value="varios">Varios elementos</option>
+            </select>
+          </label>
+          <span className="text-muted-foreground" data-testid="recorte-paso">
+            {modoRecorte === "esquina"
+              ? recorteInicial
+                ? "Clic en el segundo elemento"
+                : "Clic en el primer elemento"
+              : referenciaRecorte
+                ? "Clic en el elemento a ajustar"
+                : "Clic en la referencia (elemento o eje)"}
+          </span>
         </>
       )}
       {herramienta === "muro" && (

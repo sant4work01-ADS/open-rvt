@@ -199,6 +199,13 @@ export function App() {
         if (estado.modoCorte) {
           estado.cancelarCorte();
           e.preventDefault();
+        } else if (estado.herramienta === "recortar_extender") {
+          if (estado.referenciaRecorte || estado.recorteInicial) {
+            estado.terminarRecorteExtender();
+          } else {
+            estado.cancelarHerramienta();
+          }
+          e.preventDefault();
         } else if (estado.herramienta) {
           // O005c: el primer Esc cancela el trazo en curso; el segundo sale de la herramienta.
           if (!estado.cancelarTrazo()) estado.cancelarHerramienta();
@@ -209,6 +216,11 @@ export function App() {
         return;
       }
       if (enTexto) return;
+      if (estado.herramienta === "recortar_extender" && e.key === "Enter") {
+        e.preventDefault();
+        estado.terminarRecorteExtender();
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
         void estado.deshacer();
@@ -278,6 +290,7 @@ export function App() {
         al: () => estado.activarHerramienta("alinear"),
         mv: () => estado.activarHerramienta("mover"),
         co: () => estado.activarHerramienta("copiar"),
+        tr: () => estado.activarHerramienta("recortar_extender"),
       };
       const accion = acciones[buffer.texto];
       if (accion) {
@@ -352,6 +365,8 @@ export function App() {
         herramientaPuerta: () => useModelo.getState().activarHerramienta("puerta"),
         herramientaVentana: () => useModelo.getState().activarHerramienta("ventana"),
         herramientaMover: () => useModelo.getState().activarHerramienta("mover"),
+        herramientaRecortarExtender: () =>
+          useModelo.getState().activarHerramienta("recortar_extender"),
         girarEje: () => useModelo.getState().iniciarGiroEje(),
         herramientaCopiar: () => useModelo.getState().activarHerramienta("copiar"),
         herramientaAlinear: () => useModelo.getState().activarHerramienta("alinear"),
