@@ -42,6 +42,7 @@ import { debeIgnorarGestoNativo, factorGestoZoom } from "@/lib/gestos";
 import { elegirDestinoDiagnostico } from "@/lib/dialogos";
 import { commands } from "@/lib/bindings";
 import {
+  buscarEnganche,
   colocarAbertura,
   describirEnganche,
   distanciaAEjeParalelo,
@@ -5453,8 +5454,18 @@ export function Visor3D({
           if (recorrido < 3) return;
           arrLosa.movido = true;
         }
-        const punto = puntoPlanta(evento);
-        if (!punto) return;
+        const crudo = puntoPlanta(evento);
+        if (!crudo) return;
+        // O034: primero los imanes de la planta (extremos, medios, cruces e
+        // intersecciones); si no hay ninguno, se usa el punto y el redondeo de
+        // 0.005 m de `desfaseConArrastre`.
+        const enganche = buscarEnganche(
+          crudo,
+          useModelo.getState().referencias,
+          null,
+          mundoPorPxRef.current,
+        );
+        const punto = enganche.tipo === "cuadricula" ? crudo : enganche.punto;
         const delta: Punto2 = [
           punto[0] - arrLosa.inicio[0],
           punto[1] - arrLosa.inicio[1],
