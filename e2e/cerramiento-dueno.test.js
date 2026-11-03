@@ -358,19 +358,59 @@ test("Archivo del dueño: el cerramiento del muro izquierdo se puede dibujar", a
     await elegirVista(ses, "Planta Nivel 1");
     await activar(ses, "visor-ajustar");
     await esperar(800);
-    const antes = (await teselado(ses)).filter((e) => e.estructura?.alias === "cerramiento").length;
-    await activar(ses, "cmd-cerramiento");
-    const resultados = [];
-    for (const [x, y] of [[0, 0.3], [0, 1.25], [0.05, 0.45], [0, 0.6]]) {
-      await clicMundo(ses, x, y);
-      await esperar(700);
-      const n = (await teselado(ses)).filter((e) => e.estructura?.alias === "cerramiento").length;
-      resultados.push(`(${x},${y}) → ${n} · ${await textoDom(ses, '[data-testid="estado-aviso"]')} · ${await textoDom(ses, '[data-testid="estado-error"]')}`);
-      if (n > antes) break;
+    // O045: al abrir el archivo viejo, los cuatro muros recuperan su altura de
+    // restricciones (Nivel 0 a Nivel 4 = 3.60); ninguno queda cortado.
+    const elementos0 = await teselado(ses);
+    const muros = elementos0.filter((e) => e.clase === "IfcWall");
+    assert.equal(muros.length, 4, `muros del archivo: ${muros.length}`);
+    for (const muro of muros) {
+      const props = await invocar(ses, "modelo.propiedades", { globalid: muro.globalid });
+      assert.equal(
+        Number(props.psets?.OPENRVT_Muro?.Altura),
+        3.6,
+        `el muro ${muro.globalid} no recuperó sus 3.60 m`,
+      );
     }
+    const referencias = await invocar(ses, "modelo.referencias");
+    const izquierdo = referencias.muros.find(
+      (m) => Math.abs(m.x1 - m.x2) < 1e-6 && Math.abs(m.x1) < 1e-6,
+    );
+    assert.ok(izquierdo, "no se encontró el muro izquierdo (x = 0)");
+    const niveles = await invocar(ses, "modelo.niveles");
+    const nivel1 = niveles.find((n) => Math.abs(n.elevacion - 2.2) < 1e-6);
+    assert.ok(nivel1, "no existe el nivel de 2.20");
+    const antes = cerramientosDe(elementos0);
+    assert.equal(antes.length, 3, `cerramientos del archivo: ${antes.length}`);
+
+    // Se dibuja como un muro: inicio en una esquina y fin en la otra.
+    await activar(ses, "cmd-cerramiento");
+    await clicMundo(ses, izquierdo.x1, izquierdo.y1);
+    await clicMundo(ses, izquierdo.x2, izquierdo.y2);
+    await esperar(800);
+    await tecla(ses, "Escape", "Escape");
+    await tecla(ses, "Escape", "Escape");
+    const despues = cerramientosDe(await teselado(ses));
+    assert.equal(
+      despues.length,
+      antes.length + 1,
+      `antes ${antes.length}, después ${despues.length}: ${await textoDom(ses, '[data-testid="estado-aviso"]')} / ${await textoDom(ses, '[data-testid="estado-error"]')}`,
+    );
+    const previos = new Set(antes.map((c) => c.globalid));
+    const nuevo = despues.find((c) => !previos.has(c.globalid));
+    const props = await invocar(ses, "modelo.propiedades", { globalid: nuevo.globalid });
+    assert.equal(props.muro_liga?.muro, izquierdo.globalid, "el cerramiento nuevo no quedó ligado al muro izquierdo");
+    assert.equal(props.restricciones?.NivelBase, nivel1.globalid, "el cerramiento nuevo no quedó en el Nivel 1");
+    assert.equal(Number(props.restricciones?.DesfaseBase), 0, "el cerramiento nuevo no tiene desfase 0");
+    // Sin duplicados: los cuatro muros tienen un solo cerramiento en ese nivel.
+    const porMuro = new Map();
+    for (const c of despues) {
+      const p = await invocar(ses, "modelo.propiedades", { globalid: c.globalid });
+      const muro = p.muro_liga?.muro;
+      porMuro.set(muro, (porMuro.get(muro) ?? 0) + 1);
+    }
+    assert.equal(porMuro.size, 4, `muros con cerramiento: ${porMuro.size}`);
+    for (const [muro, cuantos] of porMuro) assert.equal(cuantos, 1, `el muro ${muro} tiene ${cuantos} cerramientos`);
     await ses.captura(path.join(require("node:os").tmpdir(), "cer-dueno.png"));
-    const despues = (await teselado(ses)).filter((e) => e.estructura?.alias === "cerramiento").length;
-    assert.equal(despues, antes + 1, `antes ${antes}; intentos: ${resultados.join(" | ")}`);
   } finally {
     await ses.cerrar();
   }

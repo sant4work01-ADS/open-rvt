@@ -688,13 +688,7 @@ class ModeladoMixin:
                     ("DesfaseBase", "NivelTope", "DesfaseTope", "AlturaSinConexion"),
                 )
             self._regenerar_estructura(elemento)
-            # O041: el cerramiento ligado manda la altura; el muro y los castillos
-            # terminan en su cara inferior.
-            if (
-                elemento.is_a("IfcBeam")
-                and self._estructura_de_tipo(self._tipo_entidad(elemento)) == "cerramiento"
-            ):
-                self._muro_sigue_cerramiento(elemento)
+            # O045: el cerramiento va embebido; no cambia la altura del muro.
             # O035: al cambiar el desplante o la posición de la cimentación, los
             # muros que se apoyan en ella recalculan su base.
             if self._es_cimentacion_bajo_muro(elemento):
@@ -3150,7 +3144,7 @@ class ModeladoMixin:
                     recorte = self._geometria_losa(elemento)
                 except Exception:
                     continue
-            elif alias in ("contratrabe", "dala", "cerramiento"):
+            elif alias in ("contratrabe", "dala"):
                 barra = self._barra_de_elemento(elemento)
                 if barra is None:
                     continue
@@ -3169,8 +3163,9 @@ class ModeladoMixin:
                 # Elemento que soporta: la base sube a su cara superior.
                 if base + TOLERANCIA_CALCULO < zeta1 < cima - TOLERANCIA_CALCULO:
                     base = max(base, zeta1)
-            if alias == "cerramiento" or elemento.is_a("IfcSlab"):
+            if elemento.is_a("IfcSlab"):
                 # Elemento que cubre: la corona baja a su cara inferior.
+                # O045: el cerramiento va embebido y no recorta el muro.
                 if base + TOLERANCIA_CALCULO < zeta0 < cima - TOLERANCIA_CALCULO:
                     cima = min(cima, zeta0)
         if cima - base <= TOLERANCIA_CALCULO:

@@ -302,8 +302,58 @@ class ModeloNucleo(
         # O012: los archivos anteriores pueden traer vigas encimadas; se recortan
         # al abrir sin perder elementos.
         self._recalcular_uniones_estructura()
+        # O045: los archivos con la regla vieja (muro cortado por su cerramiento)
+        # recuperan la altura de sus propias restricciones, en un solo paso.
+        migracion = self._restaurar_altura_muros_embebidos()
         self._asegurar_capitulos_obra()
-        return self.info()
+        info = self.info()
+        if migracion:
+            info["migracion"] = migracion
+        return info
+
+    def _restaurar_altura_muros_embebidos(self) -> str:
+        """O045: restaura en una sola pasada la altura de los muros cortados."""
+        restaurados = 0
+        instantanea = False
+        for muro in self.modelo.by_type("IfcWall"):
+            datos = self._datos_muro(muro)
+            tope_muro = float(datos["z"]) + float(datos["altura"])
+            cortado = False
+            for dependiente in self._dependientes_de(muro):
+                if (
+                    self._estructura_de_tipo(self._tipo_entidad(dependiente))
+                    != "cerramiento"
+                ):
+                    continue
+                peralte = self._peralte_de(dependiente)
+                z = float(
+                    self._leer_pset(dependiente, "OPENRVT_Estructura").get("Z") or 0.0
+                )
+                if abs(tope_muro - (z - peralte / 2.0)) <= 0.005:
+                    cortado = True
+                    break
+            if not cortado:
+                continue
+            try:
+                restriccion = self._restricciones_de(muro)
+                if not _texto(restriccion.get("NivelTope")) and restriccion.get(
+                    "AlturaSinConexion"
+                ) is not None:
+                    continue
+                if not instantanea:
+                    self._instantanea()
+                    instantanea = True
+                self._aplicar_restriccion(muro, restriccion)
+                restaurados += 1
+            except Exception:
+                LOG.debug("no se pudo restaurar la altura del muro", exc_info=True)
+        if not restaurados:
+            return ""
+        self.con_cambios = True
+        return (
+            f"O045: se restauró la altura de {restaurados} muro(s) que estaban "
+            "cortados por su cerramiento; ahora el cerramiento va embebido."
+        )
 
     def guardar(self, ruta: str | None = None) -> dict[str, Any]:
         modelo = self._exigir_modelo()

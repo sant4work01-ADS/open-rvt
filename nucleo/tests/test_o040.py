@@ -122,7 +122,8 @@ def test_subir_nivel_uno_sube_cerramiento_y_castillos() -> None:
     assert _tope(nucleo, cerramiento) == pytest.approx(2.90, abs=1e-6)
     for castillo in _castillos_de(nucleo, muro):
         datos = _estructura(nucleo, castillo)
-        assert datos["Altura"] == pytest.approx(2.70, abs=1e-6)
+        # O045: el castillo embebido llega a la altura completa del muro (2.90).
+        assert datos["Altura"] == pytest.approx(2.90, abs=1e-6)
         assert datos["Base"] == pytest.approx(0.0, abs=1e-6)
 
 
@@ -186,8 +187,8 @@ def test_deshacer_sueltar_y_cambiar_nivel_en_un_paso() -> None:
     assert _entidad(nucleo, cerramiento).GlobalId == cerramiento
 
 
-def test_cambiar_tipo_peralte_recalcula_muro_y_castillos() -> None:
-    """Cambiar el peralte del tipo re-deriva Z y baja los castillos al nuevo fondo."""
+def test_cambiar_tipo_peralte_recalcula_muro_sin_tocar_castillos() -> None:
+    """Cambiar el peralte del tipo re-deriva Z; O045: los castillos no bajan."""
     nucleo = _nuevo()
     muro, cerramiento, _n1 = _modelo_con_cerramiento(nucleo)
     nucleo.castillos_automaticos([muro], 3.0)
@@ -202,7 +203,7 @@ def test_cambiar_tipo_peralte_recalcula_muro_y_castillos() -> None:
     assert _z(nucleo, cerramiento) == pytest.approx(2.45, abs=1e-9)
     assert _peralte(nucleo, cerramiento) == pytest.approx(0.30, abs=1e-9)
     for castillo in _castillos_de(nucleo, muro):
-        assert _estructura(nucleo, castillo)["Altura"] == pytest.approx(2.30, abs=1e-6)
+        assert _estructura(nucleo, castillo)["Altura"] == pytest.approx(2.60, abs=1e-6)
 
 
 # ----------------------------------------------------------- esquinas y archivo viejo

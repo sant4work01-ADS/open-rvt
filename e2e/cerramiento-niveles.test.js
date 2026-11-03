@@ -385,13 +385,14 @@ test("Cerramientos en la planta de un nivel intermedio: uno por cada clic, en su
       nivel220.globalid,
       "la barra de la herramienta no preselecciona el nivel de la planta",
     );
-    const clics = [[2, 0], [6, 3], [2, 6], [0, 1.5], [4, 1.5], [8, 4.5]];
     const creados = [];
     const hechos = [];
-    for (const [x, y] of clics) {
-      const muroEsperado = gidDelMuroEn(referencias, x, y);
+    for (const [x1, y1, x2, y2] of muros) {
+      const muroEsperado = gidDelMuroEn(referencias, (x1 + x2) / 2, (y1 + y2) / 2);
       const previos = new Set(cerramientosDe(await teselado(ses)).map((c) => c.globalid));
-      await clicMundo(ses, x, y);
+      await activar(ses, "cmd-cerramiento");
+      await clicMundo(ses, x1, y1);
+      await clicMundo(ses, x2, y2);
       const nuevos = await ses.driver.wait(
         async () => {
           const actuales = cerramientosDe(await teselado(ses));
@@ -399,15 +400,14 @@ test("Cerramientos en la planta de un nivel intermedio: uno por cada clic, en su
           return diff.length === 1 ? diff : false;
         },
         15_000,
-        `el clic en (${x}, ${y}) no creó exactamente un cerramiento`,
+        `el trazo (${x1}, ${y1})→(${x2}, ${y2}) no creó exactamente un cerramiento`,
       );
-      const actuales = cerramientosDe(await teselado(ses));
-      creados.push(actuales.length);
+      creados.push(cerramientosDe(await teselado(ses)).length);
       const p = await invocar(ses, "modelo.propiedades", { globalid: nuevos[0].globalid });
       assert.equal(
         p.muro_liga?.muro,
         muroEsperado,
-        `el cerramiento del clic (${x}, ${y}) no quedó en el muro bajo el clic`,
+        `el cerramiento (${x1}, ${y1})→(${x2}, ${y2}) no quedó en su muro`,
       );
       assert.equal(
         p.restricciones?.NivelBase,
@@ -420,8 +420,9 @@ test("Cerramientos en la planta de un nivel intermedio: uno por cada clic, en su
         `el cerramiento ${p.nombre} no tiene desfase 0`,
       );
       hechos.push({ cerramiento: nuevos[0].globalid, muro: muroEsperado });
+      await tecla(ses, "Escape", "Escape");
+      await tecla(ses, "Escape", "Escape");
     }
-    await tecla(ses, "Escape", "Escape");
     const despues = path.join(CAPTURAS, "despues.png");
     await ses.captura(despues);
     dimensionesPng(despues);
@@ -436,24 +437,25 @@ test("Cerramientos en la planta de un nivel intermedio: uno por cada clic, en su
       "los seis cerramientos no cubren los seis muros",
     );
     for (const gid of gidsMuros) {
-      await esperarAltura(ses, gid, 2.2 - PERALTE);
+      await esperarAltura(ses, gid, 3.6);
     }
     const visibles = new Set(((await atributoVisor(ses, "data-mallas-visibles")) ?? "").split(","));
     for (const gid of gidsMuros) assert.ok(visibles.has(gid), `el muro ${gid} no se ve en la planta`);
     for (const c of cers) assert.ok(visibles.has(c.globalid), `el cerramiento ${c.globalid} no se ve`);
 
-    // O043 §3: un séptimo clic sobre el primer muro avisa y no toca el modelo.
+    // O043/O045: repetir el trazo del primer muro avisa y no toca el modelo.
     const gidsAntes = new Set(cers.map((c) => c.globalid));
     const alturasAntes = new Map();
     for (const gid of gidsMuros) alturasAntes.set(gid, await alturaMuro(ses, gid));
     await activar(ses, "cmd-cerramiento");
-    await clicMundo(ses, 2, 0);
+    await clicMundo(ses, 0, 0);
+    await clicMundo(ses, 8, 0);
     await esperar(800);
     const aviso = await textoDom(ses, '[data-testid="estado-aviso"]');
     assert.match(
       aviso ?? "",
       /Ese muro ya tiene cerramiento en N 2\.20/,
-      `aviso del séptimo clic: ${aviso}`,
+      `aviso del tramo repetido: ${aviso}`,
     );
     elementos = await teselado(ses);
     cers = cerramientosDe(elementos);
@@ -462,7 +464,7 @@ test("Cerramientos en la planta de un nivel intermedio: uno por cada clic, en su
     for (const gid of gidsMuros) {
       assert.ok(
         Math.abs((await alturaMuro(ses, gid)) - alturasAntes.get(gid)) < 1e-9,
-        `el séptimo clic cambió la altura del muro ${gid}`,
+        `el tramo repetido cambió la altura del muro ${gid}`,
       );
     }
   } finally {
@@ -561,14 +563,14 @@ test("Caso del dueño: losa, zapatas, muros de 0 a 3.60 y cerramientos desde la 
     dimensionesPng(antes);
 
     const referencias = await invocar(ses, "modelo.referencias");
-    await activar(ses, "cmd-cerramiento");
-    const clics = [[2, 0], [6, 3], [2, 6], [0, 1.5], [4, 1.5], [8, 4.5]];
     const creados = [];
     const hechos = [];
-    for (const [x, y] of clics) {
-      const muroEsperado = gidDelMuroEn(referencias, x, y);
+    for (const [x1, y1, x2, y2] of muros) {
+      const muroEsperado = gidDelMuroEn(referencias, (x1 + x2) / 2, (y1 + y2) / 2);
       const previos = new Set(cerramientosDe(await teselado(ses)).map((c) => c.globalid));
-      await clicMundo(ses, x, y);
+      await activar(ses, "cmd-cerramiento");
+      await clicMundo(ses, x1, y1);
+      await clicMundo(ses, x2, y2);
       const nuevos = await ses.driver.wait(
         async () => {
           const actuales = cerramientosDe(await teselado(ses));
@@ -576,16 +578,17 @@ test("Caso del dueño: losa, zapatas, muros de 0 a 3.60 y cerramientos desde la 
           return diff.length === 1 ? diff : false;
         },
         15_000,
-        `el clic en (${x}, ${y}) no creó exactamente un cerramiento`,
+        `el trazo (${x1}, ${y1})→(${x2}, ${y2}) no creó exactamente un cerramiento`,
       );
       creados.push(cerramientosDe(await teselado(ses)).length);
       const p = await invocar(ses, "modelo.propiedades", { globalid: nuevos[0].globalid });
-      assert.equal(p.muro_liga?.muro, muroEsperado, `cerramiento fuera del muro (${x}, ${y})`);
+      assert.equal(p.muro_liga?.muro, muroEsperado, `cerramiento fuera del muro (${x1}, ${y1})→(${x2}, ${y2})`);
       assert.equal(p.restricciones?.NivelBase, nivel220.globalid, `nivel de ${p.nombre}`);
       assert.equal(Number(p.restricciones?.DesfaseBase), 0, `desfase de ${p.nombre}`);
       hechos.push({ cerramiento: nuevos[0].globalid, muro: muroEsperado });
+      await tecla(ses, "Escape", "Escape");
+      await tecla(ses, "Escape", "Escape");
     }
-    await tecla(ses, "Escape", "Escape");
     const despues = path.join(CAPTURAS, "dueno-despues.png");
     await ses.captura(despues);
     dimensionesPng(despues);
@@ -595,7 +598,7 @@ test("Caso del dueño: losa, zapatas, muros de 0 a 3.60 y cerramientos desde la 
     let cers = cerramientosDe(elementos);
     assert.equal(cers.length, 6, `cerramientos: ${cers.length}`);
     assert.deepEqual(new Set(hechos.map((h) => h.muro)), new Set(gidsMuros));
-    for (const gid of gidsMuros) await esperarAltura(ses, gid, 2.2 - PERALTE);
+    for (const gid of gidsMuros) await esperarAltura(ses, gid, 3.6);
     const visibles = new Set(((await atributoVisor(ses, "data-mallas-visibles")) ?? "").split(","));
     for (const gid of gidsMuros) assert.ok(visibles.has(gid), `el muro ${gid} no se ve`);
     for (const c of cers) assert.ok(visibles.has(c.globalid), `el cerramiento ${c.globalid} no se ve`);
@@ -604,7 +607,8 @@ test("Caso del dueño: losa, zapatas, muros de 0 a 3.60 y cerramientos desde la 
     const alturasAntes = new Map();
     for (const gid of gidsMuros) alturasAntes.set(gid, await alturaMuro(ses, gid));
     await activar(ses, "cmd-cerramiento");
-    await clicMundo(ses, 2, 0);
+    await clicMundo(ses, 0, 0);
+    await clicMundo(ses, 8, 0);
     await esperar(800);
     const aviso = await textoDom(ses, '[data-testid="estado-aviso"]');
     assert.match(aviso ?? "", /Ese muro ya tiene cerramiento en N 2\.20/, `aviso: ${aviso}`);
@@ -614,7 +618,7 @@ test("Caso del dueño: losa, zapatas, muros de 0 a 3.60 y cerramientos desde la 
     for (const gid of gidsMuros) {
       assert.ok(
         Math.abs((await alturaMuro(ses, gid)) - alturasAntes.get(gid)) < 1e-9,
-        `el séptimo clic cambió la altura del muro ${gid}`,
+        `el tramo repetido cambió la altura del muro ${gid}`,
       );
     }
   } finally {

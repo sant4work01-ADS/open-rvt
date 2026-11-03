@@ -273,7 +273,7 @@ export function BarraHerramienta() {
               </label>
             </>
           )}
-          {(herramienta === "cerramiento" || herramienta === "dala") && (
+          {herramienta === "dala" && (
             <span className="text-muted-foreground">
               Clic sobre un muro · se liga a su eje
             </span>

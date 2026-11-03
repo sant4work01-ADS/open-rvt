@@ -254,6 +254,8 @@ export interface RespuestaInfo {
   elementos: number;
   por_clase: Record<string, number>;
   nombre: string;
+  /** O045: línea de bitácora cuando se restauró la altura de muros viejos. */
+  migracion?: string;
 }
 
 export interface PropiedadesElemento {

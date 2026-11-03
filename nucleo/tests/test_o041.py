@@ -64,12 +64,12 @@ def _castillos_de(nucleo: ModeloNucleo, muro: str) -> list[str]:
     return salida
 
 
-def test_ligado_editar_nivel_cambia_la_altura_del_muro() -> None:
-    """O041: al bajar el cerramiento a Nivel 1 − 0.20, el muro se acorta.
+def test_ligado_editar_nivel_no_cambia_la_altura_del_muro() -> None:
+    """O045: el cerramiento va embebido y el muro conserva su altura.
 
-    Muro Block 15 de Nivel 0 a Nivel 1 (2.60); cerramiento CE-1 (H 0.20) ligado,
-    con tope 2.60. Al fijar desfase −0.20 el tope pasa a 2.40, el fondo a 2.20 y el
-    muro (que termina en la cara inferior del cerramiento) baja de 2.60 a 2.40.
+    Muro Block 15 de Nivel 0 a Nivel 1 (2.60); cerramiento CE-1 (H 0.20) ligado.
+    Al bajar el cerramiento a Nivel 1 − 0.20 (tope 2.40, fondo 2.20), el muro sigue
+    de 0 a 2.60 y los castillos embebidos también llegan a 2.60.
     """
     nucleo = _nuevo()
     muro, cerramiento, n1 = _modelo_con_cerramiento(nucleo)
@@ -77,11 +77,10 @@ def test_ligado_editar_nivel_cambia_la_altura_del_muro() -> None:
     assert _datos_muro(nucleo, muro)["altura"] == pytest.approx(2.60, abs=1e-9)
     nucleo.restricciones_editar(cerramiento, nivel_base=n1, desfase_base=-0.20)
     assert _z(nucleo, cerramiento) == pytest.approx(2.30, abs=1e-9)
-    # El muro termina en la cara inferior (2.20); la altura guardada es 2.40.
-    assert _datos_muro(nucleo, muro)["altura"] == pytest.approx(2.40, abs=1e-9)
+    assert _datos_muro(nucleo, muro)["altura"] == pytest.approx(2.60, abs=1e-9)
     for castillo in _castillos_de(nucleo, muro):
         datos = nucleo._leer_pset(_entidad(nucleo, castillo), "OPENRVT_Estructura")
-        assert datos["Altura"] == pytest.approx(2.20, abs=1e-9)
+        assert datos["Altura"] == pytest.approx(2.60, abs=1e-9)
 
 
 def test_ligado_editar_desfase_es_un_solo_paso_de_deshacer() -> None:
@@ -89,7 +88,7 @@ def test_ligado_editar_desfase_es_un_solo_paso_de_deshacer() -> None:
     nucleo = _nuevo()
     muro, cerramiento, n1 = _modelo_con_cerramiento(nucleo)
     nucleo.restricciones_editar(cerramiento, nivel_base=n1, desfase_base=-0.20)
-    assert _datos_muro(nucleo, muro)["altura"] == pytest.approx(2.40, abs=1e-9)
+    assert _datos_muro(nucleo, muro)["altura"] == pytest.approx(2.60, abs=1e-9)
     nucleo.deshacer()
     assert _entidad(nucleo, cerramiento).GlobalId == cerramiento
     assert _z(nucleo, cerramiento) == pytest.approx(2.50, abs=1e-9)
@@ -126,8 +125,7 @@ def test_crear_con_nivel_y_desfase_de_la_barra() -> None:
 
     Muro Block 15 de Nivel 0 (0.00) a Nivel 1 (2.60). Con Nivel 0 y desfase 1.80
     en la barra, la cara superior del cerramiento (CE-1, H 0.20) queda en 1.80,
-    su centro en 1.70, y el muro guarda altura 1.80 (la cara superior, como en
-    «la altura la manda el cerramiento»; los castillos pararían en 1.60).
+    su centro en 1.70, y el muro conserva su altura de 2.60 (O045: va embebido).
     Todo es un solo paso de Deshacer.
     """
     nucleo = _nuevo()
@@ -139,7 +137,7 @@ def test_crear_con_nivel_y_desfase_de_la_barra() -> None:
         "CE-1 Cerramiento 15×20", muro, nivel=nivel0, desfase=1.80
     )["creados"][0]
     assert _z(nucleo, cerramiento) == pytest.approx(1.70, abs=1e-9)
-    assert _datos_muro(nucleo, muro)["altura"] == pytest.approx(1.80, abs=1e-9)
+    assert _datos_muro(nucleo, muro)["altura"] == pytest.approx(2.60, abs=1e-9)
     restriccion = nucleo._restricciones_de(_entidad(nucleo, cerramiento))
     assert restriccion["NivelBase"] == nivel0
     assert restriccion["DesfaseBase"] == pytest.approx(1.80, abs=1e-9)

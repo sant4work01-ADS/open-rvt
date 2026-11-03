@@ -1,9 +1,9 @@
 """O043: un cerramiento por muro y nivel, y el nivel de la planta manda.
 
 Muro de Nivel 0 a Nivel 3.60; el cerramiento creado desde la planta de 2.20 queda
-en N 2.20 con desfase 0, con su centro en 2.20 − 0.20/2 = 2.10, y el muro termina
-en la cara inferior (2.20 − 0.20 = 2.00). Un segundo cerramiento en el mismo nivel
-del mismo muro se rechaza sin tocar el modelo.
+en N 2.20 con desfase 0 y su centro en 2.20 − 0.20/2 = 2.10. O045: va embebido,
+así que el muro conserva sus 3.60. Un segundo cerramiento en el mismo nivel del
+mismo muro se rechaza sin tocar el modelo.
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ def _escenario() -> tuple[ModeloNucleo, str, str, str, str]:
     return nucleo, n220, n360, muro, n0
 
 
-def test_cerramiento_en_la_planta_baja_el_muro_a_su_cara_inferior() -> None:
+def test_cerramiento_en_la_planta_no_baja_el_muro() -> None:
     nucleo, n220, _n360, muro, _n0 = _escenario()
     cerramiento = nucleo.cerramiento_crear_en_muro(
         TIPO, muro, nivel=n220, desfase=0, desde_planta=True
@@ -55,7 +55,7 @@ def test_cerramiento_en_la_planta_baja_el_muro_a_su_cara_inferior() -> None:
     assert restriccion["NivelBase"] == n220
     assert restriccion["DesfaseBase"] == pytest.approx(0.0, abs=1e-9)
     assert _z(nucleo, cerramiento) == pytest.approx(2.10, abs=1e-9)
-    assert _altura_muro(nucleo, muro) == pytest.approx(2.00, abs=1e-9)
+    assert _altura_muro(nucleo, muro) == pytest.approx(3.60, abs=1e-9)
 
 
 def test_segundo_cerramiento_en_el_mismo_nivel_se_rechaza_sin_tocar_el_modelo() -> None:

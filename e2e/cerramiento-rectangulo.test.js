@@ -361,15 +361,23 @@ test("Rectángulo de 4 muros con castillos: un cerramiento por muro, en cualquie
     await activar(ses, "visor-ajustar");
     await esperar(700);
     void niveles0;
-    await activar(ses, "cmd-cerramiento");
-    const clics = [[3.5, 5], [7, 2.5], [3.5, 0], [0, 2.5]];
+    // O045: cada cerramiento se dibuja con inicio y fin sobre su muro.
     const cuenta = [];
     const avisos = [];
-    for (const [x, y] of clics) {
-      await clicMundo(ses, x, y);
+    for (const [x1, y1, x2, y2] of [
+      [0, 5, 7, 5],
+      [7, 0, 7, 5],
+      [0, 0, 7, 0],
+      [0, 0, 0, 5],
+    ]) {
+      await activar(ses, "cmd-cerramiento");
+      await clicMundo(ses, x1, y1);
+      await clicMundo(ses, x2, y2);
       await esperar(600);
       cuenta.push((await teselado(ses)).filter((e) => e.estructura?.alias === "cerramiento").length);
       avisos.push((await textoDom(ses, `[data-testid="estado-aviso"]`)) + " / " + (await textoDom(ses, `[data-testid="estado-error"]`)));
+      await tecla(ses, "Escape", "Escape");
+      await tecla(ses, "Escape", "Escape");
     }
     await ses.captura(require("node:path").join(require("node:os").tmpdir(), "cer-rect.png"));
     assert.deepEqual(cuenta, [1, 2, 3, 4], `cerramientos tras cada clic: ${cuenta} · avisos: ${JSON.stringify(avisos)}`);

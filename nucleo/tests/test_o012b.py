@@ -219,7 +219,7 @@ def test_muro_entre_castillos_largo_area_y_volumen_de_la_tabla() -> None:
         assert _volumen_entre(nucleo, muro, castillo) == pytest.approx(0.0, abs=1e-9)
 
 
-def test_muro_apoya_en_dala_y_corona_en_cerramiento_sin_traslape() -> None:
+def test_muro_apoya_en_dala_y_cerramiento_embebido_en_la_corona() -> None:
     nucleo, nivel = _nuevo()
     muro = nucleo.muro_crear(MURO, nivel, 0, 0, 4, 0, altura=2.60)["creados"][0]
     dala = nucleo.dala_crear_en_muro("DD-1 Dala de desplante 15×20", muro)["creados"][0]
@@ -230,19 +230,20 @@ def test_muro_apoya_en_dala_y_corona_en_cerramiento_sin_traslape() -> None:
     nucleo.castillo_crear_en_muro(K, muro, 4.0)
 
     _x0, _x1, _y0, _y1, z0, z1 = _caja(nucleo, muro)
-    # Dala 0.20 en la base; cerramiento 0.20 en la corona.
-    assert (z0, z1) == pytest.approx((0.20, 2.40), abs=1e-9)
-    assert _volumen_malla(nucleo, muro) == pytest.approx(3.85 * 0.15 * 2.20, abs=1e-9)
+    # Dala 0.20 en la base; O045: el muro llega hasta su tope (2.60) y el
+    # cerramiento de 0.20 queda embebido dentro, en la corona.
+    assert (z0, z1) == pytest.approx((0.20, 2.60), abs=1e-9)
+    assert _volumen_malla(nucleo, muro) == pytest.approx(3.85 * 0.15 * 2.40, abs=1e-9)
     assert _volumen_entre(nucleo, muro, dala) == pytest.approx(0.0, abs=1e-9)
-    assert _volumen_entre(nucleo, muro, cerramiento) == pytest.approx(0.0, abs=1e-9)
 
     info = next(
         e for e in nucleo.cantidades_estructura()["elementos"]
         if e["globalid"] == muro
     )
+    # 3.85 × 2.40 de cuerpo menos el cerramiento embebido (3.85 × 0.20).
     assert info["detalle"]["area_neta_m2"] == pytest.approx(3.85 * 2.20, abs=1e-9)
     assert info["detalle"]["base_m"] == pytest.approx(0.20, abs=1e-9)
-    assert info["detalle"]["cima_m"] == pytest.approx(2.40, abs=1e-9)
+    assert info["detalle"]["cima_m"] == pytest.approx(2.60, abs=1e-9)
 
 
 def test_muro_sobre_contratrabe_no_traslapa_y_conserva_su_largo() -> None:
@@ -309,8 +310,16 @@ def test_invariante_global_sin_traslapes_en_un_modelo_con_todos_los_elementos() 
         "castillo", "dala", "cerramiento",
     }
     ids = [e["globalid"] for e in elementos]
+    alias = {e["globalid"]: e["alias"] for e in elementos}
+    embebidos = ("cerramiento", "castillo")
     for i, a in enumerate(ids):
         for b in ids[i + 1:]:
+            # O045: cerramientos y castillos van embebidos en el muro; su
+            # traslape es intencional y las cantidades lo descuentan.
+            if {alias[a], alias[b]} == {"muro", "cerramiento"} or {
+                alias[a], alias[b]
+            } == {"muro", "castillo"}:
+                continue
             assert _volumen_entre(nucleo, a, b) <= 1e-6, f"{a} y {b} se traslapan"
     cantidades = nucleo.cantidades_estructura()
     assert cantidades["total"]["volumen_neto_m3"] == pytest.approx(

@@ -336,19 +336,22 @@ test("O041: cerramientos con clics, Tab, panel, Supr y la losa sobre el dado", a
     assert.equal(castillos.length, 15, `castillos: ${castillos.length}`);
     assert.ok(segundos < 3, `los castillos tardaron ${segundos.toFixed(2)} s`);
 
-    // 3. Herramienta Cerramiento: un clic dentro de cada muro, lejos de los cruces.
-    await activar(ses, "cmd-cerramiento");
-    for (const [x, y] of [
-      [2, 0],
-      [6, 3],
-      [2, 6],
-      [0, 1.5],
-      [4, 1.5],
-      [8, 4.5],
+    // 3. Herramienta Cerramiento: se dibuja como un muro, con inicio y fin sobre
+    //    cada muro de la retícula (O045: ya no es «un clic = todo el muro»).
+    for (const [x1, y1, x2, y2] of [
+      [0, 0, 8, 0],
+      [0, 3, 8, 3],
+      [0, 6, 8, 6],
+      [0, 0, 0, 6],
+      [4, 0, 4, 6],
+      [8, 0, 8, 6],
     ]) {
-      await clicMundo(ses, x, y);
+      await activar(ses, "cmd-cerramiento");
+      await clicMundo(ses, x1, y1);
+      await clicMundo(ses, x2, y2);
+      await tecla(ses, "Escape", "Escape");
+      await tecla(ses, "Escape", "Escape");
     }
-    await tecla(ses, "Escape", "Escape");
     elementos = await teselado(ses);
     assert.equal(
       elementos.filter((e) => e.estructura?.alias === "cerramiento").length,
@@ -357,7 +360,8 @@ test("O041: cerramientos con clics, Tab, panel, Supr y la losa sobre el dado", a
     );
 
     // 4. Tab en planta sobre el muro de y = 0: primero el muro y después su
-    //    cerramiento. Se cambia el nivel a Nivel 1 − 0.20 y el muro baja a 2.40.
+    //    cerramiento. Se cambia el nivel a Nivel 1 − 0.20; O045: el muro conserva
+    //    su altura porque el cerramiento va embebido.
     const puntoTab = await moverMundo(ses, 2, 0);
     const candidatos = await ses.driver.executeScript(
       (p) => document.querySelector('[data-testid="visor"]').__openrvtCandidatosTab(p.x, p.y),
@@ -384,7 +388,10 @@ test("O041: cerramientos con clics, Tab, panel, Supr y la losa sobre el dado", a
     await fijarValor(ses, "restriccion-base", nivel1.globalid);
     await esperar(500);
     await fijarCampoPanel(ses, "desfase-base", "-0.20");
-    await esperarAltura(ses, muroLiga, 2.4);
+    assert.ok(
+      Math.abs((await alturaMuro(ses, muroLiga)) - 2.6) < 1e-6,
+      "O045: el muro no debe cambiar de altura al mover el cerramiento",
+    );
     assert.ok(
       Math.abs(
         (await invocar(ses, "modelo.propiedades", { globalid: cerramiento })).restricciones
