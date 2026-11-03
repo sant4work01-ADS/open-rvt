@@ -498,10 +498,10 @@ test("O011-2: dos codos, tercero deshabilitado, candado, guardar/reabrir y desha
     a = await ajustes(ses);
     assert.equal(a[eje1.globalid]?.extremoFin, undefined);
 
-    // O042 (revisión): un codo = dos nodos. Con D = 0.8 m (globo de 8 mm a 1:100)
-    // y eje vertical, el globo original tiene centro en el fin + radio; el codo
-    // solo lo separa 0.6·D de lado: V2 = centro - 1.5·D a lo largo + 0.6·D de lado
-    // y V1 = V2 - 0.85·D a lo largo, de vuelta sobre el eje.
+    // O044: un codo = dos nodos. Con D = 0.8 m (globo de 8 mm a 1:100) y eje
+    // vertical, el globo original tiene centro en el fin + radio; el codo lo
+    // separa 0.55·D de lado: V2 = centro - 1.30·D a lo largo + 0.55·D de lado y
+    // V1 = V2 - 0.50·D a lo largo - 0.55·D de lado, de vuelta sobre el eje.
     await activar(ses, "eje-codo-fin-agregar");
     a = await ajustes(ses);
     assert.equal(a[eje1.globalid].codosFin.length, 2);
@@ -512,21 +512,21 @@ test("O011-2: dos codos, tercero deshabilitado, candado, guardar/reabrir y desha
     const D = 0.8;
     const centroGlobo = [fin[0] + dir[0] * (D / 2), fin[1] + dir[1] * (D / 2)];
     const esperado2 = [
-      centroGlobo[0] - dir[0] * 1.5 * D + perp[0] * 0.6 * D,
-      centroGlobo[1] - dir[1] * 1.5 * D + perp[1] * 0.6 * D,
+      centroGlobo[0] - dir[0] * 1.3 * D + perp[0] * 0.55 * D,
+      centroGlobo[1] - dir[1] * 1.3 * D + perp[1] * 0.55 * D,
     ];
     const esperado1 = [
-      esperado2[0] - dir[0] * 0.85 * D - perp[0] * 0.6 * D,
-      esperado2[1] - dir[1] * 0.85 * D - perp[1] * 0.6 * D,
+      esperado2[0] - dir[0] * 0.5 * D - perp[0] * 0.55 * D,
+      esperado2[1] - dir[1] * 0.5 * D - perp[1] * 0.55 * D,
     ];
     const cerca = (p, q) => Math.abs(p[0] - q[0]) < 1e-6 && Math.abs(p[1] - q[1]) < 1e-6;
     assert.ok(
       cerca(a[eje1.globalid].codosFin[0], esperado1),
-      `V1 no está a 0.85D/0.6D: ${JSON.stringify(a[eje1.globalid].codosFin[0])} vs ${esperado1}`,
+      `V1 no está a 0.5D/0.55D: ${JSON.stringify(a[eje1.globalid].codosFin[0])} vs ${esperado1}`,
     );
     assert.ok(
       cerca(a[eje1.globalid].codosFin[1], esperado2),
-      `V2 no está a 1.5D/0.6D: ${JSON.stringify(a[eje1.globalid].codosFin[1])} vs ${esperado2}`,
+      `V2 no está a 1.3D/0.55D: ${JSON.stringify(a[eje1.globalid].codosFin[1])} vs ${esperado2}`,
     );
     assert.equal(a[eje1.globalid].extremoFin, undefined, "el codo no debe guardar extremo libre");
     const boton = await ses.porTestid("eje-codo-fin-agregar");
@@ -764,7 +764,7 @@ test("O011-3: cotas .15 por la pantalla y niveles/globos del alzado", async () =
       );
     }
 
-    // O042: «Agregar codo» separa el globo 0.6·D de lado (en el alzado, en X) sin
+    // O044: «Agregar codo» separa el globo 0.55·D de lado (en el alzado, en X) sin
     // moverlo a lo largo del eje.
     await seleccionarEje(ses, "4");
     const globoAntes = await ses.driver.executeScript(() =>
@@ -776,8 +776,8 @@ test("O011-3: cotas .15 por la pantalla y niveles/globos del alzado", async () =
     );
     const diametro = 2 * globoAntes.radio;
     assert.ok(
-      Math.abs(Math.abs(globoDespues.x - globoAntes.x) - 0.6 * diametro) <= 2,
-      `el globo del eje 4 no se separó 0.6·D: ${globoAntes.x} → ${globoDespues.x} (D=${diametro})`,
+      Math.abs(Math.abs(globoDespues.x - globoAntes.x) - 0.55 * diametro) <= 2,
+      `el globo del eje 4 no se separó 0.55·D: ${globoAntes.x} → ${globoDespues.x} (D=${diametro})`,
     );
     // Se quita el codo para que la captura de entrega siga limpia.
     const codo4 = await ses.driver.executeScript(() =>
