@@ -423,6 +423,7 @@ class Servidor:
                 str(params.get("muro") or ""),
                 params.get("nivel") or None,
                 params.get("desfase"),
+                bool(params.get("desde_planta", False)),
             )
         if metodo in ("cerramientos.soltar_del_muro", "elementos.soltar_del_muro"):
             return self._exigir().soltar_del_muro(

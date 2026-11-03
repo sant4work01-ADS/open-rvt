@@ -11,8 +11,9 @@ const path = require("node:path");
 const { Sesion, esperar, By, until } = require("./arnes");
 
 const RAIZ = path.resolve(__dirname, "..");
-const CAPTURAS = path.join(RAIZ, "docs", "progreso", "cerramiento-niveles");
+const CAPTURAS = path.join(RAIZ, "docs", "progreso", "O043");
 const DIMENSION = { ancho: 1700, alto: 1000 };
+const PERALTE = 0.2; // CE-1 Cerramiento 15×20: 20 cm de peralte.
 
 const textoDom = (ses, selector) =>
   ses.driver.executeScript(
@@ -239,6 +240,54 @@ async function teselado(ses) {
   return (await invocar(ses, "geometria.teselar", { globalids: null })).elementos;
 }
 
+async function atributoVisor(ses, nombre) {
+  return ses.driver.executeScript(
+    (nombre) => document.querySelector('[data-testid="visor"]')?.getAttribute(nombre),
+    nombre,
+  );
+}
+
+async function esperarMurosVisibles(ses, gidsMuros, cuantos) {
+  await ses.driver.wait(
+    async () => {
+      const visibles = new Set(((await atributoVisor(ses, "data-mallas-visibles")) ?? "").split(","));
+      return gidsMuros.filter((gid) => visibles.has(gid)).length === cuantos;
+    },
+    15_000,
+    `la planta no mostró ${cuantos} muros`,
+  );
+}
+
+function distanciaASegmento(x, y, muro) {
+  const dx = muro.x2 - muro.x1;
+  const dy = muro.y2 - muro.y1;
+  const largo2 = dx * dx + dy * dy;
+  const t =
+    largo2 <= 1e-12
+      ? 0
+      : Math.max(0, Math.min(1, ((x - muro.x1) * dx + (y - muro.y1) * dy) / largo2));
+  return Math.hypot(x - (muro.x1 + t * dx), y - (muro.y1 + t * dy));
+}
+
+/** GlobalId del muro más cercano al clic, con la misma regla de la interfaz. */
+function gidDelMuroEn(referencias, x, y) {
+  let mejor = null;
+  let distancia = Infinity;
+  for (const muro of referencias.muros) {
+    const d = distanciaASegmento(x, y, muro);
+    if (d < distancia) {
+      distancia = d;
+      mejor = muro;
+    }
+  }
+  assert.ok(mejor && distancia < 0.35, `no hay muro bajo (${x}, ${y})`);
+  return mejor.globalid;
+}
+
+function cerramientosDe(elementos) {
+  return elementos.filter((e) => e.estructura?.alias === "cerramiento");
+}
+
 async function esperarSeleccion(ses, aliasEsperado) {
   return ses.driver.wait(
     async () => {
@@ -316,33 +365,258 @@ test("Cerramientos en la planta de un nivel intermedio: uno por cada clic, en su
       await invocar(ses, "restricciones.editar", { globalid: gid, nivel_tope: tope.globalid, desfase_tope: 0 });
     }
 
-    // Cerramientos desde la planta de 2.20, un clic dentro de cada muro.
+    // O043: la planta de 2.20 es un corte horizontal y muestra los seis muros
+    // del Nivel 0 aunque suban a 3.60, antes de dibujar nada.
     await elegirVista(ses, "Planta N 2.20");
     await activar(ses, "visor-ajustar");
+    await esperarMurosVisibles(ses, gidsMuros, 6);
+    const antes = path.join(CAPTURAS, "antes.png");
+    await ses.captura(antes);
+    dimensionesPng(antes);
+
+    const nivel220 = niveles.find((n) => n.nombre === "N 2.20");
+    const referencias = await invocar(ses, "modelo.referencias");
+    await activar(ses, "cmd-cerramiento");
+    const nivelBarra = await ses.driver.executeScript(
+      () => document.querySelector('[data-testid="cerramiento-nivel"]')?.value,
+    );
+    assert.equal(
+      nivelBarra,
+      nivel220.globalid,
+      "la barra de la herramienta no preselecciona el nivel de la planta",
+    );
+    const clics = [[2, 0], [6, 3], [2, 6], [0, 1.5], [4, 1.5], [8, 4.5]];
+    const creados = [];
+    const hechos = [];
+    for (const [x, y] of clics) {
+      const muroEsperado = gidDelMuroEn(referencias, x, y);
+      const previos = new Set(cerramientosDe(await teselado(ses)).map((c) => c.globalid));
+      await clicMundo(ses, x, y);
+      const nuevos = await ses.driver.wait(
+        async () => {
+          const actuales = cerramientosDe(await teselado(ses));
+          const diff = actuales.filter((c) => !previos.has(c.globalid));
+          return diff.length === 1 ? diff : false;
+        },
+        15_000,
+        `el clic en (${x}, ${y}) no creó exactamente un cerramiento`,
+      );
+      const actuales = cerramientosDe(await teselado(ses));
+      creados.push(actuales.length);
+      const p = await invocar(ses, "modelo.propiedades", { globalid: nuevos[0].globalid });
+      assert.equal(
+        p.muro_liga?.muro,
+        muroEsperado,
+        `el cerramiento del clic (${x}, ${y}) no quedó en el muro bajo el clic`,
+      );
+      assert.equal(
+        p.restricciones?.NivelBase,
+        nivel220.globalid,
+        `el cerramiento ${p.nombre} no quedó en N 2.20`,
+      );
+      assert.equal(
+        Number(p.restricciones?.DesfaseBase),
+        0,
+        `el cerramiento ${p.nombre} no tiene desfase 0`,
+      );
+      hechos.push({ cerramiento: nuevos[0].globalid, muro: muroEsperado });
+    }
+    await tecla(ses, "Escape", "Escape");
+    const despues = path.join(CAPTURAS, "despues.png");
+    await ses.captura(despues);
+    dimensionesPng(despues);
+    assert.deepEqual(creados, [1, 2, 3, 4, 5, 6], `cerramientos tras cada clic: ${creados}`);
+
+    elementos = await teselado(ses);
+    let cers = cerramientosDe(elementos);
+    assert.equal(cers.length, 6, `cerramientos: ${cers.length}`);
+    assert.deepEqual(
+      new Set(hechos.map((h) => h.muro)),
+      new Set(gidsMuros),
+      "los seis cerramientos no cubren los seis muros",
+    );
+    for (const gid of gidsMuros) {
+      await esperarAltura(ses, gid, 2.2 - PERALTE);
+    }
+    const visibles = new Set(((await atributoVisor(ses, "data-mallas-visibles")) ?? "").split(","));
+    for (const gid of gidsMuros) assert.ok(visibles.has(gid), `el muro ${gid} no se ve en la planta`);
+    for (const c of cers) assert.ok(visibles.has(c.globalid), `el cerramiento ${c.globalid} no se ve`);
+
+    // O043 §3: un séptimo clic sobre el primer muro avisa y no toca el modelo.
+    const gidsAntes = new Set(cers.map((c) => c.globalid));
+    const alturasAntes = new Map();
+    for (const gid of gidsMuros) alturasAntes.set(gid, await alturaMuro(ses, gid));
+    await activar(ses, "cmd-cerramiento");
+    await clicMundo(ses, 2, 0);
+    await esperar(800);
+    const aviso = await textoDom(ses, '[data-testid="estado-aviso"]');
+    assert.match(
+      aviso ?? "",
+      /Ese muro ya tiene cerramiento en N 2\.20/,
+      `aviso del séptimo clic: ${aviso}`,
+    );
+    elementos = await teselado(ses);
+    cers = cerramientosDe(elementos);
+    assert.equal(cers.length, 6, `el séptimo clic dejó ${cers.length} cerramientos`);
+    assert.deepEqual(new Set(cers.map((c) => c.globalid)), gidsAntes);
+    for (const gid of gidsMuros) {
+      assert.ok(
+        Math.abs((await alturaMuro(ses, gid)) - alturasAntes.get(gid)) < 1e-9,
+        `el séptimo clic cambió la altura del muro ${gid}`,
+      );
+    }
+  } finally {
+    await ses.cerrar();
+  }
+});
+
+test("Caso del dueño: losa, zapatas, muros de 0 a 3.60 y cerramientos desde la planta de 2.20", async () => {
+  const ses = await Sesion.abrir({
+    prueba: "cerramiento-dueno",
+    tamano: DIMENSION,
+    lateralExpandido: true,
+    compositar: true,
+  });
+  try {
+    fs.mkdirSync(CAPTURAS, { recursive: true });
+    await nuevoModelo(ses);
+    for (const [nombre, elev] of [
+      ["N 2.20", 2.2],
+      ["N 3.00", 3.0],
+      ["N 3.20", 3.2],
+      ["N 3.60", 3.6],
+    ]) {
+      await crearNivel(ses, nombre, elev);
+    }
+    await cambiarPestana(ses, "Modelar");
+    await elegirVista(ses, "Planta Nivel 0");
+    const muros = [
+      [0, 0, 8, 0],
+      [0, 3, 8, 3],
+      [0, 6, 8, 6],
+      [0, 0, 0, 6],
+      [4, 0, 4, 6],
+      [8, 0, 8, 6],
+    ];
+    for (const [x1, y1, x2, y2] of muros) await dibujarMuro(ses, x1, y1, x2, y2);
+    await activar(ses, "visor-ajustar");
     await esperar(700);
-    await ses.captura(path.join(CAPTURAS, "antes.png"));
+    let elementos = await teselado(ses);
+    const gidsMuros = elementos.filter((e) => e.clase === "IfcWall").map((e) => e.globalid);
+    assert.equal(gidsMuros.length, 6, `muros: ${gidsMuros.length}`);
+    const niveles = await invocar(ses, "modelo.niveles");
+    const nivel0 = niveles.find((n) => n.nombre === "Nivel 0") ?? niveles[0];
+    const nivel220 = niveles.find((n) => n.nombre === "N 2.20");
+    const tope = niveles.find((n) => n.nombre === "N 3.60");
+    for (const gid of gidsMuros) {
+      await invocar(ses, "restricciones.editar", {
+        globalid: gid,
+        nivel_tope: tope.globalid,
+        desfase_tope: 0,
+      });
+    }
+
+    // Losa en el Nivel 0 (8 × 6 × 0.10) y nueve zapatas aisladas en las esquinas
+    // y cruces de la retícula (x = 0, 4, 8; y = 0, 3, 6).
+    await invocar(ses, "losas.crear", {
+      nivel: nivel0.globalid,
+      puntos: [
+        [0, 0],
+        [8, 0],
+        [8, 6],
+        [0, 6],
+      ],
+      espesor: 0.1,
+    });
+    for (const x of [0, 4, 8]) {
+      for (const y of [0, 3, 6]) {
+        await invocar(ses, "zapatas.crear", {
+          tipo: "Z-1 Zapata 1.20×1.20",
+          nivel: nivel0.globalid,
+          x,
+          y,
+          desplante: 1.0,
+        });
+      }
+    }
+    // Las creaciones por comando se recargan con deshacer/rehacer, como en O041.
+    await activar(ses, "cmd-deshacer");
+    await esperar(600);
+    await activar(ses, "cmd-rehacer");
+    await esperar(1200);
+    elementos = await teselado(ses);
+    assert.equal(elementos.filter((e) => e.clase === "IfcSlab").length, 1, "falta la losa");
+    assert.equal(
+      elementos.filter((e) => e.clase === "IfcFooting").length,
+      9,
+      "no están las nueve zapatas",
+    );
+
+    // Cerramientos desde la planta de 2.20, en el orden 1 a 6, uno por muro.
+    await elegirVista(ses, "Planta N 2.20");
+    await activar(ses, "visor-ajustar");
+    await esperarMurosVisibles(ses, gidsMuros, 6);
+    const antes = path.join(CAPTURAS, "dueno-antes.png");
+    await ses.captura(antes);
+    dimensionesPng(antes);
+
+    const referencias = await invocar(ses, "modelo.referencias");
     await activar(ses, "cmd-cerramiento");
     const clics = [[2, 0], [6, 3], [2, 6], [0, 1.5], [4, 1.5], [8, 4.5]];
     const creados = [];
+    const hechos = [];
     for (const [x, y] of clics) {
+      const muroEsperado = gidDelMuroEn(referencias, x, y);
+      const previos = new Set(cerramientosDe(await teselado(ses)).map((c) => c.globalid));
       await clicMundo(ses, x, y);
-      await esperar(500);
-      const actuales = (await teselado(ses)).filter((e) => e.estructura?.alias === "cerramiento");
-      creados.push(actuales.length);
+      const nuevos = await ses.driver.wait(
+        async () => {
+          const actuales = cerramientosDe(await teselado(ses));
+          const diff = actuales.filter((c) => !previos.has(c.globalid));
+          return diff.length === 1 ? diff : false;
+        },
+        15_000,
+        `el clic en (${x}, ${y}) no creó exactamente un cerramiento`,
+      );
+      creados.push(cerramientosDe(await teselado(ses)).length);
+      const p = await invocar(ses, "modelo.propiedades", { globalid: nuevos[0].globalid });
+      assert.equal(p.muro_liga?.muro, muroEsperado, `cerramiento fuera del muro (${x}, ${y})`);
+      assert.equal(p.restricciones?.NivelBase, nivel220.globalid, `nivel de ${p.nombre}`);
+      assert.equal(Number(p.restricciones?.DesfaseBase), 0, `desfase de ${p.nombre}`);
+      hechos.push({ cerramiento: nuevos[0].globalid, muro: muroEsperado });
     }
     await tecla(ses, "Escape", "Escape");
-    await ses.captura(path.join(CAPTURAS, "despues.png"));
+    const despues = path.join(CAPTURAS, "dueno-despues.png");
+    await ses.captura(despues);
+    dimensionesPng(despues);
     assert.deepEqual(creados, [1, 2, 3, 4, 5, 6], `cerramientos tras cada clic: ${creados}`);
+
     elementos = await teselado(ses);
-    const cers = elementos.filter((e) => e.estructura?.alias === "cerramiento");
-    const ligas = new Set();
-    for (const c of cers) {
-      const p = await invocar(ses, "modelo.propiedades", { globalid: c.globalid });
-      ligas.add(p.muro_liga?.muro);
-      const n = niveles.find((x) => x.globalid === p.restricciones?.NivelBase);
-      assert.equal(n?.nombre, "N 2.20", `el cerramiento ${p.nombre} quedó en ${n?.nombre}`);
+    let cers = cerramientosDe(elementos);
+    assert.equal(cers.length, 6, `cerramientos: ${cers.length}`);
+    assert.deepEqual(new Set(hechos.map((h) => h.muro)), new Set(gidsMuros));
+    for (const gid of gidsMuros) await esperarAltura(ses, gid, 2.2 - PERALTE);
+    const visibles = new Set(((await atributoVisor(ses, "data-mallas-visibles")) ?? "").split(","));
+    for (const gid of gidsMuros) assert.ok(visibles.has(gid), `el muro ${gid} no se ve`);
+    for (const c of cers) assert.ok(visibles.has(c.globalid), `el cerramiento ${c.globalid} no se ve`);
+
+    const gidsAntes = new Set(cers.map((c) => c.globalid));
+    const alturasAntes = new Map();
+    for (const gid of gidsMuros) alturasAntes.set(gid, await alturaMuro(ses, gid));
+    await activar(ses, "cmd-cerramiento");
+    await clicMundo(ses, 2, 0);
+    await esperar(800);
+    const aviso = await textoDom(ses, '[data-testid="estado-aviso"]');
+    assert.match(aviso ?? "", /Ese muro ya tiene cerramiento en N 2\.20/, `aviso: ${aviso}`);
+    cers = cerramientosDe(await teselado(ses));
+    assert.equal(cers.length, 6, `el séptimo clic dejó ${cers.length} cerramientos`);
+    assert.deepEqual(new Set(cers.map((c) => c.globalid)), gidsAntes);
+    for (const gid of gidsMuros) {
+      assert.ok(
+        Math.abs((await alturaMuro(ses, gid)) - alturasAntes.get(gid)) < 1e-9,
+        `el séptimo clic cambió la altura del muro ${gid}`,
+      );
     }
-    assert.equal(ligas.size, 6, `cerramientos ligados a ${ligas.size} muros distintos`);
   } finally {
     await ses.cerrar();
   }
