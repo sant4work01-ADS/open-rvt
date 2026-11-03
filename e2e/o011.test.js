@@ -475,31 +475,58 @@ test("O011-2: dos codos, tercero deshabilitado, candado, guardar/reabrir y desha
     assert.ok(eje1, "falta el eje 1");
     assert.ok(eje1.vertical, "el eje 1 debe ser vertical");
 
+    // El candado y el extremo libre se prueban sin codo: con codo el extremo
+    // original ya no se dibuja y su pinzamiento no existe (solo se arrastra V2).
     await seleccionarEje(ses, "1");
-    await activar(ses, "eje-codo-fin-agregar");
-    let a = await ajustes(ses);
-    // O042: un codo = dos nodos. Con D = 0.8 m (globo de 8 mm a 1:100) y el eje
-    // vertical (0,0)→(0,10): V1 = fin - 2D = (0, 8.4); V2 = V1 + D afuera + D de
-    // lado = (-0.8, 9.2). El globo se deriva en V2 + D afuera = (-0.8, 10).
-    assert.equal(a[eje1.globalid].codosFin.length, 2);
+    await activar(ses, "eje-candado-fin");
+    assert.equal(await (await ses.porTestid("eje-candado-fin")).getAttribute("aria-pressed"), "true");
     const fin = [eje1.x2, eje1.y2];
+    await arrastrarExtremo(ses, "1", "fin", [fin[0], fin[1] + 1]);
+    let a = await ajustes(ses);
+    assert.deepEqual(Object.keys(a), [eje1.globalid], "el arrastre con candado abierto tocó otros ejes");
+    assert.ok(a[eje1.globalid].extremoFin, "no se guardó el extremo libre");
+    assert.ok(
+      Math.abs(a[eje1.globalid].extremoFin[1] - (fin[1] + 1)) < 0.05,
+      `el extremo no se movió 1 m: ${a[eje1.globalid].extremoFin}`,
+    );
+    // Ctrl+Z: una entrada por arrastre y vuelve al extremo alineado.
+    await tecla(ses, "z", "KeyZ", { ctrlKey: true });
+    a = await ajustes(ses);
+    assert.equal(a[eje1.globalid]?.extremoFin, undefined, "Ctrl+Z no quitó el extremo libre");
+    // Cerrar el candado mantiene el extremo en la alineación.
+    await activar(ses, "eje-candado-fin");
+    a = await ajustes(ses);
+    assert.equal(a[eje1.globalid]?.extremoFin, undefined);
+
+    // O042 (revisión): un codo = dos nodos. Con D = 0.8 m (globo de 8 mm a 1:100)
+    // y eje vertical, el globo original tiene centro en el fin + radio; el codo
+    // solo lo separa 0.6·D de lado: V2 = centro - 1.5·D a lo largo + 0.6·D de lado
+    // y V1 = V2 - 0.85·D a lo largo, de vuelta sobre el eje.
+    await activar(ses, "eje-codo-fin-agregar");
+    a = await ajustes(ses);
+    assert.equal(a[eje1.globalid].codosFin.length, 2);
     const interior = [eje1.x1, eje1.y1];
     const largo = Math.hypot(fin[0] - interior[0], fin[1] - interior[1]);
     const dir = [(fin[0] - interior[0]) / largo, (fin[1] - interior[1]) / largo];
     const perp = [-dir[1], dir[0]];
-    const esperado1 = [fin[0] - dir[0] * 1.6, fin[1] - dir[1] * 1.6];
+    const D = 0.8;
+    const centroGlobo = [fin[0] + dir[0] * (D / 2), fin[1] + dir[1] * (D / 2)];
     const esperado2 = [
-      esperado1[0] + dir[0] * 0.8 + perp[0] * 0.8,
-      esperado1[1] + dir[1] * 0.8 + perp[1] * 0.8,
+      centroGlobo[0] - dir[0] * 1.5 * D + perp[0] * 0.6 * D,
+      centroGlobo[1] - dir[1] * 1.5 * D + perp[1] * 0.6 * D,
+    ];
+    const esperado1 = [
+      esperado2[0] - dir[0] * 0.85 * D - perp[0] * 0.6 * D,
+      esperado2[1] - dir[1] * 0.85 * D - perp[1] * 0.6 * D,
     ];
     const cerca = (p, q) => Math.abs(p[0] - q[0]) < 1e-6 && Math.abs(p[1] - q[1]) < 1e-6;
     assert.ok(
       cerca(a[eje1.globalid].codosFin[0], esperado1),
-      `V1 no está a 2D del extremo: ${JSON.stringify(a[eje1.globalid].codosFin[0])} vs ${esperado1}`,
+      `V1 no está a 0.85D/0.6D: ${JSON.stringify(a[eje1.globalid].codosFin[0])} vs ${esperado1}`,
     );
     assert.ok(
       cerca(a[eje1.globalid].codosFin[1], esperado2),
-      `V2 no está a D afuera y D de lado: ${JSON.stringify(a[eje1.globalid].codosFin[1])} vs ${esperado2}`,
+      `V2 no está a 1.5D/0.6D: ${JSON.stringify(a[eje1.globalid].codosFin[1])} vs ${esperado2}`,
     );
     assert.equal(a[eje1.globalid].extremoFin, undefined, "el codo no debe guardar extremo libre");
     const boton = await ses.porTestid("eje-codo-fin-agregar");
@@ -512,31 +539,6 @@ test("O011-2: dos codos, tercero deshabilitado, candado, guardar/reabrir y desha
     );
     await esperar(600);
     await ses.captura(path.join(RESULTADOS, "planta-codos.png"));
-
-    // Abrir el candado del fin y arrastrarlo 1 m: solo ese eje cambia.
-    await activar(ses, "eje-candado-fin");
-    assert.equal(await (await ses.porTestid("eje-candado-fin")).getAttribute("aria-pressed"), "true");
-    const codosAntes = JSON.stringify(a[eje1.globalid].codosFin);
-    await arrastrarExtremo(ses, "1", "fin", [fin[0], fin[1] + 1]);
-    a = await ajustes(ses);
-    assert.deepEqual(Object.keys(a), [eje1.globalid], "el arrastre con candado abierto tocó otros ejes");
-    assert.ok(a[eje1.globalid].extremoFin, "no se guardó el extremo libre");
-    assert.ok(
-      Math.abs(a[eje1.globalid].extremoFin[1] - (fin[1] + 1)) < 0.05,
-      `el extremo no se movió 1 m: ${a[eje1.globalid].extremoFin}`,
-    );
-
-    // Ctrl+Z: una entrada por arrastre y vuelve al globo de los codos.
-    await tecla(ses, "z", "KeyZ", { ctrlKey: true });
-    a = await ajustes(ses);
-    assert.equal(a[eje1.globalid]?.extremoFin, undefined, "Ctrl+Z no quitó el extremo libre");
-    assert.equal(JSON.stringify(a[eje1.globalid].codosFin), codosAntes, "Ctrl+Z tocó los codos");
-
-    // Cerrar el candado devuelve el extremo a la alineación.
-    await activar(ses, "eje-candado-fin");
-    a = await ajustes(ses);
-    assert.equal(a[eje1.globalid]?.extremoFin, undefined);
-    assert.equal(a[eje1.globalid].codosFin.length, 2, "los codos no deben perderse al cerrar el candado");
 
     // Guardar, reabrir y comprobar que los ajustes de la vista persisten.
     await cambiarPestana(ses, "Inicio");
@@ -555,15 +557,49 @@ test("O011-2: dos codos, tercero deshabilitado, candado, guardar/reabrir y desha
     assert.equal(reabierto[eje1.globalid].codosFin.length, 2, "los codos no persistieron");
     assert.equal(reabierto[eje1.globalid].codosFin[0][0], a[eje1.globalid].codosFin[0][0]);
 
-    // En la sesión reabierta, otro arrastre y Ctrl+Z vuelven al estado guardado.
+    // En la sesión reabierta, V2 se arrastra a lo largo (solo cambia una
+    // componente) y Ctrl+Z vuelve al estado guardado.
     await seleccionarEje(ses, "1");
-    await activar(ses, "eje-candado-fin");
-    const baseReabierta = await invocar(ses, "modelo.referencias");
-    const ejeReabierto = baseReabierta.ejes.find((e) => e.etiqueta === "1");
-    await arrastrarExtremo(ses, "1", "fin", [ejeReabierto.x2, ejeReabierto.y2 + 1]);
-    assert.ok((await ajustes(ses))[eje1.globalid]?.extremoFin, "no se movió en la sesión reabierta");
+    const v2Antes = [...reabierto[eje1.globalid].codosFin[1]];
+    const asaV2 = await ses.driver.executeScript(() =>
+      document.querySelector('[data-testid="visor"]').__openrvtEjeAPantalla("1", "fin", 1),
+    );
+    assert.ok(asaV2, "no se proyectó el pinzamiento de V2");
+    await ses.driver.executeScript(
+      (inicio) => {
+        const canvas = document.querySelector('[data-testid="visor"] canvas');
+        const abajo = {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          buttons: 1,
+          pointerId: 21,
+          pointerType: "mouse",
+          clientX: inicio.x,
+          clientY: inicio.y,
+        };
+        canvas.dispatchEvent(new PointerEvent("pointerdown", abajo));
+        window.dispatchEvent(
+          new PointerEvent("pointermove", { ...abajo, clientX: inicio.x, clientY: inicio.y + 60 }),
+        );
+        window.dispatchEvent(
+          new PointerEvent("pointerup", {
+            ...abajo,
+            buttons: 0,
+            clientX: inicio.x,
+            clientY: inicio.y + 60,
+          }),
+        );
+      },
+      asaV2,
+    );
+    await esperar(700);
+    const v2Movido = (await ajustes(ses))[eje1.globalid].codosFin[1];
+    assert.ok(Math.abs(v2Movido[0] - v2Antes[0]) <= 0.0011, "el arrastre vertical movió x de V2");
+    assert.ok(Math.abs(v2Movido[1] - v2Antes[1]) > 0.2, "el arrastre vertical no movió V2");
     await tecla(ses, "z", "KeyZ", { ctrlKey: true });
-    assert.equal((await ajustes(ses))[eje1.globalid]?.extremoFin, undefined);
+    const v2Deshecho = (await ajustes(ses))[eje1.globalid].codosFin[1];
+    assert.ok(cerca(v2Deshecho, v2Antes), "Ctrl+Z no devolvió V2 al estado guardado");
   } finally {
     await ses.cerrar();
     fs.rmSync(carpeta, { recursive: true, force: true });
@@ -728,7 +764,8 @@ test("O011-3: cotas .15 por la pantalla y niveles/globos del alzado", async () =
       );
     }
 
-    // O011b: «Agregar codo» desplaza el globo del eje 4 al menos un diámetro en X.
+    // O042: «Agregar codo» separa el globo 0.6·D de lado (en el alzado, en X) sin
+    // moverlo a lo largo del eje.
     await seleccionarEje(ses, "4");
     const globoAntes = await ses.driver.executeScript(() =>
       document.querySelector('[data-testid="visor"]').__openrvtEjeBurbujaPantalla("4"),
@@ -739,8 +776,8 @@ test("O011-3: cotas .15 por la pantalla y niveles/globos del alzado", async () =
     );
     const diametro = 2 * globoAntes.radio;
     assert.ok(
-      Math.abs(globoDespues.x - globoAntes.x) >= diametro - 1,
-      `el globo del eje 4 no se movió un diámetro: ${globoAntes.x} → ${globoDespues.x}`,
+      Math.abs(Math.abs(globoDespues.x - globoAntes.x) - 0.6 * diametro) <= 2,
+      `el globo del eje 4 no se separó 0.6·D: ${globoAntes.x} → ${globoDespues.x} (D=${diametro})`,
     );
     // Se quita el codo para que la captura de entrega siga limpia.
     const codo4 = await ses.driver.executeScript(() =>
@@ -878,9 +915,10 @@ test("O011-3: cotas .15 por la pantalla y niveles/globos del alzado", async () =
     const conCodos = await ajustes(ses);
     const gidCentral = referencias.ejes.find((e) => e.etiqueta === etiquetaGlobo).globalid;
     assert.equal(conCodos[gidCentral]?.codosFin?.length, 2);
+    // O042: con codo el globo ya no tiene asa; se mide su centro dibujado.
     const globoCentral = await ses.driver.executeScript(
       (etiqueta) =>
-        document.querySelector('[data-testid="visor"]').__openrvtEjeAPantalla(etiqueta, "fin"),
+        document.querySelector('[data-testid="visor"]').__openrvtEjeBurbujaPantalla(etiqueta),
       etiquetaGlobo,
     );
     await ses.driver.executeScript(

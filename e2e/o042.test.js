@@ -1,5 +1,10 @@
 // O042: codo de eje con V1/V2, arrastre de V2 y dibujo. Se ejecuta sobre la app
 // real (Tauri + WebKitGTK) con clics y arrastres de ratón en planta.
+//
+// Valores calculados a mano (D = 0.8 m = globo de 8 mm a 1:100):
+//   eje (0,0)→(10,0): globo sin codo con borde en x=10 y centro en (10.4, 0).
+//   con codo: centro (10.4, 0.48), V2 = (9.2, 0.48), V1 = (8.52, 0).
+//   Diagonal: 0.85·D a lo largo y 0.6·D de lado. Tramo final: 1.0·D hasta el borde.
 "use strict";
 
 const { test } = require("node:test");
@@ -7,11 +12,76 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { Sesion, esperar, By, until, Key } = require("./arnes");
+const zlib = require("node:zlib");
+const { Sesion, esperar, By, until } = require("./arnes");
 
 const RAIZ = path.resolve(__dirname, "..");
 const PROGRESO = path.join(RAIZ, "docs", "progreso", "O042");
 fs.mkdirSync(PROGRESO, { recursive: true });
+
+/** Lector PNG propio (sin Pillow): capturas de 8 bits RGB/RGBA. */
+function leerPng(ruta) {
+  const b = fs.readFileSync(ruta);
+  let p = 8;
+  let ancho = 0;
+  let alto = 0;
+  let tipoColor = 0;
+  const idat = [];
+  while (p < b.length) {
+    const largo = b.readUInt32BE(p);
+    const tipo = b.toString("ascii", p + 4, p + 8);
+    const datos = b.subarray(p + 8, p + 8 + largo);
+    p += 12 + largo;
+    if (tipo === "IHDR") {
+      ancho = datos.readUInt32BE(0);
+      alto = datos.readUInt32BE(4);
+      assert.equal(datos[8], 8, "se esperaba una captura PNG de 8 bits");
+      tipoColor = datos[9];
+    } else if (tipo === "IDAT") {
+      idat.push(datos);
+    } else if (tipo === "IEND") {
+      break;
+    }
+  }
+  const canales = tipoColor === 6 ? 4 : tipoColor === 2 ? 3 : 0;
+  assert.ok(canales, `tipo de color PNG no soportado: ${tipoColor}`);
+  const crudo = zlib.inflateSync(Buffer.concat(idat));
+  const fila = ancho * canales + 1;
+  const salida = Buffer.alloc(ancho * alto * canales);
+  for (let y = 0; y < alto; y += 1) {
+    const filtro = crudo[y * fila];
+    const src = crudo.subarray(y * fila + 1, (y + 1) * fila);
+    const dst = salida.subarray(y * ancho * canales, (y + 1) * ancho * canales);
+    const previa = y > 0 ? salida.subarray((y - 1) * ancho * canales, y * ancho * canales) : null;
+    for (let x = 0; x < ancho * canales; x += 1) {
+      const a = x >= canales ? dst[x - canales] : 0;
+      const arriba = previa ? previa[x] : 0;
+      const c = previa && x >= canales ? previa[x - canales] : 0;
+      let valor = src[x];
+      if (filtro === 1) valor += a;
+      else if (filtro === 2) valor += arriba;
+      else if (filtro === 3) valor += (a + arriba) >> 1;
+      else if (filtro === 4) {
+        const pp = a + arriba - c;
+        const pa = Math.abs(pp - a);
+        const pb = Math.abs(pp - arriba);
+        const pc = Math.abs(pp - c);
+        valor += pa <= pb && pa <= pc ? a : pb <= pc ? arriba : c;
+      }
+      dst[x] = valor & 255;
+    }
+  }
+  return { ancho, alto, canales, datos: salida };
+}
+
+function colorDistancia(a, b) {
+  return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+}
+
+function esNaranja(c) {
+  // Pinzamiento del eje seleccionado (#f59e0b): rojo alto, azul bajo.
+  return c[0] >= 170 && c[1] >= 90 && c[1] <= 220 && c[2] <= 120;
+}
 
 async function textoDom(ses, selector) {
   return ses.driver.executeScript(
@@ -151,7 +221,6 @@ async function crearNivelLista(ses) {
 
 async function crearModelo(ses) {
   await activar(ses, "cmd-nuevo");
-  // Con cambios sin guardar, «Nuevo» pregunta; se descarta para empezar limpio.
   const descartar = await ses.driver.findElements(
     By.xpath('//button[normalize-space(.)="No guardar"]'),
   );
@@ -205,11 +274,17 @@ async function seleccionarEje(ses, etiqueta) {
 /** Arrastra el asa `indiceCodo` (o la base) en píxeles de pantalla. */
 async function arrastrarAsa(ses, etiqueta, lado, dx, dy, opciones = {}) {
   const inicio = await ses.driver.executeScript(
-    (etiqueta, lado, indice) =>
-      document.querySelector('[data-testid="visor"]').__openrvtEjeAPantalla(etiqueta, lado, indice),
+    (etiqueta, lado, indice, tipoAsa) =>
+      document.querySelector('[data-testid="visor"]').__openrvtEjeAPantalla(
+        etiqueta,
+        lado,
+        indice,
+        tipoAsa,
+      ),
     etiqueta,
     lado,
     opciones.indiceCodo,
+    opciones.tipoAsa,
   );
   assert.ok(inicio, `no se encontró el asa ${etiqueta}/${lado}/${opciones.indiceCodo ?? "base"}`);
   await ses.driver.executeScript(
@@ -354,7 +429,30 @@ function cerca(p, q, tolerancia = 1e-6) {
   return Math.abs(p[0] - q[0]) <= tolerancia && Math.abs(p[1] - q[1]) <= tolerancia;
 }
 
-test("O042: codo de eje con V1/V2, arrastre de V2 y capturas", async () => {
+/** Muestrea un cuadrado de píxeles alrededor de un punto de pantalla. */
+function muestrear(img, punto, ventana, radio = 10) {
+  const sx = img.ancho / ventana.ancho;
+  const sy = img.alto / ventana.alto;
+  const px = (x, y) => {
+    const xi = Math.max(0, Math.min(img.ancho - 1, Math.round(x * sx)));
+    const yi = Math.max(0, Math.min(img.alto - 1, Math.round(y * sy)));
+    const i = (yi * img.ancho + xi) * img.canales;
+    return [img.datos[i], img.datos[i + 1], img.datos[i + 2]];
+  };
+  const muestras = [];
+  for (let dy = -radio; dy <= radio; dy += 1) {
+    for (let dx = -radio; dx <= radio; dx += 1) {
+      muestras.push(px(punto.x + dx, punto.y + dy));
+    }
+  }
+  return { px, muestras };
+}
+
+function hayNaranja(img, punto, ventana, radio = 10) {
+  return muestrear(img, punto, ventana, radio).muestras.some(esNaranja);
+}
+
+test("O042: codo de eje con V1/V2, arrastre de V2, píxeles y capturas", async () => {
   const ses = await Sesion.abrir({
     prueba: "o042",
     tamano: { ancho: 1600, alto: 900 },
@@ -375,6 +473,7 @@ test("O042: codo de eje con V1/V2, arrastre de V2 y capturas", async () => {
     assert.ok(vista, "falta la vista Planta Nivel 0");
     // D = 8 mm de papel en el modelo: a 1:100 son 0.8 m. Calculado de la escala.
     const D = (8 * vista.escala) / 1000;
+    assert.equal(D, 0.8, "la escala de la vista no es 1:100");
 
     const referencias = await invocar(ses, "modelo.referencias");
     const vertical = referencias.ejes.find((e) => e.vertical && e.etiqueta);
@@ -383,6 +482,21 @@ test("O042: codo de eje con V1/V2, arrastre de V2 y capturas", async () => {
     assert.equal(vertical.etiqueta, "1");
     assert.equal(horizontal.etiqueta, "A");
 
+    // 1) Los globos sin codo tienen el borde sobre el extremo y el centro a D/2.
+    const finH = [horizontal.x2, horizontal.y2];
+    const ajustesIniciales = await ajustes(ses);
+    const asaGlobo = await ses.driver.executeScript(() =>
+      document.querySelector('[data-testid="visor"]').__openrvtEjeAPantalla("A", "fin"),
+    );
+    const bu = await ses.driver.executeScript(() =>
+      document.querySelector('[data-testid="visor"]').__openrvtEjeBurbujaPantalla("A"),
+    );
+    const centroSinCodo = await proyectar(ses, finH[0] + D / 2, finH[1]);
+    assert.ok(
+      Math.hypot(bu.x - centroSinCodo.x, bu.y - centroSinCodo.y) < 2,
+      `el globo sin codo no está a D/2 del extremo: burbuja=${JSON.stringify(bu)} centro=${JSON.stringify(centroSinCodo)} fin=${JSON.stringify(finH)} ajustes=${JSON.stringify(ajustesIniciales)} asa=${JSON.stringify(asaGlobo)}`,
+    );
+
     // 2) Agregar codo al extremo de cada uno.
     await seleccionarEje(ses, "1");
     await activar(ses, "eje-codo-fin-agregar");
@@ -390,35 +504,55 @@ test("O042: codo de eje con V1/V2, arrastre de V2 y capturas", async () => {
     await activar(ses, "eje-codo-fin-agregar");
     let a = await ajustes(ses);
 
-    const finV = [vertical.x2, vertical.y2];
-    const dirV = [
-      (vertical.x2 - vertical.x1) / Math.hypot(vertical.x2 - vertical.x1, vertical.y2 - vertical.y1),
-      (vertical.y2 - vertical.y1) / Math.hypot(vertical.x2 - vertical.x1, vertical.y2 - vertical.y1),
+    // Eje A horizontal: dirección +x, perpendicular +y.
+    const gidH = horizontal.globalid;
+    const dirH = [1, 0];
+    const perpH = [0, 1];
+    const centroH = [finH[0] + dirH[0] * (D / 2), finH[1] + dirH[1] * (D / 2)];
+    const v2H = [
+      centroH[0] - dirH[0] * 1.5 * D + perpH[0] * 0.6 * D,
+      centroH[1] - dirH[1] * 1.5 * D + perpH[1] * 0.6 * D,
     ];
-    // V1 = fin - 2D; V2 = V1 + D afuera + D de lado; perpendicular = (-dy, dx).
-    const v1V = [finV[0] - dirV[0] * 2 * D, finV[1] - dirV[1] * 2 * D];
-    const v2V = [
-      v1V[0] + dirV[0] * D + -dirV[1] * D,
-      v1V[1] + dirV[1] * D + dirV[0] * D,
+    const v1H = [
+      v2H[0] - dirH[0] * 0.85 * D - perpH[0] * 0.6 * D,
+      v2H[1] - dirH[1] * 0.85 * D - perpH[1] * 0.6 * D,
     ];
-    assert.equal(a[vertical.globalid].codosFin.length, 2);
-    assert.ok(cerca(a[vertical.globalid].codosFin[0], v1V, 1e-6), "V1 vertical incorrecto");
-    assert.ok(cerca(a[vertical.globalid].codosFin[1], v2V, 1e-6), "V2 vertical incorrecto");
-    assert.equal(a[vertical.globalid].extremoFin, undefined);
-    // El tramo final es paralelo al eje: el globo de 1 queda en V2 + D·dirV.
-    const globoV = [v2V[0] + dirV[0] * D, v2V[1] + dirV[1] * D];
-    const burbujaV = await ses.driver.executeScript(() =>
-      document.querySelector('[data-testid="visor"]').__openrvtEjeBurbujaPantalla("1"),
+    assert.equal(a[gidH].codosFin.length, 2);
+    assert.ok(cerca(a[gidH].codosFin[0], v1H, 1e-6), `V1 horizontal incorrecto: ${a[gidH].codosFin[0]}`);
+    assert.ok(cerca(a[gidH].codosFin[1], v2H, 1e-6), `V2 horizontal incorrecto: ${a[gidH].codosFin[1]}`);
+    assert.equal(a[gidH].extremoFin, undefined);
+
+    // El globo solo se separa 0.6·D de lado: su x no cambia.
+    const burbujaH = await ses.driver.executeScript(() =>
+      document.querySelector('[data-testid="visor"]').__openrvtEjeBurbujaPantalla("A"),
     );
-    const globoVPantalla = await proyectar(ses, globoV[0], globoV[1]);
+    const centroConCodo = await proyectar(ses, centroH[0], centroH[1] + 0.6 * D);
     assert.ok(
-      Math.hypot(burbujaV.x - globoVPantalla.x, burbujaV.y - globoVPantalla.y) < 2,
-      "el globo del eje vertical no está D más allá de V2 sobre el eje",
+      Math.hypot(burbujaH.x - centroConCodo.x, burbujaH.y - centroConCodo.y) < 2,
+      "el globo no quedó en la misma x y 0.6·D de lado",
     );
+
+    // Eje 1 vertical: comprobar la forma con los mismos valores.
+    const v = a[vertical.globalid];
+    assert.equal(v.codosFin.length, 2);
+    const finV = [vertical.x2, vertical.y2];
+    const largoV = Math.hypot(finV[0] - vertical.x1, finV[1] - vertical.y1);
+    const dirV = [(finV[0] - vertical.x1) / largoV, (finV[1] - vertical.y1) / largoV];
+    const perpV = [-dirV[1], dirV[0]];
+    const centroV = [finV[0] + dirV[0] * (D / 2), finV[1] + dirV[1] * (D / 2)];
+    const v2V = [
+      centroV[0] - dirV[0] * 1.5 * D + perpV[0] * 0.6 * D,
+      centroV[1] - dirV[1] * 1.5 * D + perpV[1] * 0.6 * D,
+    ];
+    const v1V = [
+      v2V[0] - dirV[0] * 0.85 * D - perpV[0] * 0.6 * D,
+      v2V[1] - dirV[1] * 0.85 * D - perpV[1] * 0.6 * D,
+    ];
+    assert.ok(cerca(v.codosFin[0], v1V, 1e-6), "V1 vertical incorrecto");
+    assert.ok(cerca(v.codosFin[1], v2V, 1e-6), "V2 vertical incorrecto");
 
     // 3) V2 horizontal: arrastre casi vertical (perpendicular) y luego casi
     // horizontal (a lo largo). Solo cambia la componente elegida.
-    const gidH = horizontal.globalid;
     const v2Antes = [...a[gidH].codosFin[1]];
     await arrastrarAsa(ses, "A", "fin", 10, 90, { indiceCodo: 1 });
     a = await ajustes(ses);
@@ -433,22 +567,37 @@ test("O042: codo de eje con V1/V2, arrastre de V2 y capturas", async () => {
     assert.ok(Math.abs(v2[1] - v2TrasPerp[1]) <= 0.0011, `casi horizontal movió y: ${v2[1]} vs ${v2TrasPerp[1]}`);
     assert.ok(Math.abs(v2[0] - v2TrasPerp[0]) > 0.2, "casi horizontal no movió x");
 
-    // 8) El globo se deriva de V2: mismo largo final, paralelo al eje (+x).
-    const globoH = [v2[0] + D, v2[1]];
+    // El globo sigue a V2 con el tramo final de 1.0·D, paralelo al eje (+x).
+    const centroActual = [v2[0] + 1.5 * D, v2[1]];
     const burbuja = await ses.driver.executeScript(() =>
       document.querySelector('[data-testid="visor"]').__openrvtEjeBurbujaPantalla("A"),
     );
-    const globoPantalla = await proyectar(ses, globoH[0], globoH[1]);
+    const globoPantalla = await proyectar(ses, centroActual[0], centroActual[1]);
     assert.ok(
       Math.hypot(burbuja.x - globoPantalla.x, burbuja.y - globoPantalla.y) < 2,
-      "el globo no está D más allá de V2 sobre el eje",
+      "el globo no sigue a V2 a 1.5·D (borde a 1.0·D)",
     );
 
-    // 4) V1 y el globo no se pueden arrastrar.
-    const antesV1 = JSON.stringify(a[gidH]);
-    const pV1 = await proyectar(ses, a[gidH].codosFin[0][0], a[gidH].codosFin[0][1]);
-    await arrastrarEnPantalla(ses, pV1, 60, 60, 13);
-    assert.equal(JSON.stringify((await ajustes(ses))[gidH]), antesV1, "V1 se pudo arrastrar");
+    // Píxeles: el pinzamiento de V2 se ve (naranja) con el eje seleccionado.
+    await seleccionarEje(ses, "A");
+    await esperar(400);
+    const capturaPix = path.join(os.tmpdir(), `o042-pix-${process.pid}.png`);
+    await ses.captura(capturaPix);
+    const img = leerPng(capturaPix);
+    const ventana = await ses.driver.executeScript(() => ({
+      ancho: window.innerWidth,
+      alto: window.innerHeight,
+    }));
+    const pV2 = await proyectar(ses, v2[0], v2[1]);
+    assert.ok(hayNaranja(img, pV2, ventana), "el pinzamiento de V2 no se ve en pantalla");
+    // Sin pinzamiento flotante en el extremo original (base oculta con codo).
+    const baseH = await ses.driver.executeScript(() =>
+      document.querySelector('[data-testid="visor"]').__openrvtEjeAPantalla("A", "fin", undefined, "base"),
+    );
+    assert.equal(baseH, null, "el extremo original todavía tiene pinzamiento");
+    const pBase = await proyectar(ses, horizontal.x2, horizontal.y2);
+    assert.equal(hayNaranja(img, pBase, ventana, 6), false, "hay un pinzamiento flotando en el extremo original");
+    // V1 no tiene pinzamiento.
     assert.equal(
       await ses.driver.executeScript(() =>
         document.querySelector('[data-testid="visor"]').__openrvtEjeAPantalla("A", "fin", 0),
@@ -456,35 +605,38 @@ test("O042: codo de eje con V1/V2, arrastre de V2 y capturas", async () => {
       null,
       "V1 no debe tener pinzamiento",
     );
+    // La polilínea dibujada no tiene huecos: se muestrean los puntos medios de
+    // V1→V2 y V2→borde del globo (fuera de los nodos).
+    const fondo = muestrear(img, pBase, ventana, 4).px(img.ancho - 5, img.alto - 5);
+    const puntoMedio = (p, q, t) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+    const bordeActual = [v2[0] + D, v2[1]];
+    for (const [p, q] of [
+      [a[gidH].codosFin[0], v2],
+      [v2, bordeActual],
+    ]) {
+      for (const t of [0.35, 0.5, 0.65]) {
+        const m = puntoMedio(p, q, t);
+        const pm = await proyectar(ses, m[0], m[1]);
+        const c = muestrear(img, pm, ventana, 2).px(pm.x, pm.y);
+        assert.ok(
+          colorDistancia(c, fondo) > 25,
+          `hueco en la polilínea cerca de ${JSON.stringify(m)}`,
+        );
+      }
+    }
+    fs.rmSync(capturaPix, { force: true });
+
+    // 4) V1 y el globo no se pueden arrastrar.
+    const antesV1 = JSON.stringify(a[gidH]);
+    const pV1 = await proyectar(ses, a[gidH].codosFin[0][0], a[gidH].codosFin[0][1]);
+    await arrastrarEnPantalla(ses, pV1, 60, 60, 13);
+    assert.equal(JSON.stringify((await ajustes(ses))[gidH]), antesV1, "V1 se pudo arrastrar");
 
     const antesGlobo = JSON.stringify((await ajustes(ses))[gidH]);
     const burbujaAntes = await ses.driver.executeScript(() =>
       document.querySelector('[data-testid="visor"]').__openrvtEjeBurbujaPantalla("A"),
     );
-    await ses.driver.executeScript(
-      (punto) => {
-        const canvas = document.querySelector('[data-testid="visor"] canvas');
-        const abajo = {
-          bubbles: true,
-          cancelable: true,
-          button: 0,
-          buttons: 1,
-          pointerId: 11,
-          pointerType: "mouse",
-          clientX: punto.x,
-          clientY: punto.y,
-        };
-        canvas.dispatchEvent(new PointerEvent("pointerdown", abajo));
-        window.dispatchEvent(
-          new PointerEvent("pointermove", { ...abajo, clientX: punto.x + 40, clientY: punto.y + 40 }),
-        );
-        window.dispatchEvent(
-          new PointerEvent("pointerup", { ...abajo, buttons: 0, clientX: punto.x + 40, clientY: punto.y + 40 }),
-        );
-      },
-      burbujaAntes,
-    );
-    await esperar(500);
+    await arrastrarEnPantalla(ses, burbujaAntes, 40, 40, 11);
     assert.equal(
       JSON.stringify((await ajustes(ses))[gidH]),
       antesGlobo,
@@ -520,13 +672,13 @@ test("O042: codo de eje con V1/V2, arrastre de V2 y capturas", async () => {
     const burbujaFinal = await ses.driver.executeScript(() =>
       document.querySelector('[data-testid="visor"]').__openrvtEjeBurbujaPantalla("A"),
     );
-    const finH = await proyectar(ses, horizontal.x2, horizontal.y2);
+    const finReal = await proyectar(ses, horizontal.x2 + D / 2, horizontal.y2);
     assert.ok(
-      Math.hypot(burbujaFinal.x - finH.x, burbujaFinal.y - finH.y) < 2,
-      "el globo no volvió al extremo del eje",
+      Math.hypot(burbujaFinal.x - finReal.x, burbujaFinal.y - finReal.y) < 2,
+      "el globo no volvió al extremo (borde sobre el extremo, centro a D/2)",
     );
 
-    // 9) Capturas: los 4 casos de la referencia en ejes horizontales, el eje
+    // 8) Capturas: los 4 casos de la referencia en ejes horizontales, el eje
     // vertical con codo y un eje seleccionado con sus pinzamientos.
     await cambiarPestana(ses, "Inicio");
     await crearModelo(ses);
@@ -550,27 +702,64 @@ test("O042: codo de eje con V1/V2, arrastre de V2 y capturas", async () => {
     // Caso 2: codo hacia un lado (el de por omisión).
     await seleccionarEje(ses, h2.etiqueta);
     await activar(ses, "eje-codo-fin-agregar");
-    // Caso 3: codo hacia el otro lado (V2 arrastrado de lado más de D).
+    // Caso 3: codo hacia el otro lado, arrastrando V2 de lado.
     await seleccionarEje(ses, h3.etiqueta);
     await activar(ses, "eje-codo-fin-agregar");
-    await arrastrarAsaAMundo(ses, h3.etiqueta, "fin", 1, [h3.x2 - D, h3.y2 - D]);
-    // Caso 4: diagonal más larga (V2 arrastrado a lo largo, hacia afuera).
+    const centro3 = [h3.x2 + D / 2, h3.y2];
+    await arrastrarAsaAMundo(ses, h3.etiqueta, "fin", 1, [centro3[0] - 1.5 * D, centro3[1] - 0.6 * D]);
+    // Caso 4: V2 de lado y hacia afuera a lo largo: diagonal y recorrido más
+    // largos; el globo sigue a V2 conservando el tramo final de 1.0·D.
     await seleccionarEje(ses, h4.etiqueta);
     await activar(ses, "eje-codo-fin-agregar");
-    await arrastrarAsaAMundo(ses, h4.etiqueta, "fin", 1, [h4.x2 + D, h4.y2 + D]);
+    const centro4 = [h4.x2 + D / 2, h4.y2];
+    await arrastrarAsaAMundo(ses, h4.etiqueta, "fin", 1, [centro4[0] - 1.5 * D, centro4[1] + 1.2 * D]);
+    await arrastrarAsaAMundo(ses, h4.etiqueta, "fin", 1, [centro4[0] + 0.5 * D, centro4[1] + 1.2 * D]);
     // Eje vertical con codo.
     await seleccionarEje(ses, vert.etiqueta);
     await activar(ses, "eje-codo-fin-agregar");
     await esperar(600);
 
-    await ses.captura(path.join(PROGRESO, "casos-referencia-y-vertical.png"));
+    // Zoom suficiente para que los cuatro casos se lean como la referencia.
+    await activar(ses, "visor-ajustar");
+    await ses.driver.executeScript(() =>
+      document.querySelector('[data-testid="visor"]').__openrvtZoom(0.85),
+    );
+    await esperar(600);
+    await ses.captura(path.join(PROGRESO, "casos-referencia.png"));
+
     // Eje horizontal seleccionado: se ve el único pinzamiento en V2.
     await seleccionarEje(ses, h4.etiqueta);
     await esperar(500);
     await ses.captura(path.join(PROGRESO, "eje-seleccionado-pinzamientos.png"));
 
+    // Un eje vertical suelto, ampliado, para comparar con el caso vertical.
+    await seleccionarEje(ses, vert.etiqueta);
+    const burbujaV = await ses.driver.executeScript(
+      (etiqueta) =>
+        document.querySelector('[data-testid="visor"]').__openrvtEjeBurbujaPantalla(etiqueta),
+      vert.etiqueta,
+    );
+    await ses.driver.executeScript(
+      (x, y) => document.querySelector('[data-testid="visor"]').__openrvtZoomEn(0.3, x, y),
+      burbujaV.x,
+      burbujaV.y,
+    );
+    await esperar(600);
+    await ses.captura(path.join(PROGRESO, "eje-vertical.png"));
+
+    // Casos 1 y 2 sueltos para leerlos con detalle.
+    await activar(ses, "visor-ajustar");
+    await esperar(500);
+    await ses.captura(path.join(PROGRESO, "casos-referencia-y-vertical.png"));
+
     const capturas = fs.readdirSync(PROGRESO).filter((f) => f.endsWith(".png"));
-    assert.ok(capturas.length >= 2, "no se guardaron las capturas");
+    for (const nombre of [
+      "casos-referencia.png",
+      "eje-seleccionado-pinzamientos.png",
+      "eje-vertical.png",
+    ]) {
+      assert.ok(capturas.includes(nombre), `no se guardó ${nombre}`);
+    }
   } finally {
     await ses.cerrar();
   }

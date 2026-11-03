@@ -308,12 +308,13 @@ test("O021: candado, globos, codo y copia de acomodo entre plantas", async () =>
     const acomodo3 = JSON.parse(JSON.stringify(ajustes[gid3]));
 
     // 5) Copiar el acomodo a la otra planta con el menú contextual.
-    const globo3 = await ses.driver.executeScript(
+    // O042: con codo el globo no tiene asa; el menú se abre sobre V2.
+    const nodoCodo3 = await ses.driver.executeScript(
       (etiqueta) =>
-        document.querySelector('[data-testid="visor"]').__openrvtEjeAPantalla(etiqueta, "fin"),
+        document.querySelector('[data-testid="visor"]').__openrvtEjeAPantalla(etiqueta, "fin", 1),
       "3",
     );
-    assert.ok(globo3, "no se encontró el globo del eje 3");
+    assert.ok(nodoCodo3, "no se encontró el pinzamiento V2 del eje 3");
     await ses.driver.executeScript(
       (punto) => {
         document.querySelector('[data-testid="visor"] canvas').dispatchEvent(
@@ -325,7 +326,7 @@ test("O021: candado, globos, codo y copia de acomodo entre plantas", async () =>
           }),
         );
       },
-      globo3,
+      nodoCodo3,
     );
     await esperar(300);
     await activar(ses, "eje-menu-copiar");
