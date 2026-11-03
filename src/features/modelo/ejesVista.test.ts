@@ -66,10 +66,10 @@ describe("O011: polilínea del eje", () => {
   });
 });
 
-describe("O042: un codo son V1 y V2", () => {
-  // Globo de 8 mm a 1:100 = 0.8 m de diámetro (D). Revisión del supervisor:
-  // diagonal de 0.85·D a lo largo y 0.6·D de lado; tramo final de 1.0·D hasta el
-  // borde del globo; el globo no se mueve a lo largo del eje al agregar el codo.
+describe("O044: codo con V1 a lo largo y V2 en X/Y", () => {
+  // Globo de 8 mm a 1:100 = 0.8 m de diámetro (D). Forma del dueño: globo corrido
+  // 0.55·D de lado, V2 a 1.30·D del centro (0.80·D hasta el borde), V1 a 0.50·D
+  // antes de V2 sobre el eje y tramo final de 0.80·D hasta el borde del globo.
   const D = 0.8;
 
   it("sin codo el borde del globo toca el extremo: centro en (10.4, 0)", () => {
@@ -88,48 +88,47 @@ describe("O042: un codo son V1 y V2", () => {
     ]);
   });
 
-  it("eje horizontal (0,0)-(10,0): V1=(8.52,0), V2=(9.2,0.48) y globo en (10.4,0.48)", () => {
-    // Globo original: centro (10.4, 0), borde (10, 0).
-    // V2 = centro - 1.5·D a lo largo + 0.6·D de lado = (10.4-1.2, 0.48) = (9.2, 0.48).
-    // V1 = V2 - 0.85·D a lo largo - 0.6·D de lado = (9.2-0.68, 0) = (8.52, 0).
+  it("eje horizontal (0,0)-(10,0): V1=(8.96,0), V2=(9.36,-0.44) y globo en (10.4,-0.44)", () => {
+    // Globo original: centro (10.4, 0); con codo se corre 0.55·D = 0.44 de lado
+    // (hacia -y): (10.4, -0.44). V2 = centro - 1.30·D a lo largo = (9.36, -0.44).
+    // V1 = V2 - 0.50·D a lo largo - 0.55·D de lado = (8.96, 0).
     const ajuste = agregarCodoEje(undefined, "fin", [10.4, 0], [1, 0], D);
     expect(ajuste.codosFin).toHaveLength(2);
-    esperarPunto(ajuste.codosFin![0], [8.52, 0]);
-    esperarPunto(ajuste.codosFin![1], [9.2, 0.48]);
+    esperarPunto(ajuste.codosFin![0], [8.96, 0]);
+    esperarPunto(ajuste.codosFin![1], [9.36, -0.44]);
     expect(ajuste.extremoFin).toBeUndefined();
+    expect(ajuste.codoNuevoFin).toBe(true);
 
     const g = geometriaEje(ajuste, [0, 0], [10, 0], { diametroGlobo: D });
-    esperarPunto(g.globoFin, [10.4, 0.48]);
+    esperarPunto(g.globoFin, [10.4, -0.44]);
     expect(g.puntos).toHaveLength(4);
     esperarPunto(g.puntos[0], [0, 0]);
-    esperarPunto(g.puntos[1], [8.52, 0]);
-    esperarPunto(g.puntos[2], [9.2, 0.48]);
-    esperarPunto(g.puntos[3], [10.4, 0.48]);
+    esperarPunto(g.puntos[1], [8.96, 0]);
+    esperarPunto(g.puntos[2], [9.36, -0.44]);
+    esperarPunto(g.puntos[3], [10.4, -0.44]);
     // El patrón llega hasta V1; de V1 al borde del globo es continuo.
-    expect(g.ejeDiscontinuo).toEqual([
-      [0, 0],
-      [8.52, 0],
-    ]);
+    esperarPunto(g.ejeDiscontinuo[0], [0, 0]);
+    esperarPunto(g.ejeDiscontinuo[1], [8.96, 0]);
     expect(g.tramosSolidos).toHaveLength(1);
     expect(g.tramosSolidos[0]).toHaveLength(3);
-    esperarPunto(g.tramosSolidos[0][0], [8.52, 0]);
-    esperarPunto(g.tramosSolidos[0][1], [9.2, 0.48]);
-    // Borde del globo: centro (10.4, 0.48) menos el radio 0.4 = (10.0, 0.48).
-    esperarPunto(g.tramosSolidos[0][2], [10, 0.48]);
-    // El tramo final V2→borde mide exactamente 1.0·D = 0.8.
+    esperarPunto(g.tramosSolidos[0][0], [8.96, 0]);
+    esperarPunto(g.tramosSolidos[0][1], [9.36, -0.44]);
+    // Borde del globo: centro (10.4, -0.44) menos el radio 0.4 = (10.0, -0.44).
+    esperarPunto(g.tramosSolidos[0][2], [10.0, -0.44]);
+    // Tramo final V2→borde: 0.80·D = 0.64.
     const final = g.tramosSolidos[0];
     expect(
       Math.hypot(final[2][0] - final[1][0], final[2][1] - final[1][1]),
-    ).toBeCloseTo(D, 9);
-    // Diagonal: 0.85·D a lo largo y 0.6·D de lado.
+    ).toBeCloseTo(0.8 * D, 9);
+    // Diagonal: 0.50·D a lo largo y 0.55·D de lado.
     expect(Math.hypot(final[1][0] - final[0][0], final[1][1] - final[0][1])).toBeCloseTo(
-      Math.hypot(0.85 * D, 0.6 * D),
+      Math.hypot(0.5 * D, 0.55 * D),
       9,
     );
   });
 
   it("el globo conserva su posición a lo largo del eje al agregar el codo", () => {
-    // Centro sin codo: (10.4, 0). Con codo: (10.4, 0.48). Solo cambia la y.
+    // Centro sin codo: (10.4, 0). Con codo: (10.4, -0.44). Solo cambia la y.
     const original = geometriaEje(undefined, [0, 0], [10, 0], { diametroGlobo: D });
     const conCodo = geometriaEje(
       agregarCodoEje(undefined, "fin", [10.4, 0], [1, 0], D),
@@ -138,87 +137,153 @@ describe("O042: un codo son V1 y V2", () => {
       { diametroGlobo: D },
     );
     expect(conCodo.globoFin[0]).toBeCloseTo(original.globoFin[0], 9);
-    expect(conCodo.globoFin[1] - original.globoFin[1]).toBeCloseTo(0.6 * D, 9);
+    expect(conCodo.globoFin[1] - original.globoFin[1]).toBeCloseTo(-0.55 * D, 9);
   });
 
   it("eje vertical (0,0)-(0,10): el tramo final es vertical", () => {
-    // Globo original: centro (0, 10.4), borde (0, 10).
-    // V2 = (0, 10.4) - 1.5·D arriba + 0.6·D a la izquierda = (-0.48, 9.2).
-    // V1 = V2 + 0.85·D abajo + 0.6·D a la derecha = (0, 8.52).
+    // Globo original: centro (0, 10.4); con codo (+0.55·D de lado): (0.44, 10.4).
+    // V2 = (0.44, 10.4) - 1.30·D arriba = (0.44, 9.36).
+    // V1 = V2 - 0.50·D abajo - 0.55·D de lado = (0, 8.96).
     const ajuste = agregarCodoEje(undefined, "fin", [0, 10.4], [0, 1], D);
-    esperarPunto(ajuste.codosFin![0], [0, 8.52]);
-    esperarPunto(ajuste.codosFin![1], [-0.48, 9.2]);
+    esperarPunto(ajuste.codosFin![0], [0, 8.96]);
+    esperarPunto(ajuste.codosFin![1], [0.44, 9.36]);
     const g = geometriaEje(ajuste, INICIO, FIN, { diametroGlobo: D });
-    esperarPunto(g.globoFin, [-0.48, 10.4]);
-    // Del globo a V2 solo cambia la z: la x no se mueve.
+    esperarPunto(g.globoFin, [0.44, 10.4]);
     expect(Math.abs(g.globoFin[0] - ajuste.codosFin![1][0])).toBeLessThanOrEqual(1e-9);
-    expect(g.globoFin[1] - ajuste.codosFin![1][1]).toBeCloseTo(1.5 * D, 9);
+    expect(g.globoFin[1] - ajuste.codosFin![1][1]).toBeCloseTo(1.3 * D, 9);
   });
 
-  it("arrastre de V2 con (+0.30,+0.02) se bloquea a lo largo: solo cambia x", () => {
+  it("con un cruce cerca del extremo, V1 queda 0.30·D pasado el cruce", () => {
+    // Globo original (10.4, 0). Sin corrimiento V1 = (8.96, 0), a 0.04 m del cruce
+    // x = 9.0 (menos de 0.30·D = 0.24). Se corre todo 0.28 m: V1 = (9.24, 0),
+    // que deja 0.24 m de tramo recto pasado el cruce; V2 = (9.64, -0.44) y
+    // globo = (10.68, -0.44).
+    const ajuste = agregarCodoEje(undefined, "fin", [10.4, 0], [1, 0], D, [[9.0, 0]]);
+    esperarPunto(ajuste.codosFin![0], [9.24, 0]);
+    esperarPunto(ajuste.codosFin![1], [9.64, -0.44]);
+    const g = geometriaEje(ajuste, [0, 0], [10, 0], { diametroGlobo: D });
+    esperarPunto(g.globoFin, [10.68, -0.44]);
+    expect(ajuste.codosFin![0][0] - 9.0).toBeCloseTo(0.3 * D, 9);
+  });
+
+  it("un cruce lejano no mueve el codo", () => {
+    // Cruce x = 7.0: V1 = (8.96, 0) ya deja 1.96 m de recta, más de 0.30·D.
+    const ajuste = agregarCodoEje(undefined, "fin", [10.4, 0], [1, 0], D, [[7.0, 0]]);
+    esperarPunto(ajuste.codosFin![0], [8.96, 0]);
+    esperarPunto(ajuste.codosFin![1], [9.36, -0.44]);
+  });
+
+  it("arrastrar V1 en diagonal solo lo mueve a lo largo del eje", () => {
     const ajuste = agregarCodoEje(undefined, "fin", [10.4, 0], [1, 0], D);
-    const v2 = ajuste.codosFin![1];
-    const r = destinoArrastreCodo(v2, v2, [v2[0] + 0.3, v2[1] + 0.02], "horizontal", "auto", 0.001);
+    const v1 = ajuste.codosFin![0] as [number, number];
+    const v2 = ajuste.codosFin![1] as [number, number];
+    // Puntero +0.30 en x y +0.50 en y: la y de V1 (sobre el eje) no cambia.
+    const r = destinoArrastreCodo(v1, v2, v1, [v1[0] + 0.3, v1[1] + 0.5], "horizontal", 0, "auto", 0.001);
     expect(r.modo).toBe("eje");
-    // 9.2 + 0.30 = 9.50 exacto (redondeo a 1 mm de papel).
-    esperarPunto(r.punto, [9.5, 0.48]);
-    const g = geometriaEje({ ...ajuste, codosFin: [ajuste.codosFin![0], r.punto] }, [0, 0], [10, 0], {
-      diametroGlobo: D,
-    });
-    // El globo sigue a V2 sin cambiar su largo: (9.5+1.2, 0.48) = (10.7, 0.48).
-    esperarPunto(g.globoFin, [10.7, 0.48]);
-    expect(g.globoFin[1]).toBeCloseTo(0.48, 9);
+    esperarPunto(r.punto, [9.26, 0]);
   });
 
-  it("arrastre de V2 con (0.01,-0.50) se bloquea perpendicular: solo cambia y", () => {
+  it("arrastrar V2 en diagonal lo mueve solo en el componente mayor", () => {
     const ajuste = agregarCodoEje(undefined, "fin", [10.4, 0], [1, 0], D);
-    const v2 = ajuste.codosFin![1];
-    const r = destinoArrastreCodo(v2, v2, [v2[0] + 0.01, v2[1] - 0.5], "horizontal", "auto", 0.001);
-    expect(r.modo).toBe("perpendicular");
-    // 0.48 - 0.50 = -0.02 exacto.
-    esperarPunto(r.punto, [9.2, -0.02]);
-    const g = geometriaEje({ ...ajuste, codosFin: [ajuste.codosFin![0], r.punto] }, [0, 0], [10, 0], {
-      diametroGlobo: D,
-    });
-    // Globo = (9.2+1.2, -0.02) = (10.4, -0.02): solo cambió la y.
-    esperarPunto(g.globoFin, [10.4, -0.02]);
-    expect(g.globoFin[0]).toBeCloseTo(10.4, 9);
+    const v1 = ajuste.codosFin![0] as [number, number];
+    const v2 = ajuste.codosFin![1] as [number, number];
+    // +0.30 en x y +0.20 en y: manda x; la y queda en -0.44.
+    const r = destinoArrastreCodo(v1, v2, v2, [v2[0] + 0.3, v2[1] + 0.2], "horizontal", 1, "auto", 0.001);
+    expect(r.modo).toBe("x");
+    esperarPunto(r.punto, [9.66, -0.44]);
+    // +0.10 en x y +0.50 en y: manda y.
+    const r2 = destinoArrastreCodo(v1, v2, v2, [v2[0] + 0.1, v2[1] + 0.5], "horizontal", 1, "auto", 0.001);
+    expect(r2.modo).toBe("y");
+    esperarPunto(r2.punto, [9.36, 0.06]);
   });
 
-  it("solo V2 tiene pinzamiento; V1 y el globo no, y V2 cae sobre la polilínea", () => {
+  it("dos arrastres seguidos de V2, uno en X y otro en Y, dan el punto esperado", () => {
+    const ajuste = agregarCodoEje(undefined, "fin", [10.4, 0], [1, 0], D);
+    const v1 = ajuste.codosFin![0] as [number, number];
+    const v2 = ajuste.codosFin![1] as [number, number];
+    const primero = destinoArrastreCodo(v1, v2, v2, [v2[0] + 0.3, v2[1] + 0.05], "horizontal", 1, "auto", 0.001);
+    esperarPunto(primero.punto, [9.66, -0.44]);
+    // El segundo arrastre parte del nodo ya movido y usa Y.
+    const segundo = destinoArrastreCodo(v1, primero.punto, primero.punto, [9.76, -0.24], "horizontal", 1, "y", 0.001);
+    esperarPunto(segundo.punto, [9.66, -0.24]);
+    const g = geometriaEje(
+      { ...ajuste, codosFin: [v1, segundo.punto] },
+      [0, 0],
+      [10, 0],
+      { diametroGlobo: D },
+    );
+    // El globo sigue a V2 a 1.30·D: (9.66+1.04, -0.24) = (10.70, -0.24).
+    esperarPunto(g.globoFin, [10.7, -0.24]);
+  });
+
+  it("arrastre de V2 en X conserva el largo del tramo final", () => {
+    const ajuste = agregarCodoEje(undefined, "fin", [10.4, 0], [1, 0], D);
+    const v1 = ajuste.codosFin![0] as [number, number];
+    const v2 = ajuste.codosFin![1] as [number, number];
+    const r = destinoArrastreCodo(v1, v2, v2, [v2[0] + 0.3, v2[1] + 0.02], "horizontal", 1, "auto", 0.001);
+    esperarPunto(r.punto, [9.66, -0.44]);
+    const g = geometriaEje({ ...ajuste, codosFin: [v1, r.punto] }, [0, 0], [10, 0], {
+      diametroGlobo: D,
+    });
+    esperarPunto(g.globoFin, [10.7, -0.44]);
+    const tramo = g.tramosSolidos[0];
+    expect(
+      Math.hypot(tramo[2][0] - tramo[1][0], tramo[2][1] - tramo[1][1]),
+    ).toBeCloseTo(0.8 * D, 9);
+  });
+
+  it("V1 y V2 tienen pinzamiento; el globo no, y ambos caen sobre la polilínea", () => {
     const ajuste = agregarCodoEje(undefined, "fin", [10.4, 0], [1, 0], D);
     const asas = asasCodoVista(ajuste);
-    expect(asas).toHaveLength(1);
-    expect(asas[0].lado).toBe("fin");
-    expect(asas[0].indice).toBe(1);
-    esperarPunto(asas[0].punto, [9.2, 0.48]);
-    // V1 no aparece como asa.
-    expect(asas.some((a) => a.indice === 0)).toBe(false);
+    expect(asas).toHaveLength(2);
+    expect(asas.map((a) => a.indice)).toEqual([0, 1]);
+    esperarPunto(asas[0].punto, [8.96, 0]);
+    esperarPunto(asas[1].punto, [9.36, -0.44]);
     expect(asasCodoVista(undefined)).toEqual([]);
 
-    // Invariante: el único pinzamiento del codo está exactamente sobre la
-    // polilínea continua V1→V2→borde del globo.
+    // Invariante: cada pinzamiento del codo está exactamente sobre la polilínea
+    // continua V1→V2→borde del globo.
     const g = geometriaEje(ajuste, [0, 0], [10, 0], { diametroGlobo: D });
-    for (const tramo of g.tramosSolidos) {
-      for (let i = 1; i < tramo.length; i += 1) {
-        const [ax, ay] = tramo[i - 1];
-        const [bx, by] = tramo[i];
-        const dx = bx - ax;
-        const dy = by - ay;
-        const t = Math.max(
-          0,
-          Math.min(1, ((asas[0].punto[0] - ax) * dx + (asas[0].punto[1] - ay) * dy) / (dx * dx + dy * dy)),
-        );
-        const d = Math.hypot(asas[0].punto[0] - (ax + t * dx), asas[0].punto[1] - (ay + t * dy));
-        expect(d).toBeLessThanOrEqual(1e-9);
+    for (const asa of asas) {
+      let menor = Infinity;
+      for (const tramo of g.tramosSolidos) {
+        for (let i = 1; i < tramo.length; i += 1) {
+          const [ax, ay] = tramo[i - 1];
+          const [bx, by] = tramo[i];
+          const dx = bx - ax;
+          const dy = by - ay;
+          const t = Math.max(
+            0,
+            Math.min(1, ((asa.punto[0] - ax) * dx + (asa.punto[1] - ay) * dy) / (dx * dx + dy * dy)),
+          );
+          menor = Math.min(
+            menor,
+            Math.hypot(asa.punto[0] - (ax + t * dx), asa.punto[1] - (ay + t * dy)),
+          );
+        }
       }
+      expect(menor).toBeLessThanOrEqual(1e-9);
     }
   });
 
-  it("un archivo viejo con dos codos se lee como uno: V1 y V2 con globo paralelo", () => {
-    // Eje vertical; el archivo traía tres nodos y un extremo lejano. Se recorta a
-    // V1=(0,8.52) y V2=(-0.48,9.2); el globo se deriva de V2 a 1.5·D:
-    // (-0.48, 9.2 + 1.2) = (-0.48, 10.4), y el borde queda en z=10.
+  it("un codo viejo cargado no cambia (conserva su tramo final de 1.0·D)", () => {
+    // Pset de O042 sin marca: V1=(8.52,0), V2=(9.2,0.48). El globo se deriva con
+    // la regla vieja: 1.50·D hasta el centro = (10.4, 0.48), borde (10.0, 0.48).
+    const viejo = normalizarAjusteEje({
+      codosFin: [
+        [8.52, 0],
+        [9.2, 0.48],
+      ],
+    })!;
+    expect(viejo.codoNuevoFin).toBeUndefined();
+    const g = geometriaEje(viejo, [0, 0], [10, 0], { diametroGlobo: D });
+    esperarPunto(g.globoFin, [10.4, 0.48]);
+    esperarPunto(g.tramosSolidos[0][2], [10.0, 0.48]);
+  });
+
+  it("un archivo viejo con tres nodos se recorta a V1 y V2 sin marca", () => {
+    // Se conservan los dos primeros puntos tal cual; el globo se deriva con la
+    // regla vieja (1.50·D): V2=(-0.48,9.2) → (−0.48,10.4).
     const limpio = normalizarAjusteEje({
       codosFin: [
         [0, 8.52],
@@ -230,8 +295,6 @@ describe("O042: un codo son V1 y V2", () => {
     expect(limpio.codosFin).toHaveLength(2);
     const g = geometriaEje(limpio, INICIO, FIN, { diametroGlobo: D });
     esperarPunto(g.globoFin, [-0.48, 10.4]);
-    expect(g.tramosSolidos).toHaveLength(1);
-    expect(g.tramosSolidos[0]).toHaveLength(3);
     esperarPunto(g.tramosSolidos[0][0], [0, 8.52]);
     esperarPunto(g.tramosSolidos[0][1], [-0.48, 9.2]);
     esperarPunto(g.tramosSolidos[0][2], [-0.48, 10]);
@@ -241,27 +304,24 @@ describe("O042: un codo son V1 y V2", () => {
     const original = { globoFin: false };
     const conCodo = agregarCodoEje(original, "fin", [10.4, 0], [1, 0], D);
     expect(conCodo.codosFin).toHaveLength(2);
-    // Quitar por V1 o por V2 deja el mismo resultado: el codo es uno solo.
     expect(quitarCodoEje(conCodo, "fin", 0)).toEqual(original);
     expect(quitarCodoEje(conCodo, "fin", 1)).toEqual(original);
-    // Desde cero, quitar el único codo deja el ajuste vacío.
     expect(quitarCodoEje(agregarCodoEje(undefined, "fin", [10.4, 0], [1, 0], D), "fin", 0)).toBeUndefined();
-    // Índice fuera de rango no rompe ni inventa codos.
     expect(quitarCodoEje(conCodo, "fin", 9)).toEqual(conCodo);
   });
 
   it("los codos del inicio se guardan por separado y su globo también se deriva", () => {
     // Inicio en (0,0), afuera (0,-1), globo original centro (0,-0.4).
-    // V2 = centro + 1.5·D hacia adentro + 0.6·D de lado = (0.48, 0.8).
-    // V1 = V2 + 0.85·D hacia adentro - 0.6·D de lado = (0, 1.48).
+    // Con codo: globo (-0.44,-0.4); V2 = globo + 1.30·D hacia adentro = (-0.44,0.64);
+    // V1 = V2 + 0.50·D adentro + 0.55·D de lado = (0,1.04).
     const g = agregarCodoEje(undefined, "inicio", [0, -0.4], [0, -1], D);
-    esperarPunto(g.codosInicio![0], [0, 1.48]);
-    esperarPunto(g.codosInicio![1], [0.48, 0.8]);
+    esperarPunto(g.codosInicio![0], [0, 1.04]);
+    esperarPunto(g.codosInicio![1], [-0.44, 0.64]);
     expect(g.extremoInicio).toBeUndefined();
     expect(g.codosFin).toBeUndefined();
     expect(g.extremoFin).toBeUndefined();
     const geo = geometriaEje(g, INICIO, FIN, { globoInicio: true, diametroGlobo: D });
-    esperarPunto(geo.globoInicio!, [0.48, -0.4]);
+    esperarPunto(geo.globoInicio!, [-0.44, -0.4]);
   });
 });
 
@@ -446,9 +506,9 @@ describe("O021: candado de alineación, globos por extremo y copia", () => {
   });
 });
 
-describe("O042: asas de los codos en el alzado", () => {
-  it("devuelve solo el asa de V2 de cada lado", () => {
-    // (t, z) del plano del alzado. V1 no es asa; V2 sí.
+describe("O044: asas de los codos en el alzado", () => {
+  it("devuelve el asa de V1 y la de V2 de cada lado", () => {
+    // (t, z) del plano del alzado: V1 y V2 son pinzamientos.
     const ajuste = {
       codosInicio: [
         [0, 1.6],
@@ -460,12 +520,18 @@ describe("O042: asas de los codos en el alzado", () => {
       ] as Array<[number, number]>,
     };
     expect(asasCodoVista(ajuste)).toEqual([
+      { lado: "inicio", indice: 0, punto: [0, 1.6] },
       { lado: "inicio", indice: 1, punto: [0.8, 0.8] },
+      { lado: "fin", indice: 0, punto: [0, 8.4] },
       { lado: "fin", indice: 1, punto: [-0.8, 9.2] },
     ]);
-    // Sin ajuste no hay asas (no se inventan codos).
+    // Sin ajuste no hay asas (no se inventan codos). Un codo viejo de un solo
+    // nodo conserva su asa para poder quitarlo.
     expect(asasCodoVista(undefined)).toEqual([]);
     expect(asasCodoVista({})).toEqual([]);
+    expect(asasCodoVista({ codosFin: [[0, 8.4]] })).toEqual([
+      { lado: "fin", indice: 0, punto: [0, 8.4] },
+    ]);
   });
 });
 
@@ -512,13 +578,13 @@ describe("O037: asa de codo nuevo sobre la polilínea", () => {
   }
 
   it("con codo el asa queda en el último tramo, no flota fuera", () => {
-    // Eje (0,0)→(0,10), D=0.8: V1=(0,8.52), V2=(-0.48,9.2) y globo (-0.48,10.4).
-    // El borde del globo está en (-0.48,10); 0.5 m más adentro cae en (-0.48, 9.5).
+    // Eje (0,0)→(0,10), D=0.8: V1=(0,8.96), V2=(0.44,9.36) y globo (0.44,10.4).
+    // El borde del globo está en (0.44,10); 0.5 m más adentro cae en (0.44, 9.5).
     const bases = { inicio: [0, 0] as [number, number], fin: [0, 10] as [number, number] };
     const ajuste = agregarCodoEje(undefined, "fin", [0, 10.4], [0, 1], 0.8);
     const asa = puntoAsaCodoNuevo(ajuste, bases, "fin", 0.5, 0.8);
-    expect(Math.hypot(asa[0] - -0.48, asa[1] - 9.5)).toBeCloseTo(0, 9);
-    expect(distanciaASegmento(asa, [-0.48, 9.2], [-0.48, 10])).toBeLessThanOrEqual(1e-6);
+    expect(Math.hypot(asa[0] - 0.44, asa[1] - 9.5)).toBeCloseTo(0, 9);
+    expect(distanciaASegmento(asa, [0.44, 9.36], [0.44, 10])).toBeLessThanOrEqual(1e-6);
   });
 
   it("sin codo el asa va sobre la propia línea base", () => {
