@@ -773,7 +773,6 @@ export function ArbolProyecto({
             });
           }}
           onDragOver={(e) => {
-            if (!arrastrando) return;
             e.preventDefault();
             if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
           }}
