@@ -178,3 +178,138 @@ export function clavesParaAislar(arbol: NodoArbol | null, clave: string): string
 export function elementosDeNodo(indice: IndiceArbol, clave: string): string[] {
   return [...(indice.elementos.get(clave) ?? [])];
 }
+
+// ---------------------------------------------------------------- O039: modo Obra
+export interface RenglonObra {
+  clave: string;
+  globalid: string;
+  elemento: string;
+  descripcion: string;
+  resultado: number;
+}
+
+export interface PartidaObra {
+  clave: string;
+  clave_pp: string;
+  nombre: string;
+  unidad: string;
+  total: number;
+  conteo: number;
+  renglones: RenglonObra[];
+}
+
+export interface CapituloObra {
+  clave: string;
+  globalid: string;
+  identificacion: string;
+  nombre: string;
+  orden: number;
+  conteo: number;
+  partidas: PartidaObra[];
+}
+
+export interface ArbolObra {
+  tipo: "obra";
+  clave: string;
+  nombre: string;
+  conteo: number;
+  capitulos: CapituloObra[];
+}
+
+/** Unidades del núcleo con su símbolo visible (m3 → m³). */
+const UNIDADES_VISIBLES: Record<string, string> = {
+  m: "m",
+  m2: "m²",
+  m3: "m³",
+  kg: "kg",
+  pza: "pza",
+};
+
+export function unidadVisible(unidad: string): string {
+  return UNIDADES_VISIBLES[unidad] ?? unidad;
+}
+
+/** «Cimentación (3)». */
+export function formatoCapituloObra(capitulo: CapituloObra): string {
+  return `${capitulo.nombre} (${capitulo.conteo})`;
+}
+
+/** «CIM-010 Concreto en zapatas · 1.234 m³» (sin clave: «Nombre · total unidad»). */
+export function formatoPartidaObra(partida: PartidaObra): string {
+  const total = `${Number(partida.total).toFixed(3)} ${unidadVisible(partida.unidad)}`;
+  return partida.clave_pp
+    ? `${partida.clave_pp} ${partida.nombre} · ${total}`
+    : `${partida.nombre} · ${total}`;
+}
+
+/** «Muro 1 · 8.510». */
+export function formatoRenglonObra(renglon: RenglonObra): string {
+  const resultado = Number(renglon.resultado);
+  const numero = Number.isFinite(resultado) ? resultado.toFixed(3) : "—";
+  return `${renglon.elemento} · ${numero}`;
+}
+
+/** GlobalIds únicos de los elementos de una partida. */
+export function gidsDePartidaObra(partida: PartidaObra): string[] {
+  return [...new Set(partida.renglones.map((r) => r.globalid).filter(Boolean))];
+}
+
+/** GlobalIds únicos de los elementos de un capítulo. */
+export function gidsDeCapituloObra(capitulo: CapituloObra): string[] {
+  return [
+    ...new Set(
+      capitulo.partidas.flatMap((partida) => gidsDePartidaObra(partida)),
+    ),
+  ];
+}
+
+/** Busca una partida por su clave de nodo (para arrastrar y soltar). */
+export function buscarPartidaObra(
+  arbol: ArbolObra | null,
+  clave: string,
+): PartidaObra | null {
+  if (!arbol) return null;
+  for (const capitulo of arbol.capitulos) {
+    const partida = capitulo.partidas.find((p) => p.clave === clave);
+    if (partida) return partida;
+  }
+  return null;
+}
+
+/** Filtra capítulos, partidas y renglones por nombre, clave o GlobalId. */
+export function filtrarArbolObra(
+  arbol: ArbolObra | null,
+  consulta: string,
+): ArbolObra | null {
+  const buscado = normalizarConsulta(consulta);
+  if (!arbol || !buscado) return arbol;
+  const capitulos: CapituloObra[] = [];
+  for (const capitulo of arbol.capitulos) {
+    const partidas: PartidaObra[] = [];
+    for (const partida of capitulo.partidas) {
+      const renglones = partida.renglones.filter(
+        (renglon) =>
+          normalizarConsulta(renglon.elemento).includes(buscado) ||
+          normalizarConsulta(renglon.globalid).includes(buscado) ||
+          normalizarConsulta(renglon.descripcion).includes(buscado),
+      );
+      const coincidePartida =
+        normalizarConsulta(partida.nombre).includes(buscado) ||
+        normalizarConsulta(partida.clave_pp).includes(buscado);
+      if (coincidePartida) {
+        partidas.push(partida);
+      } else if (renglones.length > 0) {
+        partidas.push({ ...partida, renglones, conteo: renglones.length });
+      }
+    }
+    const coincideCapitulo = normalizarConsulta(capitulo.nombre).includes(buscado);
+    if (partidas.length > 0 || coincideCapitulo) {
+      capitulos.push({
+        ...capitulo,
+        conteo: coincideCapitulo ? capitulo.conteo : partidas.length,
+        partidas: coincideCapitulo ? capitulo.partidas : partidas,
+      });
+    }
+  }
+  return { ...arbol, capitulos };
+}

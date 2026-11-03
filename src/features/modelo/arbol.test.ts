@@ -5,9 +5,16 @@ import {
   estadoDeNodo,
   expandirGlobalids,
   filtrarArbol,
+  filtrarArbolObra,
+  formatoCapituloObra,
+  formatoPartidaObra,
+  formatoRenglonObra,
+  gidsDeCapituloObra,
+  gidsDePartidaObra,
   indexarArbol,
   nodoCoincide,
   rutaDeElemento,
+  type ArbolObra,
   type NodoArbol,
 } from "./arbol";
 
@@ -148,5 +155,127 @@ describe("rutaDeElemento", () => {
       "elemento:e2",
     ]);
     expect(rutaDeElemento(arbolEjemplo(), "e99")).toBeNull();
+  });
+});
+
+
+// ---------------------------------------------------------------- O039: modo Obra
+function arbolObraEjemplo(): ArbolObra {
+  return {
+    tipo: "obra",
+    clave: "obra",
+    nombre: "Obra",
+    conteo: 2,
+    capitulos: [
+      {
+        clave: "capitulo:c1",
+        globalid: "c1",
+        identificacion: "02",
+        nombre: "Cimentación",
+        orden: 1,
+        conteo: 1,
+        partidas: [
+          {
+            clave: "partida:clave|CIM-010|m3",
+            clave_pp: "CIM-010",
+            nombre: "Concreto en zapatas",
+            unidad: "m3",
+            total: 1.234,
+            conteo: 2,
+            renglones: [
+              {
+                clave: "renglon:z1",
+                globalid: "z1",
+                elemento: "Zapata 1",
+                descripcion: "Z-1 · Zapata 1",
+                resultado: 0.617,
+              },
+              {
+                clave: "renglon:z2",
+                globalid: "z2",
+                elemento: "Zapata 2",
+                descripcion: "Z-1 · Zapata 2",
+                resultado: 0.617,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        clave: "capitulo:c2",
+        globalid: "c2",
+        identificacion: "05",
+        nombre: "Acabados",
+        orden: 2,
+        conteo: 1,
+        partidas: [
+          {
+            clave: "partida:nombre|Aplanado exterior|m2",
+            clave_pp: "",
+            nombre: "Aplanado exterior",
+            unidad: "m2",
+            total: 39.71,
+            conteo: 1,
+            renglones: [
+              {
+                clave: "renglon:m1",
+                globalid: "m1",
+                elemento: "Muro 1",
+                descripcion: "Block 15 · Muro 1 · capa: Aplanado exterior",
+                resultado: 39.71,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+describe("O039 formato de los nodos de Obra", () => {
+  it("el capítulo muestra su nombre y cuántas partidas tiene", () => {
+    expect(formatoCapituloObra(arbolObraEjemplo().capitulos[0])).toBe("Cimentación (1)");
+  });
+
+  it("la partida muestra clave, nombre, total con 3 decimales y unidad", () => {
+    expect(formatoPartidaObra(arbolObraEjemplo().capitulos[0].partidas[0])).toBe(
+      "CIM-010 Concreto en zapatas · 1.234 m³",
+    );
+    expect(formatoPartidaObra(arbolObraEjemplo().capitulos[1].partidas[0])).toBe(
+      "Aplanado exterior · 39.710 m²",
+    );
+  });
+
+  it("el renglón muestra el elemento y su resultado con 3 decimales", () => {
+    expect(formatoRenglonObra(arbolObraEjemplo().capitulos[0].partidas[0].renglones[0])).toBe(
+      "Zapata 1 · 0.617",
+    );
+  });
+});
+
+describe("O039 elementos de partidas y capítulos", () => {
+  it("una partida devuelve sus GlobalId sin repetir", () => {
+    const partida = arbolObraEjemplo().capitulos[0].partidas[0];
+    expect(gidsDePartidaObra(partida)).toEqual(["z1", "z2"]);
+  });
+
+  it("un capítulo reúne los elementos de todas sus partidas", () => {
+    const capitulo = arbolObraEjemplo().capitulos[0];
+    expect(gidsDeCapituloObra(capitulo)).toEqual(["z1", "z2"]);
+  });
+});
+
+describe("O039 búsqueda en Obra", () => {
+  it("filtra partidas y renglones sin perder el capítulo", () => {
+    const filtrado = filtrarArbolObra(arbolObraEjemplo(), "zapata 2")!;
+    expect(filtrado.capitulos).toHaveLength(1);
+    expect(filtrado.capitulos[0].nombre).toBe("Cimentación");
+    expect(filtrado.capitulos[0].partidas[0].renglones.map((r) => r.globalid)).toEqual([
+      "z2",
+    ]);
+  });
+
+  it("sin consulta devuelve el árbol completo", () => {
+    expect(filtrarArbolObra(arbolObraEjemplo(), "")).toEqual(arbolObraEjemplo());
   });
 });

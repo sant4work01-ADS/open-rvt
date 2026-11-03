@@ -54,6 +54,13 @@ export function ModeloView() {
   const alternarNodoArbol = useModelo((s) => s.alternarNodoArbol);
   const aislarNodoArbol = useModelo((s) => s.aislarNodoArbol);
   const mostrarTodoArbol = useModelo((s) => s.mostrarTodoArbol);
+  // O039: árbol del presupuesto (modo Obra).
+  const arbolObra = useModelo((s) => s.arbolObra);
+  const moverPartidaObra = useModelo((s) => s.moverPartidaObra);
+  const crearCapituloObra = useModelo((s) => s.crearCapituloObra);
+  const renombrarCapituloObra = useModelo((s) => s.renombrarCapituloObra);
+  const moverCapituloObra = useModelo((s) => s.moverCapituloObra);
+  const borrarCapituloObra = useModelo((s) => s.borrarCapituloObra);
   const seleccionarVarios = useModelo((s) => s.seleccionarVarios);
   const pedirAjustar = useModelo((s) => s.pedirAjustar);
   const fijarEjeSeleccionado = useModelo((s) => s.fijarEjeSeleccionado);
@@ -154,6 +161,20 @@ export function ModeloView() {
                 onElegirNivel={(gid) => fijarNivelSeleccionado(gid)}
                 onAjustar={pedirAjustar}
                 onPlegar={() => fijarPanelIzquierdoPlegado(true)}
+                arbolObra={arbolObra}
+                onMoverPartidaObra={(partida, capitulo) =>
+                  void moverPartidaObra(partida, capitulo.identificacion)
+                }
+                onCrearCapituloObra={(nombre) => void crearCapituloObra(nombre)}
+                onRenombrarCapituloObra={(identificacion, nombre) =>
+                  void renombrarCapituloObra(identificacion, nombre)
+                }
+                onMoverCapituloObra={(identificacion, direccion) =>
+                  void moverCapituloObra(identificacion, direccion)
+                }
+                onBorrarCapituloObra={(identificacion) =>
+                  void borrarCapituloObra(identificacion)
+                }
               />
             ) : (
               <NavegadorVistas

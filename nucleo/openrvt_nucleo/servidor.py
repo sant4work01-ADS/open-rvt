@@ -89,6 +89,29 @@ class Servidor:
             return self._exigir().elementos(params.get("filtro"))
         if metodo == "modelo.arbol":
             return self._exigir().arbol()
+        if metodo == "modelo.arbol_obra":
+            return self._exigir().arbol_obra()
+        if metodo == "obra.capitulo_crear":
+            return self._exigir().obra_capitulo_crear(str(params.get("nombre") or ""))
+        if metodo == "obra.capitulo_renombrar":
+            return self._exigir().obra_capitulo_renombrar(
+                str(params.get("identificacion") or ""), str(params.get("nombre") or "")
+            )
+        if metodo == "obra.capitulo_mover":
+            return self._exigir().obra_capitulo_mover(
+                str(params.get("identificacion") or ""), str(params.get("direccion") or "")
+            )
+        if metodo == "obra.capitulo_borrar":
+            return self._exigir().obra_capitulo_borrar(
+                str(params.get("identificacion") or "")
+            )
+        if metodo == "obra.partida_mover":
+            return self._exigir().obra_partida_mover(
+                str(params.get("clave") or ""),
+                str(params.get("nombre") or ""),
+                str(params.get("unidad") or ""),
+                str(params.get("capitulo") or ""),
+            )
         if metodo == "modelo.propiedades":
             return self._exigir().propiedades(str(params.get("globalid") or ""))
         if metodo == "geometria.teselar":
