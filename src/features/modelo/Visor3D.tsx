@@ -4911,17 +4911,21 @@ export function Visor3D({
     empujarZ,
   ]);
 
-  // O049: al terminar o cambiar de herramienta se apaga el marcador.
+  // O049: al terminar o cambiar de herramienta se apaga el marcador. La
+  // limpieza se aplaza para no encadenar renders dentro del efecto.
   useEffect(() => {
     if (
       herramienta !== "empujar" ||
       (puntosHerramienta.length === 0 && !empujarRect)
     ) {
-      setMarcadorEmpujar(null);
-      setGuiaEmpujar(null);
       ultimaInferenciaEmpujar.current = null;
       bloqueoFlechas.current = null;
       bloqueoShift.current = null;
+      const id = setTimeout(() => {
+        setMarcadorEmpujar(null);
+        setGuiaEmpujar(null);
+      }, 0);
+      return () => clearTimeout(id);
     }
   }, [herramienta, puntosHerramienta.length, empujarRect]);
 
