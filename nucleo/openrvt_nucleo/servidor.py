@@ -284,6 +284,13 @@ class Servidor:
                 str(params.get("lado") or "exterior"),
                 params.get("desfase", 0.0),
             )
+        if metodo == "genericos.crear":
+            return self._exigir().generico_crear(
+                str(params.get("nivel") or ""),
+                params.get("puntos"),
+                params.get("altura", 0.0),
+                str(params.get("nombre") or "Genérico"),
+            )
         if metodo == "aberturas.crear":
             return self._exigir().abertura_crear(
                 str(params.get("clase") or "IfcDoor"),
