@@ -272,3 +272,116 @@ animado (`core/snap.py:1817`, `core/snap.py:1970`).
   barrido accidental robe la referencia.
 - La guía discontinua y el marcador por tipo son buenas decisiones de
   accesibilidad; conviene reutilizarlas y añadir el nombre del elemento.
+
+---
+
+## 3. Dibujo de líneas y rectángulos sobre caras
+
+### Qué problema resuelve
+
+Añadir aristas de dibujo al modelo sin romper la topología: una línea que
+cruza una arista existente debe partirla; una línea que atraviesa una cara
+debe dividirla en dos caras; y varias caras coplanares que quedaron partidas
+deben poder volver a fusionarse cuando el corte fue un efecto de la operación
+y no un dibujo deliberado del usuario.
+
+### Cómo lo resuelve
+
+**Planificación en seco.** La herramienta de línea no muta la escena
+directamente: entrega los segmentos a un planificador que simula la lista de
+aristas y produce una lista ordenada de comandos reversibles
+(`core/edits.py:55`). El plan:
+
+1. Busca las aristas que el segmento cruza y las parte en el punto de cruce,
+   sustituyéndolas por dos subaristas que heredan sus banderas de curva
+   (`core/edits.py:90`, `core/topology.py:296`).
+2. Propaga ese punto a las caras que compartían la arista partida, para que
+   ninguna cara quede con una arista «larga» que ya no existe
+   (`core/edits.py:90`, `core/topology.py:843`). Es lo que mantiene el modelo
+   estanco al dibujar una puerta sobre un muro: sin esto, el suelo conservaba
+   la arista larga y la caja dejaba de ser cerrada.
+3. Divide el propio segmento nuevo en los tramos entre cruces.
+4. Añade las subaristas soldando duplicados y, opcionalmente, autocompleta
+   caras (`core/edits.py:139`).
+
+**Cuándo una línea parte una cara.** Solo si el segmento es una **cuerda**
+real de una cara sin agujeros: ambos extremos caen sobre su contorno
+(vértice o punto interior de una arista) y el punto medio del segmento queda
+estrictamente dentro del polígono (esto descarta los cortes que salen por
+una concavidad). Si se cumple, la cara madre se borra y se sustituye por los
+dos subcontornos, que heredan su orientación y todos sus atributos —incluido
+el mapa de textura— para que la imagen no se reinicie en cada mitad
+(`core/topology.py:744`, `core/edits.py:261`). Las caras con agujeros se
+dejan fuera: partir una cara con huecos es un caso más difícil que no abordan
+(`core/topology.py:744`).
+
+**Cuándo se crea una cara nueva.** Si el segmento no es cuerda, se buscan los
+ciclos mínimos que se cierran al añadirlo, se comprueba que sean planos y que
+no exista ya una cara con ese mismo ciclo; entonces se crea la cara,
+orientada hacia arriba o hacia la cámara (`core/edits.py:261`,
+`core/topology.py:1087`). También se generan ambos lados cuando un ciclo se
+cierra sobre una zona sin cara.
+
+**Cuándo se fusionan caras coplanares.** La fusión no la hace la herramienta
+de línea, sino la pasada de costura que sigue a las operaciones de modelado.
+Consta de tres fases (`core/history.py:3152`):
+
+1. Resolver uniones en T: partir aristas que reciben un vértice en su
+   interior, limitado a la caja de la operación.
+2. Colapsar vértices colineales de valencia 2.
+3. Fusionar componentes coplanares y conexos por arista, **solo si** el
+   componente contiene una cara creada por esa operación (`core/history.py:3220`).
+
+La última condición es la clave: una línea coplanar dibujada a propósito por
+el usuario no se disuelve por una operación ajena, mientras que una costura
+que acaba de crear un empuje sí se limpia. Además, un borde que también
+sostiene una cara no coplanar es una **arista de pliegue** y la fusión nunca
+la cruza: dos faldones de tejado sobre un muro divisorio siguen siendo dos
+caras con cumbrera visible (`core/history.py:3246`). La herramienta de borrado
+hace lo simétrico: borrar la arista que divide dos caras coplanares las
+reúne; borrar cualquier otra arista arrastra las caras que delimita
+(`core/history.py:501`).
+
+**Rectángulos.** Se definen por dos esquinas opuestas sobre un plano de
+trabajo, que puede ser la cara bajo el cursor, un plano bloqueado con flechas
+o el plano de la vista (`tools/rectangle.py:56`). Los cuatro lados se emiten
+como un único comando compuesto (un solo paso de deshacer) y la cara se añade
+explícitamente, sin autocompletado de ciclos, para que la subdivisión por
+cruces no la altere (`tools/rectangle.py:372`). En un plano ya poblado se
+dispara una reconstrucción por planos para integrar el rectángulo con lo que
+ya había. Detalles de interacción:
+
+- Ejes del plano derivados de la normal (la X del mundo proyectada sobre el
+  plano, o la Y si la normal es casi X) para que el rectángulo se sienta
+  alineado también en paredes verticales (`tools/rectangle.py:29`).
+- Tolerancia de cuadrado: si los dos lados difieren en menos del 4 % del
+  mayor, se ajusta a cuadrado perfecto (`tools/rectangle.py:56`,
+  `tools/rectangle.py:343`); Shift fuerza el cuadrado, Ctrl dibuja desde el
+  centro.
+- Un lado de longitud < 10⁻⁶ se rechaza con un mensaje que explica la causa
+  real (p. ej. la segunda esquina está fuera del plano bloqueado y sugiere la
+  flecha que elige el plano correcto) (`tools/rectangle.py:103`,
+  `tools/rectangle.py:126`).
+- Se puede teclear «3;2» (ancho;alto) para dimensiones exactas; un solo
+  número cambia el lado que el cursor está estirando (`tools/rectangle.py:179`).
+
+**Tolerancias de topología** (`core/topology.py:29`): las posiciones se
+comparan redondeando a 4 decimales (≈ 0,1 mm); la planaridad de una cara se
+admite hasta 10⁻³; un cruce solo cuenta si las líneas se acercan a menos de
+10⁻⁴.
+
+### Qué haríamos distinto en OPEN-RVT
+
+- En IFC no se «parte una cara»: se parte un elemento o se añade una
+  abertura/partición. La cuerda de una cara de malla es un detalle de
+  representación; el documento debe hablar de dividir un muro o una losa y de
+  sus relaciones.
+- La regla de fusión «solo lo que tocó la operación» es exactamente la que
+  necesita un modelo paramétrico: evita destruir particiones deliberadas.
+- Las caras con agujeros son el caso normal en BIM (muros con puertas), así
+  que no se pueden dejar «para más tarde»: hay que resolver el corte de una
+  cara con huecos.
+- El rectángulo debe crear un elemento (o una abertura) con parámetros
+  editables, no cuatro aristas y una cara suelta.
+- Conservar el comando compuesto para que un rectángulo sea un solo paso de
+  deshacer y el mensaje de error que explica el plano equivocado.
