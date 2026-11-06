@@ -1,7 +1,7 @@
 // OPEN-RVT: visor three.js del módulo Modelo. Dibuja mallas en coordenadas de mundo,
 // cámaras ortográficas para plantas/alzados/cortes y órbita libre en 3D, con recorte y
 // relleno de sección por stencil (técnica del ejemplo webgl_clipping_stencil).
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import * as THREE from "three";
 import { Line2 } from "three/examples/jsm/lines/Line2.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
@@ -65,9 +65,24 @@ import {
   clasificarEmpujar,
   crearRectangulo,
   puntosRectangulo,
-  rayoPlanoHorizontal,
   textoDimensiones,
 } from "./empujar";
+import {
+  inferir,
+  type Bloqueo,
+  type CandidatosInferencia,
+  type Inferencia,
+  type Vec3,
+} from "./inferencias3d";
+import {
+  CacheCandidatosMallas,
+  caraSuperiorEn,
+  envolventeDeMalla,
+  filtrarPorCercania,
+  unirCandidatos,
+  type Envolvente,
+  type MallaCandidata,
+} from "./candidatos3d";
 import {
   asasDeLosa,
   contornoPrevio,
@@ -987,6 +1002,111 @@ function planosVista(vista: Vista, caja: Caja): {  planos: THREE.Plane[];
   return { planos: [], relleno: null };
 }
 
+
+function etiquetaInferencia(tipo: string | null): string {
+  switch (tipo) {
+    case "extremo": return "Extremo";
+    case "medio": return "Punto medio";
+    case "sobre_arista": return "En arista";
+    case "interseccion": return "Intersección";
+    case "sobre_cara": return "En cara";
+    case "eje_x": return "Eje X";
+    case "eje_y": return "Eje Y";
+    case "eje_z": return "Eje Z";
+    case "paralelo": return "Paralelo";
+    case "perpendicular": return "Perpendicular";
+    default: return "Plano";
+  }
+}
+
+function colorDeGuia(tipo: string | null): string {
+  if (tipo === "eje_x") return "#dc2626";
+  if (tipo === "eje_y") return "#16a34a";
+  if (tipo === "eje_z") return "#2563eb";
+  if (tipo === "paralelo" || tipo === "perpendicular") return "#0891b2";
+  return "#64748b";
+}
+
+function formaDeMarcador(tipo: string): CSSProperties {
+  if (tipo === "extremo") {
+    return { width: 10, height: 10, background: "#16a34a", borderRadius: 1 };
+  }
+  if (tipo === "medio") {
+    return {
+      width: 0,
+      height: 0,
+      borderLeft: "6px solid transparent",
+      borderRight: "6px solid transparent",
+      borderBottom: "11px solid #06b6d4",
+    };
+  }
+  if (tipo === "sobre_arista") {
+    return {
+      width: 10,
+      height: 10,
+      background: "#dc2626",
+      transform: "rotate(45deg)",
+      borderRadius: 1,
+    };
+  }
+  if (tipo === "sobre_cara") {
+    return {
+      width: 10,
+      height: 10,
+      background: "#2563eb",
+      transform: "rotate(45deg)",
+      borderRadius: 1,
+    };
+  }
+  if (tipo === "interseccion") {
+    return {
+      width: 12,
+      height: 12,
+      color: "#16a34a",
+      fontSize: 16,
+      lineHeight: "12px",
+      fontWeight: 700,
+    };
+  }
+  const color = tipo === "eje_x"
+    ? "#dc2626"
+    : tipo === "eje_y"
+      ? "#16a34a"
+      : tipo === "eje_z"
+        ? "#2563eb"
+        : "#0891b2";
+  return { width: 9, height: 9, background: color, borderRadius: "50%" };
+}
+
+function redondearVec(p: Vec3): Vec3 {
+  const r = (v: number) => {
+    const n = Math.round(v * 1e6) / 1e6;
+    return Object.is(n, -0) ? 0 : n;
+  };
+  return { x: r(p.x), y: r(p.y), z: r(p.z) };
+}
+
+function bloqueoDeInferencia(
+  inf: Inferencia,
+  candidatos: CandidatosInferencia,
+): Bloqueo | null {
+  if (inf.tipo === "eje_x") return { tipo: "eje", eje: "x" };
+  if (inf.tipo === "eje_y") return { tipo: "eje", eje: "y" };
+  if (inf.tipo === "eje_z") return { tipo: "eje", eje: "z" };
+  if (inf.tipo === "paralelo" && inf.referencia !== null) {
+    const arista = candidatos.aristas?.[inf.referencia];
+    if (arista) {
+      return {
+        tipo: "arista",
+        inicio: arista.inicio,
+        fin: arista.fin,
+        referencia: inf.referencia,
+      };
+    }
+  }
+  return null;
+}
+
 export function Visor3D({
   vista,
   vistas,
@@ -1015,6 +1135,34 @@ export function Visor3D({
   const grupo = useRef<THREE.Group | null>(null);
   const grupoHerramienta = useRef<THREE.Group | null>(null);
   const meshes = useRef<THREE.Mesh[]>([]);
+  // O049: mallas visibles del último dibujo, caché de candidatos y bloqueos.
+  const mallas3d = useRef<
+    { globalid: string; malla: MallaCandidata; envolvente: Envolvente }[]
+  >([]);
+  const cacheCandidatos = useRef(new CacheCandidatosMallas());
+  const bloqueoFlechas = useRef<Bloqueo | null>(null);
+  const bloqueoShift = useRef<Bloqueo | null>(null);
+  const ultimaInferenciaEmpujar = useRef<{
+    punto: Vec3;
+    tipo: string | null;
+    etiqueta: string;
+  } | null>(null);
+  const [marcadorEmpujar, setMarcadorEmpujar] = useState<{
+    x: number;
+    y: number;
+    tipo: string;
+    etiqueta: string;
+    punto: Vec3;
+    tooltipIzquierda: boolean;
+  } | null>(null);
+  const [guiaEmpujar, setGuiaEmpujar] = useState<{
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    color: string;
+    tipo: string;
+  } | null>(null);
   const grosores = useRef<EntradaGrosor[]>([]);
   const navegacion = useRef<Navegacion | null>(null);
   // O010/O031: la cámara de cada vista se conserva al cambiar de vista, entre
@@ -1068,6 +1216,7 @@ export function Visor3D({
   const moverEmpujar = useModelo((s) => s.moverEmpujar);
   const clicEmpujar = useModelo((s) => s.clicEmpujar);
   const confirmarEmpujar = useModelo((s) => s.confirmarEmpujar);
+  const empujarZ = useModelo((s) => s.empujarZ);
   const opcionesNivel = useModelo((s) => s.opcionesNivel);
   const cotasNivel = useModelo((s) => s.cotasNivel);
   const dobleClicEnPlanta = useModelo((s) => s.dobleClicEnPlanta);
@@ -2012,6 +2161,11 @@ export function Visor3D({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dimensiones.ancho, dimensiones.alto]);
 
+  // O049: el caché por elemento se invalida cuando cambia el modelo.
+  useEffect(() => {
+    cacheCandidatos.current.limpiar();
+  }, [mallas]);
+
   // Los cambios del modelo solo ajustan el recorte de profundidad.
   useEffect(() => {
     aplicarCamara();
@@ -2078,6 +2232,14 @@ export function Visor3D({
       }
       return true;
     });
+
+    // O049: la inferencia usa las mismas mallas visibles que el dibujo. La caja
+    // se calcula una vez por redibujo; los candidatos se arman al acercarse.
+    mallas3d.current = visibles.map((elemento) => ({
+      globalid: elemento.globalid,
+      malla: elemento,
+      envolvente: envolventeDeMalla(elemento),
+    }));
 
     // O012: en 3D no se dibujan las aristas que caen sobre la cara de otro
     // elemento unido del mismo material (extremos de viga contra columnas).
@@ -4643,7 +4805,8 @@ export function Visor3D({
     const ancho = Math.abs(rect.x2 - rect.x1);
     const largo = Math.abs(rect.y2 - rect.y1);
     if (ancho < 1e-6 || largo < 1e-6) return;
-    const z = zEmpujar + 0.02;
+    const cotaPlano = empujarZ ?? zEmpujar;
+    const z = cotaPlano + 0.02;
     const clase =
       empujarClasificacion === "auto"
         ? clasificarEmpujar(rect, empujarAltura ?? 0).clase
@@ -4709,7 +4872,7 @@ export function Visor3D({
         side: THREE.DoubleSide,
       });
       const solido = new THREE.Mesh(cajaSolido, material);
-      solido.position.set(centroX, centroY, zEmpujar + altura / 2);
+      solido.position.set(centroX, centroY, cotaPlano + altura / 2);
       solido.renderOrder = 10;
       grupoLocal.add(solido);
       const aristas = new THREE.LineSegments(
@@ -4721,8 +4884,8 @@ export function Visor3D({
       grupoLocal.add(aristas);
       // Línea de altura en la primera esquina.
       const vertical = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(esquinas[0][0], esquinas[0][1], zEmpujar),
-        new THREE.Vector3(esquinas[0][0], esquinas[0][1], zEmpujar + altura),
+        new THREE.Vector3(esquinas[0][0], esquinas[0][1], cotaPlano),
+        new THREE.Vector3(esquinas[0][0], esquinas[0][1], cotaPlano + altura),
       ]);
       const lineaAltura = new THREE.Line(
         vertical,
@@ -4746,7 +4909,26 @@ export function Visor3D({
     puntosHerramienta,
     ratonHerramienta,
     zEmpujar,
+    empujarZ,
   ]);
+
+  // O049: al terminar o cambiar de herramienta se apaga el marcador. La
+  // limpieza se aplaza para no encadenar renders dentro del efecto.
+  useEffect(() => {
+    if (
+      herramienta !== "empujar" ||
+      (puntosHerramienta.length === 0 && !empujarRect)
+    ) {
+      ultimaInferenciaEmpujar.current = null;
+      bloqueoFlechas.current = null;
+      bloqueoShift.current = null;
+      const id = setTimeout(() => {
+        setMarcadorEmpujar(null);
+        setGuiaEmpujar(null);
+      }, 0);
+      return () => clearTimeout(id);
+    }
+  }, [herramienta, puntosHerramienta.length, empujarRect]);
 
   // Ajustar la cámara a la vista (botón y F). Es la única acción que reencuadra.
   const ajustar = useCallback(() => {
@@ -5231,12 +5413,132 @@ export function Visor3D({
       };
     };
 
-    /** O046: punto del rayo sobre el plano z del nivel activo. */
-    const puntoNivel3D = (clientX: number, clientY: number): Punto2 | null => {
-      const rayo = rayoPantalla(clientX, clientY);
-      if (!rayo) return null;
-      const punto = rayoPlanoHorizontal(rayo, zEmpujar);
-      return punto ? [punto[0], punto[1]] : null;
+    /** O049: proyección mundo → píxeles de la página. */
+    const proyectarLienzo = (p: Vec3): { x: number; y: number } => {
+      const camera = camara.current;
+      const rect = nodo.getBoundingClientRect();
+      if (!camera) return { x: 0, y: 0 };
+      camera.updateMatrixWorld();
+      const v = new THREE.Vector3(p.x, p.y, p.z).project(camera);
+      return {
+        x: rect.left + ((v.x + 1) / 2) * rect.width,
+        y: rect.top + ((1 - v.y) / 2) * rect.height,
+      };
+    };
+
+    /** O049: pinta el marcador y la guía de la inferencia; devuelve el punto. */
+    const anotarInferenciaEmpujar = (inf: Inferencia): Vec3 | null => {
+      if (!inf.punto || inf.tipo === null || inf.tipo === "plano") {
+        setMarcadorEmpujar(null);
+        setGuiaEmpujar(null);
+        ultimaInferenciaEmpujar.current = null;
+        return inf.punto ? redondearVec(inf.punto) : null;
+      }
+      const punto = redondearVec(inf.punto);
+      const pantalla = proyectarLienzo(punto);
+      const rect = nodo.getBoundingClientRect();
+      const etiqueta = etiquetaInferencia(inf.tipo);
+      setMarcadorEmpujar({
+        x: pantalla.x - rect.left,
+        y: pantalla.y - rect.top,
+        tipo: inf.tipo,
+        etiqueta,
+        punto,
+        // Cerca del borde derecho el tooltip se dibuja hacia la izquierda para
+        // que el recorte del visor no lo oculte.
+        tooltipIzquierda: pantalla.x - rect.left > rect.width * 0.7,
+      });
+      ultimaInferenciaEmpujar.current = { punto, tipo: inf.tipo, etiqueta };
+      if (inf.guia) {
+        const a = proyectarLienzo(redondearVec(inf.guia.inicio));
+        const b = proyectarLienzo(redondearVec(inf.guia.fin));
+        setGuiaEmpujar({
+          x1: a.x - rect.left,
+          y1: a.y - rect.top,
+          x2: b.x - rect.left,
+          y2: b.y - rect.top,
+          color: colorDeGuia(inf.tipo),
+          tipo: inf.tipo,
+        });
+      } else {
+        setGuiaEmpujar(null);
+      }
+      return punto;
+    };
+
+    /**
+     * O049: una sola entrada a `inferir()` para la herramienta Empujar/Tirar.
+     * El rayo viene de la cámara, los candidatos de las mallas visibles cercanas
+     * a 60 px y el plano de trabajo del nivel o de la cara superior ya fijada.
+     */
+    const inferenciaEmpujarEn = (
+      clientX: number,
+      clientY: number,
+      shiftKey: boolean,
+    ): { inf: Inferencia; candidatos: CandidatosInferencia; punto: Vec3 | null } | null => {
+      const rayoCrudo = rayoPantalla(clientX, clientY);
+      if (!rayoCrudo) return null;
+      const rayo = {
+        origen: {
+          x: rayoCrudo.origen[0],
+          y: rayoCrudo.origen[1],
+          z: rayoCrudo.origen[2],
+        },
+        direccion: {
+          x: rayoCrudo.direccion[0],
+          y: rayoCrudo.direccion[1],
+          z: rayoCrudo.direccion[2],
+        },
+      };
+      const cursor = { x: clientX, y: clientY };
+      const cercanas = filtrarPorCercania(mallas3d.current, proyectarLienzo, cursor, 60);
+      const unidos = unirCandidatos(
+        cercanas.map((m) => cacheCandidatos.current.obtener(m.malla, mallas)),
+      );
+      // O049: la herramienta solo dibuja sobre caras horizontales (normal +Z).
+      // Las caras verticales no son destino válido y, además, ocluirían puntos
+      // medios y extremos de las tapas que el usuario sí quiere enganchar.
+      const candidatos: CandidatosInferencia = {
+        ...unidos,
+        caras: (unidos.caras ?? []).filter(
+          (cara) => !!cara.normal && cara.normal.z >= 1 - 1e-6,
+        ),
+      };
+      const cota = empujarZ ?? zEmpujar;
+      const primera = puntosHerramienta[0];
+      const puntoPrevio = primera
+        ? { x: primera[0], y: primera[1], z: cota }
+        : undefined;
+      const planoTrabajo = {
+        punto: { x: 0, y: 0, z: cota },
+        normal: { x: 0, y: 0, z: 1 },
+      };
+      let bloqueo = bloqueoFlechas.current ?? undefined;
+      if (!bloqueo && shiftKey) {
+        if (!bloqueoShift.current) {
+          const libre = inferir({
+            rayo,
+            proyectar: proyectarLienzo,
+            candidatos,
+            ...(puntoPrevio ? { puntoPrevio } : {}),
+            planoTrabajo,
+          });
+          bloqueoShift.current = bloqueoDeInferencia(libre, candidatos);
+        }
+        bloqueo = bloqueoShift.current ?? undefined;
+      } else if (!shiftKey) {
+        bloqueoShift.current = null;
+      }
+      const inf = inferir({
+        rayo,
+        proyectar: proyectarLienzo,
+        candidatos,
+        ...(puntoPrevio ? { puntoPrevio } : {}),
+        planoTrabajo,
+        ...(bloqueo ? { bloqueo } : {}),
+      });
+      const punto = anotarInferenciaEmpujar(inf);
+      return { inf, candidatos, punto };
     };
 
     // O041: elementos bajo el cursor para Tab. En planta se detectan por geometría
@@ -5392,8 +5694,17 @@ export function Visor3D({
           void confirmarEmpujar();
           return;
         }
-        const punto = puntoNivel3D(clientX, clientY);
-        if (punto) void clicEmpujar(punto);
+        const res = inferenciaEmpujarEn(clientX, clientY, shift);
+        if (!res || !res.punto) return;
+        // O049: si el primer punto cae sobre una cara superior, el contorno se
+        // dibuja en su plano y el sólido nace con ese desfase.
+        const cara = caraSuperiorEn(res.punto, res.candidatos.caras ?? []);
+        // La cota sale del punto ya redondeado (no del vértice float32 de la
+        // malla) para que el desfase guardado sea 0.12 y no 0.119999997.
+        void clicEmpujar(
+          [res.punto.x, res.punto.y],
+          cara ? res.punto.z : undefined,
+        );
         return;
       }
       if (herramienta === "nivel" && (vista.tipo === "alzado" || vista.tipo === "corte")) {
@@ -6208,10 +6519,13 @@ export function Visor3D({
         evento.buttons === 0
       ) {
         if (empujarRect) {
+          setMarcadorEmpujar(null);
+          setGuiaEmpujar(null);
+          ultimaInferenciaEmpujar.current = null;
           const centro: [number, number, number] = [
             (empujarRect.x1 + empujarRect.x2) / 2,
             (empujarRect.y1 + empujarRect.y2) / 2,
-            zEmpujar,
+            empujarZ ?? zEmpujar,
           ];
           const rayo = rayoPantalla(evento.clientX, evento.clientY);
           const altura = rayo ? alturaEnEjeVertical(rayo, centro) : null;
@@ -6221,9 +6535,9 @@ export function Visor3D({
           }
           return;
         }
-        const punto = puntoNivel3D(evento.clientX, evento.clientY);
-        if (punto) {
-          moverEmpujar(punto);
+        const res = inferenciaEmpujarEn(evento.clientX, evento.clientY, evento.shiftKey);
+        if (res && res.punto) {
+          moverEmpujar([res.punto.x, res.punto.y]);
           return;
         }
       }
@@ -6503,6 +6817,29 @@ export function Visor3D({
         evento.preventDefault();
         return;
       }
+      // O049: flechas fijan el eje de la inferencia mientras dura el trazo.
+      if (herramienta === "empujar") {
+        const ejes: Record<string, "x" | "y" | "z"> = {
+          ArrowRight: "x",
+          ArrowLeft: "y",
+          ArrowUp: "z",
+        };
+        const eje = ejes[evento.key];
+        if (eje) {
+          evento.preventDefault();
+          evento.stopPropagation();
+          const actual = bloqueoFlechas.current;
+          bloqueoFlechas.current =
+            actual?.tipo === "eje" && actual.eje === eje
+              ? null
+              : { tipo: "eje", eje };
+          nodo.dataset.bloqueoEmpujar =
+            bloqueoFlechas.current?.tipo === "eje"
+              ? bloqueoFlechas.current.eje
+              : "";
+          return;
+        }
+      }
       // O041: Tab recorre muro → cerramiento → castillo → muro bajo el cursor.
       if (evento.key === "Tab" && !evento.ctrlKey && !evento.metaKey && !evento.altKey) {
         const posicion = ultimoPuntero.current;
@@ -6558,6 +6895,34 @@ export function Visor3D({
     };
     const alSoltarTecla = (evento: KeyboardEvent) => {
       if (evento.code === "Space") espacio.current = false;
+      if (evento.key === "Shift" && herramienta === "empujar") {
+        bloqueoShift.current = null;
+      }
+    };
+    // O049: último punto inferido para las pruebas E2E.
+    (nodo as unknown as Record<string, unknown>).__openrvtEmpujarInferencia = () =>
+      ultimaInferenciaEmpujar.current;
+    // O049: diagnóstico de candidatos de Empujar/Tirar para las pruebas E2E.
+    (nodo as unknown as Record<string, unknown>).__openrvtEmpujarCandidatos = (
+      clientX: number,
+      clientY: number,
+    ) => {
+      const cercanas = filtrarPorCercania(
+        mallas3d.current,
+        proyectarLienzo,
+        { x: clientX, y: clientY },
+        60,
+      );
+      const candidatos = unirCandidatos(
+        cercanas.map((m) => cacheCandidatos.current.obtener(m.malla, mallas)),
+      );
+      return {
+        mallas: mallas3d.current.length,
+        cercanas: cercanas.map((m) => m.globalid),
+        vertices: candidatos.vertices?.length ?? 0,
+        aristas: candidatos.aristas?.length ?? 0,
+        caras: candidatos.caras?.length ?? 0,
+      };
     };
     // Utilidad de las pruebas E2E: candidatos de Tab bajo un punto de la pantalla.
     (nodo as unknown as Record<string, unknown>).__openrvtCandidatosTab = (
@@ -6651,6 +7016,7 @@ export function Visor3D({
     mallas,
     empujarRect,
     zEmpujar,
+    empujarZ,
     fijarAlturaEmpujar,
     moverEmpujar,
     clicEmpujar,
@@ -6679,6 +7045,16 @@ export function Visor3D({
       return {
         x: rect.left + ((punto.x + 1) / 2) * rect.width,
         y: rect.top + ((1 - punto.y) / 2) * rect.height,
+      };
+    };
+    // O049: estado vivo de la herramienta para las pruebas E2E (puntos 2D y cota).
+    (nodo as unknown as Record<string, unknown>).__openrvtEmpujar = () => {
+      const estado = useModelo.getState();
+      return {
+        z: estado.empujarZ,
+        puntos: estado.puntosHerramienta,
+        rect: estado.empujarRect,
+        altura: estado.empujarAltura,
       };
     };
     // O014b: asa en pantalla de la cabeza de un nivel (para arrastrarla en E2E).
@@ -7225,6 +7601,54 @@ export function Visor3D({
         >
           {guiaAlinear.bloqueada ? "\u{1F512}" : "\u{1F513}"}
         </button>
+      )}
+      {guiaEmpujar && (
+        <svg
+          data-testid="empujar-guia"
+          data-tipo={guiaEmpujar.tipo}
+          className="pointer-events-none absolute inset-0 z-20 h-full w-full"
+          aria-hidden="true"
+        >
+          <line
+            x1={guiaEmpujar.x1}
+            y1={guiaEmpujar.y1}
+            x2={guiaEmpujar.x2}
+            y2={guiaEmpujar.y2}
+            stroke={guiaEmpujar.color}
+            strokeWidth={2}
+            strokeDasharray="8 6"
+          />
+        </svg>
+      )}
+      {marcadorEmpujar && (
+        <div
+          className="pointer-events-none absolute z-30"
+          style={{ left: marcadorEmpujar.x, top: marcadorEmpujar.y }}
+        >
+          <span
+            className="absolute"
+            style={{ left: 0, top: 0, transform: "translate(-50%, -50%)" }}
+          >
+            <span
+              data-testid="empujar-marcador"
+              data-tipo={marcadorEmpujar.tipo}
+              data-etiqueta={marcadorEmpujar.etiqueta}
+              data-punto={`${marcadorEmpujar.punto.x},${marcadorEmpujar.punto.y},${marcadorEmpujar.punto.z}`}
+              className="block"
+              style={formaDeMarcador(marcadorEmpujar.tipo)}
+            >
+              {marcadorEmpujar.tipo === "interseccion" ? "×" : ""}
+            </span>
+          </span>
+          <span
+            data-testid="empujar-tooltip"
+            className={`absolute -top-2 whitespace-nowrap rounded bg-background/95 px-1 py-0.5 text-[11px] shadow ${
+              marcadorEmpujar.tooltipIzquierda ? "right-3" : "left-3"
+            }`}
+          >
+            {marcadorEmpujar.etiqueta}
+          </span>
+        </div>
       )}
       {herramienta === "empujar" &&
         (vista.tipo === "iso" || vista.tipo === "perspectiva") && (

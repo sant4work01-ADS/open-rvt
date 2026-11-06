@@ -3462,6 +3462,7 @@ class ModeladoMixin:
         linea_ubicacion: str | None = None,
         desfase_ubicacion: float = 0.0,
         volteado: bool = False,
+        desfase_base: float = 0.0,
     ) -> dict[str, Any]:
         self._exigir_modelo()
         tipo_entidad = self._tipo_muro(tipo)
@@ -3470,8 +3471,11 @@ class ModeladoMixin:
             x1, y1, x2, y2 = float(x1), float(y1), float(x2), float(y2)
             altura = float(altura)
             desfase_ubicacion = float(desfase_ubicacion)
+            desfase_base = float(desfase_base)
         except (TypeError, ValueError) as exc:
             raise self._error("Los datos del muro no son números.", -32602) from exc
+        if not math.isfinite(desfase_base):
+            raise self._error("El desfase de base del muro no es un número.", -32602)
         if alineacion not in ALINEACIONES:
             raise self._error(
                 f"Alineación «{alineacion}» no válida; use centro, interior o exterior.",
@@ -3500,7 +3504,7 @@ class ModeladoMixin:
         superior = self._nivel_inmediato_superior(elevacion)
         restriccion = {
             "NivelBase": _gid(nivel_entidad),
-            "DesfaseBase": 0.0,
+            "DesfaseBase": desfase_base,
             "NivelTope": _gid(superior) if superior is not None else "",
             "DesfaseTope": 0.0,
             "AlturaSinConexion": altura,
@@ -3508,7 +3512,9 @@ class ModeladoMixin:
         if superior is not None:
             elev_tope = float(superior.Elevation or 0.0)
             try:
-                _, altura = altura_restringida(elevacion, 0.0, elev_tope, 0.0, altura)
+                _, altura = altura_restringida(
+                    elevacion, desfase_base, elev_tope, 0.0, altura
+                )
             except ValueError as exc:
                 raise self._error(str(exc), -32602) from exc
         self._instantanea()
@@ -3526,6 +3532,7 @@ class ModeladoMixin:
                 "Alineacion": alineacion,
                 "LineaUbicacion": linea_ubicacion,
                 "DesfaseUbicacion": desfase_ubicacion,
+                "DesfaseBase": desfase_base,
                 "Volteado": bool(volteado),
                 "BajarACimentacion": True,
             },
@@ -3540,7 +3547,7 @@ class ModeladoMixin:
             [
                 [ux, -uy, 0.0, x1],
                 [uy, ux, 0.0, y1],
-                [0.0, 0.0, 1.0, elevacion],
+                [0.0, 0.0, 1.0, elevacion + desfase_base],
                 [0.0, 0.0, 0.0, 1.0],
             ]
         )
@@ -4086,15 +4093,19 @@ class ModeladoMixin:
         altura: float | None = None,
         eje_a: str = "",
         eje_b: str = "",
+        desfase: float = 0.0,
     ) -> dict[str, Any]:
         self._exigir_modelo()
         tipo_entidad = self._tipo_estructura(tipo, ("IfcColumnType",))
         nivel_entidad = self._nivel_por_gid(nivel)
         try:
             x, y, rotacion = float(x), float(y), float(rotacion)
+            desfase = float(desfase)
         except (TypeError, ValueError) as exc:
             raise self._error("La posición de la columna no es numérica.", -32602) from exc
-        elevacion = float(nivel_entidad.Elevation or 0.0)
+        if not math.isfinite(desfase):
+            raise self._error("El desfase de la columna no es un número.", -32602)
+        elevacion = float(nivel_entidad.Elevation or 0.0) + desfase
         alto = self._altura_columna(elevacion, nivel_superior, altura)
         tope = _texto(nivel_superior)
         if not tope:
@@ -4121,7 +4132,7 @@ class ModeladoMixin:
             PSET_RESTRICCIONES,
             {
                 "NivelBase": _gid(nivel_entidad),
-                "DesfaseBase": 0.0,
+                "DesfaseBase": desfase,
                 "NivelTope": tope,
                 "DesfaseTope": 0.0,
                 "AlturaSinConexion": alto,
@@ -4936,6 +4947,7 @@ class ModeladoMixin:
         puntos: Any,
         altura: float,
         nombre: str = "Genérico",
+        desfase: float = 0.0,
     ) -> dict[str, Any]:
         """O046: sólido genérico del prototipo Empujar/Tirar.
 
@@ -4948,8 +4960,11 @@ class ModeladoMixin:
         try:
             poligono = [(float(p[0]), float(p[1])) for p in puntos]
             altura = float(altura)
+            desfase = float(desfase)
         except (TypeError, ValueError, IndexError) as exc:
             raise self._error("El contorno del genérico no es válido.", -32602) from exc
+        if not math.isfinite(desfase):
+            raise self._error("El desfase del genérico no es un número.", -32602)
         if len(poligono) < 3:
             raise self._error("El genérico necesita al menos tres vértices.", -32602)
         area = abs(_poligono_area(poligono))
@@ -4963,7 +4978,7 @@ class ModeladoMixin:
         proxy = root.create_entity(self.modelo, ifc_class="IfcBuildingElementProxy")
         proxy.Name = nombre
         proxy.PredefinedType = "ELEMENT"
-        elevacion = float(nivel_entidad.Elevation or 0.0)
+        elevacion = float(nivel_entidad.Elevation or 0.0) + desfase
         matriz = np.identity(4)
         matriz[2][3] = elevacion
         geometry_api.edit_object_placement(self.modelo, product=proxy, matrix=matriz)
@@ -5058,6 +5073,7 @@ class ModeladoMixin:
                 "AreaBase": area,
                 "Volumen": volumen,
                 "Nombre": nombre,
+                "Desfase": desfase,
             },
         )
         spatial_api.assign_container(

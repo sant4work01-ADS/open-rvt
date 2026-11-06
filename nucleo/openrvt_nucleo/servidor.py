@@ -266,6 +266,7 @@ class Servidor:
                 params.get("linea_ubicacion", params.get("LineaUbicacion")),
                 params.get("desfase_ubicacion", params.get("DesfaseUbicacion", 0.0)),
                 bool(params.get("volteado", params.get("Volteado", False))),
+                params.get("desfase_base", params.get("DesfaseBase", 0.0)),
             )
         if metodo in ("muros.voltear", "elementos.voltear"):
             return self._exigir().muro_voltear(str(params.get("globalid") or ""))
@@ -290,6 +291,7 @@ class Servidor:
                 params.get("puntos"),
                 params.get("altura", 0.0),
                 str(params.get("nombre") or "Genérico"),
+                params.get("desfase", params.get("Desfase", 0.0)),
             )
         if metodo == "aberturas.crear":
             return self._exigir().abertura_crear(
@@ -411,6 +413,7 @@ class Servidor:
                 params.get("altura"),
                 str(params.get("ejeA") or params.get("eje_a") or ""),
                 str(params.get("ejeB") or params.get("eje_b") or ""),
+                params.get("desfase", params.get("Desfase", 0.0)),
             )
         if metodo in ("castillos.crear_en_muro", "castillo.crear_en_muro"):
             return self._exigir().castillo_crear_en_muro(

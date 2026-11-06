@@ -360,10 +360,12 @@ interface EstadoModelo {
   empujarClasificacion: ClasificacionEmpujar;
   empujarRect: RectanguloEmpujar | null;
   empujarAltura: number | null;
+  /** O049: cota del plano del contorno (cara superior) o null = nivel activo. */
+  empujarZ: number | null;
   fijarClasificacionEmpujar: (clasificacion: ClasificacionEmpujar) => void;
   fijarAlturaEmpujar: (altura: number | null) => void;
   moverEmpujar: (punto: Punto2 | null) => void;
-  clicEmpujar: (punto: Punto2) => Promise<boolean>;
+  clicEmpujar: (punto: Punto2, z?: number) => Promise<boolean>;
   confirmarEmpujar: () => Promise<boolean>;
   /** O006d: el trazo de eje actual se dibuja libre (Ctrl o Alt). */
   ejeLibre: boolean;
@@ -823,6 +825,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       longitudTecleada: "",
       empujarRect: null,
       empujarAltura: null,
+      empujarZ: null,
       opcionesMuro: {
         tipo: tipos.find((t) => t.nombre === "Block 15")?.nombre ?? tipos[0]?.nombre ?? "",
         altura: 2.6,
@@ -1032,6 +1035,13 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       set({ aviso: "El rectángulo necesita ancho y largo mayores que cero." });
       return false;
     }
+    // O049: el contorno puede vivir en la cara superior de otro elemento. El
+    // sólido se liga al nivel activo con ese desfase vertical.
+    const nivelEntidad = get().niveles.find((n) => n.globalid === nivel);
+    const cotaEmpujar = get().empujarZ;
+    const desfasePlano = cotaEmpujar === null
+      ? 0
+      : cotaEmpujar - (nivelEntidad?.elevacion ?? 0);
     const elegida = get().empujarClasificacion;
     const clase: ClaseEmpujar =
       elegida === "auto" ? clasificarEmpujar(rect, altura).clase : elegida;
@@ -1051,11 +1061,15 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     const centroY = (rect.y1 + rect.y2) / 2;
 
     if (clase === "losa") {
+      // O049: el contorno es la base del sólido. La losa crece hacia arriba
+      // desde el plano (igual que muro y columna), así que su cara superior
+      // queda en el plano + espesor. Dibujar sobre una losa de 0.12 deja el
+      // contorno a 0.12 y el sólido nuevo nace ahí.
       const ok = await ejecutar("losas.crear", {
         nivel,
         puntos: puntosRectangulo(rect),
         espesor: h,
-        desfase: 0,
+        desfase: desfasePlano + h,
       });
       if (ok) set({ aviso: `Losa de ${h.toFixed(2)} m de espesor.` });
       return ok;
@@ -1088,6 +1102,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         y2,
         altura: h,
         alineacion: "centro",
+        desfase_base: desfasePlano,
       });
       if (ok) {
         const diferencia = Math.abs(Number(tipo.espesor) - menor);
@@ -1142,6 +1157,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         y: centroY,
         rotacion,
         altura: h,
+        desfase: desfasePlano,
       });
       if (ok) set({ aviso: `Columna de ${h.toFixed(2)} m de alto.` });
       return ok;
@@ -1152,6 +1168,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       puntos: puntosRectangulo(rect),
       altura,
       nombre: "Genérico",
+      desfase: desfasePlano,
     });
     if (ok) set({ aviso: `Genérico de ${h.toFixed(2)} m.` });
     return ok;
@@ -1442,6 +1459,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     empujarClasificacion: "auto",
     empujarRect: null,
     empujarAltura: null,
+    empujarZ: null,
     ejeLibre: false,
     voltearSiguiente: false,
     etiquetaEje: "",
@@ -1953,6 +1971,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         longitudTecleada: "",
         empujarRect: null,
         empujarAltura: null,
+        empujarZ: null,
         ejeLibre: false,
         modoCorte: false,
         puntoCorte: null,
@@ -1981,6 +2000,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         longitudTecleada: "",
         empujarRect: null,
         empujarAltura: null,
+        empujarZ: null,
         ejeLibre: false,
         etiquetaEje: "",
         opcionesNivel: { ...get().opcionesNivel, elevacionTexto: "" },
@@ -2219,6 +2239,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         longitudTecleada: "",
         empujarRect: null,
         empujarAltura: null,
+        empujarZ: null,
         ejeLibre: false,
         etiquetaEje: "",
         opcionesNivel: { ...get().opcionesNivel, elevacionTexto: "" },
@@ -2253,14 +2274,17 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
     moverEmpujar: (punto) => set({ ratonHerramienta: punto }),
 
-    clicEmpujar: async (punto) => {
+    clicEmpujar: async (punto, z) => {
       const estado = get();
       if (!estado.empujarRect) {
         const primero = estado.puntosHerramienta[0];
         if (!primero) {
+          const nivel = estado.niveles.find((n) => n.globalid === nivelActivo());
+          const zPlano = z ?? estado.empujarZ ?? nivel?.elevacion ?? 0;
           set({
             puntosHerramienta: [punto],
             ratonHerramienta: punto,
+            empujarZ: zPlano,
             longitudTecleada: "",
             aviso: "Empujar/Tirar: clic en la esquina opuesta o teclee ancho,largo.",
           });
@@ -2301,6 +2325,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
           longitudTecleada: "",
           empujarRect: null,
           empujarAltura: null,
+          empujarZ: null,
         });
         bitacoraHerramienta("empujar", "terminar");
       }

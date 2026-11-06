@@ -41,6 +41,9 @@ CLASES_OBJETIVO = (
     "IfcWindow",
     "IfcRoof",
     "IfcStair",
+    # O049: el sólido genérico de Empujar/Tirar también cuenta en la barra; O046
+    # mostraba 4 en el núcleo y 3 en la barra porque esta clase quedaba fuera.
+    "IfcBuildingElementProxy",
 )
 
 CATEGORIA = {
