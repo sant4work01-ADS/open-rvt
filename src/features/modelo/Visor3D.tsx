@@ -61,6 +61,14 @@ import {
 } from "./alinear";
 import { bordesDePset } from "./bordesLosa";
 import {
+  alturaEnEjeVertical,
+  clasificarEmpujar,
+  crearRectangulo,
+  puntosRectangulo,
+  rayoPlanoHorizontal,
+  textoDimensiones,
+} from "./empujar";
+import {
   asasDeLosa,
   contornoPrevio,
   desfaseConArrastre,
@@ -1053,6 +1061,13 @@ export function Visor3D({
   const clicNivel = useModelo((s) => s.clicNivel);
   const vistaPreviaRecorte = useModelo((s) => s.vistaPreviaRecorte);
   const clicRecorte = useModelo((s) => s.clicRecorte);
+  const empujarRect = useModelo((s) => s.empujarRect);
+  const empujarAltura = useModelo((s) => s.empujarAltura);
+  const empujarClasificacion = useModelo((s) => s.empujarClasificacion);
+  const fijarAlturaEmpujar = useModelo((s) => s.fijarAlturaEmpujar);
+  const moverEmpujar = useModelo((s) => s.moverEmpujar);
+  const clicEmpujar = useModelo((s) => s.clicEmpujar);
+  const confirmarEmpujar = useModelo((s) => s.confirmarEmpujar);
   const opcionesNivel = useModelo((s) => s.opcionesNivel);
   const cotasNivel = useModelo((s) => s.cotasNivel);
   const dobleClicEnPlanta = useModelo((s) => s.dobleClicEnPlanta);
@@ -1318,6 +1333,12 @@ export function Visor3D({
       fijarAviso(`No se pudo guardar el diagnóstico: ${respuesta.error.mensaje}`);
     }
   }, [eventosGrabados, fijarAviso, preferenciaRueda, resumenGrabacion]);
+
+  // O046: plano del nivel activo en 3D (la vista 3D no guarda un nivel propio).
+  const zEmpujar = useMemo(() => {
+    const id = vista.nivel ?? niveles[0]?.globalid;
+    return niveles.find((n) => n.globalid === id)?.elevacion ?? 0;
+  }, [vista.nivel, niveles]);
 
   const nivelGlobalidPorNombre = useMemo(() => {
     const mapa = new Map<string, string>();
@@ -4596,6 +4617,137 @@ export function Visor3D({
     vistaPreviaRecorte,
   ]);
 
+  // O046: vista previa del empujar/tirar en 3D: contorno, relleno y sólido.
+  useEffect(() => {
+    const grupoLocal = grupoHerramienta.current;
+    if (!grupoLocal) return;
+    while (grupoLocal.children.length) {
+      const hijo = grupoLocal.children.pop()!;
+      hijo.traverse((objeto) => {
+        const malla = objeto as THREE.Mesh;
+        if (malla.geometry) malla.geometry.dispose();
+        const material = malla.material;
+        if (Array.isArray(material)) material.forEach((m) => m.dispose());
+        else if (material) material.dispose();
+      });
+    }
+    if (herramienta !== "empujar") return;
+    if (vista.tipo !== "iso" && vista.tipo !== "perspectiva") return;
+    const rect =
+      empujarRect ??
+      (puntosHerramienta[0] && ratonHerramienta
+        ? crearRectangulo(puntosHerramienta[0], ratonHerramienta)
+        : null);
+    if (!rect) return;
+    const esquinas = puntosRectangulo(rect);
+    const ancho = Math.abs(rect.x2 - rect.x1);
+    const largo = Math.abs(rect.y2 - rect.y1);
+    if (ancho < 1e-6 || largo < 1e-6) return;
+    const z = zEmpujar + 0.02;
+    const clase =
+      empujarClasificacion === "auto"
+        ? clasificarEmpujar(rect, empujarAltura ?? 0).clase
+        : empujarClasificacion;
+    const color =
+      clase === "losa"
+        ? 0x64748b
+        : clase === "muro"
+          ? 0x2563eb
+          : clase === "columna"
+            ? 0x16a34a
+            : 0xd97706;
+
+    // Relleno translúcido del contorno.
+    const relleno = new THREE.BufferGeometry();
+    relleno.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(
+        [
+          esquinas[0][0], esquinas[0][1], z,
+          esquinas[1][0], esquinas[1][1], z,
+          esquinas[2][0], esquinas[2][1], z,
+          esquinas[0][0], esquinas[0][1], z,
+          esquinas[2][0], esquinas[2][1], z,
+          esquinas[3][0], esquinas[3][1], z,
+        ],
+        3,
+      ),
+    );
+    const mallaRelleno = new THREE.Mesh(
+      relleno,
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.18,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+    );
+    mallaRelleno.renderOrder = 11;
+    grupoLocal.add(mallaRelleno);
+
+    const borde = new THREE.BufferGeometry().setFromPoints(
+      [...esquinas, esquinas[0]].map(([x, y]) => new THREE.Vector3(x, y, z)),
+    );
+    const linea = new THREE.Line(
+      borde,
+      new THREE.LineBasicMaterial({ color, depthTest: false }),
+    );
+    linea.renderOrder = 14;
+    grupoLocal.add(linea);
+
+    const altura = empujarAltura ?? 0;
+    if (empujarRect && Math.abs(altura) > 1e-6) {
+      const centroX = (rect.x1 + rect.x2) / 2;
+      const centroY = (rect.y1 + rect.y2) / 2;
+      const cajaSolido = new THREE.BoxGeometry(ancho, largo, Math.abs(altura));
+      const material = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.3,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const solido = new THREE.Mesh(cajaSolido, material);
+      solido.position.set(centroX, centroY, zEmpujar + altura / 2);
+      solido.renderOrder = 10;
+      grupoLocal.add(solido);
+      const aristas = new THREE.LineSegments(
+        new THREE.EdgesGeometry(cajaSolido),
+        new THREE.LineBasicMaterial({ color, depthTest: false }),
+      );
+      aristas.position.copy(solido.position);
+      aristas.renderOrder = 15;
+      grupoLocal.add(aristas);
+      // Línea de altura en la primera esquina.
+      const vertical = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(esquinas[0][0], esquinas[0][1], zEmpujar),
+        new THREE.Vector3(esquinas[0][0], esquinas[0][1], zEmpujar + altura),
+      ]);
+      const lineaAltura = new THREE.Line(
+        vertical,
+        new THREE.LineDashedMaterial({
+          color,
+          dashSize: 0.12,
+          gapSize: 0.08,
+          depthTest: false,
+        }),
+      );
+      lineaAltura.computeLineDistances();
+      lineaAltura.renderOrder = 16;
+      grupoLocal.add(lineaAltura);
+    }
+  }, [
+    herramienta,
+    vista.tipo,
+    empujarRect,
+    empujarAltura,
+    empujarClasificacion,
+    puntosHerramienta,
+    ratonHerramienta,
+    zEmpujar,
+  ]);
+
   // Ajustar la cámara a la vista (botón y F). Es la única acción que reencuadra.
   const ajustar = useCallback(() => {
     const nodo = contenedor.current;
@@ -5055,6 +5207,38 @@ export function Visor3D({
       return [punto.x, punto.y];
     };
 
+    const rayoPantalla = (clientX: number, clientY: number) => {
+      const camera = camara.current;
+      if (!camera) return null;
+      const rect = nodo.getBoundingClientRect();
+      const raton = new THREE.Vector2(
+        ((clientX - rect.left) / rect.width) * 2 - 1,
+        -((clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      const rayo = new THREE.Raycaster();
+      rayo.setFromCamera(raton, camera);
+      return {
+        origen: [rayo.ray.origin.x, rayo.ray.origin.y, rayo.ray.origin.z] as [
+          number,
+          number,
+          number,
+        ],
+        direccion: [
+          rayo.ray.direction.x,
+          rayo.ray.direction.y,
+          rayo.ray.direction.z,
+        ] as [number, number, number],
+      };
+    };
+
+    /** O046: punto del rayo sobre el plano z del nivel activo. */
+    const puntoNivel3D = (clientX: number, clientY: number): Punto2 | null => {
+      const rayo = rayoPantalla(clientX, clientY);
+      if (!rayo) return null;
+      const punto = rayoPlanoHorizontal(rayo, zEmpujar);
+      return punto ? [punto[0], punto[1]] : null;
+    };
+
     // O041: elementos bajo el cursor para Tab. En planta se detectan por geometría
     // (el cerramiento queda arriba del corte y no tiene malla que el rayo toque); en
     // alzado, corte y 3D se suma el rayo y la línea del cerramiento en pantalla.
@@ -5198,6 +5382,18 @@ export function Visor3D({
             : "cara1"
           : "cercana";
         void aplicarAlinear(gidAlinear, cara, puntoAlinear);
+        return;
+      }
+      if (
+        herramienta === "empujar" &&
+        (vista.tipo === "iso" || vista.tipo === "perspectiva")
+      ) {
+        if (empujarRect) {
+          void confirmarEmpujar();
+          return;
+        }
+        const punto = puntoNivel3D(clientX, clientY);
+        if (punto) void clicEmpujar(punto);
         return;
       }
       if (herramienta === "nivel" && (vista.tipo === "alzado" || vista.tipo === "corte")) {
@@ -6006,6 +6202,31 @@ export function Visor3D({
         aplicarCamara();
         return;
       }
+      if (
+        herramienta === "empujar" &&
+        (vista.tipo === "iso" || vista.tipo === "perspectiva") &&
+        evento.buttons === 0
+      ) {
+        if (empujarRect) {
+          const centro: [number, number, number] = [
+            (empujarRect.x1 + empujarRect.x2) / 2,
+            (empujarRect.y1 + empujarRect.y2) / 2,
+            zEmpujar,
+          ];
+          const rayo = rayoPantalla(evento.clientX, evento.clientY);
+          const altura = rayo ? alturaEnEjeVertical(rayo, centro) : null;
+          if (altura !== null) {
+            // Cerca del plano se toma como altura cero: evita sólidos de micras.
+            fijarAlturaEmpujar(Math.abs(altura) < 0.005 ? 0 : altura);
+          }
+          return;
+        }
+        const punto = puntoNivel3D(evento.clientX, evento.clientY);
+        if (punto) {
+          moverEmpujar(punto);
+          return;
+        }
+      }
       if (herramienta === "nivel" && (vista.tipo === "alzado" || vista.tipo === "corte")) {
         const punto = puntoVistaDesdeEvento(evento.clientX, evento.clientY);
         if (punto) fijarRaton(punto, evento.shiftKey, metrosPorPixelActual());
@@ -6428,6 +6649,12 @@ export function Visor3D({
     vista.ejes,
     elementosBloqueados,
     mallas,
+    empujarRect,
+    zEmpujar,
+    fijarAlturaEmpujar,
+    moverEmpujar,
+    clicEmpujar,
+    confirmarEmpujar,
   ]);
 
   useEffect(() => {
@@ -6999,6 +7226,37 @@ export function Visor3D({
           {guiaAlinear.bloqueada ? "\u{1F512}" : "\u{1F513}"}
         </button>
       )}
+      {herramienta === "empujar" &&
+        (vista.tipo === "iso" || vista.tipo === "perspectiva") && (
+          <div
+            data-testid="empujar-preview"
+            data-paso={empujarRect ? "altura" : "contorno"}
+            className="pointer-events-none absolute bottom-12 left-2 z-10 whitespace-nowrap rounded bg-background/95 px-2 py-1 text-[11px] shadow"
+          >
+            <strong>Empujar/Tirar</strong>
+            {empujarRect ? (
+              <>
+                {" "}
+                · {textoDimensiones(empujarRect)}
+                {empujarAltura !== null && (
+                  <span data-testid="empujar-preview-altura">
+                    {" "}
+                    · h {empujarAltura.toFixed(2)} m
+                  </span>
+                )}
+                <span data-testid="empujar-preview-clase">
+                  {" "}
+                  ·{" "}
+                  {empujarClasificacion === "auto"
+                    ? clasificarEmpujar(empujarRect, empujarAltura ?? 0).clase
+                    : empujarClasificacion}
+                </span>
+              </>
+            ) : (
+              <> · primer clic en el nivel activo</>
+            )}
+          </div>
+        )}
       {herramienta === "nivel" && ratonHerramienta && (
         <div
           data-testid="nivel-preview"

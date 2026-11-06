@@ -50,6 +50,9 @@ export function App() {
   const nombreArchivo = useModelo((s) => s.nombreArchivo);
   const conCambios = useModelo((s) => s.conCambios);
   const herramientaActiva = useModelo((s) => s.herramienta);
+  const vistaTipo = useModelo(
+    (s) => s.vistas.find((v) => v.id === s.vistaActivaId)?.tipo ?? null,
+  );
   const tituloDocumento = nombreArchivo
     ? `${tr("comun.app", "OPEN-RVT")} — ${nombreArchivo}${conCambios ? " *" : ""}`
     : tr("comun.app", "OPEN-RVT");
@@ -267,7 +270,15 @@ export function App() {
           void estado.confirmarLongitud(e.shiftKey);
           return;
         }
-        if (e.key === "Backspace" || e.key === "," || e.key === "." || /^\d$/.test(e.key)) {
+        if (
+          e.key === "Backspace" ||
+          e.key === "," ||
+          e.key === "." ||
+          e.key === ";" ||
+          e.key === "-" ||
+          e.key === " " ||
+          /^\d$/.test(e.key)
+        ) {
           e.preventDefault();
           estado.teclearLongitud(e.key);
           return;
@@ -362,6 +373,8 @@ export function App() {
         nuevosEjesPorSeparaciones: () => useModelo.getState().abrirDialogoCotas(),
         herramientaMuro: () => useModelo.getState().activarHerramienta("muro"),
         herramientaLosa: () => useModelo.getState().activarHerramienta("losa"),
+        herramientaEmpujar: () => useModelo.getState().activarHerramienta("empujar"),
+        vistaTipo,
         losaDesdeMuros: () => void useModelo.getState().losaDesdeMuros(),
         herramientaPuerta: () => useModelo.getState().activarHerramienta("puerta"),
         herramientaVentana: () => useModelo.getState().activarHerramienta("ventana"),
@@ -405,7 +418,7 @@ export function App() {
         temaOscuro: () => fijar("oscuro"),
         temaActivo: pref,
       }),
-    [fijar, pref, herramientaActiva, irAModulo],
+    [fijar, pref, herramientaActiva, vistaTipo, irAModulo],
   );
 
   const comandos = useMemo<Comando[]>(() => {

@@ -104,6 +104,9 @@ export interface AccionesRibbon {
   nuevosEjesPorSeparaciones: () => void;
   herramientaMuro: () => void;
   herramientaLosa: () => void;
+  /** O046: empujar/tirar solo existe en las vistas 3D. */
+  herramientaEmpujar?: () => void;
+  vistaTipo?: string | null;
   losaDesdeMuros: () => void;
   herramientaPuerta: () => void;
   herramientaVentana: () => void;
@@ -303,6 +306,21 @@ export function construirComandosRibbon(a: AccionesRibbon): ComandoRibbon[] {
           accion: a.losaDesdeMuros,
         },
       ],
+    },
+    {
+      id: "empujar",
+      texto: "Empujar/Tirar",
+      icono: Box,
+      grupo: "Construir",
+      pestana: "modelar",
+      tamano: "grande",
+      habilitado: a.vistaTipo === "iso" || a.vistaTipo === "perspectiva",
+      activo: a.herramientaActiva === "empujar",
+      descripcion:
+        a.vistaTipo === "iso" || a.vistaTipo === "perspectiva"
+          ? "Rectángulo del nivel activo empujado a un sólido IFC"
+          : "Solo en 3D",
+      accion: a.herramientaEmpujar,
     },
     {
       id: "puerta",
