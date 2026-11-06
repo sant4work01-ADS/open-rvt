@@ -680,3 +680,92 @@ presupuestador llama «área de muro».
   cerrado; debe calcularse siempre con su definición correcta.
 - La caché por firma y el «no contar dos veces» son buenas ideas que conviene
   conservar, con pruebas de secuencia (etiquetar, mover, anidar, desagrupar).
+
+---
+
+## 7. El MCP: pocas herramientas y un recetario
+
+### Qué problema resuelve
+
+Permitir que un agente de IA (Claude Code/Desktop u otro cliente MCP) opere
+el documento vivo de la aplicación: consultar qué hay, construir geometría,
+**ver** el resultado y deshacer. El riesgo no es solo que el agente no sepa
+la API, sino que gaste decenas de turnos explorándola y que sus cambios dejen
+el documento en un estado a medias.
+
+### Cómo lo resuelve
+
+**Servidor mínimo, sin dependencias.** El servidor MCP es un proceso de
+stdio escrito solo con la biblioteca estándar; no importa Qt ni la aplicación.
+Traduce JSON-RPC a peticiones por un socket TCP local contra un «puente» que
+vive dentro de la aplicación (`scripts/ingetrazo_mcp.py:1`). Puerto por
+defecto 4763, configurable por variable de entorno; protocolo MCP
+`2024-11-05`. El puente escucha **solo en loopback**, no tiene autenticación
+y por eso no debe abrirse a la red (`docs/ai-bridge.md:1`).
+
+**Cinco herramientas, no cincuenta** (`scripts/ingetrazo_mcp.py:79`):
+
+1. `run_python`: ejecuta Python contra el documento vivo; devuelve
+   stdout/stderr. Cada llamada es **un paso de deshacer**; si lanza una
+   excepción, el documento se revierte **por completo**.
+2. `query_model`: conteos, nombres de grupos/componentes, materiales, capas,
+   límites y tamaño de la selección.
+3. `screenshot`: renderiza el viewport real y lo devuelve como imagen; el
+   agente mira e itera.
+4. `undo`.
+5. `redo`.
+
+La decisión de diseño es deliberada: en vez de exponer decenas de
+herramientas con firmas que el modelo tendría que adivinar, se exponen muy
+pocas y se le da **el recetario completo en la descripción de `run_python`**
+(y también en las instrucciones del handshake, para que cualquier cliente lo
+vea) (`scripts/ingetrazo_mcp.py:57`, `scripts/ingetrazo_mcp.py:79`).
+
+**El recetario.** Es un texto único, en español, sin imports, compartido por
+las dos puertas de IA de la aplicación: el asistente interno y el servidor
+MCP (`core/ai_recipes.py:1`). Contiene:
+
+- Unidades y convenciones: Z arriba, metros, ángulos en radianes.
+- El scope disponible (`scene`, `mesh`, `selection`, `groups`, `layers`,
+  `viewport`, `QVector3D`, `Mesh`, `Group`, `Edge`, `Face`, `bim`).
+- Constructores de alto nivel: caja, casa completa, torno/revolución,
+  prisma/extrusión, losa, muro con huecos, etc.; cada uno crea el grupo y lo
+  añade, para que el modelo no repita el error de añadirlo otra vez.
+- Operaciones básicas: cara suelta, arista, grupo manual, pintar un grupo,
+  mover un grupo (componiendo la matriz si es una instancia), cámara,
+  lámina y capa.
+- Cómo se ejecuta: cada unidad es un paso de undo, el scope **persiste**
+  entre llamadas, no hay que redefinir variables, y **no se debe explorar la
+  API con `dir()`, `inspect` ni `dis`** (`core/ai_recipes.py:73`).
+
+El motivo está medido y documentado en el propio módulo: un modelo construyó
+una mesa correcta pero gastó **81 llamadas, 46 de ellas de pura
+introspección**, y 34 s razonando sobre el giro de una caja que una función
+del recetario resolvía en una línea (`core/ai_recipes.py:1`).
+
+**Seguridad y alcance.** El puente solo escucha en `127.0.0.1`; si el
+cliente está en un contenedor o en otra máquina, el usuario lleva el puerto
+con un túnel que él controla y le dice al cliente dónde está el otro extremo
+(`docs/ai-bridge.md:1`). Como escuchar en local no protege del navegador de
+la misma máquina (una página puede hacer un POST a localhost sin permiso), el
+puente corta la conexión en la primera línea que no sea una petición JSON, de
+modo que el cuerpo de una petición HTTP nunca llega a leerse. Aun así, la
+recomendación es detener el puente cuando no se use.
+
+### Qué haríamos distinto en OPEN-RVT
+
+- Mantener la filosofia de **pocas herramientas + recetario**: es la que
+  reduce el coste de los agentes y evita que inventen la API.
+- El recetario debe ser una **fuente única** compartida por todas las puertas
+  (asistente interno, MCP, línea de comandos); si se duplica, se desincroniza.
+- Cada llamada debe ser transaccional y atómica respecto al historial, y el
+  rollback debe probarse con un error a mitad de una receta.
+- En OPEN-RVT los constructores deben crear **elementos IFC** con parámetros
+  (muro, losa, hueco), no caras y aristas sueltas; el recetario debe enseñar
+  esas funciones y no la malla.
+- Conservar `screenshot` como herramienta de verificación: obliga al agente a
+  mirar lo que hizo.
+- La seguridad debe ser explícita: loopback, sin autenticación, apagado por
+  defecto y corte de peticiones que no sean JSON; no exponerlo a la red.
+- El scope persistente entre llamadas es cómodo, pero debe documentarse y
+  limpiarse al cambiar de documento.
