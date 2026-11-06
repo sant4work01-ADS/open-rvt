@@ -32,3 +32,18 @@ completo y orientado a arquitectura e ingeniería: «inspirado descaradamente en
 - ¿OPEN-RVT pasa a GPL? Si pasa, se puede reutilizar código de IngeTrazo, como el lector `.skp` y la geometría;
   si no, se construye todo propio.
 - Respeta la directriz del 26-oct («que funcione bien lo que hay»): esto entra cuando el dueño lo ordene.
+
+## Decisión del dueño (6-nov)
+**No se copia código de IngeTrazo** (ni traducido). Se toman ideas y soluciones, o se usa como
+inspiración. OPEN-RVT conserva su licencia propia.
+
+Procedimiento para los workers (sala limpia):
+1. Un worker estudia IngeTrazo y escribe un documento de diseño en `docs/referencias/`: qué resuelve,
+   casos difíciles y enfoque, en prosa y pseudocódigo propio. Sin fragmentos de su código.
+2. Otro worker implementa solo desde ese documento y desde la spec, sin abrir el repo de IngeTrazo.
+
+Plan previsto (sin arrancar):
+- prueba de unas 2 h: rectángulo sobre un nivel → empujar/tirar → losa o muro IFC;
+- fases 1-3: inferencias 3D, crear elementos con empujar/tirar y editar caras de elementos existentes,
+  unas 8-10 h;
+- fase 4: geometría libre, al final o nunca.
