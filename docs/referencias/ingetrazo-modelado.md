@@ -488,3 +488,92 @@ puede seleccionar, mover ni abrir); ambos estados se guardan en el documento
   conviene mapearla a elementos y no a fragmentos de malla.
 - Ocultar/bloquear a nivel de objeto y de capa debe mantenerse y probarse en
   todas las puertas (pantalla, comandos, importación, pegado).
+
+---
+
+## 5. La guarda de hermeticidad
+
+### Qué problema resuelve
+
+Evitar que una edición deje un «sólido» agujereado, con aristas sueltas o con
+caras interiores mal marcadas. Un modelo abierto puede seguir dibujándose,
+pero ya no tiene interior/exterior, así que su volumen, su orientación y su
+exportación dejan de ser fiables. La guarda debe detectarlo **antes** de
+confirmar el cambio (y, cuando el daño ya existe, decir dónde está).
+
+### Cómo lo resuelve
+
+Hay dos niveles de comprobación:
+
+**Nivel débil: ¿hay frontera?** Una malla está cerrada si toda arista toca al
+menos dos caras (`core/orient.py:498`). Basta para saber si tiene sentido
+calcular un dentro/fuera, pero no para llamarla sólido: permite aristas con
+tres o más caras y no comprueba volumen.
+
+**Nivel fuerte: ¿es un sólido?** Se exige que **cada arista toque exactamente
+dos caras no interiores**, que no haya aristas sueltas, que haya al menos una
+cara y que el volumen firmado sea mayor que 10⁻¹² m³
+(`core/solids.py:55`). El volumen se calcula sumando tetraedros desde el
+origen sobre las caras trianguladas y se toma su valor absoluto
+(`core/bim.py:154`). Las caras marcadas como `interior` (tabiques que el
+motor conserva a propósito) no cuentan como piel.
+
+**La guarda del empuje.** Antes de mutar, si la malla era un sólido cerrado y
+no plana, se guarda una instantánea. Después de mutar se vuelve a comprobar:
+si dejó de estar cerrada, se restaura la instantánea y se marca el empuje como
+**rechazado**; el usuario ve «Push refused: would break the solid» y el modelo
+queda intacto (`tools/pushpull.py:2120`, `tools/pushpull.py:2002`). También se
+rechaza si el resultado es geométricamente idéntico al inicial (la
+reconstrucción «digerió» el empuje). La guarda **no** se aplica a hojas
+abiertas: una hoja plana puede abrirse legítimamente al convertirla en volumen.
+
+Si el rechazo ocurre a la distancia arrastrada, se busca por bisección la
+mayor distancia aceptada (hasta 6 intentos) y se confirma esa, avisando del
+tope (`tools/pushpull.py:2079`).
+
+**Cantidades y exportación.** El volumen de un conjunto de caras se devuelve
+solo si el conjunto es hermético por sí mismo: cada arista del conjunto
+delimitada por exactamente dos caras del conjunto; si no, se devuelve «sin
+volumen» (`core/bim.py:154`, `core/bim.py:25`). El área sí se calcula siempre
+(descontando huecos). La exportación IFC documenta la misma regla: área
+siempre, volumen solo cuando el objeto es hermético (`formats/ifc.py:9`).
+
+**Diagnóstico cuando ya está roto.** El inspector de sólidos clasifica cada
+arista contando caras no interiores incidentes (`plugins/solid_inspector.py:1`):
+
+- 0 caras → arista suelta (dibujo que no pertenece a ninguna superficie).
+- 1 cara → borde abierto (el borde de un agujero en la piel).
+- Más de 2 caras → sobreconexión (tabique interior o unión en T que la
+  frontera no debería tener).
+
+Y cada cara: **interior** (repite las esquinas de otra o es una partición
+cuyas aristas están todas sobreconectadas) o **reversa** (en un objeto
+cerrado, su frente mira hacia dentro). «Hermético» significa que no hay
+aristas sueltas, abiertas ni sobreconectadas; el volumen solo se muestra si
+además ninguna cara está reversa, porque una cara girada falsea la suma
+firmada (`plugins/solid_inspector.py:181`, `plugins/solid_inspector.py:196`).
+
+La reparación automática solo hace lo que tiene una única respuesta correcta:
+borra aristas sueltas y caras duplicadas, cierra agujeros cuyo borde es plano,
+marca particiones como interiores y gira caras reversas. Un agujero no plano
+o una arista compartida por dos sólidos exigen una decisión y se dejan
+señalados (`plugins/solid_inspector.py:1`). Las herramientas booleanas, por su
+parte, se niegan a operar si alguna entrada no es un sólido
+(`core/solids.py:415`).
+
+### Qué haríamos distinto en OPEN-RVT
+
+- La validez de un elemento IFC no es solo «malla cerrada»: hay reglas de
+  tipo, relaciones y representación. La guarda debe combinar ambas cosas y
+  ejecutarse en una capa compartida por todas las puertas (pantalla,
+  comandos, importación, pegado), con la invariante «ninguna puerta guarda un
+  elemento con geometría no hermética si su tipo exige volumen».
+- Distinguir «hoja abierta a propósito» (un plano, una cubierta) de «sólido
+  roto» por el tipo IFC, no por una bandera de malla.
+- El rechazo con restauración y el tope por bisección son buenas ideas;
+  conviene añadir el motivo concreto y el elemento afectado.
+- El diagnóstico por arista (suelta / abierta / sobreconectada) es
+  directamente reutilizable; en IFC hay que traducirlo a «abertura sin
+  relación», «cara sin volumen» y «partición mal clasificada».
+- Nunca calcular cantidades sobre geometría dudosa: devolver «sin volumen» en
+  vez de un número engañoso, como hacen ellos.
