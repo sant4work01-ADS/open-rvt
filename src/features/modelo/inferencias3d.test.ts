@@ -50,7 +50,7 @@ function entrada(
   candidatos: CandidatosInferencia = {},
   extra: Partial<EntradaInferencia> = {},
 ): EntradaInferencia {
-  return { rayo, proyectar, candidatos, planoDeTrabajo: planoSuelo, ...extra };
+  return { rayo, proyectar, candidatos, planoTrabajo: planoSuelo, ...extra };
 }
 
 const puntoCerca = (p: Vec3 | null, esperado: Vec3, eps = 1e-6): void => {
@@ -151,6 +151,52 @@ describe("O047 inferencias 3D", () => {
     puntoCerca(res.punto, v(1, 1, -29));
   });
 
+  it("bloqueo por dirección de arista: el punto cae en la recta, aunque el cursor esté lejos", () => {
+    // Recta por (1,1,0) con dirección (1,1,0)/√2. El rayo desde (40,40,10) con
+    // dirección (-1,-1,-1)/√3 baja 10/√3 m por eje hasta z = 0, justo en (30,30,0).
+    const { proyectar } = ortografica(1);
+    const rayo: Rayo3 = {
+      origen: { x: 40, y: 40, z: 10 },
+      direccion: normalizar({ x: -1, y: -1, z: -1 }),
+    };
+    const res = inferir(
+      entrada(
+        rayo,
+        proyectar,
+        {},
+        {
+          puntoPrevio: v(1, 1, 0),
+          bloqueo: { tipo: "arista", inicio: v(1, 1, 0), fin: v(2, 2, 0), referencia: 7 },
+        },
+      ),
+    );
+    expect(res.tipo).toBe("paralelo");
+    expect(res.referencia).toBe(7);
+    puntoCerca(res.punto, v(30, 30, 0));
+    puntoCerca(res.guia!.inicio, v(1, 1, 0));
+    puntoCerca(res.guia!.fin, v(30, 30, 0));
+  });
+
+  it("secuencia de cursor: extremo, luego medio y después plano (sin estado pegado)", () => {
+    // Arista (0,0,0)-(4,0,0) con escala 10. Los tres pasos usan la misma entrada
+    // salvo el rayo: no debe quedar memoria de la inferencia anterior.
+    const { proyectar, rayo } = ortografica(10);
+    const aristas = [{ inicio: v(0, 0, 0), fin: v(4, 0, 0) }];
+    const candidatos = { vertices: [v(0, 0, 0)], aristas };
+
+    const paso1 = inferir(entrada(rayo(0.1, 0.1), proyectar, candidatos));
+    expect(paso1.tipo).toBe("extremo");
+    puntoCerca(paso1.punto, v(0, 0, 0));
+
+    const paso2 = inferir(entrada(rayo(2, 0), proyectar, { aristas }));
+    expect(paso2.tipo).toBe("medio");
+    puntoCerca(paso2.punto, v(2, 0, 0));
+
+    const paso3 = inferir(entrada(rayo(2, 2), proyectar, { aristas }));
+    expect(paso3.tipo).toBe("plano");
+    puntoCerca(paso3.punto, v(2, 2, 0));
+  });
+
   it("paralelo a una arista oblicua de 30°", () => {
     // Dirección de la arista (cos30, sen30) = (0.8660254, 0.5). Desde el origen,
     // el cursor en (2, 2·tan30) = (2, 1.1547005) está sobre la paralela.
@@ -185,16 +231,21 @@ describe("O047 inferencias 3D", () => {
     puntoCerca(res.punto, v(-1, 1.7320508075688772, 0));
   });
 
-  it("prioridad: un eje 2 px gana a un extremo a 6 px, pero no a uno a 4 px", () => {
+  it("prioridad: un eje a 2 px gana a un extremo a 6 px, pero no a uno a 4 px", () => {
     const { proyectar, rayo } = ortografica(1);
-    // Ejes desde (2,2): el X queda a 2 px (0,2), el Y a 2 px (2,0).
+    // Ancla en (10,2). El eje X pasa a 2 px del cursor en (0,0): su punto más
+    // cercano es (0,2,0). El eje Y queda a 10 px, así que no empata. Un vértice
+    // en (0,6) está a 6 px: 2 + 3 < 6, gana el eje X. Con el vértice en (0,4)
+    // (4 px) ya no se supera el margen de 3 px y gana el extremo.
     const lejos = inferir(
-      entrada(rayo(0, 0), proyectar, { vertices: [v(0, 6)] }, { puntoPrevio: v(2, 2) }),
+      entrada(rayo(0, 0), proyectar, { vertices: [v(0, 6)] }, { puntoPrevio: v(10, 2) }),
     );
-    expect(lejos.tipo?.startsWith("eje")).toBe(true);
+    expect(lejos.tipo).toBe("eje_x");
+    expect(lejos.referencia).toBe(0);
+    puntoCerca(lejos.punto, v(0, 2, 0));
 
     const cercaRes = inferir(
-      entrada(rayo(0, 0), proyectar, { vertices: [v(0, 4)] }, { puntoPrevio: v(2, 2) }),
+      entrada(rayo(0, 0), proyectar, { vertices: [v(0, 4)] }, { puntoPrevio: v(10, 2) }),
     );
     expect(cercaRes.tipo).toBe("extremo");
     puntoCerca(cercaRes.punto, v(0, 4));

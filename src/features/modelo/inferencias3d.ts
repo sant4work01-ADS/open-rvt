@@ -79,7 +79,7 @@ export interface EntradaInferencia {
   candidatos: CandidatosInferencia;
   /** Último punto fijado por la herramienta; ancla de ejes y paralelas. */
   puntoPrevio?: Vec3;
-  planoDeTrabajo: PlanoTrabajo;
+  planoTrabajo: PlanoTrabajo;
   bloqueo?: Bloqueo;
   /** Tolerancia en píxeles (por omisión 10). */
   tolerancia_px?: number;
@@ -444,7 +444,7 @@ export function inferir(entrada: EntradaInferencia): Inferencia {
       });
     }
 
-    const normalPlano = normalizar(entrada.planoDeTrabajo.normal);
+    const normalPlano = normalizar(entrada.planoTrabajo.normal);
     for (let i = 0; i < aristas.length; i++) {
       const a2 = entrada.proyectar(aristas[i].inicio);
       const b2 = entrada.proyectar(aristas[i].fin);
@@ -488,7 +488,7 @@ export function inferir(entrada: EntradaInferencia): Inferencia {
 
   // Sin candidatos: el rayo corta el plano del nivel activo. Si es paralelo, no
   // hay punto posible y se devuelve una inferencia nula (documentado en la spec).
-  const corte = interseccionRayoPlano(rayo, entrada.planoDeTrabajo.punto, entrada.planoDeTrabajo.normal);
+  const corte = interseccionRayoPlano(rayo, entrada.planoTrabajo.punto, entrada.planoTrabajo.normal);
   if (!corte) return nula;
   return { punto: corte.punto, tipo: "plano", referencia: null };
 }
