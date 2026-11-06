@@ -251,8 +251,8 @@ terminar la operación (`views/viewport.py:18240`,
 con su color; el viewport las pinta como líneas discontinuas de 2 px y dibuja
 un marcador distinto por tipo: cruz para intersección, rombo cian para punto
 medio, cuadrado para extremo, círculo para centro/cierre, etc.
-(`views/viewport.py:9291`). La etiqueta textual («Endpoint», «Midpoint»,
-«From point»…) se dibuja junto al marcador y se traduce al pintar
+(`views/viewport.py:9291`). La etiqueta textual del tipo de snap se dibuja junto al marcador y se
+traduce al pintar
 (`views/viewport.py:1796`, `views/viewport.py:9385`). Los bloqueos de eje se
 comunican con la goma de color (rojo X, verde Y, azul Z) y una etiqueta en la
 esquina, no con un marcador pegado al cursor (`views/viewport.py:9293`,
@@ -586,7 +586,7 @@ si el volumen es nulo o negativo: no es sólido
 **La guarda del empuje.** Antes de mutar, si la malla era un sólido cerrado y
 no plana, se guarda una instantánea. Después de mutar se vuelve a comprobar:
 si dejó de estar cerrada, se restaura la instantánea y se marca el empuje como
-**rechazado**; el usuario ve «Push refused: would break the solid» y el modelo
+**rechazado**; el usuario ve un aviso de que el empuje rompería el sólido y el modelo
 queda intacto (`tools/pushpull.py:2120`, `tools/pushpull.py:2002`). También se
 rechaza si el resultado es geométricamente idéntico al inicial (la
 reconstrucción «digerió» el empuje). La guarda **no** se aplica a hojas
