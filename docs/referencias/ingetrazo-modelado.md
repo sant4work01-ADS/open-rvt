@@ -147,3 +147,128 @@ IFC (un muro, una losa, un forjado). Por tanto:
   reglas del elemento y contra las aberturas existentes antes de mover nada.
 - El retecleo en caliente y el doble clic son buenas ideas de UX que conviene
   conservar.
+
+---
+
+## 2. Motor de inferencias
+
+### Qué problema resuelve
+
+Decidir a qué punto del modelo «se pega» el cursor mientras se dibuja, sin que
+el usuario tenga que teclear coordenadas, y comunicar visualmente qué regla
+está activa. Debe funcionar igual con ratón, con bloqueos de eje y con
+referencias a aristas, y no debe ofrecer puntos ocultos ni inference que
+muevan el cursor lejos de donde está.
+
+### Cómo lo resuelve
+
+Hay una única función de búsqueda que recibe el punto crudo del cursor, la
+escena de candidatos y una lista de callbacks (proyección a píxel, rayos de
+oclusión, proyección sobre la línea de bloqueo). Devuelve un resultado con
+punto, tipo, color y, opcionalmente, guías discontinuas que dibujar
+(`core/snap.py:1458`, `core/snap.py:89`). El motor que guarda estado entre
+movimientos (arista bajo el cursor, centro de círculo, punto/arista
+«adquiridos», puntos «animados», bloqueos) vive aparte y llama a esa función
+en un solo sitio (`core/inference.py:57`, `core/inference.py:171`).
+
+**Prioridad.** El orden está escrito en la cabecera del módulo
+(`core/snap.py:1`) y se implementa como una cascada de retornos tempranos:
+
+1. Bloqueo explícito de eje con flechas (o el bloqueo pegado de Shift).
+2. Referencia a arista capturada con flecha abajo (paralelo/perpendicular).
+3. Shift mantenido con una inferencia de eje activa.
+4. Cierre de polígono.
+5. Vértice / extremo (`endpoint`).
+6. Intersección real de aristas o guías (cruz verde).
+7. Punto medio de arista.
+8. Origen del mundo.
+9. Punto cualquiera sobre una arista.
+10. Alineado con un punto animado (plano de eje que pasa por él).
+11. Inferencia suave de eje (solo señal visual).
+12. Punto libre sobre la cara bajo el cursor.
+13. Ninguno.
+
+Las comprobaciones de distancia se hacen en **píxeles de pantalla**, no en
+metros, para que el radio de captura sea constante con el zoom
+(`core/snap.py:1458`, `core/snap.py:1`). Los empates a menos de 0,5 px se
+resuelven a favor del punto «suelto» frente al de un componente y a favor de
+los puntos con nombre propio (`core/snap.py:1428`, `core/snap.py:1714`).
+
+**Tolerancias y valores** (`views/viewport.py:1786-1893`):
+
+- Radio general de snap: 9 px (`snap_threshold_px`).
+- Radio específico para aristas: 14 px (`edge_snap_threshold_px`).
+- Ángulo de inferencia de eje: 3° (`inference_angle_deg`).
+- Pausa para «animar» un punto: 250 ms (`ENCOURAGE_MS`).
+- Puntos animados: se conservan los dos últimos; solo cuentan puntos
+  discretos (extremos, medios, centros, intersecciones), no «sobre arista» ni
+  «sobre cara» (`views/viewport.py:1789`).
+
+**Bloqueo de eje (flechas).** Flecha derecha fija el eje X, izquierda el Y,
+arriba el Z; pulsar la misma flecha lo apaga (`views/viewport.py:18254`). El
+bloqueo dura una sola operación: se libera al terminar el trazo o al aplicar
+un valor (`views/viewport.py:18298`). Bajo bloqueo, la línea de bloqueo se
+orienta hacia el cursor (no solo en el sentido positivo) y sobre ella siguen
+funcionando los snaps de punto, para poder «ir a buscar» un vértice sin salir
+del eje (`core/snap.py:1573`).
+
+**Referencia a arista (flecha abajo).** Cicla ninguno → paralelo →
+perpendicular → ninguno, capturando la arista que esté bajo el cursor al
+entrar en modo paralelo (`views/viewport.py:18267`,
+`views/viewport.py:18452`). La dirección se calcula desde la arista y el
+plano de trabajo.
+
+**Shift.** Al pulsarlo se congela la inferencia activa (dirección y color) y
+se mantiene, aunque el cursor se separe; los snaps de punto siguen
+funcionando sobre la línea de bloqueo (`views/viewport.py:18585`,
+`core/snap.py:1610`). Shift también marca el plano de dibujo, pero eso es una
+ayuda aparte que no sustituye al bloqueo.
+
+**Inferencias lineales (Alt).** Durante una operación, Alt cicla «todas» →
+«ninguna» (solo puntos) → «solo paralelo/perpendicular» → «todas». Los
+bloqueos explícitos siguen activos en todos los modos y el modo se restaura al
+terminar la operación (`views/viewport.py:18240`,
+`views/viewport.py:18286`, `core/snap.py:1544`).
+
+**Guías visuales.** El resultado puede traer una guía `(a, b)` o varias
+`[(a, b, color)]`; el viewport las pinta como líneas discontinuas de 2 px y
+dibuja un marcador distinto por tipo: cruz para intersección, rombo cian para
+punto medio, cuadrado para extremo, círculo para centro/cierre, etc.
+(`views/viewport.py:9291`). La etiqueta textual («Endpoint», «Midpoint»,
+«From point»…) se dibuja junto al marcador y se traduce al pintar
+(`views/viewport.py:1796`, `views/viewport.py:9385`). Los bloqueos de eje se
+comunican con la goma de color (rojo X, verde Y, azul Z) y una etiqueta en la
+esquina, no con un marcador pegado al cursor (`views/viewport.py:9293`,
+`views/viewport.py:10700`).
+
+**Oclusión.** Solo se aceptan candidatos visibles: se ordenan por distancia en
+pantalla y se prueban perezosamente; tras el primer oculto, se consultan en
+lotes que duplican tamaño (8, 16, 32…) para reducir rayos
+(`core/snap.py:1714`). Las extensiones de terceros pueden añadir su propio
+proveedor de snap, pero nunca pueden pisar un punto con nombre propio y sus
+excepciones se ignoran (`core/inference.py:294`).
+
+**Inferencias de dibujo (resumen).** Además de los puntos, el motor ofrece:
+perpendicular a la pared donde se empezó (con predicción de cruce),
+«pasar por un punto» animado, prolongación colineal de una arista con su cruce,
+«desde un punto» alineado con el eje de dibujo, punto de cruce de la línea de
+bloqueo con una arista o una cara, y alineación con el plano de eje de un punto
+animado (`core/snap.py:1817`, `core/snap.py:1970`).
+
+### Qué haríamos distinto en OPEN-RVT
+
+- Las inferencias deben apoyarse en la geometría del elemento IFC y en sus
+  ejes locales, no solo en aristas de malla. Un muro tiene eje, caras y
+  niveles; el snap debería ofrecer «eje del muro», «cara del muro», «nivel»
+  y «extremo de muro» como tipos propios.
+- Mantener la prioridad y las tolerancias en una **capa única compartida**
+  por todas las puertas de entrada (ratón, teclado, comandos, importación),
+  probando la invariante «ninguna entrada acepta un punto oculto ni fuera del
+  radio».
+- El bloqueo de eje debería integrarse con restricciones paramétricas de IFC
+  (por ejemplo, mantener la altura de un muro) en vez de ser solo una línea
+  de dibujo.
+- Conservar la idea de «animar» puntos por pausa: es barata y evita que un
+  barrido accidental robe la referencia.
+- La guía discontinua y el marcador por tipo son buenas decisiones de
+  accesibilidad; conviene reutilizarlas y añadir el nombre del elemento.
