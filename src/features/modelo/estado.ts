@@ -1119,7 +1119,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       if (!tipo) {
         const nombre = `Columna ${medidaCorta(menor)}×${medidaCorta(mayor)}`;
         const creado = await ejecutarResultado("tipos.crear", {
-          clase: "IfcColumnType",
+          clase: "columna",
           nombre,
           datos: {
             seccion: { Forma: "rectangular", B: mayor, H: menor, D: 0 },
@@ -1129,7 +1129,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         const nombreUsado = datosTipo?.nombre ?? nombre;
         const recargados = await cargarTiposEstructura();
         set({ tiposHerramienta: recargados });
-        tipo = recargados.find((t) => t.nombre === nombreUsado);
+        tipo = recargados.find((t) => t.nombre === nombreUsado && t.alias === "columna");
         if (!tipo) {
           set({ aviso: "No se pudo preparar el tipo de columna." });
           return false;
