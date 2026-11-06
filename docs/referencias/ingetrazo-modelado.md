@@ -769,3 +769,103 @@ recomendación es detener el puente cuando no se use.
   defecto y corte de peticiones que no sean JSON; no exponerlo a la red.
 - El scope persistente entre llamadas es cómodo, pero debe documentarse y
   limpiarse al cambiar de documento.
+
+---
+
+## 8. Lector `.skp`: estrategia general
+
+### Qué problema resuelve
+
+Abrir archivos de SketchUp (`.skp`) antiguos y recientes sin depender de
+software propietario, de Wine ni de un conversor externo. El objetivo
+declarado es leer «cualquier» `.skp`, con un lector propio, offline y en
+Python puro, y mantener la aplicación desacoplada de cómo se lee.
+
+### Cómo lo resuelve
+
+**Una sola costura.** Todo el acceso a `.skp` pasa por un módulo–fachada
+(`formats/skp.py:1`). El lector no toca la escena: **primero parsea** el
+archivo a un «payload» plano (bucles de caras en coordenadas de mundo) y
+**después aplica** ese payload dentro de un comando de la aplicación. El
+parseo pesado ocurre fuera del historial de deshacer; si falla o sale vacío,
+no se ha mutado nada y no queda una edición a medias (`formats/skp.py:1`).
+
+La fachada expone una API pequeña y estable:
+
+- Detectar el formato por los primeros bytes (un `.skp` real, ya sea el
+  contenedor clásico o el de versiones recientes, empieza con la misma marca
+  UTF-16 o con un envoltorio ZIP; la «era» no se distingue por los bytes
+  mágicos y no hace falta distinguirla) (`formats/skp.py:33`).
+- Comprobar si hay backend disponible y si reconoce el archivo
+  (`formats/skp.py:91`).
+- Parsear con el primer backend que produzca geometría; si ninguno puede,
+  lanzar una excepción de «no legible» **antes** de tocar la escena
+  (`formats/skp.py:99`).
+- Aplicar el payload como grupos de referencia (`formats/skp.py:1`).
+
+**El backend.** Se usa OpenSKP, un parser MIT en Python puro, como
+dependencia **opcional**: si no está instalado, el backend simplemente no está
+disponible y la fachada lo dice; no se importa al cargar el módulo
+(`formats/skp.py:48`). OpenSKP cubre tanto el contenedor clásico (anteriores a
+2021) como el formato reciente; el adaptador de IngeTrazo se limita a traducir
+su modelo de datos a la geometría de la aplicación (`docs/skp-backend.md:1`).
+
+**El adaptador.** OpenSKP devuelve definiciones con vértices, aristas, caras
+e instancias. El adaptador:
+
+- Convierte unidades: el `.skp` guarda pulgadas y es Z-arriba, la misma
+  vertical que la aplicación, así que solo escala (×0,0254) y no intercambia
+  ejes (`formats/skp_openskp.py:1`).
+- Aplana el árbol de instancias a polígonos en coordenadas de mundo, con un
+  límite de profundidad para no caer en anidamientos patológicos
+  (`formats/skp_openskp.py:1`).
+- Interpreta cada cara como un bucle exterior más bucles de agujeros; recorre
+  la conectividad de las aristas en vez de confiar en una bandera de sentido
+  que cambió entre versiones del parser (`formats/skp_openskp.py:1`).
+- Resuelve materiales y texturas: color plano a atributo de cara, textura con
+  bytes de imagen, tamaño de baldosa en metros y proyección planar; las
+  imágenes van a una caché propia de la aplicación, no junto al `.skp` del
+  usuario (`docs/skp-backend.md:1`, `formats/skp_openskp.py:1`).
+
+**Sala limpia y validación.** La estrategia es «upstream primero, sin depender
+de upstream»: se envían mejoras a OpenSKP y, si no se aceptan, se mantiene un
+fork amigable con una versión fijada tras la costura. La validación es
+**caja negra**: se compara la salida del parser contra una exportación COLLADA
+del mismo modelo, nunca se descompila ni se copian internals propietarios
+(`docs/openskp-collaboration.md:1`). Se conservan las licencias MIT del parser.
+
+**Cascada en la interfaz.** Al importar un `.skp`: si hay backend y reconoce
+el archivo, se parsea fuera del historial y se aplica en un comando; si sale
+vacío o no se reconoce, se informa de que el archivo no se pudo leer y se
+sugiere exportarlo como COLLADA u OBJ desde el programa que lo creó
+(`docs/skp-backend.md:1`). La **exportación** a `.skp` está desactivada: el
+escritor de OpenSKP necesita una plantilla de documento en blanco que la
+aplicación ya no distribuye.
+
+**Alcance medido.** Según la documentación del proyecto: caja envolvente
+exacta, geometría muy completa, materiales y texturas con paridad exacta en
+los archivos de prueba, y soporte de archivos clásicos validado contra
+re-guardados recientes (`docs/skp-backend.md:1`). Las limitaciones conocidas
+se documentan como lagunas concretas (materiales muy antiguos, entidades de
+imagen, miniatura del documento, paridad visual de texturas posicionadas),
+no como fallos silenciosos.
+
+### Qué haríamos distinto en OPEN-RVT
+
+- En OPEN-RVT el destino no es una malla suelta sino elementos IFC. El
+  payload debería ser una lista de elementos con su clase, sus parámetros y
+  su geometría, no solo bucles de caras; la importación debe decidir qué
+  hacer con geometría no clasificable (dejarla como referencia o descartarla
+  con aviso).
+- Mantener la costura «parsear fuera del historial y aplicar dentro de un
+  comando»: es la garantía de que un archivo corrupto no deje el documento a
+  medias.
+- La validación por caja negra contra una exportación independiente es el
+  método correcto de sala limpia; conviene conservarlo y automatizarlo.
+- No reintroducir dependencias propietarias ni conversores externos.
+- La caché de texturas fuera de la carpeta del usuario y el guardado de las
+  imágenes dentro del contenedor del documento son buenas decisiones de
+  portabilidad.
+- El límite de profundidad de instancias y el recorrido por conectividad (en
+  vez de confiar en banderas de sentido) son defensas que conviene copiar
+  como ideas, no como código.
