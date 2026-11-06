@@ -346,6 +346,27 @@ test("O046: empujar/tirar crea muro, losa, columna y genérico en 3D", async () 
       "el sólido con el ratón no se creó",
     );
 
+    // La altura negativa se rechaza en una clase que no es Genérico, sin dejar nada.
+    const antesNegativa = (await elementos(ses)).length;
+    await ajustarVista(ses);
+    await clicMundo(ses, 0, 0);
+    await moverMundo(ses, 1, 1);
+    await teclearYEnter(ses, "4,0.15");
+    await moverMundo(ses, 0.5, 0.5, 2);
+    await teclearYEnter(ses, "-2.6");
+    await esperar(600);
+    assert.equal(
+      (await elementos(ses)).length,
+      antesNegativa,
+      "una altura negativa creó un muro",
+    );
+    assert.match(
+      (await textoDom(ses, '[data-testid="estado-aviso"]')) ?? "",
+      /altura negativa solo se permite en Genérico/i,
+    );
+    await tecla(ses, "Escape");
+    await esperar(300);
+
     for (const nombre of [
       "cuatro-elementos.png",
       "contorno-a-medias.png",
