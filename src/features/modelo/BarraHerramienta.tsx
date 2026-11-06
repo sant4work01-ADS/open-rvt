@@ -9,6 +9,7 @@ import {
   type ModoRecorte,
 } from "./estado";
 import { plantaTomaNivelPropio } from "./herramientas";
+import { textoDimensiones, type ClasificacionEmpujar } from "./empujar";
 import type { LineaUbicacion } from "./tipos";
 
 export function BarraHerramienta() {
@@ -53,6 +54,10 @@ export function BarraHerramienta() {
   const fijarModoRecorte = useModelo((s) => s.fijarModoRecorte);
   const referenciaRecorte = useModelo((s) => s.referenciaRecorte);
   const recorteInicial = useModelo((s) => s.recorteInicial);
+  const empujarClasificacion = useModelo((s) => s.empujarClasificacion);
+  const fijarClasificacion = useModelo((s) => s.fijarClasificacionEmpujar);
+  const empujarRect = useModelo((s) => s.empujarRect);
+  const empujarAltura = useModelo((s) => s.empujarAltura);
   if (!herramienta) return null;
   const vistaActiva = vistas.find((v) => v.id === vistaActivaId);
   const esAlzadoOCorte =
@@ -73,6 +78,38 @@ export function BarraHerramienta() {
       <span className="font-semibold capitalize">
         {herramienta === "recortar_extender" ? "Recortar/Extender" : herramienta}
       </span>
+      {herramienta === "empujar" && (
+        <>
+          <label className="flex items-center gap-1">
+            <span className="text-muted-foreground">Clasificación</span>
+            <select
+              data-testid="empujar-clasificacion"
+              value={empujarClasificacion}
+              onChange={(e) =>
+                fijarClasificacion(e.target.value as ClasificacionEmpujar)
+              }
+              className="rounded border bg-background px-1 py-0.5"
+            >
+              <option value="auto">Auto</option>
+              <option value="losa">Losa</option>
+              <option value="muro">Muro</option>
+              <option value="columna">Columna</option>
+              <option value="generico">Genérico</option>
+            </select>
+          </label>
+          <span className="text-muted-foreground" data-testid="empujar-paso">
+            {empujarRect
+              ? "Altura: clic, Enter o teclee la medida"
+              : "Contorno: dos esquinas del nivel activo (o teclee ancho,largo)"}
+          </span>
+          {empujarRect && (
+            <span data-testid="empujar-medidas">
+              {textoDimensiones(empujarRect)}
+              {empujarAltura !== null ? ` · h ${empujarAltura.toFixed(2)} m` : ""}
+            </span>
+          )}
+        </>
+      )}
       {herramienta === "recortar_extender" && (
         <>
           <label className="flex items-center gap-1">

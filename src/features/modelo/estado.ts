@@ -54,6 +54,19 @@ import {
   type Referencias,
 } from "./herramientas";
 import { estilosPorDefecto, normalizarEstilos, type Estilos } from "./estilos";
+import {
+  alturaPermitida,
+  clasificarEmpujar,
+  crearRectangulo,
+  ladosRectangulo,
+  parsearAltura,
+  parsearDimensiones,
+  puntosRectangulo,
+  rectanguloDesdeDimensiones,
+  type ClasificacionEmpujar,
+  type ClaseEmpujar,
+  type RectanguloEmpujar,
+} from "./empujar";
 import { cortarRectas, recortarRecta } from "./planta";
 import { construirAberturas } from "./aberturas";
 import { normalizarAjusteEje } from "./ejesVista";
@@ -88,7 +101,8 @@ export type Herramienta =
   | "nivel"
   | "recortar_extender"
   | "espejo"
-  | "matriz";
+  | "matriz"
+  | "empujar";
 export type AlineacionMuro = "centro" | "interior" | "exterior";
 /** ED1: modos de la herramienta Recortar/Extender. */
 export type ModoRecorte = "esquina" | "elemento" | "varios";
@@ -342,6 +356,15 @@ interface EstadoModelo {
   ratonHerramienta: Punto2 | null;
   engancheHerramienta: Enganche | null;
   longitudTecleada: string;
+  /** O046: clasificación elegida, rectángulo y altura provisional del empujar/tirar. */
+  empujarClasificacion: ClasificacionEmpujar;
+  empujarRect: RectanguloEmpujar | null;
+  empujarAltura: number | null;
+  fijarClasificacionEmpujar: (clasificacion: ClasificacionEmpujar) => void;
+  fijarAlturaEmpujar: (altura: number | null) => void;
+  moverEmpujar: (punto: Punto2 | null) => void;
+  clicEmpujar: (punto: Punto2) => Promise<boolean>;
+  confirmarEmpujar: () => Promise<boolean>;
   /** O006d: el trazo de eje actual se dibuja libre (Ctrl o Alt). */
   ejeLibre: boolean;
   voltearSiguiente: boolean;
@@ -798,6 +821,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       ratonHerramienta: null,
       engancheHerramienta: null,
       longitudTecleada: "",
+      empujarRect: null,
+      empujarAltura: null,
       opcionesMuro: {
         tipo: tipos.find((t) => t.nombre === "Block 15")?.nombre ?? tipos[0]?.nombre ?? "",
         altura: 2.6,
@@ -983,6 +1008,153 @@ export const useModelo = create<EstadoModelo>((set, get) => {
   const nivelActivo = () => {
     const vista = get().vistas.find((v) => v.id === get().vistaActivaId);
     return vista?.nivel ?? get().niveles[0]?.globalid;
+  };
+
+  /** O046: las medidas se escriben como en el diálogo (sin ceros sobrantes). */
+  const medidaCorta = (valor: number): string =>
+    valor
+      .toFixed(3)
+      .replace(/0+$/, "")
+      .replace(/\.$/, "") || "0";
+
+  /** O046: crea el sólido ya clasificado desde el rectángulo y la altura. */
+  const crearSolidoEmpujar = async (
+    rect: RectanguloEmpujar,
+    altura: number,
+  ): Promise<boolean> => {
+    const nivel = nivelActivo();
+    if (!nivel) {
+      set({ aviso: "Cree antes un nivel." });
+      return false;
+    }
+    const { menor, mayor } = ladosRectangulo(rect);
+    if (menor < 0.01) {
+      set({ aviso: "El rectángulo necesita ancho y largo mayores que cero." });
+      return false;
+    }
+    const elegida = get().empujarClasificacion;
+    const clase: ClaseEmpujar =
+      elegida === "auto" ? clasificarEmpujar(rect, altura).clase : elegida;
+    if (!alturaPermitida(clase, altura)) {
+      set({
+        aviso:
+          altura < 0
+            ? "La altura negativa solo se permite en Genérico."
+            : "La altura debe ser distinta de cero.",
+      });
+      return false;
+    }
+    const h = Math.abs(altura);
+    const ancho = Math.abs(rect.x2 - rect.x1);
+    const largo = Math.abs(rect.y2 - rect.y1);
+    const centroX = (rect.x1 + rect.x2) / 2;
+    const centroY = (rect.y1 + rect.y2) / 2;
+
+    if (clase === "losa") {
+      const ok = await ejecutar("losas.crear", {
+        nivel,
+        puntos: puntosRectangulo(rect),
+        espesor: h,
+        desfase: 0,
+      });
+      if (ok) set({ aviso: `Losa de ${h.toFixed(2)} m de espesor.` });
+      return ok;
+    }
+
+    if (clase === "muro") {
+      // El eje del muro va por el centro del rectángulo y a lo largo del lado mayor.
+      const largoEnY = largo >= ancho;
+      const x1 = largoEnY ? centroX : Math.min(rect.x1, rect.x2);
+      const y1 = largoEnY ? Math.min(rect.y1, rect.y2) : centroY;
+      const x2 = largoEnY ? centroX : Math.max(rect.x1, rect.x2);
+      const y2 = largoEnY ? Math.max(rect.y1, rect.y2) : centroY;
+      const tipos = get().tiposMuro;
+      if (tipos.length === 0) {
+        set({ aviso: "No hay tipos de muro en la biblioteca." });
+        return false;
+      }
+      const tipo = tipos.reduce((mejor, candidato) =>
+        Math.abs(Number(candidato.espesor) - menor) <
+        Math.abs(Number(mejor.espesor) - menor)
+          ? candidato
+          : mejor,
+      );
+      const ok = await ejecutar("muros.crear", {
+        tipo: tipo.nombre,
+        nivel,
+        x1,
+        y1,
+        x2,
+        y2,
+        altura: h,
+        alineacion: "centro",
+      });
+      if (ok) {
+        const diferencia = Math.abs(Number(tipo.espesor) - menor);
+        set({
+          aviso:
+            diferencia > 0.02
+              ? `Se usó el tipo ${tipo.nombre} de ${Math.round(Number(tipo.espesor) * 100)} cm.`
+              : `Muro de ${h.toFixed(2)} m de alto.`,
+        });
+      }
+      return ok;
+    }
+
+    if (clase === "columna") {
+      // R va en X con rotación 0; con el lado mayor en Y se gira π/2.
+      const rotacion = ancho >= largo ? 0 : Math.PI / 2;
+      // El perfil local es B × H; B corresponde al lado mayor y H al menor.
+      const candidatos = get().tiposHerramienta.filter((t) => t.alias === "columna");
+      let tipo = candidatos.find((t) => {
+        const B = Number(t.seccion?.B ?? NaN);
+        const H = Number(t.seccion?.H ?? NaN);
+        return (
+          Number.isFinite(B) &&
+          Number.isFinite(H) &&
+          Math.abs(B - mayor) <= 0.01 &&
+          Math.abs(H - menor) <= 0.01
+        );
+      });
+      if (!tipo) {
+        const nombre = `Columna ${medidaCorta(menor)}×${medidaCorta(mayor)}`;
+        const creado = await ejecutarResultado("tipos.crear", {
+          clase: "IfcColumnType",
+          nombre,
+          datos: {
+            seccion: { Forma: "rectangular", B: mayor, H: menor, D: 0 },
+          },
+        });
+        const datosTipo = creado?.tipo as { nombre?: string } | undefined;
+        const nombreUsado = datosTipo?.nombre ?? nombre;
+        const recargados = await cargarTiposEstructura();
+        set({ tiposHerramienta: recargados });
+        tipo = recargados.find((t) => t.nombre === nombreUsado);
+        if (!tipo) {
+          set({ aviso: "No se pudo preparar el tipo de columna." });
+          return false;
+        }
+      }
+      const ok = await ejecutar("columnas.crear", {
+        tipo: tipo.nombre,
+        nivel,
+        x: centroX,
+        y: centroY,
+        rotacion,
+        altura: h,
+      });
+      if (ok) set({ aviso: `Columna de ${h.toFixed(2)} m de alto.` });
+      return ok;
+    }
+
+    const ok = await ejecutar("genericos.crear", {
+      nivel,
+      puntos: puntosRectangulo(rect),
+      altura,
+      nombre: "Genérico",
+    });
+    if (ok) set({ aviso: `Genérico de ${h.toFixed(2)} m.` });
+    return ok;
   };
 
   const crearMuroEntre = async (origen: Punto2, destino: Punto2): Promise<boolean> => {
@@ -1267,6 +1439,9 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     ratonHerramienta: null,
     engancheHerramienta: null,
     longitudTecleada: "",
+    empujarClasificacion: "auto",
+    empujarRect: null,
+    empujarAltura: null,
     ejeLibre: false,
     voltearSiguiente: false,
     etiquetaEje: "",
@@ -1715,6 +1890,11 @@ export const useModelo = create<EstadoModelo>((set, get) => {
           set({ aviso: "Abre un alzado o corte" });
           return;
         }
+      } else if (herramienta === "empujar") {
+        if (!vista || (vista.tipo !== "iso" && vista.tipo !== "perspectiva")) {
+          set({ aviso: "Empujar/Tirar: solo en 3D." });
+          return;
+        }
       } else if (
         !vista ||
         (vista.tipo !== "planta" &&
@@ -1752,6 +1932,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         recortar_extender: "Recortar/Extender: haga clic en el primer elemento.",
         espejo: "Espejo: clic en un eje o en un elemento lineal; o dos puntos del eje.",
         matriz: "Matriz: lineal con dos puntos o polar con un clic en el centro.",
+        empujar: "Empujar/Tirar: clic en una esquina del nivel activo; luego la opuesta.",
       };
       const conservarSeleccion =
         herramienta === "mover" ||
@@ -1770,6 +1951,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         ratonHerramienta: null,
         engancheHerramienta: null,
         longitudTecleada: "",
+        empujarRect: null,
+        empujarAltura: null,
         ejeLibre: false,
         modoCorte: false,
         puntoCorte: null,
@@ -1796,6 +1979,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         ratonHerramienta: null,
         engancheHerramienta: null,
         longitudTecleada: "",
+        empujarRect: null,
+        empujarAltura: null,
         ejeLibre: false,
         etiquetaEje: "",
         opcionesNivel: { ...get().opcionesNivel, elevacionTexto: "" },
@@ -2032,6 +2217,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         ratonHerramienta: null,
         engancheHerramienta: null,
         longitudTecleada: "",
+        empujarRect: null,
+        empujarAltura: null,
         ejeLibre: false,
         etiquetaEje: "",
         opcionesNivel: { ...get().opcionesNivel, elevacionTexto: "" },
@@ -2058,6 +2245,67 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
     fijarTipoHerramienta: (herramienta, nombre) =>
       set({ tipoHerramienta: { ...get().tipoHerramienta, [herramienta]: nombre } }),
+
+    fijarClasificacionEmpujar: (clasificacion) =>
+      set({ empujarClasificacion: clasificacion }),
+
+    fijarAlturaEmpujar: (altura) => set({ empujarAltura: altura }),
+
+    moverEmpujar: (punto) => set({ ratonHerramienta: punto }),
+
+    clicEmpujar: async (punto) => {
+      const estado = get();
+      if (!estado.empujarRect) {
+        const primero = estado.puntosHerramienta[0];
+        if (!primero) {
+          set({
+            puntosHerramienta: [punto],
+            ratonHerramienta: punto,
+            longitudTecleada: "",
+            aviso: "Empujar/Tirar: clic en la esquina opuesta o teclee ancho,largo.",
+          });
+          return false;
+        }
+        const rect = crearRectangulo(primero, punto);
+        const { menor } = ladosRectangulo(rect);
+        if (menor < 0.01) {
+          set({ aviso: "El rectángulo necesita ancho y largo mayores que cero." });
+          return false;
+        }
+        set({
+          empujarRect: rect,
+          ratonHerramienta: punto,
+          longitudTecleada: "",
+          aviso: "Empujar/Tirar: mueva el ratón para la altura o téclela y Enter.",
+        });
+        return false;
+      }
+      return get().confirmarEmpujar();
+    },
+
+    confirmarEmpujar: async () => {
+      const estado = get();
+      const rect = estado.empujarRect;
+      if (!rect) return false;
+      const altura = estado.empujarAltura;
+      if (altura === null || Math.abs(altura) < 1e-9) {
+        set({ aviso: "Empujar/Tirar: falta la altura." });
+        return false;
+      }
+      const ok = await crearSolidoEmpujar(rect, altura);
+      if (ok) {
+        set({
+          puntosHerramienta: [],
+          ratonHerramienta: null,
+          engancheHerramienta: null,
+          longitudTecleada: "",
+          empujarRect: null,
+          empujarAltura: null,
+        });
+        bitacoraHerramienta("empujar", "terminar");
+      }
+      return ok;
+    },
 
     fijarColumnaConZapata: (valor) => set({ columnaConZapata: valor }),
     fijarTipoZapata: (nombre) => set({ tipoZapata: nombre }),
@@ -2197,6 +2445,25 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         set({ longitudTecleada: siguiente });
         return;
       }
+      if (herramienta === "empujar") {
+        const campo = get().longitudTecleada;
+        if (get().puntosHerramienta.length === 0) return;
+        let siguiente = campo;
+        if (tecla === "Backspace") siguiente = campo.slice(0, -1);
+        else if (tecla === "-" && campo === "") siguiente = "-";
+        else if (tecla === "," || tecla === ";") {
+          if (!campo.includes(",") && !campo.includes(";")) siguiente = `${campo}${tecla}`;
+        } else if (tecla === ".") {
+          const ultimo = campo.split(/[,;]/).pop() ?? "";
+          if (!ultimo.includes(".")) siguiente = `${campo}.`;
+        } else if (tecla === " ") {
+          if (campo !== "" && !campo.endsWith(" ")) siguiente = `${campo} `;
+        } else if (/^\d$/.test(tecla)) {
+          siguiente = `${campo}${tecla}`;
+        }
+        set({ longitudTecleada: siguiente });
+        return;
+      }
       if (get().puntosHerramienta.length === 0) return;
       if (herramienta === "nivel") {
         // O029: la cota temporal se teclea relativa al nivel inferior.
@@ -2232,6 +2499,44 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     confirmarLongitud: async (shift = false) => {
       const herramienta = get().herramienta;
       const puntos = get().puntosHerramienta;
+      // O046: Enter con «ancho,largo» cierra el contorno; con la altura tecleada
+      // confirma el sólido. Sin texto, Enter usa la altura que sigue al ratón.
+      if (herramienta === "empujar") {
+        const texto = get().longitudTecleada.trim();
+        if (!get().empujarRect) {
+          const primero = puntos[0];
+          if (!primero) return;
+          const dimensiones = parsearDimensiones(texto);
+          if (!dimensiones) {
+            set({ aviso: "Escriba ancho,largo en metros, por ejemplo 4,0.15." });
+            return;
+          }
+          const rect = rectanguloDesdeDimensiones(
+            primero,
+            dimensiones,
+            get().ratonHerramienta ?? primero,
+          );
+          set({
+            empujarRect: rect,
+            longitudTecleada: "",
+            aviso: "Empujar/Tirar: mueva el ratón para la altura o téclela y Enter.",
+          });
+          return;
+        }
+        const altura = texto === "" ? get().empujarAltura : parsearAltura(texto);
+        if (altura === null) {
+          set({
+            aviso:
+              texto === ""
+                ? "Empujar/Tirar: falta la altura."
+                : "Altura no válida: escriba un número distinto de cero.",
+          });
+          return;
+        }
+        set({ empujarAltura: altura, longitudTecleada: "" });
+        await get().confirmarEmpujar();
+        return;
+      }
       // O029: nivel seleccionado en el alzado + Copiar/Mover + desfase tecleado.
       if (
         (herramienta === "copiar" || herramienta === "mover") &&

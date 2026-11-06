@@ -1,6 +1,6 @@
 // O046: geometría pura del prototipo «Empujar/Tirar». No depende de three.js ni
 // del estado: la vista solo le pasa rayos y rectángulos en metros.
-import type { Punto2 } from "./tipos";
+type Punto2 = [number, number];
 
 export type ClasificacionEmpujar = "auto" | "losa" | "muro" | "columna" | "generico";
 export type ClaseEmpujar = Exclude<ClasificacionEmpujar, "auto">;
