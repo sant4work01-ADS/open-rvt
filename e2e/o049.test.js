@@ -302,6 +302,7 @@ test("O049: empujar con inferencias, dibujo en cara y bloqueo de eje", async () 
     );
     assert.equal(inferenciaEsquina.tipo, "extremo");
     assert.deepEqual(inferenciaEsquina.punto, { x: 0, y: 0, z: 0.12 });
+    console.log("PASO marcador extremo");
     const marcador = await ses.porTestid("empujar-marcador");
     assert.equal(await marcador.getAttribute("data-tipo"), "extremo");
     assert.equal(await (await ses.porTestid("empujar-tooltip")).getText(), "Extremo");
@@ -328,6 +329,18 @@ test("O049: empujar con inferencias, dibujo en cara y bloqueo de eje", async () 
     assert.equal(propsMuro.psets.OPENRVT_Muro.Altura, 2.6);
     assert.equal(propsMuro.restricciones.DesfaseBase, 0.12);
     assert.ok(Math.abs((await minZDe(ses, muro.globalid)) - 0.12) < 1e-5);
+    {
+      const tes = await invocar(ses, "geometria.teselar", { globalids: [muro.globalid] });
+      const el = tes.elementos.find((e) => e.globalid === muro.globalid);
+      const bytes = Buffer.from(el.vertices, "base64");
+      const verts = new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4);
+      let mnX = Infinity, mxX = -Infinity, mnY = Infinity, mxY = -Infinity;
+      for (let i = 0; i < verts.length; i += 3) {
+        mnX = Math.min(mnX, verts[i]); mxX = Math.max(mxX, verts[i]);
+        mnY = Math.min(mnY, verts[i + 1]); mxY = Math.max(mxY, verts[i + 1]);
+      }
+      console.log("DIAG muro bbox", JSON.stringify({ mnX, mxX, mnY, mxY }));
+    }
     await esperarBarra(ses, (await elementos(ses)).length);
     assert.equal((await elementos(ses)).length, 2);
 
@@ -361,6 +374,7 @@ test("O049: empujar con inferencias, dibujo en cara y bloqueo de eje", async () 
     );
     assert.equal(inferenciaMedio.tipo, "medio");
     assert.deepEqual(inferenciaMedio.punto, { x: 2.5, y: 0, z: 0.12 });
+    console.log("PASO marcador medio");
     assert.equal(
       await (await ses.porTestid("empujar-marcador")).getAttribute("data-tipo"),
       "medio",
@@ -383,13 +397,48 @@ test("O049: empujar con inferencias, dibujo en cara y bloqueo de eje", async () 
     await moverPantalla(ses, await proyectar(ses, 4, 2, 0.12), true);
     await moverPantalla(ses, await proyectar(ses, 4, 5, 0.12), true);
     const inferenciaEje = await inferenciaEmpujar(ses);
+    console.log("PASO inferencia eje", JSON.stringify(inferenciaEje));
     assert.equal(inferenciaEje.tipo, "eje_x");
     // El eje conserva la y y la z del primer punto; la x depende del rayo.
     assert.equal(inferenciaEje.punto.y, 2);
     assert.equal(inferenciaEje.punto.z, 0.12);
+    console.log("PASO marcador eje");
+    console.log(
+      "DIAG marcador",
+      JSON.stringify(
+        await ses.driver.executeScript(() => {
+          const el = document.querySelector('[data-testid="empujar-marcador"]');
+          if (!el) return { existe: false };
+          const r = el.getBoundingClientRect();
+          const s = getComputedStyle(el);
+          return {
+            existe: true,
+            tipo: el.getAttribute("data-tipo"),
+            rect: { x: r.x, y: r.y, w: r.width, h: r.height },
+            display: s.display,
+            visibility: s.visibility,
+            opacity: s.opacity,
+            html: el.outerHTML.slice(0, 300),
+          };
+        }),
+      ),
+    );
     assert.equal(
       await (await ses.porTestid("empujar-marcador")).getAttribute("data-tipo"),
       "eje_x",
+    );
+    console.log("PASO marcador eje ok");
+    console.log(
+      "DIAG tooltip",
+      JSON.stringify(
+        await ses.driver.executeScript(() => {
+          const el = document.querySelector('[data-testid="empujar-tooltip"]');
+          if (!el) return { existe: false };
+          const r = el.getBoundingClientRect();
+          const s = getComputedStyle(el);
+          return { existe: true, texto: el.textContent, rect: { x: r.x, y: r.y, w: r.width, h: r.height }, display: s.display, visibility: s.visibility, opacity: s.opacity, cls: el.className };
+        }),
+      ),
     );
     assert.equal(await (await ses.porTestid("empujar-tooltip")).getText(), "Eje X");
     await ses.captura(path.join(PROGRESO, "bloqueo-eje.png"));

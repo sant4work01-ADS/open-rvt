@@ -1153,6 +1153,7 @@ export function Visor3D({
     tipo: string;
     etiqueta: string;
     punto: Vec3;
+    tooltipIzquierda: boolean;
   } | null>(null);
   const [guiaEmpujar, setGuiaEmpujar] = useState<{
     x1: number;
@@ -5443,6 +5444,9 @@ export function Visor3D({
         tipo: inf.tipo,
         etiqueta,
         punto,
+        // Cerca del borde derecho el tooltip se dibuja hacia la izquierda para
+        // que el recorte del visor no lo oculte.
+        tooltipIzquierda: pantalla.x - rect.left > rect.width * 0.7,
       });
       ultimaInferenciaEmpujar.current = { punto, tipo: inf.tipo, etiqueta };
       if (inf.guia) {
@@ -5488,9 +5492,18 @@ export function Visor3D({
       };
       const cursor = { x: clientX, y: clientY };
       const cercanas = filtrarPorCercania(mallas3d.current, proyectarLienzo, cursor, 60);
-      const candidatos = unirCandidatos(
+      const unidos = unirCandidatos(
         cercanas.map((m) => cacheCandidatos.current.obtener(m.malla, mallas)),
       );
+      // O049: la herramienta solo dibuja sobre caras horizontales (normal +Z).
+      // Las caras verticales no son destino válido y, además, ocluirían puntos
+      // medios y extremos de las tapas que el usuario sí quiere enganchar.
+      const candidatos: CandidatosInferencia = {
+        ...unidos,
+        caras: (unidos.caras ?? []).filter(
+          (cara) => !!cara.normal && cara.normal.z >= 1 - 1e-6,
+        ),
+      };
       const cota = empujarZ ?? zEmpujar;
       const primera = puntosHerramienta[0];
       const puntoPrevio = primera
@@ -7609,10 +7622,6 @@ export function Visor3D({
       )}
       {marcadorEmpujar && (
         <div
-          data-testid="empujar-marcador"
-          data-tipo={marcadorEmpujar.tipo}
-          data-etiqueta={marcadorEmpujar.etiqueta}
-          data-punto={`${marcadorEmpujar.punto.x},${marcadorEmpujar.punto.y},${marcadorEmpujar.punto.z}`}
           className="pointer-events-none absolute z-30"
           style={{ left: marcadorEmpujar.x, top: marcadorEmpujar.y }}
         >
@@ -7621,6 +7630,10 @@ export function Visor3D({
             style={{ left: 0, top: 0, transform: "translate(-50%, -50%)" }}
           >
             <span
+              data-testid="empujar-marcador"
+              data-tipo={marcadorEmpujar.tipo}
+              data-etiqueta={marcadorEmpujar.etiqueta}
+              data-punto={`${marcadorEmpujar.punto.x},${marcadorEmpujar.punto.y},${marcadorEmpujar.punto.z}`}
               className="block"
               style={formaDeMarcador(marcadorEmpujar.tipo)}
             >
@@ -7629,7 +7642,9 @@ export function Visor3D({
           </span>
           <span
             data-testid="empujar-tooltip"
-            className="absolute left-3 -top-2 whitespace-nowrap rounded bg-background/95 px-1 py-0.5 text-[11px] shadow"
+            className={`absolute -top-2 whitespace-nowrap rounded bg-background/95 px-1 py-0.5 text-[11px] shadow ${
+              marcadorEmpujar.tooltipIzquierda ? "right-3" : "left-3"
+            }`}
           >
             {marcadorEmpujar.etiqueta}
           </span>
