@@ -2,9 +2,10 @@
 
 Documento de diseño elaborado a partir de la lectura del código de IngeTrazo
 (`C:/Users/Sant4/referencias-ext/ingetrazo`, GPL-3.0). No reproduce código ni
-nombres de funciones: solo ideas, decisiones y valores, con la ruta y línea
-donde se puede verificar cada afirmación. El objetivo es que otra persona
-pueda implementar las mismas capacidades en OPEN-RVT sin leer el original.
+nombres de funciones o variables del original: solo ideas, decisiones y
+valores, con la ruta y línea donde se puede verificar cada afirmación. El
+objetivo es que otra persona pueda implementar las mismas capacidades en
+OPEN-RVT sin leer IngeTrazo.
 
 Nota de contexto: IngeTrazo es un modelador de mallas de caras planas (estilo
 «caja y empuje»), no un modelador BIM nativo. Varias de sus soluciones nacen de
@@ -74,6 +75,20 @@ de cada agujero (`tools/pushpull.py:2638`). No hay casos especiales: donde un
 quad cae sobre el plano de una cara existente, una pasada posterior de
 reconstrucción por planos lo disuelve (`tools/pushpull.py:2271`).
 
+Pseudocódigo propio del camino general:
+
+```
+base        = contorno de la cara, partido en los vértices que caen sobre sus aristas
+tapa        = base desplazada por la normal × distancia
+agujeros    = cada bucle de agujero, partido igual, y su copia desplazada
+si la cara está adherida: eliminar la cara base
+crear un quad de pared por cada arista de base (y por cada arista de agujero)
+crear la tapa con sus agujeros
+soldar coincidencias, resolver uniones en T, colapsar vértices colineales
+si el resultado es un sólido: reconstruir por planos las caras tocadas
+orientar hacia fuera el sólido resultante
+```
+
 **Agujero pasante.** Si el empuje alcanza una cara paralela al otro lado del
 sólido, no se crea un fondo: se borra la cara de origen, se perfora la cara
 lejana con el contorno proyectado —o se recorta si el contorno toca su borde—
@@ -89,7 +104,8 @@ propia pared y fondo (`tools/pushpull.py:2772`, `tools/pushpull.py:2831`).
   cara lejana antes de proyectar el agujero (`tools/pushpull.py:187`); al
   empujar se admite que el contacto ocurra cuando cualquier esquina llega,
   no solo el centroide (`tools/pushpull.py:2689`). Tolerancias: 5·10⁻⁴ para
-  pegar al contorno y 2·10⁻³ para considerar la cara «plana» (`tools/pushpull.py:194`).
+  pegar al contorno y 2·10⁻³ para considerar la cara «plana»
+  (`tools/pushpull.py:194`).
 - **Límite de empuje hacia dentro.** Antes del arrastre se calcula la
   profundidad máxima: una cara paralela que bloquee, una salida lateral por una
   cara no paralela, o una pared inclinada que se aleja. Al llegar al límite se
@@ -113,7 +129,7 @@ propia pared y fondo (`tools/pushpull.py:2772`, `tools/pushpull.py:2831`).
 El campo de valor acepta un único número. Durante el arrastre, un valor
 positivo va en la dirección en que se arrastra y uno negativo la invierte; el
 cero se ignora (`tools/pushpull.py:764`). Se admiten sufijos de unidad
-(`30cm`, `1500mm`). Después de confirmar, el valor tecleado actúa como
+(«30cm», «1500mm»). Después de confirmar, el valor tecleado actúa como
 «retecleo en caliente»: deshace el último empuje de esta herramienta y lo
 repite a la distancia total tecleada, manteniendo el signo o invirtiéndolo, y
 dejando un único paso de deshacer (`tools/pushpull.py:764`). El doble clic
@@ -121,13 +137,14 @@ repite la última distancia confirmada (`tools/pushpull.py:687`).
 
 ### Valores y atajos
 
-- Atajo principal `P`, alternativo `U` (por memoria histórica)
-  (`tools/pushpull.py:324`).
-- `Ctrl` = conservar la cara base y apilar un segmento nuevo (modo «copiar
+- Atajo principal P, alternativo U (por memoria histórica)
+  (`tools/pushpull.py:328`).
+- Ctrl = conservar la cara base y apilar un segmento nuevo (modo «copiar
   empuje»), típico para apilar forjados. Un toque de Ctrl alterna el modo; un
   Ctrl mantenido afecta solo al gesto en curso (`tools/pushpull.py:353`,
-  `tools/pushpull.py:2965`). El modo se consume con el empuje (`tools/pushpull.py:2984`).
-- `Esc` cancela y restaura la vista previa (`tools/pushpull.py:820`).
+  `tools/pushpull.py:2965`). El modo se consume con el empuje
+  (`tools/pushpull.py:2984`).
+- Esc cancela y restaura la vista previa (`tools/pushpull.py:820`).
 - La orientación hacia fuera se establece una vez por arrastre y se vuelve a
   aplicar tras confirmar (`tools/pushpull.py:612`, `tools/pushpull.py:2271`).
 
@@ -157,7 +174,7 @@ IFC (un muro, una losa, un forjado). Por tanto:
 Decidir a qué punto del modelo «se pega» el cursor mientras se dibuja, sin que
 el usuario tenga que teclear coordenadas, y comunicar visualmente qué regla
 está activa. Debe funcionar igual con ratón, con bloqueos de eje y con
-referencias a aristas, y no debe ofrecer puntos ocultos ni inference que
+referencias a aristas, y no debe ofrecer puntos ocultos ni inferencias que
 muevan el cursor lejos de donde está.
 
 ### Cómo lo resuelve
@@ -167,7 +184,7 @@ escena de candidatos y una lista de callbacks (proyección a píxel, rayos de
 oclusión, proyección sobre la línea de bloqueo). Devuelve un resultado con
 punto, tipo, color y, opcionalmente, guías discontinuas que dibujar
 (`core/snap.py:1458`, `core/snap.py:89`). El motor que guarda estado entre
-movimientos (arista bajo el cursor, centro de círculo, punto/arista
+movimientos (arista bajo el cursor, centro de círculo, punto y arista
 «adquiridos», puntos «animados», bloqueos) vive aparte y llama a esa función
 en un solo sitio (`core/inference.py:57`, `core/inference.py:171`).
 
@@ -178,7 +195,7 @@ en un solo sitio (`core/inference.py:57`, `core/inference.py:171`).
 2. Referencia a arista capturada con flecha abajo (paralelo/perpendicular).
 3. Shift mantenido con una inferencia de eje activa.
 4. Cierre de polígono.
-5. Vértice / extremo (`endpoint`).
+5. Vértice / extremo.
 6. Intersección real de aristas o guías (cruz verde).
 7. Punto medio de arista.
 8. Origen del mundo.
@@ -196,10 +213,10 @@ los puntos con nombre propio (`core/snap.py:1428`, `core/snap.py:1714`).
 
 **Tolerancias y valores** (`views/viewport.py:1786-1893`):
 
-- Radio general de snap: 9 px (`snap_threshold_px`).
-- Radio específico para aristas: 14 px (`edge_snap_threshold_px`).
-- Ángulo de inferencia de eje: 3° (`inference_angle_deg`).
-- Pausa para «animar» un punto: 250 ms (`ENCOURAGE_MS`).
+- Radio general de snap: 9 px.
+- Radio específico para aristas: 14 px.
+- Ángulo de inferencia de eje: 3°.
+- Pausa para «animar» un punto: 250 ms.
 - Puntos animados: se conservan los dos últimos; solo cuentan puntos
   discretos (extremos, medios, centros, intersecciones), no «sobre arista» ni
   «sobre cara» (`views/viewport.py:1789`).
@@ -230,16 +247,27 @@ bloqueos explícitos siguen activos en todos los modos y el modo se restaura al
 terminar la operación (`views/viewport.py:18240`,
 `views/viewport.py:18286`, `core/snap.py:1544`).
 
-**Guías visuales.** El resultado puede traer una guía `(a, b)` o varias
-`[(a, b, color)]`; el viewport las pinta como líneas discontinuas de 2 px y
-dibuja un marcador distinto por tipo: cruz para intersección, rombo cian para
-punto medio, cuadrado para extremo, círculo para centro/cierre, etc.
+**Guías visuales.** El resultado puede traer una guía (dos puntos) o varias
+con su color; el viewport las pinta como líneas discontinuas de 2 px y dibuja
+un marcador distinto por tipo: cruz para intersección, rombo cian para punto
+medio, cuadrado para extremo, círculo para centro/cierre, etc.
 (`views/viewport.py:9291`). La etiqueta textual («Endpoint», «Midpoint»,
 «From point»…) se dibuja junto al marcador y se traduce al pintar
 (`views/viewport.py:1796`, `views/viewport.py:9385`). Los bloqueos de eje se
 comunican con la goma de color (rojo X, verde Y, azul Z) y una etiqueta en la
 esquina, no con un marcador pegado al cursor (`views/viewport.py:9293`,
 `views/viewport.py:10700`).
+
+Pseudocódigo propio de la búsqueda:
+
+```
+para cada candidato del modelo dentro del radio en píxeles:
+    convertir su posición a píxeles
+    si está más lejos que el radio: descartar
+    si está oculto por geometría: descartar
+ordenar por distancia en pantalla, con empates a favor de los puntos con nombre
+devolver el primero visible, junto con su tipo, color y guías
+```
 
 **Oclusión.** Solo se aceptan candidatos visibles: se ordenan por distancia en
 pantalla y se prueban perezosamente; tras el primer oculto, se consultan en
@@ -315,6 +343,18 @@ el mapa de textura— para que la imagen no se reinicie en cada mitad
 dejan fuera: partir una cara con huecos es un caso más difícil que no abordan
 (`core/topology.py:744`).
 
+Pseudocódigo propio:
+
+```
+si el segmento tiene sus dos extremos sobre el contorno de una cara sin agujeros
+   y su punto medio cae estrictamente dentro del polígono:
+       borrar la cara madre
+       crear dos caras con los dos recorridos del contorno, heredando atributos
+si no:
+       buscar los ciclos mínimos que se cierran al añadir el segmento
+       crear una cara por cada ciclo plano que aún no exista
+```
+
 **Cuándo se crea una cara nueva.** Si el segmento no es cuerda, se buscan los
 ciclos mínimos que se cierran al añadirlo, se comprueba que sean planos y que
 no exista ya una cara con ese mismo ciclo; entonces se crea la cara,
@@ -330,7 +370,8 @@ Consta de tres fases (`core/history.py:3152`):
    interior, limitado a la caja de la operación.
 2. Colapsar vértices colineales de valencia 2.
 3. Fusionar componentes coplanares y conexos por arista, **solo si** el
-   componente contiene una cara creada por esa operación (`core/history.py:3220`).
+   componente contiene una cara creada por esa operación
+   (`core/history.py:3220`).
 
 La última condición es la clave: una línea coplanar dibujada a propósito por
 el usuario no se disuelve por una operación ajena, mientras que una costura
@@ -358,12 +399,13 @@ ya había. Detalles de interacción:
   mayor, se ajusta a cuadrado perfecto (`tools/rectangle.py:56`,
   `tools/rectangle.py:343`); Shift fuerza el cuadrado, Ctrl dibuja desde el
   centro.
-- Un lado de longitud < 10⁻⁶ se rechaza con un mensaje que explica la causa
-  real (p. ej. la segunda esquina está fuera del plano bloqueado y sugiere la
-  flecha que elige el plano correcto) (`tools/rectangle.py:103`,
-  `tools/rectangle.py:126`).
+- Un lado de longitud menor que 10⁻⁶ se rechaza con un mensaje que explica la
+  causa real (por ejemplo, que la segunda esquina está fuera del plano
+  bloqueado y qué flecha elige el plano correcto)
+  (`tools/rectangle.py:103`, `tools/rectangle.py:126`).
 - Se puede teclear «3;2» (ancho;alto) para dimensiones exactas; un solo
-  número cambia el lado que el cursor está estirando (`tools/rectangle.py:179`).
+  número cambia el lado que el cursor está estirando
+  (`tools/rectangle.py:179`).
 
 **Tolerancias de topología** (`core/topology.py:29`): las posiciones se
 comparan redondeando a 4 decimales (≈ 0,1 mm); la planaridad de una cara se
@@ -403,27 +445,26 @@ compartir su definición para no multiplicar la memoria.
 **Aislamiento.** La malla principal del documento suelda todos los vértices
 coincidentes, así que un bloque dibujado contra un muro se fusiona con él. Un
 grupo guarda su geometría en una malla **propia**: nada se suelda a través de
-su frontera y por eso se mueve y edita como una unidad
-(`core/group.py:1`, `core/group.py:79`). Cada grupo tiene además capa,
-etiqueta IFC, material, visibilidad, bloqueo y un identificador estable que
-sobrevive a guardar y cargar (`core/group.py:79`).
+su frontera y por eso se mueve y edita como una unidad (`core/group.py:1`,
+`core/group.py:79`). Cada grupo tiene además capa, etiqueta IFC, material,
+visibilidad, bloqueo y un identificador estable que sobrevive a guardar y
+cargar (`core/group.py:79`).
 
 **Grupo clásico frente a componente.** Un grupo clásico mantiene la malla en
 coordenadas de mundo y solo guarda sus ejes locales en una matriz aparte,
 para no perder la orientación al mover o rotar (`core/group.py:79`,
 `core/group.py:254`). Un **componente** es una instancia: su malla es un
 prototipo en coordenadas locales compartido con las demás copias, y una
-matriz `xform` la lleva al mundo. Mover, rotar o escalar una instancia solo
-compone su matriz (coste O(1)); editar su geometría es otra historia
-(`core/group.py:79`, `core/group.py:202`).
+matriz de transformación la lleva al mundo. Mover, rotar o escalar una
+instancia solo compone su matriz (coste O(1)); editar su geometría es otra
+historia (`core/group.py:79`, `core/group.py:202`).
 
 **Anidamiento.** Un grupo puede tener «hijos» que son emplazamientos de otros
 prototipos dentro de sus propias coordenadas. Se recorren en profundidad
-componiendo matrices (`iter_placements`) y, cuando hace falta una sola malla,
-se funden con una pasada vectorizada (`world_mesh`)
-(`core/group.py:390`, `core/group.py:486`). Esto permite importar un
-componente conservando la repetición interna que traía el archivo original en
-vez de aplanarla y multiplicar la geometría (`core/group.py:79`).
+componiendo matrices y, cuando hace falta una sola malla, se funden con una
+pasada vectorizada (`core/group.py:390`, `core/group.py:486`). Esto permite
+importar un componente conservando la repetición interna que traía el archivo
+original en vez de aplanarla y multiplicar la geometría (`core/group.py:79`).
 
 **Entrar a editar.** Editar dentro de un grupo no lo «hornea» ni destruye su
 estructura. El documento mantiene una pila de contextos: al entrar, la malla
@@ -433,6 +474,18 @@ herramientas y comandos existentes trabajan sobre ella sin cambios
 entrar a cualquier otro cierra lo abierto (`core/scene.py:376`). Salir un
 nivel (Esc) y salir de todos los niveles son operaciones distintas
 (`core/scene.py:482`, `core/scene.py:487`).
+
+Pseudocódigo propio de la entrada:
+
+```
+al entrar a un grupo:
+    si ya hay otro grupo abierto y este no es hijo suyo: cerrar el anterior
+    guardar la malla activa y los ejes del grupo
+    si el grupo tiene hijos y una matriz propia: empujar la matriz a los hijos y a su malla
+    si es una instancia de componente: editar una copia en coordenadas de mundo
+    apuntar la malla activa a la malla del grupo
+    apilar el contexto
+```
 
 **Componentes al editar.** Entrar a una instancia de componente no edita el
 prototipo compartido directamente: crea una **copia en coordenadas de mundo**
@@ -471,22 +524,23 @@ puede seleccionar, mover ni abrir); ambos estados se guardan en el documento
 
 ### Qué haríamos distinto en OPEN-RVT
 
-- En IFC el «grupo» natural es `IfcElementAssembly`, `IfcBuildingStorey` o una
-  relación de agregación; el «componente» es un tipo con ocurrencias
-  (`IfcTypeObject` / `IfcRelDefinesByType`) o una referencia compartida. El
-  documento debe hablar de esas relaciones, no de mallas compartidas.
+- En IFC el «grupo» natural es una agregación de elementos
+  (`IfcElementAssembly`, `IfcBuildingStorey`) y el «componente» es un tipo con
+  ocurrencias (`IfcTypeObject` / `IfcRelDefinesByType`) o una referencia
+  compartida. El documento debe hablar de esas relaciones, no de mallas
+  compartidas.
 - Editar una ocurrencia debe decidir explícitamente si el cambio afecta al
   tipo (todas las ocurrencias) o solo a esa ocurrencia; es la misma
-  disyuntiva que «editar componente» vs. «hacer único», pero con semántica
-  IFC y trazable.
+  disyuntiva que «editar componente» frente a «hacer único», pero con
+  semántica IFC y trazable.
 - El aislamiento por malla propia es un detalle de implementación; en OPEN-RVT
-  el aislamiento debe ser topológico/paramétrico (el grupo tiene sus
+  el aislamiento debe ser topológico y paramétrico (el grupo tiene sus
   elementos y sus vínculos, no una copia de vértices).
 - Conservar la pila de contextos y el «salir un nivel» con Esc: es una UX
   clara y probada.
 - La separación en piezas físicas es útil para importaciones, pero en BIM
   conviene mapearla a elementos y no a fragmentos de malla.
-- Ocultar/bloquear a nivel de objeto y de capa debe mantenerse y probarse en
+- Ocultar y bloquear a nivel de objeto y de capa debe mantenerse y probarse en
   todas las puertas (pantalla, comandos, importación, pegado).
 
 ---
@@ -515,8 +569,19 @@ dos caras no interiores**, que no haya aristas sueltas, que haya al menos una
 cara y que el volumen firmado sea mayor que 10⁻¹² m³
 (`core/solids.py:55`). El volumen se calcula sumando tetraedros desde el
 origen sobre las caras trianguladas y se toma su valor absoluto
-(`core/bim.py:154`). Las caras marcadas como `interior` (tabiques que el
+(`core/bim.py:154`). Las caras marcadas como interiores (tabiques que el
 motor conserva a propósito) no cuentan como piel.
+
+Pseudocódigo propio de la comprobación fuerte:
+
+```
+si no hay caras: no es sólido
+para cada arista:
+    contar sus caras no interiores
+    si el conteo no es exactamente 2: no es sólido
+calcular el volumen por suma de tetraedros
+si el volumen es nulo o negativo: no es sólido
+```
 
 **La guarda del empuje.** Antes de mutar, si la malla era un sólido cerrado y
 no plana, se guarda una instantánea. Después de mutar se vuelve a comprobar:
@@ -539,11 +604,12 @@ volumen» (`core/bim.py:154`, `core/bim.py:25`). El área sí se calcula siempre
 siempre, volumen solo cuando el objeto es hermético (`formats/ifc.py:9`).
 
 **Diagnóstico cuando ya está roto.** El inspector de sólidos clasifica cada
-arista contando caras no interiores incidentes (`plugins/solid_inspector.py:1`):
+arista contando caras no interiores incidentes
+(`plugins/solid_inspector.py:1`):
 
-- 0 caras → arista suelta (dibujo que no pertenece a ninguna superficie).
-- 1 cara → borde abierto (el borde de un agujero en la piel).
-- Más de 2 caras → sobreconexión (tabique interior o unión en T que la
+- Sin caras → arista suelta (dibujo que no pertenece a ninguna superficie).
+- Una cara → borde abierto (el borde de un agujero en la piel).
+- Más de dos caras → sobreconexión (tabique interior o unión en T que la
   frontera no debería tener).
 
 Y cada cara: **interior** (repite las esquinas de otra o es una partición
@@ -551,7 +617,8 @@ cuyas aristas están todas sobreconectadas) o **reversa** (en un objeto
 cerrado, su frente mira hacia dentro). «Hermético» significa que no hay
 aristas sueltas, abiertas ni sobreconectadas; el volumen solo se muestra si
 además ninguna cara está reversa, porque una cara girada falsea la suma
-firmada (`plugins/solid_inspector.py:181`, `plugins/solid_inspector.py:196`).
+firmada (`plugins/solid_inspector.py:181`,
+`plugins/solid_inspector.py:196`).
 
 La reparación automática solo hace lo que tiene una única respuesta correcta:
 borra aristas sueltas y caras duplicadas, cierra agujeros cuyo borde es plano,
@@ -572,7 +639,7 @@ parte, se niegan a operar si alguna entrada no es un sólido
   roto» por el tipo IFC, no por una bandera de malla.
 - El rechazo con restauración y el tope por bisección son buenas ideas;
   conviene añadir el motivo concreto y el elemento afectado.
-- El diagnóstico por arista (suelta / abierta / sobreconectada) es
+- El diagnóstico por arista (suelta, abierta o sobreconectada) es
   directamente reutilizable; en IFC hay que traducirlo a «abertura sin
   relación», «cara sin volumen» y «partición mal clasificada».
 - Nunca calcular cantidades sobre geometría dudosa: devolver «sin volumen» en
@@ -594,29 +661,29 @@ metrado y la exportación (`core/bim.py:1`).
 ### Cómo lo resuelve
 
 **Dónde vive la etiqueta.** En caras sueltas se guarda en los atributos de la
-cara (`attrs["ifc"] = {id, class, name}`), que sobreviven a los cambios de
-geometría y se serializan con el documento. En un grupo se guarda en el propio
-grupo (`group.ifc = {class, name}`). Agrupar nunca pierde la etiqueta: un
-grupo etiquetado dentro de otro, y caras etiquetadas dentro de la malla de un
-grupo, siguen siendo objetos donde estén (`core/bim.py:1`, `core/bim.py:100`).
+cara (una clase, un nombre y un identificador de objeto), que sobreviven a los
+cambios de geometría y se serializan con el documento. En un grupo se guarda
+en el propio grupo. Agrupar nunca pierde la etiqueta: un grupo etiquetado
+dentro de otro, y caras etiquetadas dentro de la malla de un grupo, siguen
+siendo objetos donde estén (`core/bim.py:1`, `core/bim.py:100`).
 
-**Recolección de objetos.** Se recogen las caras sueltas agrupadas por id de
-etiqueta y cada grupo etiquetado como un objeto, a cualquier profundidad del
-árbol. Las cantidades se miden en espacio de mundo, incluyendo los
-emplazamientos anidados de un componente, y un grupo etiquetado mide su
+**Recolección de objetos.** Se recogen las caras sueltas agrupadas por
+identificador de etiqueta y cada grupo etiquetado como un objeto, a cualquier
+profundidad del árbol. Las cantidades se miden en espacio de mundo, incluyendo
+los emplazamientos anidados de un componente, y un grupo etiquetado mide su
 geometría **menos** lo que reclaman sus descendientes también etiquetados,
 para no contar dos veces (`core/bim.py:257`, `core/bim.py:204`). Hay una caché
 por firma del grupo (matriz, malla, serie de mutación y etiquetas) para no
 remedir lo que no cambió (`core/bim.py:177`).
 
 **Área y volumen.** El área se calcula siempre y descuenta los huecos de cada
-cara (`face_net_area`). El volumen solo se devuelve si el conjunto es
-hermético por sí mismo: cada arista del conjunto delimitada por exactamente
-dos caras del conjunto; si no, `None` (`core/bim.py:122`,
-`core/bim.py:141`, `core/bim.py:152`).
+cara. El volumen solo se devuelve si el conjunto es hermético por sí mismo:
+cada arista del conjunto delimitada por exactamente dos caras del conjunto; si
+no, no hay volumen (`core/bim.py:122`, `core/bim.py:141`,
+`core/bim.py:152`).
 
-**Cantidades por clase.** Cada clase IFC produce su juego `Qto_*` y una unidad
-de metrado propia (`core/bim.py:320`):
+**Cantidades por clase.** Cada clase IFC produce su juego de cantidades
+normalizado y una unidad de metrado propia (`core/bim.py:338`):
 
 - Muro: m² de cara lateral neta.
 - Losa, cubierta, escalera, rampa, revestimiento, espacio: m².
@@ -626,42 +693,42 @@ de metrado propia (`core/bim.py:320`):
 - Barra de refuerzo: kg (volumen × 7850 kg/m³).
 - Espacio: m² de suelo neto.
 
-`solid.py`/`bim.py` calculan además largo, alto, ancho, perímetro, sección,
-gross/net, etc., según la clase (`core/bim.py:410`).
+Se calculan además largo, alto, ancho, perímetro, sección y valores brutos y
+netos, según la clase (`core/bim.py:410`).
 
-**La exportación CSV.** `quantities_csv` produce la tabla
-`class,name,metrado,unit,area_m2,volume_m3`, pensada como puente previo al
-IFC hacia IngePresupuestos (`core/bim.py:534`). La exportación IFC documenta
-la misma honestidad: área siempre, volumen solo si el objeto es hermético
+**La exportación CSV.** Se produce una tabla con clase, nombre, metrado,
+unidad, superficie y volumen, pensada como puente previo al IFC hacia
+IngePresupuestos (`core/bim.py:534`). La exportación IFC documenta la misma
+honestidad: área siempre, volumen solo si el objeto es hermético
 (`formats/ifc.py:9`).
 
 ### Por qué los muros dieron 19,7 m² en vez de ~70
 
 Este es el punto delicado. Para `IfcWall`, la función de cantidades no suma
 las dos caras laterales del muro: toma **la cara de mayor área** del conjunto
-etiquetado y usa su área bruta y su área neta como `GrossSideArea` y
-`NetSideArea`, y esta última es el **metrado** (`core/bim.py:441`). El resto
-de la geometría del muro (la otra cara, los cantos, el dorso) entra en
-`area_m2` (la suma de la superficie de todas las caras etiquetadas) y en el
-volumen, pero no en `metrado`.
+etiquetado y usa su área bruta y su área neta como superficie lateral bruta y
+neta, y esta última es el **metrado** (`core/bim.py:430`, `core/bim.py:449`). El resto de la
+geometría del muro (la otra cara, los cantos, el dorso) entra en la columna de
+superficie total (la suma de todas las caras etiquetadas) y en el volumen,
+pero no en el metrado.
 
 En una casa de 8 × 6 × 2,8 m:
 
 - La superficie bruta de muros perimetrales es 2·(8+6)·2,8 = **78,4 m²**;
   descontando huecos, del orden de **70 m²**. Ese número es el que uno espera
   en un presupuesto de albañilería, y es aproximadamente lo que aparece en la
-  columna `area_m2` (superficie total de la piel).
-- El `metrado` de `IfcWall` sería, en cambio, el de **una sola cara**: si la
+  columna de superficie total (superficie de la piel).
+- El metrado de `IfcWall` sería, en cambio, el de **una sola cara**: si la
   cara mayor es un lado de 8 m, 8 × 2,8 = 22,4 m²; restándole una abertura de
   ~2,7 m² (una puerta) queda **19,7 m²**. Ese es exactamente el orden del
   valor reportado.
 
 Dicho de otro modo: la geometría estaba bien y el área de la piel era la
 esperada; lo que estaba mal era la **definición del metrado**: para un muro,
-una sola cara no es la cantidad de muro. El CSV mezcla dos conceptos — la
-superficie de la piel (`area_m2`, suma de caras) y el metrado presupuestario
-(`metrado`, una cara) — y en `IfcWall` el segundo no coincide con lo que un
-presupuestador llama «área de muro».
+una sola cara no es la cantidad de muro. La tabla mezcla dos conceptos —la
+superficie de la piel (suma de caras) y el metrado presupuestario (una cara)—
+y en `IfcWall` el segundo no coincide con lo que un presupuestador llama «área
+de muro».
 
 ### Qué haríamos distinto en OPEN-RVT
 
@@ -672,9 +739,10 @@ presupuestador llama «área de muro».
 - No confundir «superficie de la piel» (suma de todas las caras) con
   «metrado de la partida» (una magnitud de presupuesto). Deben ser columnas
   separadas y con nombre inequívoco.
-- En IFC las cantidades deben salir de `IfcElementQuantity`/`Qto_*` con la
-  semántica del esquema, y la geometría de la abertura debe restarse por
-  relación (`IfcRelVoidsElement`), no por un hueco en una cara de malla.
+- En IFC las cantidades deben salir de los conjuntos de cantidades del
+  esquema (`IfcElementQuantity` y sus `Qto_*`), y la geometría de la abertura
+  debe restarse por relación (`IfcRelVoidsElement`), no por un hueco en una
+  cara de malla.
 - Mantener la regla de honestidad: sin volumen si no es hermético, sin número
   inventado. Pero el área lateral de un muro no depende de que el volumen sea
   cerrado; debe calcularse siempre con su definición correcta.
@@ -705,56 +773,57 @@ y por eso no debe abrirse a la red (`docs/ai-bridge.md:1`).
 
 **Cinco herramientas, no cincuenta** (`scripts/ingetrazo_mcp.py:79`):
 
-1. `run_python`: ejecuta Python contra el documento vivo; devuelve
-   stdout/stderr. Cada llamada es **un paso de deshacer**; si lanza una
+1. Ejecutar Python contra el documento vivo y devolver la salida estándar y
+   de error. Cada llamada es **un paso de deshacer**; si el código lanza una
    excepción, el documento se revierte **por completo**.
-2. `query_model`: conteos, nombres de grupos/componentes, materiales, capas,
-   límites y tamaño de la selección.
-3. `screenshot`: renderiza el viewport real y lo devuelve como imagen; el
-   agente mira e itera.
-4. `undo`.
-5. `redo`.
+2. Consultar el modelo: conteos, nombres de grupos y componentes, materiales,
+   capas, límites y tamaño de la selección.
+3. Capturar una imagen del viewport real y devolverla como imagen; el agente
+   mira e itera.
+4. Deshacer.
+5. Rehacer.
 
 La decisión de diseño es deliberada: en vez de exponer decenas de
 herramientas con firmas que el modelo tendría que adivinar, se exponen muy
-pocas y se le da **el recetario completo en la descripción de `run_python`**
-(y también en las instrucciones del handshake, para que cualquier cliente lo
-vea) (`scripts/ingetrazo_mcp.py:57`, `scripts/ingetrazo_mcp.py:79`).
+pocas y se le da **el recetario completo en la descripción de la herramienta
+de ejecución** (y también en las instrucciones del handshake, para que
+cualquier cliente lo vea) (`scripts/ingetrazo_mcp.py:57`,
+`scripts/ingetrazo_mcp.py:79`).
 
 **El recetario.** Es un texto único, en español, sin imports, compartido por
 las dos puertas de IA de la aplicación: el asistente interno y el servidor
 MCP (`core/ai_recipes.py:1`). Contiene:
 
 - Unidades y convenciones: Z arriba, metros, ángulos en radianes.
-- El scope disponible (`scene`, `mesh`, `selection`, `groups`, `layers`,
-  `viewport`, `QVector3D`, `Mesh`, `Group`, `Edge`, `Face`, `bim`).
+- El ámbito disponible: la escena, la malla activa, la selección, los grupos,
+  las capas, la vista, los tipos geométricos y el módulo BIM.
 - Constructores de alto nivel: caja, casa completa, torno/revolución,
   prisma/extrusión, losa, muro con huecos, etc.; cada uno crea el grupo y lo
   añade, para que el modelo no repita el error de añadirlo otra vez.
 - Operaciones básicas: cara suelta, arista, grupo manual, pintar un grupo,
-  mover un grupo (componiendo la matriz si es una instancia), cámara,
-  lámina y capa.
-- Cómo se ejecuta: cada unidad es un paso de undo, el scope **persiste**
+  mover un grupo (componiendo la matriz si es una instancia), cámara, lámina
+  y capa.
+- Cómo se ejecuta: cada unidad es un paso de deshacer, el ámbito **persiste**
   entre llamadas, no hay que redefinir variables, y **no se debe explorar la
-  API con `dir()`, `inspect` ni `dis`** (`core/ai_recipes.py:73`).
+  API con introspección** (`core/ai_recipes.py:73`).
 
 El motivo está medido y documentado en el propio módulo: un modelo construyó
 una mesa correcta pero gastó **81 llamadas, 46 de ellas de pura
 introspección**, y 34 s razonando sobre el giro de una caja que una función
 del recetario resolvía en una línea (`core/ai_recipes.py:1`).
 
-**Seguridad y alcance.** El puente solo escucha en `127.0.0.1`; si el
+**Seguridad y alcance.** El puente solo escucha en la dirección local; si el
 cliente está en un contenedor o en otra máquina, el usuario lleva el puerto
 con un túnel que él controla y le dice al cliente dónde está el otro extremo
 (`docs/ai-bridge.md:1`). Como escuchar en local no protege del navegador de
-la misma máquina (una página puede hacer un POST a localhost sin permiso), el
-puente corta la conexión en la primera línea que no sea una petición JSON, de
-modo que el cuerpo de una petición HTTP nunca llega a leerse. Aun así, la
-recomendación es detener el puente cuando no se use.
+la misma máquina (una página puede hacer una petición a localhost sin
+permiso), el puente corta la conexión en la primera línea que no sea una
+petición JSON, de modo que el cuerpo de una petición HTTP nunca llega a
+leerse. Aun así, la recomendación es detener el puente cuando no se use.
 
 ### Qué haríamos distinto en OPEN-RVT
 
-- Mantener la filosofia de **pocas herramientas + recetario**: es la que
+- Mantener la filosofía de **pocas herramientas más un recetario**: es la que
   reduce el coste de los agentes y evita que inventen la API.
 - El recetario debe ser una **fuente única** compartida por todas las puertas
   (asistente interno, MCP, línea de comandos); si se duplica, se desincroniza.
@@ -763,11 +832,11 @@ recomendación es detener el puente cuando no se use.
 - En OPEN-RVT los constructores deben crear **elementos IFC** con parámetros
   (muro, losa, hueco), no caras y aristas sueltas; el recetario debe enseñar
   esas funciones y no la malla.
-- Conservar `screenshot` como herramienta de verificación: obliga al agente a
-  mirar lo que hizo.
+- Conservar la captura de pantalla como herramienta de verificación: obliga
+  al agente a mirar lo que hizo.
 - La seguridad debe ser explícita: loopback, sin autenticación, apagado por
   defecto y corte de peticiones que no sean JSON; no exponerlo a la red.
-- El scope persistente entre llamadas es cómodo, pero debe documentarse y
+- El ámbito persistente entre llamadas es cómodo, pero debe documentarse y
   limpiarse al cambiar de documento.
 
 ---
@@ -785,8 +854,8 @@ Python puro, y mantener la aplicación desacoplada de cómo se lee.
 
 **Una sola costura.** Todo el acceso a `.skp` pasa por un módulo–fachada
 (`formats/skp.py:1`). El lector no toca la escena: **primero parsea** el
-archivo a un «payload» plano (bucles de caras en coordenadas de mundo) y
-**después aplica** ese payload dentro de un comando de la aplicación. El
+archivo a un paquete de datos plano (bucles de caras en coordenadas de mundo)
+y **después aplica** ese paquete dentro de un comando de la aplicación. El
 parseo pesado ocurre fuera del historial de deshacer; si falla o sale vacío,
 no se ha mutado nada y no queda una edición a medias (`formats/skp.py:1`).
 
@@ -796,21 +865,31 @@ La fachada expone una API pequeña y estable:
   contenedor clásico o el de versiones recientes, empieza con la misma marca
   UTF-16 o con un envoltorio ZIP; la «era» no se distingue por los bytes
   mágicos y no hace falta distinguirla) (`formats/skp.py:33`).
-- Comprobar si hay backend disponible y si reconoce el archivo
+- Comprobar si hay lector disponible y si reconoce el archivo
   (`formats/skp.py:91`).
-- Parsear con el primer backend que produzca geometría; si ninguno puede,
+- Parsear con el primer lector que produzca geometría; si ninguno puede,
   lanzar una excepción de «no legible» **antes** de tocar la escena
   (`formats/skp.py:99`).
-- Aplicar el payload como grupos de referencia (`formats/skp.py:1`).
+- Aplicar el paquete como grupos de referencia (`formats/skp.py:1`).
 
-**El backend.** Se usa OpenSKP, un parser MIT en Python puro, como
-dependencia **opcional**: si no está instalado, el backend simplemente no está
+Pseudocódigo propio:
+
+```
+detectar el formato por los primeros bytes
+si no se reconoce: informar y no tocar la escena
+parsear fuera del historial de deshacer
+si el resultado está vacío: informar y no tocar la escena
+aplicar el paquete dentro de un solo comando reversible
+```
+
+**El lector.** Se usa OpenSKP, un parser MIT en Python puro, como
+dependencia **opcional**: si no está instalado, el lector simplemente no está
 disponible y la fachada lo dice; no se importa al cargar el módulo
 (`formats/skp.py:48`). OpenSKP cubre tanto el contenedor clásico (anteriores a
 2021) como el formato reciente; el adaptador de IngeTrazo se limita a traducir
 su modelo de datos a la geometría de la aplicación (`docs/skp-backend.md:1`).
 
-**El adaptador.** OpenSKP devuelve definiciones con vértices, aristas, caras
+**El adaptador.** El lector devuelve definiciones con vértices, aristas, caras
 e instancias. El adaptador:
 
 - Convierte unidades: el `.skp` guarda pulgadas y es Z-arriba, la misma
@@ -834,8 +913,8 @@ fork amigable con una versión fijada tras la costura. La validación es
 del mismo modelo, nunca se descompila ni se copian internals propietarios
 (`docs/openskp-collaboration.md:1`). Se conservan las licencias MIT del parser.
 
-**Cascada en la interfaz.** Al importar un `.skp`: si hay backend y reconoce
-el archivo, se parsea fuera del historial y se aplica en un comando; si sale
+**Cascada en la interfaz.** Al importar un `.skp`: si hay lector y reconoce el
+archivo, se parsea fuera del historial y se aplica en un comando; si sale
 vacío o no se reconoce, se informa de que el archivo no se pudo leer y se
 sugiere exportarlo como COLLADA u OBJ desde el programa que lo creó
 (`docs/skp-backend.md:1`). La **exportación** a `.skp` está desactivada: el
@@ -853,10 +932,10 @@ no como fallos silenciosos.
 ### Qué haríamos distinto en OPEN-RVT
 
 - En OPEN-RVT el destino no es una malla suelta sino elementos IFC. El
-  payload debería ser una lista de elementos con su clase, sus parámetros y
-  su geometría, no solo bucles de caras; la importación debe decidir qué
-  hacer con geometría no clasificable (dejarla como referencia o descartarla
-  con aviso).
+  paquete de datos debería ser una lista de elementos con su clase, sus
+  parámetros y su geometría, no solo bucles de caras; la importación debe
+  decidir qué hacer con geometría no clasificable (dejarla como referencia o
+  descartarla con aviso).
 - Mantener la costura «parsear fuera del historial y aplicar dentro de un
   comando»: es la garantía de que un archivo corrupto no deje el documento a
   medias.
