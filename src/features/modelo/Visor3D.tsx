@@ -5686,9 +5686,11 @@ export function Visor3D({
         // O049: si el primer punto cae sobre una cara superior, el contorno se
         // dibuja en su plano y el sólido nace con ese desfase.
         const cara = caraSuperiorEn(res.punto, res.candidatos.caras ?? []);
+        // La cota sale del punto ya redondeado (no del vértice float32 de la
+        // malla) para que el desfase guardado sea 0.12 y no 0.119999997.
         void clicEmpujar(
           [res.punto.x, res.punto.y],
-          cara ? cara.poligono[0].z : undefined,
+          cara ? res.punto.z : undefined,
         );
         return;
       }
@@ -6887,6 +6889,28 @@ export function Visor3D({
     // O049: último punto inferido para las pruebas E2E.
     (nodo as unknown as Record<string, unknown>).__openrvtEmpujarInferencia = () =>
       ultimaInferenciaEmpujar.current;
+    // O049: diagnóstico de candidatos de Empujar/Tirar para las pruebas E2E.
+    (nodo as unknown as Record<string, unknown>).__openrvtEmpujarCandidatos = (
+      clientX: number,
+      clientY: number,
+    ) => {
+      const cercanas = filtrarPorCercania(
+        mallas3d.current,
+        proyectarLienzo,
+        { x: clientX, y: clientY },
+        60,
+      );
+      const candidatos = unirCandidatos(
+        cercanas.map((m) => cacheCandidatos.current.obtener(m.malla, mallas)),
+      );
+      return {
+        mallas: mallas3d.current.length,
+        cercanas: cercanas.map((m) => m.globalid),
+        vertices: candidatos.vertices?.length ?? 0,
+        aristas: candidatos.aristas?.length ?? 0,
+        caras: candidatos.caras?.length ?? 0,
+      };
+    };
     // Utilidad de las pruebas E2E: candidatos de Tab bajo un punto de la pantalla.
     (nodo as unknown as Record<string, unknown>).__openrvtCandidatosTab = (
       clientX: number,

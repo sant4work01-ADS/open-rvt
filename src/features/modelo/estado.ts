@@ -1061,11 +1061,15 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     const centroY = (rect.y1 + rect.y2) / 2;
 
     if (clase === "losa") {
+      // O049: el contorno es la base del sólido. La losa crece hacia arriba
+      // desde el plano (igual que muro y columna), así que su cara superior
+      // queda en el plano + espesor. Dibujar sobre una losa de 0.12 deja el
+      // contorno a 0.12 y el sólido nuevo nace ahí.
       const ok = await ejecutar("losas.crear", {
         nivel,
         puntos: puntosRectangulo(rect),
         espesor: h,
-        desfase: desfasePlano,
+        desfase: desfasePlano + h,
       });
       if (ok) set({ aviso: `Losa de ${h.toFixed(2)} m de espesor.` });
       return ok;
