@@ -188,6 +188,24 @@ function orientarHaciaFuera(
     : normal;
 }
 
+/** Caja en metros de la malla, calculada sin armar aristas ni caras. */
+export function envolventeDeMalla(malla: MallaCandidata): Envolvente {
+  let min = { x: Infinity, y: Infinity, z: Infinity };
+  let max = { x: -Infinity, y: -Infinity, z: -Infinity };
+  for (let i = 0; i + 2 < malla.vertices.length; i += 3) {
+    const x = malla.vertices[i];
+    const y = malla.vertices[i + 1];
+    const z = malla.vertices[i + 2];
+    min = { x: Math.min(min.x, x), y: Math.min(min.y, y), z: Math.min(min.z, z) };
+    max = { x: Math.max(max.x, x), y: Math.max(max.y, y), z: Math.max(max.z, z) };
+  }
+  if (!Number.isFinite(min.x)) {
+    min = { x: 0, y: 0, z: 0 };
+    max = { x: 0, y: 0, z: 0 };
+  }
+  return { min, max };
+}
+
 /** Candidatos (vértices, aristas de quiebre y caras planas) de una malla. */
 export function candidatosDeMalla(malla: MallaCandidata): CandidatosMalla {
   const triangulos: Triangulo[] = [];

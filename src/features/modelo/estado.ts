@@ -1038,9 +1038,10 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     // O049: el contorno puede vivir en la cara superior de otro elemento. El
     // sólido se liga al nivel activo con ese desfase vertical.
     const nivelEntidad = get().niveles.find((n) => n.globalid === nivel);
-    const desfasePlano = get().empujarZ === null
+    const cotaEmpujar = get().empujarZ;
+    const desfasePlano = cotaEmpujar === null
       ? 0
-      : get().empujarZ - (nivelEntidad?.elevacion ?? 0);
+      : cotaEmpujar - (nivelEntidad?.elevacion ?? 0);
     const elegida = get().empujarClasificacion;
     const clase: ClaseEmpujar =
       elegida === "auto" ? clasificarEmpujar(rect, altura).clase : elegida;

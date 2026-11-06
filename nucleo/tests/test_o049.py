@@ -29,6 +29,17 @@ def _pset(nucleo: ModeloNucleo, gid: str, nombre: str) -> dict:
     return nucleo.propiedades(gid)["psets"].get(nombre, {})
 
 
+def test_la_barra_cuenta_el_generico_creado() -> None:
+    # O046 mostraba 4 elementos en el núcleo y 3 en la barra: el proxy no contaba.
+    nucleo = ModeloNucleo()
+    nucleo.nuevo("O049 conteo")
+    nivel = nucleo.niveles()[0]["globalid"]
+    nucleo.generico_crear(nivel, [(0, 0), (2, 0), (2, 2), (0, 2)], 1.0)
+    info = nucleo.info()
+    assert info["elementos"] == 1
+    assert info["por_clase"] == {"IfcBuildingElementProxy": 1}
+
+
 def test_muro_sobre_losa_nace_a_z_0_12_y_su_tope_queda_a_2_72() -> None:
     nucleo = ModeloNucleo()
     nucleo.nuevo("O049 muro sobre losa")
