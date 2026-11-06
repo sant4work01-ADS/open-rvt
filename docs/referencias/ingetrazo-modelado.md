@@ -577,3 +577,106 @@ parte, se niegan a operar si alguna entrada no es un sólido
   relación», «cara sin volumen» y «partición mal clasificada».
 - Nunca calcular cantidades sobre geometría dudosa: devolver «sin volumen» en
   vez de un número engañoso, como hacen ellos.
+
+---
+
+## 6. La capa BIM: etiquetas, cantidades y el caso de los 19,7 m²
+
+### Qué problema resuelve
+
+Añadir semántica de construcción (clase IFC, nombre, cantidades) encima de
+geometría libre, sin convertir el modelador en un sistema de primitivas
+rígidas. La idea declarada es el patrón «BIM como metadatos aplicados a
+geometría seleccionada»: una etiqueta convierte un conjunto de caras o un
+grupo en un objeto IFC con nombre, y los objetos etiquetados alimentan el
+metrado y la exportación (`core/bim.py:1`).
+
+### Cómo lo resuelve
+
+**Dónde vive la etiqueta.** En caras sueltas se guarda en los atributos de la
+cara (`attrs["ifc"] = {id, class, name}`), que sobreviven a los cambios de
+geometría y se serializan con el documento. En un grupo se guarda en el propio
+grupo (`group.ifc = {class, name}`). Agrupar nunca pierde la etiqueta: un
+grupo etiquetado dentro de otro, y caras etiquetadas dentro de la malla de un
+grupo, siguen siendo objetos donde estén (`core/bim.py:1`, `core/bim.py:100`).
+
+**Recolección de objetos.** Se recogen las caras sueltas agrupadas por id de
+etiqueta y cada grupo etiquetado como un objeto, a cualquier profundidad del
+árbol. Las cantidades se miden en espacio de mundo, incluyendo los
+emplazamientos anidados de un componente, y un grupo etiquetado mide su
+geometría **menos** lo que reclaman sus descendientes también etiquetados,
+para no contar dos veces (`core/bim.py:257`, `core/bim.py:204`). Hay una caché
+por firma del grupo (matriz, malla, serie de mutación y etiquetas) para no
+remedir lo que no cambió (`core/bim.py:177`).
+
+**Área y volumen.** El área se calcula siempre y descuenta los huecos de cada
+cara (`face_net_area`). El volumen solo se devuelve si el conjunto es
+hermético por sí mismo: cada arista del conjunto delimitada por exactamente
+dos caras del conjunto; si no, `None` (`core/bim.py:122`,
+`core/bim.py:141`, `core/bim.py:152`).
+
+**Cantidades por clase.** Cada clase IFC produce su juego `Qto_*` y una unidad
+de metrado propia (`core/bim.py:320`):
+
+- Muro: m² de cara lateral neta.
+- Losa, cubierta, escalera, rampa, revestimiento, espacio: m².
+- Columna, viga, cimentación: m³.
+- Pilar, miembro, barandilla: m.
+- Puerta, ventana: unidades.
+- Barra de refuerzo: kg (volumen × 7850 kg/m³).
+- Espacio: m² de suelo neto.
+
+`solid.py`/`bim.py` calculan además largo, alto, ancho, perímetro, sección,
+gross/net, etc., según la clase (`core/bim.py:410`).
+
+**La exportación CSV.** `quantities_csv` produce la tabla
+`class,name,metrado,unit,area_m2,volume_m3`, pensada como puente previo al
+IFC hacia IngePresupuestos (`core/bim.py:534`). La exportación IFC documenta
+la misma honestidad: área siempre, volumen solo si el objeto es hermético
+(`formats/ifc.py:9`).
+
+### Por qué los muros dieron 19,7 m² en vez de ~70
+
+Este es el punto delicado. Para `IfcWall`, la función de cantidades no suma
+las dos caras laterales del muro: toma **la cara de mayor área** del conjunto
+etiquetado y usa su área bruta y su área neta como `GrossSideArea` y
+`NetSideArea`, y esta última es el **metrado** (`core/bim.py:441`). El resto
+de la geometría del muro (la otra cara, los cantos, el dorso) entra en
+`area_m2` (la suma de la superficie de todas las caras etiquetadas) y en el
+volumen, pero no en `metrado`.
+
+En una casa de 8 × 6 × 2,8 m:
+
+- La superficie bruta de muros perimetrales es 2·(8+6)·2,8 = **78,4 m²**;
+  descontando huecos, del orden de **70 m²**. Ese número es el que uno espera
+  en un presupuesto de albañilería, y es aproximadamente lo que aparece en la
+  columna `area_m2` (superficie total de la piel).
+- El `metrado` de `IfcWall` sería, en cambio, el de **una sola cara**: si la
+  cara mayor es un lado de 8 m, 8 × 2,8 = 22,4 m²; restándole una abertura de
+  ~2,7 m² (una puerta) queda **19,7 m²**. Ese es exactamente el orden del
+  valor reportado.
+
+Dicho de otro modo: la geometría estaba bien y el área de la piel era la
+esperada; lo que estaba mal era la **definición del metrado**: para un muro,
+una sola cara no es la cantidad de muro. El CSV mezcla dos conceptos — la
+superficie de la piel (`area_m2`, suma de caras) y el metrado presupuestario
+(`metrado`, una cara) — y en `IfcWall` el segundo no coincide con lo que un
+presupuestador llama «área de muro».
+
+### Qué haríamos distinto en OPEN-RVT
+
+- El metrado de un muro debe ser su **área lateral neta**, es decir, la de
+  **ambas** caras principales (o la del eje por su altura y longitud, según la
+  convención), no la de la cara más grande. Hay que definirlo explícitamente
+  y probarlo con una casa completa: 8×6×2,8 debe dar ~70 m² netos, no 19,7.
+- No confundir «superficie de la piel» (suma de todas las caras) con
+  «metrado de la partida» (una magnitud de presupuesto). Deben ser columnas
+  separadas y con nombre inequívoco.
+- En IFC las cantidades deben salir de `IfcElementQuantity`/`Qto_*` con la
+  semántica del esquema, y la geometría de la abertura debe restarse por
+  relación (`IfcRelVoidsElement`), no por un hueco en una cara de malla.
+- Mantener la regla de honestidad: sin volumen si no es hermético, sin número
+  inventado. Pero el área lateral de un muro no depende de que el volumen sea
+  cerrado; debe calcularse siempre con su definición correcta.
+- La caché por firma y el «no contar dos veces» son buenas ideas que conviene
+  conservar, con pruebas de secuencia (etiquetar, mover, anidar, desagrupar).
