@@ -385,3 +385,106 @@ admite hasta 10⁻³; un cruce solo cuenta si las líneas se acercan a menos de
   editables, no cuatro aristas y una cara suelta.
 - Conservar el comando compuesto para que un rectángulo sea un solo paso de
   deshacer y el mensaje de error que explica el plano equivocado.
+
+---
+
+## 4. Grupos y componentes: aislamiento y edición
+
+### Qué problema resuelve
+
+Separar geometría para que se mueva y edite como una unidad, sin que las
+operaciones de una parte contaminen el resto del modelo, y permitir editar
+«dentro» de un grupo o componente con las mismas herramientas que en el
+espacio suelto. Al mismo tiempo, varias copias de un componente deben
+compartir su definición para no multiplicar la memoria.
+
+### Cómo lo resuelve
+
+**Aislamiento.** La malla principal del documento suelda todos los vértices
+coincidentes, así que un bloque dibujado contra un muro se fusiona con él. Un
+grupo guarda su geometría en una malla **propia**: nada se suelda a través de
+su frontera y por eso se mueve y edita como una unidad
+(`core/group.py:1`, `core/group.py:79`). Cada grupo tiene además capa,
+etiqueta IFC, material, visibilidad, bloqueo y un identificador estable que
+sobrevive a guardar y cargar (`core/group.py:79`).
+
+**Grupo clásico frente a componente.** Un grupo clásico mantiene la malla en
+coordenadas de mundo y solo guarda sus ejes locales en una matriz aparte,
+para no perder la orientación al mover o rotar (`core/group.py:79`,
+`core/group.py:254`). Un **componente** es una instancia: su malla es un
+prototipo en coordenadas locales compartido con las demás copias, y una
+matriz `xform` la lleva al mundo. Mover, rotar o escalar una instancia solo
+compone su matriz (coste O(1)); editar su geometría es otra historia
+(`core/group.py:79`, `core/group.py:202`).
+
+**Anidamiento.** Un grupo puede tener «hijos» que son emplazamientos de otros
+prototipos dentro de sus propias coordenadas. Se recorren en profundidad
+componiendo matrices (`iter_placements`) y, cuando hace falta una sola malla,
+se funden con una pasada vectorizada (`world_mesh`)
+(`core/group.py:390`, `core/group.py:486`). Esto permite importar un
+componente conservando la repetición interna que traía el archivo original en
+vez de aplanarla y multiplicar la geometría (`core/group.py:79`).
+
+**Entrar a editar.** Editar dentro de un grupo no lo «hornea» ni destruye su
+estructura. El documento mantiene una pila de contextos: al entrar, la malla
+activa del documento pasa a ser la del grupo, de modo que todas las
+herramientas y comandos existentes trabajan sobre ella sin cambios
+(`core/scene.py:376`). Entrar a un hijo del grupo ya abierto apila un nivel;
+entrar a cualquier otro cierra lo abierto (`core/scene.py:376`). Salir un
+nivel (Esc) y salir de todos los niveles son operaciones distintas
+(`core/scene.py:482`, `core/scene.py:487`).
+
+**Componentes al editar.** Entrar a una instancia de componente no edita el
+prototipo compartido directamente: crea una **copia en coordenadas de mundo**
+y la pone como malla activa, guardando el prototipo y la matriz originales
+(`core/scene.py:376`). Al salir:
+
+- Si nada cambió, se restaura el uso compartido del prototipo.
+- Si cambió, se transforma la copia por la inversa de la matriz y se escribe
+  en el prototipo; todas las copias muestran el cambio
+  (`core/scene.py:537`, `core/scene.py:543`).
+
+«Hacer único» es la operación explícita para romper ese compartir: el
+componente deja de compartir malla y pasa a tener su propia definición y sus
+propios hijos, sin alcanzar a sus hermanos (`core/group.py:219`).
+
+**Contenedores con matriz.** Si un grupo que tiene hijos conserva una matriz
+propia, al entrar se empuja esa matriz hacia abajo: a los hijos y a la malla
+del propio grupo, que pasa a mundo. Nada se mueve visualmente y las
+herramientas pueden seguir hablando en coordenadas de mundo
+(`core/scene.py:452`).
+
+**Piezas físicas.** Un archivo importado suele llamar «parte» a fragmentos de
+superficie cortados por material, no a objetos que se puedan coger. Para
+separar un grupo en piezas físicas se hacen dos pasadas: primero se agrupan
+las caras que forman sólidos cerrados con espesor (≥ 1 mm) y al menos cuatro
+caras, emparejando caras a través de cada arista por el lado del material;
+después los fragmentos abiertos se agrupan por vértices compartidos y se
+adhieren al sólido donde caen al menos la mitad de sus esquinas; un fragmento
+que solo roza un sólido en una esquina queda como pieza aparte
+(`core/pieces.py:1`, `core/pieces.py:201`, `core/pieces.py:365`).
+
+**Ocultar y bloquear.** Un grupo puede ocultarse (deja de dibujarse,
+seleccionarse, capturarse y exportarse) o bloquearse (se dibuja pero no se
+puede seleccionar, mover ni abrir); ambos estados se guardan en el documento
+(`core/group.py:79`).
+
+### Qué haríamos distinto en OPEN-RVT
+
+- En IFC el «grupo» natural es `IfcElementAssembly`, `IfcBuildingStorey` o una
+  relación de agregación; el «componente» es un tipo con ocurrencias
+  (`IfcTypeObject` / `IfcRelDefinesByType`) o una referencia compartida. El
+  documento debe hablar de esas relaciones, no de mallas compartidas.
+- Editar una ocurrencia debe decidir explícitamente si el cambio afecta al
+  tipo (todas las ocurrencias) o solo a esa ocurrencia; es la misma
+  disyuntiva que «editar componente» vs. «hacer único», pero con semántica
+  IFC y trazable.
+- El aislamiento por malla propia es un detalle de implementación; en OPEN-RVT
+  el aislamiento debe ser topológico/paramétrico (el grupo tiene sus
+  elementos y sus vínculos, no una copia de vértices).
+- Conservar la pila de contextos y el «salir un nivel» con Esc: es una UX
+  clara y probada.
+- La separación en piezas físicas es útil para importaciones, pero en BIM
+  conviene mapearla a elementos y no a fragmentos de malla.
+- Ocultar/bloquear a nivel de objeto y de capa debe mantenerse y probarse en
+  todas las puertas (pantalla, comandos, importación, pegado).
