@@ -5607,10 +5607,31 @@ export function Visor3D({
       clientY: number,
       shift: boolean,
       agregar: boolean,
+      soloSeleccion = false,
     ) => {
       const camera = camara.current;
       if (!camera) return;
       const falso = { clientX, clientY } as PointerEvent;
+      // O051: con «Orbitar» activo, un clic sin arrastre solo selecciona; no debe
+      // disparar la herramienta Empujar/Tirar ni ninguna otra.
+      if (soloSeleccion) {
+        setEjeSeleccionado(null);
+        const rect = nodo.getBoundingClientRect();
+        const raton = new THREE.Vector2(
+          ((clientX - rect.left) / rect.width) * 2 - 1,
+          -((clientY - rect.top) / rect.height) * 2 + 1,
+        );
+        const rayo = new THREE.Raycaster();
+        rayo.setFromCamera(raton, camera);
+        const impacto = rayo.intersectObjects(meshes.current, false)[0];
+        const gidTocado = impacto?.object.userData.globalid ?? null;
+        if (gidTocado && elementosBloqueados.includes(gidTocado)) {
+          onSeleccionar(null, agregar);
+          return;
+        }
+        onSeleccionar(gidTocado, agregar);
+        return;
+      }
       if (herramienta === "alinear") {
         // O026: primer clic en la referencia; el segundo en la cara a mover.
         const rectAlinear = nodo.getBoundingClientRect();
@@ -6516,7 +6537,8 @@ export function Visor3D({
       if (
         herramienta === "empujar" &&
         (vista.tipo === "iso" || vista.tipo === "perspectiva") &&
-        evento.buttons === 0
+        evento.buttons === 0 &&
+        !arrastre.current?.paneable
       ) {
         if (empujarRect) {
           setMarcadorEmpujar(null);
@@ -6726,11 +6748,13 @@ export function Visor3D({
         return;
       }
       if (evento.button === 0 && !espacio.current) {
+        const es3dClic = vista.tipo === "iso" || vista.tipo === "perspectiva";
         hacerClic(
           evento.clientX,
           evento.clientY,
           evento.shiftKey,
           evento.ctrlKey || evento.metaKey || evento.altKey,
+          modoOrbitar && es3dClic && arr.boton === 0,
         );
       }
     };
@@ -8111,6 +8135,7 @@ export function Visor3D({
         onAjustar={ajustar}
         orbitar={modoOrbitar}
         onAlternarOrbitar={alternarOrbitar}
+        mostrarOrbitar={vista.tipo === "iso" || vista.tipo === "perspectiva"}
         aEscala={
           (vista.anotacionEscala ??
             (vista.tipo === "alzado" || vista.tipo === "corte" ? "papel" : "pantalla")) === "papel"

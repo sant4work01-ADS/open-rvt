@@ -219,6 +219,10 @@ describe("CA-8 · Linux descarga aparte", () => {
 
   it("en Tauri/Linux el diálogo ofrece Descargar en vez de instalar", async () => {
     (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
+    // La prueba simula Linux explícitamente: en un equipo Windows el UA no lo dice.
+    const ua = vi
+      .spyOn(window.navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (X11; Linux x86_64)");
     try {
       useActualizaciones.getState().fijarServicio(servicioFalso().servicio);
       useActualizaciones.setState({
@@ -232,6 +236,7 @@ describe("CA-8 · Linux descarga aparte", () => {
         "no puede sustituirse sola",
       );
     } finally {
+      ua.mockRestore();
       delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
     }
   });

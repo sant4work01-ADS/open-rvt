@@ -333,17 +333,8 @@ async function esperarAltura(ses, gid, esperado) {
 
 // Reporte del dueño (3-nov, 0.5.26): rectángulo de 4 muros con castillos en las esquinas; tres cerramientos salen y
 // el del muro izquierdo no se puede dibujar.
-function cerramientosDe(elementos) {
-  return elementos.filter((e) => e.estructura?.alias === "cerramiento");
-}
-
 function murosDe(elementos) {
   return elementos.filter((e) => e.clase === "IfcWall");
-}
-
-async function alturaMuro(ses, gid) {
-  const props = await invocar(ses, "modelo.propiedades", { globalid: gid });
-  return Number(props.psets?.OPENRVT_Muro?.Altura ?? NaN);
 }
 
 async function props(ses, gid) {

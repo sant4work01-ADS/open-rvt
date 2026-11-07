@@ -6,14 +6,14 @@ import { ControlesZoom } from "./ControlesZoom";
 
 afterEach(cleanup);
 
-function montar(orbitar = false) {
+function montar(orbitar = false, mostrarOrbitar = true) {
   const acciones = {
     onAcercar: vi.fn(),
     onAlejar: vi.fn(),
     onAjustar: vi.fn(),
     onAlternarOrbitar: vi.fn(),
   };
-  render(<ControlesZoom {...acciones} orbitar={orbitar} />);
+  render(<ControlesZoom {...acciones} orbitar={orbitar} mostrarOrbitar={mostrarOrbitar} />);
   return acciones;
 }
 
@@ -42,5 +42,11 @@ describe("O020: conmutador «Orbitar»", () => {
     expect(screen.getByTestId("visor-orbitar").getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(screen.getByTestId("visor-orbitar"));
     expect(onAlternarOrbitar).toHaveBeenCalledTimes(1);
+  });
+
+  it("O051: en planta y alzado no aparece el conmutador", () => {
+    montar(false, false);
+    expect(screen.queryByTestId("visor-orbitar")).toBeNull();
+    expect(screen.queryByText("Orbitar")).toBeNull();
   });
 });

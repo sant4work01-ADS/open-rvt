@@ -7,6 +7,8 @@ interface Props {
   onAjustar: () => void;
   orbitar: boolean;
   onAlternarOrbitar: () => void;
+  /** O051: el conmutador solo existe en las vistas 3D. */
+  mostrarOrbitar?: boolean;
   /** O030: modo «A escala» de la anotación (mm de papel). */
   aEscala?: boolean;
   onAlternarAEscala?: () => void;
@@ -19,6 +21,7 @@ export function ControlesZoom({
   onAjustar,
   orbitar,
   onAlternarOrbitar,
+  mostrarOrbitar = true,
   aEscala,
   onAlternarAEscala,
   onZoom100,
@@ -84,21 +87,23 @@ export function ControlesZoom({
           A escala
         </button>
       )}
-      <button
-        type="button"
-        data-testid="visor-orbitar"
-        title="Orbitar: arrastra con el botón izquierdo"
-        aria-label="Orbitar"
-        aria-pressed={orbitar}
-        onClick={onAlternarOrbitar}
-        className={
-          orbitar
-            ? "h-7 rounded border bg-accent px-2 text-xs font-medium text-accent-foreground shadow-sm"
-            : "h-7 rounded border bg-background/90 px-2 text-xs shadow-sm hover:bg-muted"
-        }
-      >
-        Orbitar
-      </button>
+      {mostrarOrbitar && (
+        <button
+          type="button"
+          data-testid="visor-orbitar"
+          title="Orbitar: arrastra con el botón izquierdo"
+          aria-label="Orbitar"
+          aria-pressed={orbitar}
+          onClick={onAlternarOrbitar}
+          className={
+            orbitar
+              ? "h-7 rounded border bg-accent px-2 text-xs font-medium text-accent-foreground shadow-sm"
+              : "h-7 rounded border bg-background/90 px-2 text-xs shadow-sm hover:bg-muted"
+          }
+        >
+          Orbitar
+        </button>
+      )}
     </div>
   );
 }
