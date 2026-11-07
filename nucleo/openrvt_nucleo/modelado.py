@@ -919,9 +919,20 @@ class ModeladoMixin:
             "alturaArriba": 3,
             "cotasEjes": True,
         }
+        # O052: el nivel nuevo también entra en los alzados y en las vistas 3D
+        # automáticas; si no, los elementos de ese nivel desaparecen de ellas.
+        actualizadas: list[dict[str, Any]] = []
+        for existente in vistas:
+            if existente.get("tipo") in ("alzado", "iso", "perspectiva"):
+                visibles = [
+                    x for x in (existente.get("nivelesVisibles") or []) if isinstance(x, str)
+                ]
+                if visibles and gid not in visibles:
+                    existente = {**existente, "nivelesVisibles": [*visibles, gid]}
+            actualizadas.append(existente)
         self._guardar_datos_pset(
             self._pset_vistas(crear=True),
-            [*vistas, vista],
+            [*actualizadas, vista],
             "JSON de las vistas",
         )
         return vista
@@ -5650,6 +5661,13 @@ class ModeladoMixin:
         if entidad.is_a("IfcOpeningElement"):
             relleno = self._relleno_de(entidad)
             return [entidad] + ([relleno] if relleno is not None else [])
+        if entidad.is_a("IfcDoor") or entidad.is_a("IfcWindow"):
+            # O052: mover o borrar la hoja debe arrastrar su vano; si no, queda un
+            # hueco en el muro sin puerta y el área neta del muro no cuadra.
+            for rel in getattr(entidad, "FillsVoids", ()) or ():
+                vano = getattr(rel, "RelatingOpeningElement", None)
+                if vano is not None:
+                    return [entidad, vano]
         return [entidad]
 
     def elementos_mover(self, globalids: Any, dx: float, dy: float, dz: float) -> dict[str, Any]:
@@ -5688,6 +5706,36 @@ class ModeladoMixin:
                         if _gid(zapata) not in vistos:
                             vistos.add(_gid(zapata))
                             afectados.append(zapata)
+        # O052: al mover una puerta/ventana se mueve su vano y se actualiza la
+        # distancia sobre el muro; si el muro también va en la selección, sus vanos
+        # cuelgan de él y no hay que tocar el pset.
+        muros_movidos = {
+            _gid(self._entidad_por_gid(gid))
+            for gid in gids
+            if self._entidad_por_gid(gid).is_a("IfcWall")
+        }
+        cambios_vanos: list[tuple[Any, Any, dict[str, Any]]] = []
+        for producto in afectados:
+            if not producto.is_a("IfcOpeningElement"):
+                continue
+            datos = self._datos_abertura(producto)
+            if not datos or datos["muro"] in muros_movidos:
+                continue
+            muro = self._entidad_por_gid(datos["muro"], ("IfcWall",))
+            info_muro = self._datos_muro(muro)
+            distancia = datos["distancia"] + dx * info_muro["dx"] + dy * info_muro["dy"]
+            antepecho = datos["antepecho"] + dz
+            if distancia < -TOLERANCIA_CALCULO or (
+                distancia + datos["ancho"] > info_muro["longitud"] + TOLERANCIA
+            ):
+                raise self._error("La abertura se sale del muro al moverla.", -32023)
+            if antepecho < -TOLERANCIA_CALCULO or (
+                antepecho + datos["alto"] > info_muro["altura"] + TOLERANCIA
+            ):
+                raise self._error("La abertura se sale de la altura del muro.", -32023)
+            cambios_vanos.append(
+                (producto, muro, {**datos, "distancia": distancia, "antepecho": antepecho})
+            )
         # Se calculan todas las matrices antes de tocar nada: mover un muro desplaza a
         # sus vanos (que cuelgan de él), pero un relleno puede tener colocación propia.
         matrices = {
@@ -5703,6 +5751,12 @@ class ModeladoMixin:
                 should_transform_children=False,
             )
             self._desplazar_pset_estructura(producto, dx, dy, dz)
+        for vano, muro, datos in cambios_vanos:
+            self._guardar_vano(vano, datos)
+            self._regenerar_muro(muro)
+            relleno = self._relleno_de(vano)
+            if relleno is not None:
+                self._regenerar_relleno(relleno, vano)
         for producto in afectados:
             if producto.is_a("IfcWall"):
                 self._unir_muros(producto)
@@ -6022,6 +6076,9 @@ class ModeladoMixin:
         # GlobalId en lugar de id(): los envoltorios de IfcOpenShell se liberan al
         # borrarlos y Python puede reutilizar su dirección de memoria.
         vistos: set[str] = set()
+        # O052: al borrar una puerta/ventana (o su vano) el muro debe regenerarse
+        # para cerrar el hueco; si no, el área neta sigue descontando la abertura.
+        muros_a_regenerar: set[str] = set()
         for gid in expandidos:
             try:
                 entidad = self._entidad_por_gid(gid)
@@ -6035,6 +6092,10 @@ class ModeladoMixin:
                 if _gid(producto) in vistos:
                     continue
                 vistos.add(_gid(producto))
+                if producto.is_a("IfcOpeningElement"):
+                    datos_vano = self._datos_abertura(producto)
+                    if datos_vano and datos_vano["muro"]:
+                        muros_a_regenerar.add(datos_vano["muro"])
                 if producto.is_a("IfcWall"):
                     self._quitar_uniones(producto)
                 self._quitar_conexiones(producto)
@@ -6048,6 +6109,12 @@ class ModeladoMixin:
                     borrados.append(_gid(producto))
                 except Exception:
                     LOG.warning("no se pudo borrar %s", _gid(producto), exc_info=True)
+        for muro_gid in muros_a_regenerar:
+            try:
+                muro = self._entidad_por_gid(muro_gid, ("IfcWall",))
+                self._regenerar_muro(muro)
+            except Exception:
+                LOG.debug("no se pudo regenerar el muro %s", muro_gid, exc_info=True)
         self._recalcular_uniones_estructura()
         # O035: al borrar la cimentación, los muros vuelven a nacer en su nivel.
         if cimentacion_borrada:
