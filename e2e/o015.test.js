@@ -7,7 +7,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const zlib = require("node:zlib");
-const { Sesion, esperar, By, until } = require("./arnes");
+const { Sesion, esperar, By, until, Key } = require("./arnes");
 
 const RAIZ = path.resolve(__dirname, "..");
 const RESULTADOS = path.join(RAIZ, "docs", "capturas");
@@ -237,7 +237,7 @@ async function proporcionNoFondo(ses, png, puntos, umbral) {
 test("O015: losa con relleno de proyección en planta y de material en corte", async () => {
   const ses = await Sesion.abrir({
     prueba: "o015-losas",
-    tamano: { ancho: 1600, alto: 900 },
+    tamano: { ancho: 1920, alto: 1000 },
     lateralExpandido: true,
     compositar: true,
   });
@@ -252,10 +252,14 @@ test("O015: losa con relleno de proyección en planta y de material en corte", a
       }
     }, 20_000, "el modelo nuevo no cargó");
     await cambiarPestana(ses, "Modelar");
-    // El modelo nuevo ya trae el Nivel 0 (0,00); «Nivel» añade el Nivel 1 (+3,00).
+    // El modelo nuevo ya trae el Nivel 0 (0,00); «Nivel» abre el cuadro y se
+    // teclea 3.00 (O051: ya no hay +3 automáticos).
     // O029: en un alzado «Nivel» activa el dibujo; hay que situarse en una planta.
     await elegirVista(ses, "Planta Nivel 0");
     await activar(ses, "cmd-nivel");
+    await ses.driver.actions({ async: true }).sendKeys("3").perform();
+    await ses.driver.actions({ async: true }).sendKeys(Key.ENTER).perform();
+    await ses.driver.actions({ async: true }).sendKeys(Key.ESCAPE).perform();
     let niveles = [];
     await ses.driver.wait(async () => {
       niveles = await invocar(ses, "modelo.niveles");

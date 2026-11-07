@@ -8,7 +8,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { Sesion, esperar, By, until } = require("./arnes");
+const { Sesion, esperar, By, until, Key } = require("./arnes");
 
 const RAIZ = path.resolve(__dirname, "..");
 const PROGRESO = path.join(RAIZ, "docs", "progreso", "O030");
@@ -169,7 +169,15 @@ test("O030: anotación a escala crece con el zoom y en pantalla no", async () =>
       }
     }, 20_000, "el modelo nuevo no cargó");
     await cambiarPestana(ses, "Modelar");
-    for (let i = 0; i < 4; i += 1) await activar(ses, "cmd-nivel");
+    // O051: «Nivel» abre el cuadro; se teclean cuatro +3.00 seguidos (3, 6, 9 y 12)
+    // y luego las elevaciones se editan a los valores de la prueba.
+    await activar(ses, "cmd-nivel");
+    for (let i = 0; i < 4; i += 1) {
+      await ses.driver.actions({ async: true }).sendKeys("+3").perform();
+      await ses.driver.actions({ async: true }).sendKeys(Key.ENTER).perform();
+      await esperar(350);
+    }
+    await ses.driver.actions({ async: true }).sendKeys(Key.ESCAPE).perform();
     await activar(ses, "cmd-muro");
     await clicMundo(ses, 0, 0);
     await clicMundo(ses, 3, 0);

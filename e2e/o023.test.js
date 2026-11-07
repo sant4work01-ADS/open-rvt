@@ -420,8 +420,14 @@ test("O023-4: elevaciones, error junto a la caja, cota Total y ejes ordenados al
   });
   try {
     await nuevoModelo(ses);
+    // O051: el comando abre el cuadro; dos +3.00 tecleados crean 3.00 y 6.00.
     await activar(ses, "cmd-nivel");
-    await activar(ses, "cmd-nivel");
+    for (let i = 0; i < 2; i += 1) {
+      await ses.driver.actions({ async: true }).sendKeys("+3").perform();
+      await ses.driver.actions({ async: true }).sendKeys(Key.ENTER).perform();
+      await esperar(300);
+    }
+    await ses.driver.actions({ async: true }).sendKeys(Key.ESCAPE).perform();
     const niveles = await invocar(ses, "modelo.niveles");
     assert.equal(niveles.length, 3);
     const objetivo = niveles.find((n) => Math.abs(n.elevacion - 3) < 1e-6);
@@ -514,8 +520,14 @@ test("O023-5: la planta no tiene cotas sueltas; todas salen de los ejes o del re
   });
   try {
     await nuevoModelo(ses);
+    // O051: el comando abre el cuadro; dos +3.00 tecleados crean 3.00 y 6.00.
     await activar(ses, "cmd-nivel");
-    await activar(ses, "cmd-nivel");
+    for (let i = 0; i < 2; i += 1) {
+      await ses.driver.actions({ async: true }).sendKeys("+3").perform();
+      await ses.driver.actions({ async: true }).sendKeys(Key.ENTER).perform();
+      await esperar(300);
+    }
+    await ses.driver.actions({ async: true }).sendKeys(Key.ESCAPE).perform();
     await activar(ses, "cmd-ejes-separaciones");
     await ses.driver.wait(
       until.elementLocated(By.css('[data-testid="dialogo-ejes-separaciones"]')),
@@ -606,7 +618,11 @@ test("O023-6: la cámara no se mueve al crear y editar cinco elementos", async (
     }
 
     await elegirVista(ses, "Planta Nivel 0");
+    // O051: se teclea 3.00 en el cuadro; antes lo inventaba el comando.
     await activar(ses, "cmd-nivel");
+    await ses.driver.actions({ async: true }).sendKeys("3").perform();
+    await ses.driver.actions({ async: true }).sendKeys(Key.ENTER).perform();
+    await ses.driver.actions({ async: true }).sendKeys(Key.ESCAPE).perform();
     const visibles = await ses.driver.findElements(By.css('[data-testid^="nivel-visible-"]'));
     for (const check of visibles) {
       if (!(await check.isSelected())) await check.click();

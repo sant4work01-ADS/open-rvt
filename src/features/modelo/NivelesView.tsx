@@ -21,18 +21,20 @@ export function NivelesView() {
   const [errores, setErrores] = useState<Record<string, string>>({});
   const [errorNuevo, setErrorNuevo] = useState<string | null>(null);
   const [nivelBase, setNivelBase] = useState("");
-  const [desfase, setDesfase] = useState("3.00");
+  const [desfase, setDesfase] = useState("");
   const [cantidadArreglo, setCantidadArreglo] = useState("3");
-  const [separacionArreglo, setSeparacionArreglo] = useState("3.00");
+  const [separacionArreglo, setSeparacionArreglo] = useState("");
   const [errorCopiar, setErrorCopiar] = useState<string | null>(null);
   // O029: lista y selector ordenados por elevación (no por orden de creación).
   const ordenados = [...niveles].sort((a, b) => a.elevacion - b.elevacion);
 
   const agregar = async () => {
-    const siguiente =
-      niveles.length > 0 ? Math.max(...niveles.map((n) => n.elevacion)) + 3 : 0;
-    const elev =
-      elevacion.trim() === "" ? siguiente : parsearElevacion(elevacion);
+    // O051: la elevación es obligatoria; no se inventa una separación de 3 m.
+    if (elevacion.trim() === "") {
+      setErrorNuevo("Escriba la elevación en metros.");
+      return;
+    }
+    const elev = parsearElevacion(elevacion);
     const nombreFinal = nombre.trim() || `Nivel ${niveles.length}`;
     if (elev === null) {
       setErrorNuevo("Cota no válida: use .1, 0,1, 10cm, 100mm o un número negativo.");
@@ -179,7 +181,7 @@ export function NivelesView() {
               return;
             }
             setErrorCopiar(null);
-            if (await copiarNivel(nivelBase, valor)) setDesfase("3.00");
+            if (await copiarNivel(nivelBase, valor)) setDesfase("");
           }}
           className="rounded border px-2 py-1 hover:bg-muted"
         >

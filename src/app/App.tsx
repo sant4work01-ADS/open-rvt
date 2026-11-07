@@ -13,6 +13,7 @@ import { AyudaView } from "@/features/ayuda/AyudaView";
 import { ModeloView } from "@/features/modelo/ModeloView";
 import { EditorTipos } from "@/features/tipos/EditorTipos";
 import { NivelesView } from "@/features/modelo/NivelesView";
+import { DialogoNivel } from "@/features/modelo/DialogoNivel";
 import { esHerramientaPuntual, useModelo } from "@/features/modelo/estado";
 import { bitacoraAviso, bitacoraVista, vaciarBitacora } from "@/lib/bitacora";
 import { Ribbon } from "@/features/ribbon/Ribbon";
@@ -45,6 +46,7 @@ export function App() {
   const [activo, setActivo] = useState("modelo");
   const [paleta, setPaleta] = useState(false);
   const [atajos, setAtajos] = useState(false);
+  const [dialogoNivel, setDialogoNivel] = useState(false);
   const [ribbonMinimizado, setRibbonMinimizado] = useState(ribbonMinimizadoInicial);
   const { pref, fijar, iniciar } = useTema();
   const nombreArchivo = useModelo((s) => s.nombreArchivo);
@@ -350,8 +352,8 @@ export function App() {
         estilosObjeto: () => useModelo.getState().abrirDialogoEstilos(),
         estilosAnotacion: () => useModelo.getState().abrirDialogoAnotacion(),
         // OPEN-RVT: herramientas de modelado (spec O003b).
-        // O029: en alzado/corte se dibuja; en planta, 3D o en un modelo sin
-        // niveles agrega el siguiente nivel (+3.00 sobre el más alto), como antes.
+        // O029: en alzado/corte se dibuja. O051: en el resto, el comando abre el
+        // cuadro de elevación vacío; nunca inventa una separación de 3 m.
         nuevoNivel: () => {
           const estado = useModelo.getState();
           const vista = estado.vistas.find((v) => v.id === estado.vistaActivaId);
@@ -363,11 +365,7 @@ export function App() {
             estado.activarHerramienta("nivel");
             return;
           }
-          const siguiente =
-            estado.niveles.length > 0
-              ? Math.max(...estado.niveles.map((n) => n.elevacion)) + 3
-              : 0;
-          void estado.crearNivel(`Nivel ${estado.niveles.length}`, siguiente);
+          setDialogoNivel(true);
         },
         nuevoEje: () => useModelo.getState().activarHerramienta("eje"),
         nuevosEjesPorSeparaciones: () => useModelo.getState().abrirDialogoCotas(),
@@ -510,6 +508,7 @@ export function App() {
 
       {paleta && <PaletaComandos comandos={comandos} onCerrar={() => setPaleta(false)} />}
       {atajos && <DialogoAtajos onCerrar={() => setAtajos(false)} />}
+      {dialogoNivel && <DialogoNivel onCerrar={() => setDialogoNivel(false)} />}
       <DialogoActualizacion />
       <DialogoGuardarCambios />
       <DialogoBorrarZapata />

@@ -8,7 +8,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { Sesion, esperar, By, until } = require("./arnes");
+const { Sesion, esperar, By, until, Key } = require("./arnes");
 
 const RAIZ = path.resolve(__dirname, "..");
 const PROGRESO = path.join(RAIZ, "docs", "progreso", "O021b");
@@ -154,7 +154,16 @@ async function crearModelo(ses) {
 }
 
 async function crearNiveles(ses, cantidad) {
-  for (let i = 0; i < cantidad; i += 1) await activar(ses, "cmd-nivel");
+  // O051: el comando abre el cuadro de elevación; se teclea +3 en cada paso,
+  // que es la misma separación que antes se inventaba el código.
+  await activar(ses, "cmd-nivel");
+  for (let i = 0; i < cantidad; i += 1) {
+    await ses.driver.actions({ async: true }).sendKeys("+3").perform();
+    await ses.driver.actions({ async: true }).sendKeys(Key.ENTER).perform();
+    await esperar(350);
+  }
+  await ses.driver.actions({ async: true }).sendKeys(Key.ESCAPE).perform();
+  await esperar(250);
 }
 
 async function dibujarMuroAlto(ses, alto) {

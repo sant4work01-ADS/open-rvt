@@ -7,7 +7,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { Sesion, esperar, By, until } = require("./arnes");
+const { Sesion, esperar, By, until, Key } = require("./arnes");
 
 const RAIZ = path.resolve(__dirname, "..");
 const PROGRESO = path.join(RAIZ, "docs", "progreso", "O027");
@@ -138,8 +138,16 @@ async function crearModelo(ses) {
 async function crearNiveles(ses, cantidad) {
   // O029: en un alzado «Nivel» activa la herramienta de dibujo; el modelo nuevo
   // abre en alzado, así que hay que situarse en una planta antes de crear niveles.
+  // O051: el comando abre el cuadro de elevación; se teclea +3 en cada paso.
   await elegirVista(ses, "Planta Nivel 0");
-  for (let i = 0; i < cantidad; i += 1) await activar(ses, "cmd-nivel");
+  await activar(ses, "cmd-nivel");
+  for (let i = 0; i < cantidad; i += 1) {
+    await ses.driver.actions({ async: true }).sendKeys("+3").perform();
+    await ses.driver.actions({ async: true }).sendKeys(Key.ENTER).perform();
+    await esperar(350);
+  }
+  await ses.driver.actions({ async: true }).sendKeys(Key.ESCAPE).perform();
+  await esperar(250);
 }
 
 async function dibujarEjes(ses, xs) {
@@ -288,7 +296,7 @@ async function arrastrarNivel(ses, globalid, dx, dy) {
 test("O027: asas de ejes y niveles con movimiento restringido", async () => {
   const ses = await Sesion.abrir({
     prueba: "o027",
-    tamano: { ancho: 1600, alto: 900 },
+    tamano: { ancho: 1920, alto: 1000 },
     lateralExpandido: true,
     compositar: true,
   });
