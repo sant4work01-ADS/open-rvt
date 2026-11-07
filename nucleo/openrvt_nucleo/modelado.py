@@ -909,9 +909,20 @@ class ModeladoMixin:
             "alturaArriba": 3,
             "cotasEjes": True,
         }
+        # O052: el nivel nuevo también entra en los alzados y en las vistas 3D
+        # automáticas; si no, los elementos de ese nivel desaparecen de ellas.
+        actualizadas: list[dict[str, Any]] = []
+        for existente in vistas:
+            if existente.get("tipo") in ("alzado", "iso", "perspectiva"):
+                visibles = [
+                    x for x in (existente.get("nivelesVisibles") or []) if isinstance(x, str)
+                ]
+                if visibles and gid not in visibles:
+                    existente = {**existente, "nivelesVisibles": [*visibles, gid]}
+            actualizadas.append(existente)
         self._guardar_datos_pset(
             self._pset_vistas(crear=True),
-            [*vistas, vista],
+            [*actualizadas, vista],
             "JSON de las vistas",
         )
         return vista
