@@ -498,9 +498,6 @@ const BotonRibbon = ({
   const { t } = useTranslation();
   const Icono = comando.icono;
   const label = labelComando(comando);
-  // O051: los botones de comando no llevan `title` nativo. WebView2 puede dejar
-  // pegado el globo del sistema sobre el visor (panel «fantasma»); el texto sigue
-  // disponible para lectores de pantalla en `aria-label`.
 
   if (tamano === "grande") {
     if (comando.subitems) {
@@ -517,6 +514,7 @@ const BotonRibbon = ({
             data-tamano={tamano}
             disabled={!comando.habilitado}
             aria-label={label}
+            title={label}
             aria-pressed={comando.activo}
             onClick={onClick}
             className={cn(
@@ -557,6 +555,7 @@ const BotonRibbon = ({
         data-tamano={tamano}
         disabled={!comando.habilitado}
         aria-label={label}
+        title={label}
         aria-pressed={comando.activo}
         onClick={onClick}
         className={cn(
@@ -589,6 +588,7 @@ const BotonRibbon = ({
         data-tamano={tamano}
         disabled={!comando.habilitado}
         aria-label={label}
+        title={label}
         aria-pressed={comando.activo}
         onClick={onClick}
         className={cn(
