@@ -543,14 +543,20 @@ export function factorEscala(escala: EscalaVista): number {
 }
 
 /**
- * Convierte mm de papel a píxeles de pantalla. `mundoPorPx` sale de la cámara
- * ortográfica: (arriba − abajo) / alto del lienzo. Al acercar la vista el valor
- * crece, como en Revit.
+ * O044: convierte mm de papel a píxeles de pantalla. En pantalla el grosor no
+ * depende del zoom ni de la escala (como en Revit): px = max(1, mm × 2.2), así un
+ * muro cortado de 0.5 mm mide 1.1 px a cualquier acercamiento y la proyección de
+ * 0.18 mm queda en 1 px. La ruta de impresión/PDF usa los mm de papel reales y no
+ * pasa por aquí. `escala` y `mundoPorPx` se conservan en la firma para no tocar las
+ * llamadas de la vista.
  */
 export function mmAPx(mm: number, escala: EscalaVista, mundoPorPx: number): number {
-  if (!(mundoPorPx > 0)) return 1;
-  // La tabla está a 1:100; el factor por escala la corrige sin duplicar la razón.
-  return ((mm / 1000) * 100 * factorEscala(escala)) / mundoPorPx;
+  // O044: la escala y el zoom ya no intervienen en pantalla; se leen solo para
+  // conservar la firma que usan todas las llamadas de la vista.
+  void escala;
+  void mundoPorPx;
+  if (!(mm > 0)) return 1;
+  return Math.max(1, mm * 2.2);
 }
 
 /** Convierte milímetros de papel a unidades de mundo (metros) a la escala de la vista. */

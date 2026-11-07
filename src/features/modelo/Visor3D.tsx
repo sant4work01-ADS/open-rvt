@@ -166,6 +166,7 @@ import {
   globoVisibleEje,
   imanAlineacion,
   imanMultiplo,
+  interseccionesEje,
   mmPapelAMetros,
   normalizarAjusteEje,
   quitarCodoEje,
@@ -1275,8 +1276,8 @@ export function Visor3D({
     tipo: "globo" | "codo" | "codo-nuevo" | "base";
     pantallaInicio: { x: number; y: number };
     codoCreado: boolean;
-    /** O042: dirección elegida para el arrastre de V2, fija hasta soltar. */
-    modoCodo: "eje" | "perpendicular" | null;
+    /** O044: dirección elegida para el arrastre de V2 (eje, X o Y), fija hasta soltar. */
+    modoCodo: "eje" | "x" | "y" | null;
   } | null>(null);
   // O034: asas de los bordes de la losa seleccionada y su arrastre en planta.
   const propiedades = useModelo((s) => s.propiedades);
@@ -1329,6 +1330,14 @@ export function Visor3D({
     y2: number;
     texto: string;
     enganchado: boolean;
+  } | null>(null);
+  // O044: guía de flecha sobre el pinzamiento de un codo. V1 solo en el sentido del
+  // eje; V2 en X y en Y (las dos direcciones que admite su arrastre).
+  const [guiaCodo, setGuiaCodo] = useState<{
+    x: number;
+    y: number;
+    vertical: boolean;
+    ambos: boolean;
   } | null>(null);
   const ejesInteraccion = useRef<
     Array<{
@@ -1727,6 +1736,20 @@ export function Visor3D({
   const ejesVisiblesDeVista = () =>
     referencias.ejes.filter((eje) => eje.globalid && eje.etiqueta);
 
+  /** O044: cruces reales del eje con los demás ejes de la planta (para el codo). */
+  const crucesDeEjeVista = (globalid: string): Punto2[] => {
+    const ctx = contextoEje.current;
+    const bases = ctx?.bases[globalid];
+    if (!ctx || ctx.tipo !== "planta" || !bases) return [];
+    const otros: Array<{ inicio: Punto2; fin: Punto2 }> = [];
+    for (const eje of ejesVisiblesDeVista()) {
+      if (!eje.globalid || eje.globalid === globalid) continue;
+      const b = ctx.bases[eje.globalid];
+      if (b) otros.push(b);
+    }
+    return interseccionesEje(bases.inicio, bases.fin, otros);
+  };
+
   const agregarCodoVista = (globalid: string, lado: LadoEje) => {
     const eje = ejesVisiblesDeVista().find((e) => e.globalid === globalid);
     const bases = contextoEje.current?.bases[globalid];
@@ -1745,13 +1768,14 @@ export function Visor3D({
     // Sentido hacia afuera del eje: del interior al extremo que se anota.
     const direccion: Punto2 =
       lado === "inicio" ? [-dx / largo, -dy / largo] : [dx / largo, dy / largo];
-    // O042: V1 a 2·D del extremo, V2 a D afuera y D de lado.
+    // O044: cruces reales para que la diagonal no salga encima de otro eje.
     const nuevo = agregarCodoEje(
       ajuste,
       lado,
       globo,
       direccion,
       mmPapelAMetros(8, vista.escala),
+      crucesDeEjeVista(globalid),
     );
     persistirAjusteEje(globalid, nuevo);
   };
@@ -2520,7 +2544,7 @@ export function Visor3D({
             const materialLinea = crearMaterialLinea({
               mm,
               escala: vista.escala,
-              color: seleccionado ? "#ff8a00" : estilos.categorias["arriba-corte"].color,
+              color: seleccionado ? "#ff8a00" : "#444",
               // Siempre trazo discontinuo largo, como pide la spec.
               patron: "discontinua-larga",
               registro,
@@ -2548,7 +2572,7 @@ export function Visor3D({
             const materialLinea = crearMaterialLinea({
               mm,
               escala: vista.escala,
-              color: seleccionado ? "#ff8a00" : estilos.categorias[categoriaEstilo].color,
+              color: seleccionado ? "#ff8a00" : "#444",
               patron: "continua",
               registro,
               mundoPorPx,
@@ -3151,9 +3175,9 @@ export function Visor3D({
           registro,
           mundoPorPx,
         });
-        // O042: tramo continuo y fino del codo (V1 → V2 → borde del globo).
+        // O044: de V1 al globo la línea es continua, del mismo grosor y color.
         const materialEjeSolido = crearMaterialLinea({
-          mm: Math.max(mmEjes * 0.7, 0.15),
+          mm: mmEjes,
           escala: vista.escala,
           color: colorEje,
           profundidad: false,
@@ -3238,8 +3262,8 @@ export function Visor3D({
               });
             }
           }
-          // O042: V1 y V2 se ven como puntos pequeños (como en la referencia), pero
-          // solo V2 es pinzamiento. Nada de cuadros alrededor de los nodos.
+          // O044: V1 y V2 se ven como puntos pequeños (como en la referencia) y los
+          // dos son pinzamientos. Nada de cuadros alrededor de los nodos.
           const radioNodo = mmAMundo(0.55, vista.escala);
           for (const codo of [
             ...(ajuste?.codosInicio ?? []),
@@ -3291,7 +3315,7 @@ export function Visor3D({
           }
           // O042 (revisión): en un extremo con codo el extremo original ya no se
           // dibuja; su pinzamiento quedaría flotando fuera de la polilínea. Ese
-          // lado solo conserva el pinzamiento de V2.
+          // lado solo conserva los pinzamientos de V1 y V2.
           if ((ajuste?.codosInicio?.length ?? 0) === 0) {
             ejesInteraccion.current.push({
               globalid: eje.globalid,
@@ -3853,9 +3877,9 @@ export function Visor3D({
           mundoPorPx,
           profundidad: false,
         });
-        // O042: tramo continuo y fino del codo en alzado y corte.
+        // O044: tramo continuo del codo en alzado y corte, mismo grosor y color.
         const materialEjeSolidoAlzado = crearMaterialLinea({
-          mm: Math.max(estiloEje.grosor * factorEscala(vista.escala) * 0.7, 0.15),
+          mm: estiloEje.grosor * factorEscala(vista.escala),
           escala: vista.escala,
           color: colorEje,
           registro,
@@ -4160,8 +4184,8 @@ export function Visor3D({
             grupoLocal.add(burbuja);
             burbujasEje.current.push({ etiqueta: eje.etiqueta, grupo: burbuja });
           }
-          // O042: con codo el globo no se arrastra y tampoco hay asa de codo nuevo;
-          // el único pinzamiento del codo es V2 (se agrega más abajo).
+          // O044: con codo el globo no se arrastra y tampoco hay asa de codo nuevo;
+          // los pinzamientos del codo son V1 y V2 (se agregan más abajo).
           const ajusteAlzado = ajusteEnCurso?.[eje.globalid] ?? vista.ejes?.[eje.globalid];
           const conCodoFin = (ajusteAlzado?.codosFin?.length ?? 0) > 0;
           if (!conCodoFin) {
@@ -4288,6 +4312,9 @@ export function Visor3D({
         seleccionActual === null || asa.globalid === seleccionActual ? "#f59e0b" : "#94a3b8",
       );
       sprite.position.set(asa.punto[0], asa.punto[1], asa.punto[2]);
+      // O044: los pinzamientos de V1 y V2 son redondos y pequeños (2.5 px de radio).
+      const materialAsa = sprite.material as THREE.PointsMaterial;
+      materialAsa.size = asa.tipo === "codo" ? 5 : 12;
       sprite.userData.asaEje = {
         globalid: asa.globalid,
         lado: asa.lado,
@@ -5855,6 +5882,7 @@ export function Visor3D({
         globo,
         direccion,
         mmPapelAMetros(8, vista.escala),
+        crucesDeEjeVista(asa.globalid),
       );
     };
 
@@ -6037,6 +6065,7 @@ export function Visor3D({
             };
             ajusteEnCursoRef.current = inicialConCambios;
             setAjusteEnCurso(inicialConCambios);
+            setGuiaCodo(null);
           }
           evento.preventDefault();
           return;
@@ -6304,24 +6333,44 @@ export function Visor3D({
         else if (arrEje.tipo === "codo") tipoAsa = "codo";
         else tipoAsa = codosLado.length > 0 ? "globo" : "extremo";
 
-        // O042: V2 se mueve a lo largo del eje o perpendicular a él. La dirección
-        // se elige con el primer movimiento y queda fija hasta soltar.
+        // O044: V1 solo se mueve a lo largo del eje; V2 en X o en Y. La dirección
+        // de V2 se elige con el componente mayor de los primeros 4 px y queda fija
+        // hasta soltar; el siguiente arrastre puede usar la otra.
         let modoCodo = arrEje.modoCodo;
         let destino: Punto2;
         if (arrEje.tipo === "codo" && arrEje.indice !== null) {
           const paso = mmPapelAMetros(1, vista.escala);
-          const r = destinoArrastreCodo(
-            arrEje.asaInicio,
-            arrEje.asaInicio,
-            punto,
-            direccion,
-            modoCodo ?? "auto",
-            paso,
-          );
-          destino = r.punto;
-          if (!modoCodo) {
-            modoCodo = r.modo;
-            arrEje.modoCodo = r.modo;
+          const v1 = (codosLado[0] ?? arrEje.asaInicio) as Punto2;
+          const v2 = (codosLado[1] ?? arrEje.asaInicio) as Punto2;
+          if (arrEje.indice === 0) {
+            const r = destinoArrastreCodo(v1, v2, arrEje.inicio, punto, direccion, 0, "eje", paso);
+            destino = r.punto;
+          } else {
+            if (!modoCodo) {
+              const recorrido = Math.hypot(
+                evento.clientX - arrEje.pantallaInicio.x,
+                evento.clientY - arrEje.pantallaInicio.y,
+              );
+              if (recorrido < 4) return;
+              const deltaMundo: Punto2 = [
+                punto[0] - arrEje.inicio[0],
+                punto[1] - arrEje.inicio[1],
+              ];
+              modoCodo =
+                Math.abs(deltaMundo[0]) >= Math.abs(deltaMundo[1]) ? "x" : "y";
+              arrEje.modoCodo = modoCodo;
+            }
+            const r = destinoArrastreCodo(
+              v1,
+              v2,
+              arrEje.inicio,
+              punto,
+              direccion,
+              1,
+              modoCodo,
+              paso,
+            );
+            destino = r.punto;
           }
         } else {
           // El destino parte del asa, no del puntero: pulsar fuera del centro ya no
@@ -6387,7 +6436,7 @@ export function Visor3D({
           arrEje.tipo === "codo" && modoCodo
             ? modoCodo === "eje"
               ? direccion === "vertical"
-              : direccion === "horizontal"
+              : modoCodo === "y"
             : tipoAsa === "globo"
               ? direccion === "vertical"
               : direccion === "horizontal";
@@ -6408,25 +6457,11 @@ export function Visor3D({
         if (arrEje.indice !== null) {
           const actual = normalizarAjusteEje(cambios[arrEje.globalid] ?? arrEje.originales[arrEje.globalid]) ?? {};
           const clave = arrEje.lado === "inicio" ? "codosInicio" : "codosFin";
-          const claveExtremo = arrEje.lado === "inicio" ? "extremoInicio" : "extremoFin";
           const codos = [...(actual[clave] ?? [])];
-          const anterior = codos[arrEje.indice];
-          const deltaCodo: Punto2 = anterior
-            ? [destino[0] - anterior[0], destino[1] - anterior[1]]
-            : [0, 0];
           codos[arrEje.indice] = [destino[0], destino[1]];
-          // O011b: al arrastrar un codo, el resto del tramo y el globo lo siguen.
-          for (let i = arrEje.indice + 1; i < codos.length; i += 1) {
-            codos[i] = [codos[i][0] + deltaCodo[0], codos[i][1] + deltaCodo[1]];
-          }
-          const siguiente: AjusteEjeVista = { ...actual, [clave]: codos };
-          if (actual[claveExtremo]) {
-            siguiente[claveExtremo] = [
-              actual[claveExtremo]![0] + deltaCodo[0],
-              actual[claveExtremo]![1] + deltaCodo[1],
-            ];
-          }
-          cambios[arrEje.globalid] = siguiente;
+          // O044: los dos nodos son independientes. El globo se deriva de V2, así
+          // que arrastrar V1 no mueve el tramo final ni el globo.
+          cambios[arrEje.globalid] = { ...actual, [clave]: codos };
         } else {
           // O021: candado cerrado = arrastra la alineación común de los ejes
           // paralelos; abierto = solo este eje. La decisión vive en una función pura.
@@ -6448,7 +6483,7 @@ export function Visor3D({
         return;
       }
       // O027: resaltado y cursor de la dirección permitida al pasar por un asa.
-      if (!arrastre.current?.paneable) {
+      if (!arrastre.current?.paneable && !arrastreEje.current) {
         const asaHover = asaEjeEn(evento.clientX, evento.clientY);
         for (const objeto of grupo.current?.children ?? []) {
           const datos = objeto.userData?.asaEje as
@@ -6476,12 +6511,27 @@ export function Visor3D({
                 ? "#f59e0b"
                 : "#94a3b8",
           );
-          material.size = activa ? 16 : 12;
+          material.size =
+            datos.tipo === "codo" ? (activa ? 6 : 5) : activa ? 16 : 12;
         }
         if (asaHover) {
           const ctxHover = contextoEje.current;
           const ejeHover = referencias.ejes.find((e) => e.globalid === asaHover.globalid);
           const vertical = ctxHover?.tipo === "planta" ? !!ejeHover?.vertical : true;
+          if (asaHover.tipo === "codo") {
+            const pAsa = pantallaDePunto(asaHover.punto);
+            if (pAsa) {
+              const rectHover = nodo.getBoundingClientRect();
+              setGuiaCodo({
+                x: pAsa.x - rectHover.left,
+                y: pAsa.y - rectHover.top,
+                vertical,
+                ambos: asaHover.indice === 1,
+              });
+            }
+          } else {
+            setGuiaCodo(null);
+          }
           const ajusteHover = ajusteActualEje(asaHover.globalid);
           const codosHover =
             (asaHover.lado === "inicio"
@@ -6502,6 +6552,7 @@ export function Visor3D({
         } else {
           nodo.dataset.asaCursor = "";
           nodo.dataset.asaResaltada = "";
+          setGuiaCodo(null);
           if (!herramienta && !modoCorte) nodo.style.cursor = "";
         }
       }
@@ -7764,6 +7815,51 @@ export function Visor3D({
               </text>
             </g>
           ))}
+        </svg>
+      )}
+      {guiaCodo && (
+        <svg
+          data-testid="guia-codo"
+          data-direcciones={guiaCodo.ambos ? "x,y" : guiaCodo.vertical ? "vertical" : "horizontal"}
+          className="pointer-events-none absolute inset-0 z-10 h-full w-full"
+        >
+          <defs>
+            <marker
+              id="o044-flecha-codo"
+              viewBox="0 0 6 6"
+              refX="3"
+              refY="3"
+              markerWidth="4"
+              markerHeight="4"
+              orient="auto-start-reverse"
+            >
+              <path d="M0,0 L6,3 L0,6 z" fill="#16a34a" />
+            </marker>
+          </defs>
+          {(guiaCodo.ambos || !guiaCodo.vertical) && (
+            <line
+              x1={guiaCodo.x - 15}
+              y1={guiaCodo.y}
+              x2={guiaCodo.x + 15}
+              y2={guiaCodo.y}
+              stroke="#16a34a"
+              strokeWidth={2}
+              markerStart="url(#o044-flecha-codo)"
+              markerEnd="url(#o044-flecha-codo)"
+            />
+          )}
+          {(guiaCodo.ambos || guiaCodo.vertical) && (
+            <line
+              x1={guiaCodo.x}
+              y1={guiaCodo.y - 15}
+              x2={guiaCodo.x}
+              y2={guiaCodo.y + 15}
+              stroke="#16a34a"
+              strokeWidth={2}
+              markerStart="url(#o044-flecha-codo)"
+              markerEnd="url(#o044-flecha-codo)"
+            />
+          )}
         </svg>
       )}
       {guiaArrastre && (

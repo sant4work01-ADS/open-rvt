@@ -37,10 +37,14 @@ export interface AjusteEjeVista {
   /** Extremos libres: si existe, ese extremo no sigue la alineación común. */
   extremoInicio?: [number, number];
   extremoFin?: [number, number];
-  /** O042: un codo son dos nodos (V1 sobre el eje, V2 desplazado), máximo uno por
-   *  extremo. El globo se deriva D más allá de V2, paralelo al eje. */
+  /** O042/O044: un codo son dos nodos (V1 sobre el eje, V2 desplazado), máximo uno
+   *  por extremo. El globo se deriva de V2, paralelo al eje. */
   codosInicio?: [number, number][];
   codosFin?: [number, number][];
+  /** O044: marca los codos creados con la forma nueva (V2 a 0.80·D del borde del
+   *  globo). Los codos viejos no la llevan y conservan su forma tal cual. */
+  codoNuevoInicio?: boolean;
+  codoNuevoFin?: boolean;
   /** O021: visibilidad del globo por extremo. Por omisión: fin visible e inicio
    *  visible solo cuando el extremo se ha tocado (como en O011). */
   globoInicio?: boolean;
