@@ -5,8 +5,9 @@ Modelo: 8 muros Block 20 en rectángulo 2.50 × 1.50 (N0→N1 de 0 a 2.20, N2→
 niveles 0 / 2.20 / 2.40 / 3.00 / 3.20 / 3.60, cerramientos en Nivel 2 (2.20–2.40), 4 castillos, 2 losas, 4 zapatas.
 
 ## 1. Las esquinas del cerramiento quedan sin cerrar (`esquinas-cerramiento.png`)
-El dueño marcó las 4 esquinas. Cada cerramiento va de eje a eje (X1 0 → X2 2.5) con ancho 0.20, así que
-termina en el cruce de ejes y falta el cuadro exterior de 0.10 × 0.10 en cada esquina.
+El dueño marcó las 4 esquinas. Medido en la geometría del IFC: los castillos van de 0 a 3.60 y atraviesan el
+cerramiento (2.20–2.40). La columna manda y corta el cerramiento en la cara del castillo. Como el castillo mide 0.15
+en un muro de 0.20, queda una franja vacía de 0.025 × 0.20 por el lado exterior de cada esquina.
 Debe: cerrar la esquina como los muros, sin huecos ni traslapes que dupliquen volumen o acero.
 
 ## 2. Castillo 15×15 falso (`castillo-15x15-falso.png`)
@@ -15,15 +16,22 @@ Lo que dice el nombre no es lo que hay en el modelo; afecta cantidades y acero.
 
 ## 3. Hallazgos al revisar el modelo (no los marcó el dueño)
 - **Mismo engaño en el cerramiento:** tipo «15×20», pero B 0.20 × H 0.20.
-- **Castillos con giro distinto por esquina:** Rotación 0, 0, −90° y 180°. El de la esquina (2.5, 0) queda
-  0.20 × 0.15 y los otros 0.15 × 0.20; en planta no coinciden entre sí.
-- **El castillo no llena la esquina del muro:** 0.15 de ancho contra 0.20 del muro.
+- **Castillo de esquina según el muro donde se colocó:** B va a lo largo del muro y H = núcleo, por eso en (2.5, 0)
+  queda 0.20 × 0.15 y en las otras 0.15 × 0.20. En una esquina hay dos muros y ninguna de las dos orientaciones la llena.
 - **Texto viejo en Propiedades del cerramiento:** «la altura la manda el cerramiento». Ya no es cierto: el muro no cambia.
 - **OPENRVT_Estructura muestra el GlobalId en `Nivel`,** no el nombre del nivel.
 
-## Por decidir antes de la spec
-Sección real cuando el muro es más ancho que el tipo: ¿el elemento toma el ancho del muro y su nombre lo dice, o
-conserva la sección del tipo? Recomendación: tomar el ancho del muro y mostrar la medida real en nombre, etiqueta y cantidades.
+## 4. Regla del dueño: castillos, trabes y dalas contra el muro
+- Normal: el elemento es del ancho del núcleo del muro, y el recubrimiento del muro lo cubre por completo.
+- También puede no ser así y sobresalir: entonces el muro se restringe al lado del castillo.
+- El dueño dice que la herramienta Muro funciona bien y pregunta si sirve de base para estos elementos.
+
+## 5. Propuesta técnica (pendiente de que el dueño la apruebe)
+- Reusar de Muro: trazo en cadena, enganches, longitud tecleada, cota temporal y línea de ubicación por núcleo.
+- No reusar el inglete de muros en estructura: `uniones.py` ya da la regla de concreto (columna manda, traslape en esquina).
+- Ancho: por defecto «del núcleo del muro»; opción de sección propia. Nombre, etiqueta y cantidades dicen la medida real.
+- En una esquina o cruce de muros, el castillo mide núcleo × núcleo de los muros que recibe (0.20 × 0.20 en Block 20).
+- Si la sección propia sobresale del muro, el muro termina en la cara del castillo.
 
 ## Criterio de cierre
 Abrir este mismo modelo, ver las esquinas cerradas en 3D y que el dueño lo confirme.
