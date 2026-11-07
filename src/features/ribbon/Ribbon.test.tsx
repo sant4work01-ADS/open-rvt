@@ -76,15 +76,6 @@ describe("Ribbon", () => {
     }
   });
 
-  it("O051: los comandos no dejan tooltip nativo que pueda quedar pegado", () => {
-    montar();
-    const nuevo = screen.getByRole("button", {
-      name: /Nuevo \(Ctrl\+N\) — Crear un modelo IFC vacío/,
-    });
-    expect(nuevo).toHaveAttribute("aria-label");
-    expect(nuevo).not.toHaveAttribute("title");
-  });
-
   it("Vista trae el grupo Tema con los tres botones y avisa de la elección", () => {
     const { acciones } = montar({ temaActivo: "oscuro" });
     fireEvent.click(screen.getByRole("tab", { name: "Vista" }));

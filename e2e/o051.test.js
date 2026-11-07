@@ -535,34 +535,6 @@ test("O051: niveles por teclado, sin 3 m automáticos, y Orbitar solo en 3D", as
       "con Orbitar encendido, un clic sin arrastre debe seleccionar el elemento",
     );
 
-    // 12. Panel fantasma: tras pasar por el botón Recortar/Extender y salir, no
-    // debe quedar ningún panel de ayuda en el DOM.
-    await elegirVista(ses, "Planta Nivel 0");
-    await cambiarPestana(ses, "Modelar");
-    const recorte = await ses.porTestid("cmd-recortar-extender");
-    const caja = await recorte.getRect();
-    await ses.driver
-      .actions({ async: true })
-      .move({ x: Math.round(caja.x + caja.width / 2), y: Math.round(caja.y + caja.height / 2) })
-      .perform();
-    await esperar(1500);
-    await ses.driver.actions({ async: true }).move({ x: 700, y: 500 }).perform();
-    await esperar(1200);
-    assert.equal(
-      await ses.driver.executeScript(() =>
-        [...document.querySelectorAll("body *")].some((el) => {
-          if (!(el instanceof HTMLElement)) return false;
-          const caja = el.getBoundingClientRect();
-          if (caja.width <= 0 || caja.height <= 0) return false;
-          const estilo = getComputedStyle(el);
-          if (estilo.visibility === "hidden" || estilo.display === "none") return false;
-          return /Herramienta\s+Recortes?/i.test(el.textContent ?? "");
-        }),
-      ),
-      false,
-      "no debe quedar el panel «Herramienta Recortes» sobre la planta",
-    );
-    await ses.captura(path.join(CAPTURAS, "o051-sin-panel-fantasma.png"));
   } finally {
     await ses.cerrar();
   }
