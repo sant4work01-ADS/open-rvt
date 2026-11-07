@@ -258,30 +258,16 @@ async function esperarMurosVisibles(ses, gidsMuros, cuantos) {
   );
 }
 
-function distanciaASegmento(x, y, muro) {
-  const dx = muro.x2 - muro.x1;
-  const dy = muro.y2 - muro.y1;
-  const largo2 = dx * dx + dy * dy;
-  const t =
-    largo2 <= 1e-12
-      ? 0
-      : Math.max(0, Math.min(1, ((x - muro.x1) * dx + (y - muro.y1) * dy) / largo2));
-  return Math.hypot(x - (muro.x1 + t * dx), y - (muro.y1 + t * dy));
-}
-
-/** GlobalId del muro más cercano al clic, con la misma regla de la interfaz. */
-function gidDelMuroEn(referencias, x, y) {
-  let mejor = null;
-  let distancia = Infinity;
-  for (const muro of referencias.muros) {
-    const d = distanciaASegmento(x, y, muro);
-    if (d < distancia) {
-      distancia = d;
-      mejor = muro;
-    }
-  }
-  assert.ok(mejor && distancia < 0.35, `no hay muro bajo (${x}, ${y})`);
-  return mejor.globalid;
+function gidDelMuroExacto(referencias, x1, y1, x2, y2) {
+  const muro = referencias.muros.find(
+    (m) =>
+      Math.abs(m.x1 - x1) < 1e-6 &&
+      Math.abs(m.y1 - y1) < 1e-6 &&
+      Math.abs(m.x2 - x2) < 1e-6 &&
+      Math.abs(m.y2 - y2) < 1e-6,
+  );
+  assert.ok(muro, `no está el muro (${x1}, ${y1})→(${x2}, ${y2})`);
+  return muro.globalid;
 }
 
 function cerramientosDe(elementos) {
@@ -385,10 +371,13 @@ test("Cerramientos en la planta de un nivel intermedio: uno por cada clic, en su
       nivel220.globalid,
       "la barra de la herramienta no preselecciona el nivel de la planta",
     );
+    // Salir de la herramienta: el bucle la activa en cada trazo y activarla dos
+    // veces seguidas la apagaría.
+    await tecla(ses, "Escape", "Escape");
     const creados = [];
     const hechos = [];
     for (const [x1, y1, x2, y2] of muros) {
-      const muroEsperado = gidDelMuroEn(referencias, (x1 + x2) / 2, (y1 + y2) / 2);
+      const muroEsperado = gidDelMuroExacto(referencias, x1, y1, x2, y2);
       const previos = new Set(cerramientosDe(await teselado(ses)).map((c) => c.globalid));
       await activar(ses, "cmd-cerramiento");
       await clicMundo(ses, x1, y1);
@@ -454,7 +443,7 @@ test("Cerramientos en la planta de un nivel intermedio: uno por cada clic, en su
     const aviso = await textoDom(ses, '[data-testid="estado-aviso"]');
     assert.match(
       aviso ?? "",
-      /Ese muro ya tiene cerramiento en N 2\.20/,
+      /ya tiene cerramiento en N 2\.20/,
       `aviso del tramo repetido: ${aviso}`,
     );
     elementos = await teselado(ses);
@@ -566,7 +555,7 @@ test("Caso del dueño: losa, zapatas, muros de 0 a 3.60 y cerramientos desde la 
     const creados = [];
     const hechos = [];
     for (const [x1, y1, x2, y2] of muros) {
-      const muroEsperado = gidDelMuroEn(referencias, (x1 + x2) / 2, (y1 + y2) / 2);
+      const muroEsperado = gidDelMuroExacto(referencias, x1, y1, x2, y2);
       const previos = new Set(cerramientosDe(await teselado(ses)).map((c) => c.globalid));
       await activar(ses, "cmd-cerramiento");
       await clicMundo(ses, x1, y1);
@@ -611,7 +600,7 @@ test("Caso del dueño: losa, zapatas, muros de 0 a 3.60 y cerramientos desde la 
     await clicMundo(ses, 8, 0);
     await esperar(800);
     const aviso = await textoDom(ses, '[data-testid="estado-aviso"]');
-    assert.match(aviso ?? "", /Ese muro ya tiene cerramiento en N 2\.20/, `aviso: ${aviso}`);
+    assert.match(aviso ?? "", /ya tiene cerramiento en N 2\.20/, `aviso: ${aviso}`);
     cers = cerramientosDe(await teselado(ses));
     assert.equal(cers.length, 6, `el séptimo clic dejó ${cers.length} cerramientos`);
     assert.deepEqual(new Set(cers.map((c) => c.globalid)), gidsAntes);

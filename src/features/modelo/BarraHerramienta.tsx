@@ -582,7 +582,7 @@ export function BarraHerramienta() {
       )}
       {herramienta === "losa" && puntos.length > 0 && (
         <span className="text-muted-foreground">
-          {longitud ? `Longitud: ${longitud} m · Enter cierra` : "Doble clic o Enter para cerrar"}
+          {longitud ? `Longitud: ${longitud} m · Enter agrega el vértice` : "Clic en el primero, Enter o doble clic para cerrar"}
         </span>
       )}
       <button

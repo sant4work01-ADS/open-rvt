@@ -122,8 +122,8 @@ def test_subir_nivel_uno_sube_cerramiento_y_castillos() -> None:
     assert _tope(nucleo, cerramiento) == pytest.approx(2.90, abs=1e-6)
     for castillo in _castillos_de(nucleo, muro):
         datos = _estructura(nucleo, castillo)
-        # O045: el castillo embebido llega a la altura completa del muro (2.90).
-        assert datos["Altura"] == pytest.approx(2.90, abs=1e-6)
+        # O050: el castillo llega a la cara inferior del cerramiento (2.90 − 0.20).
+        assert datos["Altura"] == pytest.approx(2.70, abs=1e-6)
         assert datos["Base"] == pytest.approx(0.0, abs=1e-6)
 
 
@@ -203,7 +203,8 @@ def test_cambiar_tipo_peralte_recalcula_muro_sin_tocar_castillos() -> None:
     assert _z(nucleo, cerramiento) == pytest.approx(2.45, abs=1e-9)
     assert _peralte(nucleo, cerramiento) == pytest.approx(0.30, abs=1e-9)
     for castillo in _castillos_de(nucleo, muro):
-        assert _estructura(nucleo, castillo)["Altura"] == pytest.approx(2.60, abs=1e-6)
+        # O050: la cara inferior baja a 2.60 − 0.30 y el castillo la sigue.
+        assert _estructura(nucleo, castillo)["Altura"] == pytest.approx(2.30, abs=1e-6)
 
 
 # ----------------------------------------------------------- esquinas y archivo viejo

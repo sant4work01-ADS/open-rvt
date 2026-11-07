@@ -630,6 +630,25 @@ export function formatearMetros(valor: number): string {
 }
 
 /**
+ * O050: ¿el clic cae sobre el primer vértice de la losa en curso?
+ *
+ * El radio es de 12 píxeles de pantalla, convertido a metros con la escala de
+ * la vista; con tres vértices o más el clic cierra sin agregar uno nuevo.
+ */
+export function esCierreLosa(
+  puntos: readonly Punto2[],
+  punto: Punto2,
+  metrosPorPixel: number,
+  radioPx = 12,
+): boolean {
+  if (puntos.length < 3) return false;
+  const escala = Number.isFinite(metrosPorPixel) && metrosPorPixel > 0 ? metrosPorPixel : 0;
+  if (escala <= 0) return false;
+  const [x, y] = puntos[0];
+  return Math.hypot(punto[0] - x, punto[1] - y) <= radioPx * escala;
+}
+
+/**
  * O043: nivel y desfase con los que se crea un cerramiento desde la vista activa.
  *
  * En una planta manda el nivel de la planta (desfase 0) salvo que la barra de

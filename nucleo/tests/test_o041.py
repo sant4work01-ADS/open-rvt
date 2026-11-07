@@ -80,7 +80,8 @@ def test_ligado_editar_nivel_no_cambia_la_altura_del_muro() -> None:
     assert _datos_muro(nucleo, muro)["altura"] == pytest.approx(2.60, abs=1e-9)
     for castillo in _castillos_de(nucleo, muro):
         datos = nucleo._leer_pset(_entidad(nucleo, castillo), "OPENRVT_Estructura")
-        assert datos["Altura"] == pytest.approx(2.60, abs=1e-9)
+        # O050: el cerramiento baja a 2.40–2.20 y el castillo termina en 2.20.
+        assert datos["Altura"] == pytest.approx(2.20, abs=1e-9)
 
 
 def test_ligado_editar_desfase_es_un_solo_paso_de_deshacer() -> None:

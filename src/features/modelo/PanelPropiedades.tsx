@@ -869,13 +869,37 @@ function RestriccionesCerramiento({ globalid }: { globalid: string }) {
   const niveles = useModelo((s) => s.niveles);
   const restricciones = useModelo((s) => s.propiedades?.restricciones);
   const muroLiga = useModelo((s) => s.propiedades?.muro_liga);
+  const seleccionados = useModelo((s) => s.seleccionados);
+  const mallas = useModelo((s) => s.mallas);
   const editarRestricciones = useModelo((s) => s.editarRestricciones);
+  const editarRestriccionesVarios = useModelo(
+    (s) => s.editarRestriccionesVarios,
+  );
   const soltarDelMuro = useModelo((s) => s.soltarDelMuro);
   if (!restricciones) return null;
+  // O050: con varios cerramientos seleccionados, Nivel y Desfase se aplican a
+  // todos en un solo paso de Deshacer.
+  const varios =
+    seleccionados.length > 1 &&
+    seleccionados.every(
+      (gid) =>
+        mallas.find((malla) => malla.globalid === gid)?.estructura?.alias ===
+        "cerramiento",
+    );
   const cambiar = (cambios: Parameters<typeof editarRestricciones>[1]) =>
-    void editarRestricciones(globalid, cambios);
+    void (varios
+      ? editarRestriccionesVarios(seleccionados, {
+          nivel_base: cambios.nivel_base,
+          desfase_base: cambios.desfase_base,
+        })
+      : editarRestricciones(globalid, cambios));
   return (
     <div data-testid={muroLiga ? "cerramiento-ligado" : "cerramiento-suelto"} className="flex flex-col gap-1 text-xs">
+      {varios && (
+        <div className="text-muted-foreground" data-testid="cerramientos-varios">
+          Nivel y desfase se aplican a {seleccionados.length} cerramientos.
+        </div>
+      )}
       {muroLiga && (
         <div className="text-muted-foreground" data-testid="cerramiento-leyenda">
           Sigue el eje del muro {muroLiga.nombre}; la altura la manda el cerramiento.
