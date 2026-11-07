@@ -1,6 +1,13 @@
 // OPEN-RVT: panel derecho. Sin selección muestra las propiedades de la vista (todas
 // editables y persistidas en OPENRVT_Vistas); con selección, las del elemento IFC.
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FocusEvent,
+  type KeyboardEvent,
+} from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { llamarConBitacora } from "@/lib/bitacora";
 import { useModelo } from "./estado";
@@ -593,6 +600,60 @@ export function PropiedadesVista({ vista }: { vista: Vista }) {
   );
 }
 
+/**
+ * O053: comportamiento común de los campos numéricos del panel. Enter guarda y sale,
+ * perder el foco guarda, Escape restaura y nunca se guarda dos veces el mismo valor.
+ */
+function useCampoConEnter({
+  valor,
+  convertir,
+  onGuardar,
+}: {
+  valor: string | number | undefined;
+  convertir: (entrada: string) => string | number | null;
+  onGuardar: (valor: string | number) => void;
+}) {
+  const comoTexto = (v: string | number | undefined) => String(v ?? "");
+  const [texto, setTexto] = useState(comoTexto(valor));
+  const [previo, setPrevio] = useState(valor);
+  const ultimoGuardado = useRef(comoTexto(valor));
+  if (valor !== previo) {
+    setPrevio(valor);
+    setTexto(comoTexto(valor));
+  }
+  useEffect(() => {
+    ultimoGuardado.current = comoTexto(valor);
+  }, [valor]);
+  const guardar = (entrada: string) => {
+    const convertido = convertir(entrada);
+    if (convertido === null) {
+      setTexto(comoTexto(valor));
+      return;
+    }
+    const nuevo = String(convertido);
+    if (nuevo !== ultimoGuardado.current) {
+      ultimoGuardado.current = nuevo;
+      onGuardar(convertido);
+    }
+    setTexto(nuevo);
+  };
+  return {
+    value: texto,
+    onChange: (e: ChangeEvent<HTMLInputElement>) => setTexto(e.target.value),
+    onBlur: (e: FocusEvent<HTMLInputElement>) => guardar(e.currentTarget.value),
+    onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        guardar(e.currentTarget.value);
+        e.currentTarget.blur();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        setTexto(ultimoGuardado.current);
+      }
+    },
+  };
+}
+
 /** Campo editable que guarda con Enter o al perder el foco (spec O003b). */
 export function CampoEditable({
   etiqueta,
@@ -611,24 +672,20 @@ export function CampoEditable({
   title?: string;
   onGuardar: (valor: string | number) => void;
 }) {
-  const [texto, setTexto] = useState(String(valor ?? ""));
-  // Al cambiar la selección (p. ej. Tab muro → cerramiento) el campo muestra el valor nuevo,
-  // no el del elemento anterior.
-  const [previo, setPrevio] = useState(valor);
-  if (valor !== previo) {
-    setPrevio(valor);
-    setTexto(String(valor ?? ""));
-  }
-  const guardar = (entrada: string) => {
-    if (numerico) {
-      const numero = Number(entrada);
-      if (Number.isFinite(numero)) onGuardar(numero);
-    } else if (entrada.trim()) {
-      onGuardar(entrada.trim());
-    }
-    // O033: si el núcleo rechaza el valor, el campo vuelve al valor guardado.
-    setTexto(String(valor ?? ""));
-  };
+  // O053: Enter, blur y Escape comparten el mismo comportamiento y solo se guarda
+  // cuando el valor cambia respecto al último guardado.
+  const campo = useCampoConEnter({
+    valor,
+    convertir: (entrada) => {
+      if (numerico) {
+        const numero = Number(entrada);
+        return Number.isFinite(numero) ? numero : null;
+      }
+      const limpio = entrada.trim();
+      return limpio || null;
+    },
+    onGuardar,
+  });
   return (
     <label className="flex items-center justify-between gap-2 text-xs">
       <span className="text-muted-foreground" title={title}>{etiqueta}</span>
@@ -637,16 +694,10 @@ export function CampoEditable({
         data-testid={testid}
         type={numerico ? "number" : "text"}
         step={paso}
-        value={texto}
-        onChange={(e) => setTexto(e.target.value)}
-        onBlur={(e) => guardar(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            guardar((e.target as HTMLInputElement).value);
-            (e.target as HTMLInputElement).blur();
-          }
-        }}
+        value={campo.value}
+        onChange={campo.onChange}
+        onBlur={campo.onBlur}
+        onKeyDown={campo.onKeyDown}
         className="w-28 rounded border bg-background px-2 py-1 text-right"
       />
     </label>
@@ -946,7 +997,74 @@ function RestriccionesCerramiento({ globalid }: { globalid: string }) {
   );
 }
 
-function BordesLosaElemento({
+function CampoDesfaseComun({
+  globalid,
+  valor,
+  editar,
+}: {
+  globalid: string;
+  valor: number | "Varios";
+  editar: (globalid: string, cambios: Record<string, unknown>) => Promise<void>;
+}) {
+  const campo = useCampoConEnter({
+    valor,
+    convertir: (entrada) => {
+      const numero = Number(entrada);
+      return Number.isFinite(numero) ? numero : null;
+    },
+    onGuardar: (nuevo) => void editar(globalid, { desfase_bordes: Number(nuevo) }),
+  });
+  return (
+    <input
+      key={String(valor)}
+      data-testid="elemento-desfase-bordes"
+      type={valor === "Varios" ? "text" : "number"}
+      step={0.005}
+      value={campo.value}
+      onChange={campo.onChange}
+      onBlur={campo.onBlur}
+      onKeyDown={campo.onKeyDown}
+      className="w-28 rounded border bg-background px-2 py-1 text-right"
+    />
+  );
+}
+
+function CampoDesfaseBorde({
+  globalid,
+  indice,
+  desfase,
+  editar,
+}: {
+  globalid: string;
+  indice: number;
+  desfase: number;
+  editar: (globalid: string, cambios: Record<string, unknown>) => Promise<void>;
+}) {
+  const campo = useCampoConEnter({
+    valor: desfase,
+    convertir: (entrada) => {
+      const numero = Number(entrada);
+      return Number.isFinite(numero) ? numero : null;
+    },
+    onGuardar: (nuevo) =>
+      void editar(globalid, { cambio_borde: { indice, desfase: Number(nuevo) } }),
+  });
+  return (
+    <input
+      key={`${indice}-${desfase}`}
+      data-testid={`elemento-borde-${indice}-desfase`}
+      type="number"
+      step={0.005}
+      value={campo.value}
+      onChange={campo.onChange}
+      onBlur={campo.onBlur}
+      onKeyDown={campo.onKeyDown}
+      className="w-20 rounded border bg-background px-1 py-0.5 text-right"
+    />
+  );
+}
+
+export function BordesLosaElemento({
   globalid,
   pset,
   editar,
@@ -968,20 +1086,7 @@ function BordesLosaElemento({
     <div className="flex flex-col gap-2" data-testid="elemento-bordes-losa">
       <label className="flex items-center justify-between gap-2 text-xs">
         <span className="text-muted-foreground">Desfase de bordes (m)</span>
-        <input
-          key={String(comun)}
-          data-testid="elemento-desfase-bordes"
-          type={comun === "Varios" ? "text" : "number"}
-          step={0.005}
-          defaultValue={comun === "Varios" ? "Varios" : comun}
-          onBlur={(e) => {
-            const valor = Number(e.target.value);
-            if (Number.isFinite(valor)) {
-              void editar(globalid, { desfase_bordes: valor });
-            }
-          }}
-          className="w-28 rounded border bg-background px-2 py-1 text-right"
-        />
+        <CampoDesfaseComun globalid={globalid} valor={comun} editar={editar} />
       </label>
       <table className="w-full text-left text-[11px]" data-testid="tabla-bordes-losa">
         <thead>
@@ -995,21 +1100,11 @@ function BordesLosaElemento({
             <tr key={indice} data-testid={`elemento-borde-${indice}`}>
               <td>{etiquetaBorde(indice, borde)}</td>
               <td>
-                <input
-                  key={`${indice}-${borde.desfase}`}
-                  data-testid={`elemento-borde-${indice}-desfase`}
-                  type="number"
-                  step={0.005}
-                  defaultValue={Number(borde.desfase) || 0}
-                  onBlur={(e) => {
-                    const valor = Number(e.target.value);
-                    if (Number.isFinite(valor)) {
-                      void editar(globalid, {
-                        cambio_borde: { indice, desfase: valor },
-                      });
-                    }
-                  }}
-                  className="w-20 rounded border bg-background px-1 py-0.5 text-right"
+                <CampoDesfaseBorde
+                  globalid={globalid}
+                  indice={indice}
+                  desfase={Number(borde.desfase) || 0}
+                  editar={editar}
                 />
                 <span className="ml-1 text-muted-foreground">
                   {desfaseConSigno(borde)}
