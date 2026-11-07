@@ -33,5 +33,9 @@ Lo que dice el nombre no es lo que hay en el modelo; afecta cantidades y acero.
 - En una esquina o cruce de muros, el castillo mide núcleo × núcleo de los muros que recibe (0.20 × 0.20 en Block 20).
 - Si la sección propia sobresale del muro, el muro termina en la cara del castillo.
 
+## 6. Pedido del dueño: anotaciones en vistas 3D
+- En las vistas 3D quiere poder activar ejes, niveles, cotas y demás anotaciones.
+- Quiere poder agregar notas, y que sean visibles en cualquier modo de vista.
+
 ## Criterio de cierre
 Abrir este mismo modelo, ver las esquinas cerradas en 3D y que el dueño lo confirme.
