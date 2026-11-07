@@ -9,9 +9,9 @@ import { tr } from "@/i18n";
 
 // OPEN-RVT: canal de actualizaciones propio.
 export const ENDPOINT_ACTUALIZACIONES =
-  "https://gitea.spm.lat/sant4/openrvt-actualizaciones/raw/branch/main/latest.json";
+  "https://github.com/sant4work01-ADS/open-rvt/releases/latest/download/latest.json";
 export const URL_DESCARGA =
-  "https://gitea.spm.lat/sant4/openrvt-actualizaciones/releases";
+  "https://github.com/sant4work01-ADS/open-rvt/releases/latest";
 
 /** OPEN-RVT: el updater de Tauri solo actualiza AppImage; en Linux se avisa con enlace. */
 export function esLinux(): boolean {

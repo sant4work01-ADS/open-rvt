@@ -53,7 +53,7 @@ struct UltimaVersion {
 #[tauri::command]
 async fn ultima_version() -> Result<Option<UltimaVersion>, String> {
     const URL: &str =
-        "https://gitea.spm.lat/sant4/openrvt-actualizaciones/raw/branch/main/latest.json";
+        "https://github.com/sant4work01-ADS/open-rvt/releases/latest/download/latest.json";
     let cliente = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()

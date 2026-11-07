@@ -1,17 +1,14 @@
 #!/bin/bash
 # Uso: herramientas/publicar-actualizacion.sh "<notas>"
 # Compila el instalador de Windows en local (nativo en Windows), firmado con la llave del
-# updater de OPEN-RVT, lo sube como release al canal de actualizaciones en Gitea y
-# actualiza latest.json. La versión sale de src-tauri/tauri.conf.json del repositorio;
+# updater de OPEN-RVT, lo sube como release del repositorio público de GitHub con
+# latest.json como adjunto. La versión sale de src-tauri/tauri.conf.json del repositorio;
 # súbela y haz commit antes. La primera publicación la hace el supervisor.
 set -euo pipefail
 export PYTHONUTF8=1 PYTHONIOENCODING=utf-8  # Windows: si no, python escribe latest.json en cp1252
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NOTAS="${1:?uso: publicar-actualizacion.sh \"<notas>\"}"
-# Directo por Tailscale: por Cloudflare las subidas largas fallan con 524.
-GITEA=${GITEA_API:-http://100.90.19.93:3000/api/v1}; REPO=sant4/openrvt-actualizaciones
-T=$(cat ~/.gitea-pp-token); UA="Mozilla/5.0 (OPEN-RVT-publicar)"
-api() { curl -sf -A "$UA" -H "Authorization: token $T" "$@"; }
+REPO=sant4work01-ADS/open-rvt; UA="Mozilla/5.0 (OPEN-RVT-publicar)"
 
 cd "$RAIZ"
 V=$(python3 -c "import json; print(json.load(open('src-tauri/tauri.conf.json'))['version'])")
@@ -30,30 +27,21 @@ command -v cygpath >/dev/null && { EXE=$(cygpath -m "$EXE"); SIG=$EXE.sig; }  # 
 [ -f "$SIG" ] || { echo "No se generó la firma $SIG"; exit 1; }
 NOMBRE=OPEN-RVT_${V}_x64-setup.exe
 
-echo "== Release v$V en Gitea"
-api -X DELETE "$GITEA/repos/$REPO/releases/tags/v$V" >/dev/null 2>&1 || true
-api -X DELETE "$GITEA/repos/$REPO/tags/v$V" >/dev/null 2>&1 || true
-RID=$(api -X POST -H "Content-Type: application/json" "$GITEA/repos/$REPO/releases" \
-  -d "$(python3 -c 'import json,sys; print(json.dumps({"tag_name":"v"+sys.argv[1],"target_commitish":"main","name":"OPEN-RVT "+sys.argv[1],"body":sys.argv[2],"prerelease":False}))' "$V" "$NOTAS")" \
-  | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
-api -X POST -F "attachment=@$EXE;filename=$NOMBRE" "$GITEA/repos/$REPO/releases/$RID/assets?name=$NOMBRE" >/dev/null
-URL=https://gitea.spm.lat/$REPO/releases/download/v$V/$NOMBRE
+URL=https://github.com/$REPO/releases/download/v$V/$NOMBRE
+LATEST_URL=https://github.com/$REPO/releases/latest/download/latest.json
 
 echo "== latest.json"
-LATEST=$(python3 -c 'import json,sys,datetime
-print(json.dumps({"version":sys.argv[1],"notes":sys.argv[2],
+python3 -c 'import json,sys,datetime
+open(sys.argv[5],"w",encoding="utf-8").write(json.dumps({"version":sys.argv[1],"notes":sys.argv[2],
  "pub_date":datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
- "platforms":{"windows-x86_64":{"signature":open(sys.argv[3]).read().strip(),"url":sys.argv[4]}}},ensure_ascii=False,indent=2))' "$V" "$NOTAS" "$SIG" "$URL")
-B64=$(printf '%s' "$LATEST" | base64 -w0)
-SHA=$(api "$GITEA/repos/$REPO/contents/latest.json?ref=main" 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin)['sha'])" 2>/dev/null || true)
-CUERPO=$(python3 -c 'import json,sys; d={"content":sys.argv[1],"message":"latest.json → "+sys.argv[2],"branch":"main"}
-if sys.argv[3]: d["sha"]=sys.argv[3]
-print(json.dumps(d))' "$B64" "$V" "$SHA")
-if [ -n "$SHA" ]; then api -X PUT -H "Content-Type: application/json" "$GITEA/repos/$REPO/contents/latest.json" -d "$CUERPO" >/dev/null
-else api -X POST -H "Content-Type: application/json" "$GITEA/repos/$REPO/contents/latest.json" -d "$CUERPO" >/dev/null; fi
-curl -sf -A "$UA" https://gitea.spm.lat/$REPO/raw/branch/main/latest.json | python3 -c "import json,sys; d=json.load(sys.stdin); print('publicado', d['version'], d['platforms']['windows-x86_64']['url'])"
-# Comprobación de lo que ve la app: latest.json en UTF-8, versión, firma y descarga.
-curl -sf -A "$UA" https://gitea.spm.lat/$REPO/raw/branch/main/latest.json -o /tmp/openrvt-latest.json
+ "platforms":{"windows-x86_64":{"signature":open(sys.argv[3]).read().strip(),"url":sys.argv[4]}}},ensure_ascii=False,indent=2))' "$V" "$NOTAS" "$SIG" "$URL" /tmp/latest.json
+
+echo "== Release v$V en GitHub"
+gh release delete "v$V" -R "$REPO" --yes --cleanup-tag >/dev/null 2>&1 || true
+gh release create "v$V" -R "$REPO" --target main --latest --title "OPEN-RVT $V" --notes "$NOTAS"   "$EXE#$NOMBRE" "$SIG#$NOMBRE.sig" /tmp/latest.json
+
+# Comprobación de lo que ve la app, sin credenciales: UTF-8, versión, firma y descarga.
+curl -sfL -A "$UA" "$LATEST_URL" -o /tmp/openrvt-latest.json
 python3 -c 'import json,sys; d=json.loads(open(sys.argv[1],"rb").read().decode("utf-8")); w=d["platforms"]["windows-x86_64"]
 assert d["version"]==sys.argv[2], d["version"]; assert w["signature"]==open(sys.argv[3]).read().strip(), "firma distinta"' /tmp/openrvt-latest.json "$V" "$SIG"
 [ "$(curl -s -o /dev/null -w '%{http_code}' -L -I -A "$UA" "$URL")" = 200 ] || { echo "El instalador no se descarga: $URL"; exit 1; }
