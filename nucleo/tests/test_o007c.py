@@ -90,7 +90,8 @@ def test_el_castillo_sigue_al_muro_y_el_cerramiento_se_recalcula() -> None:
     )["creados"][0]
     for castillo in castillos:
         datos = _pset(nucleo, castillo, "OPENRVT_Estructura")
-        assert datos["Altura"] == pytest.approx(2.40)
+        # O045: el castillo va embebido y llega a la altura completa del muro.
+        assert datos["Altura"] == pytest.approx(2.60)
         assert datos["H"] == pytest.approx(0.15)
 
     nucleo.elementos_mover([muro], 1.0, 0.0, 0.0)
@@ -115,7 +116,7 @@ def test_el_castillo_sigue_al_muro_y_el_cerramiento_se_recalcula() -> None:
     assert len(nucleo.modelo.by_type("IfcBeam")) == 1
 
 
-def test_cerramiento_veinte_baja_los_castillos_a_dos_cuarenta() -> None:
+def test_cerramiento_veinte_no_baja_los_castillos() -> None:
     nucleo = _nuevo()
     muro = nucleo.muro_crear("Block 15", _nivel(nucleo), 0, 0, 2.6, 0, 2.6)["creados"][0]
     castillo = nucleo.castillo_crear_en_muro(
@@ -124,7 +125,7 @@ def test_cerramiento_veinte_baja_los_castillos_a_dos_cuarenta() -> None:
     assert _pset(nucleo, castillo, "OPENRVT_Estructura")["Altura"] == pytest.approx(2.6)
     nucleo.cerramiento_crear_en_muro("CE-1 Cerramiento 15×20", muro)
     datos = _pset(nucleo, castillo, "OPENRVT_Estructura")
-    assert datos["Altura"] == pytest.approx(2.40)
+    assert datos["Altura"] == pytest.approx(2.60)
     assert datos["Base"] == pytest.approx(0.0)
     # El cerramiento va de extremo a extremo y con el ancho del núcleo.
     cerramientos = [

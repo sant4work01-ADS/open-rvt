@@ -245,21 +245,8 @@ class InteraccionesMixin:
         _, seccion, _ = self._seccion_y_armado(tipo_entidad)
         ancho = float(seccion.get("B") or 0.15)
         nivel_entidad = self._nivel_de_elemento(muro)
-        cerramientos = [
-            d for d in self._dependientes_de(muro)
-            if self._estructura_de_tipo(self._tipo_entidad(d)) == "cerramiento"
-        ]
-        if cerramientos:
-            alto_cerramiento = float(
-                self._leer_pset(cerramientos[0], "OPENRVT_Estructura").get("H")
-                or self._seccion_y_armado(self._tipo_entidad(cerramientos[0]))[1].get("H")
-                or 0.20
-            )
-            altura = datos["altura"] - alto_cerramiento
-        else:
-            altura = datos["altura"]
-        if altura <= TOLERANCIA_CALCULO:
-            altura = datos["altura"]
+        # O045: el castillo va embebido y llega a la altura completa del muro.
+        altura = datos["altura"]
         elevacion = datos["z"]
         castillo, _ = self._columna_nueva(
             tipo_entidad, nivel_entidad, x, y, rotacion, max(altura, 0.05),
@@ -501,6 +488,229 @@ class InteraccionesMixin:
     def dala_crear_en_muro(self, tipo: str, muro: str) -> dict[str, Any]:
         return self._lineal_en_muro(tipo, muro, "dala")
 
+    def cerramiento_crear(
+        self,
+        tipo: str,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+        nivel: str | None = None,
+        desfase: float | None = None,
+    ) -> dict[str, Any]:
+        """O045: cerramiento dibujado con dos puntos, embebido en el muro.
+
+        El tramo dibujado se liga a cada muro colineal que tenga debajo (dentro de
+        la mitad de su espesor y de su largo) y se corta en las juntas; lo que no
+        cae sobre un muro queda libre. El muro no cambia de altura.
+        """
+        self._exigir_modelo()
+        tipo_entidad = self._tipo_estructura(tipo, ("IfcBeamType",))
+        if self._estructura_de_tipo(tipo_entidad) != "cerramiento":
+            raise self._error("El tipo no es un cerramiento.", -32602)
+        try:
+            x1, y1, x2, y2 = float(x1), float(y1), float(x2), float(y2)
+            if desfase is not None:
+                desfase = float(desfase)
+        except (TypeError, ValueError) as exc:
+            raise self._error("Los datos del cerramiento no son números.", -32602) from exc
+        largo = math.hypot(x2 - x1, y2 - y1)
+        if largo <= TOLERANCIA_CALCULO:
+            raise self._error("El cerramiento necesita dos puntos distintos.", -32602)
+        nivel_elegido = self._nivel_por_gid(str(nivel)) if nivel else None
+        ux, uy = (x2 - x1) / largo, (y2 - y1) / largo
+        tramos: list[dict[str, Any]] = []
+        for muro in self.modelo.by_type("IfcWall"):
+            datos = self._datos_muro(muro)
+            longitud = datos["longitud"]
+            if longitud <= TOLERANCIA_CALCULO:
+                continue
+            wx, wy = datos["x1"], datos["y1"]
+            mux, muy = datos["dx"], datos["dy"]
+            tolerancia = datos["espesor"] / 2.0 + TOLERANCIA
+            dist1 = abs(mux * (y1 - wy) - muy * (x1 - wx))
+            dist2 = abs(mux * (y2 - wy) - muy * (x2 - wx))
+            if dist1 > tolerancia or dist2 > tolerancia:
+                continue
+            t1 = (x1 - wx) * mux + (y1 - wy) * muy
+            t2 = (x2 - wx) * mux + (y2 - wy) * muy
+            inicio = max(0.0, min(t1, t2))
+            fin = min(longitud, max(t1, t2))
+            if fin - inicio <= TOLERANCIA:
+                continue
+            qx1, qy1 = wx + mux * inicio, wy + muy * inicio
+            qx2, qy2 = wx + mux * fin, wy + muy * fin
+            s1 = ((qx1 - x1) * ux + (qy1 - y1) * uy) / largo
+            s2 = ((qx2 - x1) * ux + (qy2 - y1) * uy) / largo
+            tramos.append(
+                {
+                    "muro": muro,
+                    "inicio": inicio,
+                    "fin": fin,
+                    "x1": qx1, "y1": qy1, "x2": qx2, "y2": qy2,
+                    "s0": min(s1, s2), "s1": max(s1, s2),
+                }
+            )
+        for tramo in tramos:
+            if nivel_elegido is not None:
+                restriccion = {
+                    "NivelBase": _gid(nivel_elegido),
+                    "DesfaseBase": 0.0 if desfase is None else float(desfase),
+                }
+            else:
+                restriccion = self._restricciones_cerramiento_ligado(tramo["muro"])
+                if desfase is not None:
+                    restriccion["DesfaseBase"] = float(desfase)
+            tramo["restriccion"] = restriccion
+            tramo["nivel"] = _texto(restriccion.get("NivelBase"))
+            for dependiente in self._dependientes_de(tramo["muro"]):
+                if (
+                    self._estructura_de_tipo(self._tipo_entidad(dependiente))
+                    != "cerramiento"
+                ):
+                    continue
+                otro_nivel = _texto(
+                    self._restricciones_de(dependiente).get("NivelBase")
+                )
+                if otro_nivel != tramo["nivel"]:
+                    continue
+                liga = self._leer_liga(dependiente)
+                datos_muro = self._datos_muro(tramo["muro"])
+                if liga.get("Inicio") is None:
+                    a, b = 0.0, datos_muro["longitud"]
+                else:
+                    a = float(liga.get("Inicio") or 0.0)
+                    b = float(liga.get("Fin") or a)
+                if min(b, tramo["fin"]) - max(a, tramo["inicio"]) > TOLERANCIA:
+                    entidad_nivel = self._nivel_por_gid(tramo["nivel"])
+                    raise self._error(
+                        f"Ese tramo ya tiene cerramiento en {_nombre(entidad_nivel)}.",
+                        -32602,
+                    )
+        tramos.sort(key=lambda t: t["s0"])
+        huecos: list[tuple[float, float]] = []
+        cursor = 0.0
+        for tramo in tramos:
+            if tramo["s0"] > cursor + TOLERANCIA:
+                huecos.append((cursor, tramo["s0"]))
+            cursor = max(cursor, tramo["s1"])
+        if cursor < 1.0 - TOLERANCIA:
+            huecos.append((cursor, 1.0))
+        if not tramos and not huecos:
+            raise self._error("El cerramiento no cae sobre ningún muro.", -32602)
+        libre_nivel = nivel_elegido
+        if libre_nivel is None:
+            niveles = sorted(
+                self.modelo.by_type("IfcBuildingStorey"),
+                key=lambda n: float(n.Elevation or 0.0),
+            )
+            libre_nivel = niveles[0] if niveles else None
+        self._instantanea()
+        creados: list[Any] = []
+        for tramo in tramos:
+            creados.append(
+                self._cerramiento_tramo(
+                    tipo_entidad,
+                    tramo["muro"],
+                    tramo["x1"], tramo["y1"], tramo["x2"], tramo["y2"],
+                    tramo["restriccion"],
+                    tramo["inicio"],
+                    tramo["fin"],
+                )
+            )
+        for s0, s1 in huecos:
+            if libre_nivel is None:
+                raise self._error("Indique el nivel del cerramiento.", -32602)
+            restriccion = {
+                "NivelBase": _gid(libre_nivel),
+                "DesfaseBase": 0.0 if desfase is None else float(desfase),
+            }
+            px1, py1 = x1 + ux * largo * s0, y1 + uy * largo * s0
+            px2, py2 = x1 + ux * largo * s1, y1 + uy * largo * s1
+            if math.hypot(px2 - px1, py2 - py1) <= TOLERANCIA:
+                continue
+            creados.append(
+                self._cerramiento_tramo(
+                    tipo_entidad, None, px1, py1, px2, py2, restriccion
+                )
+            )
+        self.con_cambios = True
+        if len(creados) == 1 and creados[0] is not None:
+            datos_viga = self._leer_pset(creados[0], "OPENRVT_Estructura")
+            mensaje = (
+                f"Cerramiento creado ({float(datos_viga.get('Longitud') or 0.0):.2f} m)."
+            )
+        else:
+            mensaje = f"Cerramientos creados ({len(creados)})."
+        return self._resultado(creados, mensaje=mensaje)
+
+    def _cerramiento_tramo(
+        self,
+        tipo_entidad: Any,
+        muro: Any | None,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+        restriccion: dict[str, Any],
+        inicio: float | None = None,
+        fin: float | None = None,
+    ) -> Any:
+        """Crea un cerramiento embebido en un tramo; sin muro queda libre."""
+        nivel_entidad = (
+            self._nivel_de_elemento(muro)
+            if muro is not None
+            else self._nivel_por_gid(_texto(restriccion.get("NivelBase")))
+        )
+        nivel_restriccion = self._nivel_por_gid(
+            _texto(restriccion.get("NivelBase"))
+        )
+        nucleo = (
+            self._capas_nucleo(muro)[0]
+            if muro is not None
+            else float(self._seccion_y_armado(tipo_entidad)[1].get("B") or 0.15)
+        )
+        elevacion = float(nivel_entidad.Elevation or 0.0)
+        tope = float(nivel_restriccion.Elevation or 0.0) + float(
+            restriccion.get("DesfaseBase") or 0.0
+        )
+        alto = float(self._seccion_y_armado(tipo_entidad)[1].get("H") or 0.20)
+        viga = self._viga_nueva(
+            tipo_entidad,
+            nivel_entidad,
+            x1, y1, x2, y2,
+            tope - elevacion,
+        )
+        self._guardar_pset(
+            viga,
+            "OPENRVT_Estructura",
+            {
+                **self._leer_pset(viga, "OPENRVT_Estructura"),
+                "B": nucleo,
+                "Z": tope - alto / 2.0,
+                "Nivel": restriccion["NivelBase"],
+                "Desfase": restriccion["DesfaseBase"],
+            },
+        )
+        self._regenerar_estructura(viga)
+        self._guardar_pset(viga, PSET_RESTRICCIONES, restriccion)
+        if muro is not None:
+            datos_muro = self._datos_muro(muro)
+            completo = float(inicio or 0.0) <= TOLERANCIA and float(
+                fin or 0.0
+            ) >= datos_muro["longitud"] - TOLERANCIA
+            self._guardar_liga(
+                viga,
+                {
+                    "Muro": _gid(muro),
+                    "Inicio": float(inicio or 0.0),
+                    "Fin": float(fin or 0.0),
+                    "Completo": completo,
+                },
+            )
+            self._conectar(viga, muro)
+        return viga
+
     def _lineal_en_muro(
         self,
         tipo: str,
@@ -579,7 +789,10 @@ class InteraccionesMixin:
             },
         )
         self._regenerar_estructura(viga)
-        self._guardar_liga(viga, {"Muro": _gid(muro_entidad)})
+        self._guardar_liga(
+            viga,
+            {"Muro": _gid(muro_entidad), "Completo": esperado == "cerramiento"},
+        )
         if esperado == "cerramiento":
             restriccion = restriccion_cerramiento or self._restricciones_cerramiento_ligado(
                 muro_entidad
@@ -598,11 +811,8 @@ class InteraccionesMixin:
             )
             if explicito:
                 # Recalcula Z en la misma instantánea (un solo paso de Deshacer).
+                # O045: el cerramiento va embebido; el muro conserva su altura.
                 self._aplicar_restriccion(viga, restriccion)
-                if desde_planta:
-                    # O043: al crear desde una planta el muro no sube hasta la
-                    # cara superior: termina en la cara inferior del cerramiento.
-                    self._muro_sigue_cerramiento(viga, cara_inferior=True)
         self._conectar(viga, muro_entidad)
         if esperado == "cerramiento":
             self._actualizar_castillos(muro_entidad)
@@ -622,7 +832,9 @@ class InteraccionesMixin:
         if not liga.get("Muro"):
             raise self._error("El elemento no está ligado a un muro.", -32602)
         self._instantanea()
-        self._quitar_claves_pset(entidad, LIGA, ("Muro", "Distancia"))
+        self._quitar_claves_pset(
+            entidad, LIGA, ("Muro", "Distancia", "Inicio", "Fin", "Completo")
+        )
         self._quitar_conexiones(entidad)
         self.con_cambios = True
         return self._resultado([entidad], mensaje="Soltado del muro.")
@@ -646,60 +858,21 @@ class InteraccionesMixin:
         datos["Z"] = tope - peralte / 2.0
         self._guardar_pset(elemento, "OPENRVT_Estructura", datos)
         self._regenerar_estructura(elemento)
-        self._muro_sigue_cerramiento(elemento)
-
-    def _muro_sigue_cerramiento(
-        self, cerramiento: Any, cara_inferior: bool = False
-    ) -> None:
-        """O041: la altura la manda el cerramiento; el muro ligado termina en su cara
-        inferior y los castillos llegan a esa cara. Al subir el cerramiento el muro
-        crece; al bajar, se acorta. O043: al crearlo desde una planta se usa la cara
-        inferior (el tope de la pieza es el nivel de la planta)."""
-        muro_gid = _texto(self._leer_liga(cerramiento).get("Muro"))
-        if not muro_gid:
-            return
-        try:
-            muro = self._entidad_por_gid(muro_gid, ("IfcWall",))
-        except Exception:
-            return
-        datos = self._datos_muro(muro)
-        peralte = self._peralte_de(cerramiento)
-        z = float(self._leer_pset(cerramiento, "OPENRVT_Estructura").get("Z") or 0.0)
-        tope = z - peralte / 2.0 if cara_inferior else z + peralte / 2.0
-        nueva_altura = tope - datos["z"]
-        if nueva_altura <= TOLERANCIA_CALCULO:
-            return
-        pset = self._leer_pset(muro, "OPENRVT_Muro")
-        if pset:
-            pset["Altura"] = nueva_altura
-            self._guardar_pset(muro, "OPENRVT_Muro", pset)
-        self._regenerar_muro(muro)
-        self._actualizar_castillos(muro)
 
     def _actualizar_castillos(self, muro: Any) -> None:
+        """O045: los castillos van embebidos y llegan a la altura del muro.
+
+        Ya no terminan en la cara inferior del cerramiento: el muro no se corta y
+        el castillo ocupa todo el alto del muro como pieza embebida.
+        """
         datos = self._datos_muro(muro)
-        cerramientos = [
-            d for d in self._dependientes_de(muro)
-            if self._estructura_de_tipo(self._tipo_entidad(d)) == "cerramiento"
-        ]
-        altura = datos["altura"]
-        if cerramientos:
-            pset = self._leer_pset(cerramientos[0], "OPENRVT_Estructura")
-            tipo = self._tipo_entidad(cerramientos[0])
-            _, seccion, _ = self._seccion_y_armado(tipo)
-            alto = float(pset.get("H") or seccion.get("H") or 0.20)
-            # O043: los castillos llegan a la cara inferior real del cerramiento,
-            # que sale de su centro y peralte (no de la altura del muro, que puede
-            # terminar justo en esa cara).
-            centro = float(pset.get("Z") or 0.0)
-            altura = centro - alto / 2.0 - datos["z"]
         for castillo in self._dependientes_de(muro):
             if self._estructura_de_tipo(self._tipo_entidad(castillo)) != "castillo":
                 continue
             pset = {
                 **self._leer_pset(castillo, "OPENRVT_Estructura"),
                 "Base": datos["z"],
-                "Altura": max(altura, 0.05),
+                "Altura": max(datos["altura"], 0.05),
             }
             self._guardar_pset(castillo, "OPENRVT_Estructura", pset)
             self._regenerar_estructura(castillo)
@@ -760,17 +933,35 @@ class InteraccionesMixin:
             elif alias in ("cerramiento", "dala"):
                 _, seccion, _ = self._seccion_y_armado(self._tipo_entidad(dependiente))
                 alto = float(pset.get("H") or seccion.get("H") or 0.20)
+                liga = self._leer_liga(dependiente)
+                # O045: el cerramiento puede cubrir solo un tramo del muro; sus
+                # distancias al inicio se guardan en la liga y se conservan.
+                if (
+                    alias == "cerramiento"
+                    and liga.get("Inicio") is not None
+                    and not liga.get("Completo")
+                ):
+                    d1 = min(max(float(liga.get("Inicio") or 0.0), 0.0), datos["longitud"])
+                    d2 = min(max(float(liga.get("Fin") or 0.0), d1), datos["longitud"])
+                else:
+                    d1, d2 = 0.0, datos["longitud"]
+                x1 = datos["x1"] + datos["dx"] * d1
+                y1 = datos["y1"] + datos["dy"] * d1
+                x2 = datos["x1"] + datos["dx"] * d2
+                y2 = datos["y1"] + datos["dy"] * d2
                 pset.update(
                     {
-                        "X1": datos["x1"], "Y1": datos["y1"],
-                        "X2": datos["x2"], "Y2": datos["y2"],
-                        "Longitud": datos["longitud"], "B": nucleo,
+                        "X1": x1, "Y1": y1,
+                        "X2": x2, "Y2": y2,
+                        "Longitud": d2 - d1, "B": nucleo,
                     }
                 )
                 if alias == "dala":
                     pset["Z"] = datos["z"] + alto / 2.0
-                # O041: la altura la manda el cerramiento, no sigue la corona del
-                # muro; su Z y su restricción quedan como estaban.
+                else:
+                    liga["Inicio"], liga["Fin"] = d1, d2
+                    self._guardar_liga(dependiente, liga)
+                # O045: la altura del cerramiento no cambia la del muro.
             else:
                 continue
             self._guardar_pset(dependiente, "OPENRVT_Estructura", pset)
@@ -1498,6 +1689,80 @@ class InteraccionesMixin:
             salida.append((pieza, z))
         return salida or [(base, z0)]
 
+    def _area_embebida_muro(
+        self, muro: Any, datos: dict[str, Any], nucleo: float
+    ) -> float:
+        """O045: área del muro ocupada por cerramientos y castillos embebidos.
+
+        Se mide en el plano del muro (largo × alto) y se limita al espesor del
+        núcleo. La huella de los castillos ya viene recortada en la base del muro;
+        por eso se suma su unión y luego se le resta la de los propios castillos,
+        para no descontarla dos veces.
+        """
+        if nucleo <= TOLERANCIA_CALCULO:
+            return 0.0
+        from shapely.geometry import box
+        from shapely.ops import unary_union
+
+        def area_de(cajas: list[Any]) -> float:
+            if not cajas:
+                return 0.0
+            return float(unary_union(cajas).area)
+
+        cerramientos: list[Any] = []
+        castillos: list[Any] = []
+        for dependiente in self._dependientes_de(muro):
+            alias = self._estructura_de_tipo(self._tipo_entidad(dependiente))
+            if alias not in ("cerramiento", "castillo"):
+                continue
+            pset = self._leer_pset(dependiente, "OPENRVT_Estructura")
+            if not pset:
+                continue
+            alto = float(pset.get("H") or self._peralte_de(dependiente) or 0.20)
+            if alias == "cerramiento":
+                x1 = float(pset.get("X1") or 0.0)
+                y1 = float(pset.get("Y1") or 0.0)
+                x2 = float(pset.get("X2") or 0.0)
+                y2 = float(pset.get("Y2") or 0.0)
+                u1 = (x1 - datos["x1"]) * datos["dx"] + (
+                    y1 - datos["y1"]
+                ) * datos["dy"]
+                u2 = (x2 - datos["x1"]) * datos["dx"] + (
+                    y2 - datos["y1"]
+                ) * datos["dy"]
+                z = float(pset.get("Z") or 0.0)
+                z0 = max(float(datos["z"]), z - alto / 2.0)
+                z1 = min(float(datos["z"]) + float(datos["altura"]), z + alto / 2.0)
+            else:
+                liga = self._leer_liga(dependiente)
+                distancia = float(liga.get("Distancia") or 0.0)
+                ancho = float(
+                    pset.get("B")
+                    or self._seccion_y_armado(self._tipo_entidad(dependiente))[1].get(
+                        "B"
+                    )
+                    or 0.15
+                )
+                u1 = distancia - ancho / 2.0
+                u2 = distancia + ancho / 2.0
+                z0 = max(float(datos["z"]), float(pset.get("Base") or datos["z"]))
+                z1 = min(
+                    float(datos["z"]) + float(datos["altura"]),
+                    float(pset.get("Base") or datos["z"])
+                    + float(pset.get("Altura") or alto),
+                )
+            u1, u2 = max(0.0, min(u1, u2)), min(datos["longitud"], max(u1, u2))
+            if u2 - u1 <= TOLERANCIA_CALCULO or z1 - z0 <= TOLERANCIA_CALCULO:
+                continue
+            (cerramientos if alias == "cerramiento" else castillos).append(
+                box(u1, z0, u2, z1)
+            )
+        if not cerramientos:
+            return 0.0
+        if not castillos:
+            return area_de(cerramientos)
+        return max(area_de(cerramientos + castillos) - area_de(castillos), 0.0)
+
     def _piezas_de_elemento(self, elemento: Any) -> dict[str, Any] | None:
         from shapely.geometry import Polygon
 
@@ -1732,6 +1997,10 @@ class InteraccionesMixin:
             )
             for _vano, info in vanos:
                 area_neta -= info["ancho"] * info["alto"]
+            # O045: el cerramiento va embebido; su sección dentro del espesor se
+            # descuenta del área de block (los castillos ya vienen recortados de la
+            # huella por ser IfcColumn). Los recubrimientos miden la cara completa.
+            area_neta -= self._area_embebida_muro(elemento, datos, nucleo)
             detalle["area_neta_m2"] = round(max(area_neta, 0.0), 6)
             detalle["base_m"] = round(min(z for _b, z in subtramos), 6)
             detalle["cima_m"] = round(z1, 6)

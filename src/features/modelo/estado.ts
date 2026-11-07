@@ -2,7 +2,7 @@
 // lista de vistas y la selección para que la cinta, el visor y la barra de estado
 // compartan una sola fuente de verdad.
 import { create } from "zustand";
-import { bitacoraHerramienta, llamarConBitacora } from "@/lib/bitacora";
+import { agregarEvento, bitacoraHerramienta, llamarConBitacora } from "@/lib/bitacora";
 import { elegirDestinoIfc, elegirIfcParaAbrir } from "@/lib/dialogos";
 import {
   CATEGORIAS_TODAS,
@@ -41,7 +41,6 @@ import {
   ejeOrtogonal,
   muroBajoPunto,
   opcionesCerramientoEnVista,
-  plantaTomaNivelPropio,
   puntoConLongitud,
   proyectarSobreSegmento,
   puntoDibujo,
@@ -49,6 +48,7 @@ import {
   referenciasAlDia,
   restringirEje,
   siguienteEtiquetaEje,
+  tramosDeCerramiento,
   type Enganche,
   type Punto2,
   type Referencias,
@@ -1201,6 +1201,57 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     return ok;
   };
 
+  /** O045: cerramiento dibujado como un muro (inicio y fin, en cadena). */
+  const crearCerramientoEntre = async (
+    origen: Punto2,
+    destino: Punto2,
+  ): Promise<boolean> => {
+    if (Math.hypot(destino[0] - origen[0], destino[1] - origen[1]) < 0.01) {
+      return false;
+    }
+    const tipo = tipoEstructural("cerramiento");
+    if (!tipo) return false;
+    const vistaActiva = get().vistas.find((v) => v.id === get().vistaActivaId);
+    const extras = opcionesCerramientoEnVista(
+      vistaActiva,
+      get().opcionesCerramiento,
+      get().niveles,
+    );
+    // O045: se parte igual que en el núcleo: un cerramiento por muro colineal
+    // (cortado en las juntas) y libres los tramos que no caen sobre un muro.
+    const tramos = tramosDeCerramiento(
+      get().referencias,
+      origen[0],
+      origen[1],
+      destino[0],
+      destino[1],
+    );
+    if (tramos.length === 0) return false;
+    let creados = 0;
+    for (const tramo of tramos) {
+      const resultado = await ejecutarResultado("cerramientos.crear", {
+        tipo: tipo.nombre,
+        x1: tramo.x1,
+        y1: tramo.y1,
+        x2: tramo.x2,
+        y2: tramo.y2,
+        ...extras,
+      });
+      if (!resultado) {
+        // O043/O045: el rechazo del núcleo (tramo ya ocupado) se muestra como aviso.
+        if (get().error) set({ aviso: get().error });
+        return false;
+      }
+      creados += resultado.creados.length;
+    }
+    if (creados === 0) return false;
+    set({ puntosHerramienta: [destino], ...limpiarTrazoExtra() });
+    bitacoraHerramienta("cerramiento", "terminar", {
+      x: destino[0], y: destino[1],
+    });
+    return true;
+  };
+
   const tipoEstructural = (herramienta: Herramienta): TipoHerramienta | null => {
     const tipo = tipoDeHerramienta(
       herramienta,
@@ -1493,6 +1544,9 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         set({ cargando: true, error: null, aviso: null });
         const info = await rpc<RespuestaInfo>("proyecto.abrir", { ruta });
         await cargar(info);
+        if (info.migracion) {
+          agregarEvento("aviso", { texto: info.migracion, origen: "migracion" });
+        }
         return true;
       } catch (e) {
         set({
@@ -1943,7 +1997,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         columna: "Columna: un clic en un cruce de ejes. R gira 90°.",
         castillo: "Castillo: clic sobre un muro o en un cruce de ejes. R gira 90°.",
         trabe: "Trabe: dos clics entre columnas.",
-        cerramiento: "Cerramiento: clic sobre un muro.",
+        cerramiento: "Cerramiento: primer punto en la planta.",
         dala: "Dala de desplante: clic sobre un muro.",
         alinear: "Alinear: clic en la referencia (eje, nivel o cara) y luego en la cara del elemento.",
         nivel: "Nivel: dos clics horizontales; la elevación se engancha o se teclea.",
@@ -2634,6 +2688,10 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         await crearMuroEntre(origen, destino);
         return;
       }
+      if (herramienta === "cerramiento") {
+        await crearCerramientoEntre(origen, destino);
+        return;
+      }
       if (esHerramientaLineal(herramienta)) {
         await crearEstructuralLineal(herramienta, origen, destino);
         return;
@@ -2774,43 +2832,26 @@ export const useModelo = create<EstadoModelo>((set, get) => {
           return;
         }
       }
-      if (herramienta === "cerramiento" || herramienta === "dala") {
+      if (herramienta === "cerramiento") {
+        if (puntos.length === 0) {
+          set({
+            puntosHerramienta: [p],
+            aviso: "Cerramiento: segundo punto o longitud y Enter.",
+          });
+          return;
+        }
+        await crearCerramientoEntre(puntos[puntos.length - 1], p);
+        return;
+      }
+      if (herramienta === "dala") {
         const bajo = muroBajoPunto(get().referencias, p, 0.35);
         if (bajo) {
           const tipo = tipoEstructural(herramienta);
           if (!tipo) return;
-          const extras: {
-            nivel?: string;
-            desfase?: number;
-            desde_planta?: boolean;
-          } = {};
-          if (herramienta === "cerramiento") {
-            const vistaActiva = get().vistas.find(
-              (v) => v.id === get().vistaActivaId,
-            );
-            Object.assign(
-              extras,
-              opcionesCerramientoEnVista(
-                vistaActiva,
-                get().opcionesCerramiento,
-                get().niveles,
-              ),
-            );
-            if (plantaTomaNivelPropio(vistaActiva, get().niveles)) {
-              extras.desde_planta = true;
-            }
-          }
-          const resultado = await ejecutarResultado(
-            herramienta === "cerramiento"
-              ? "cerramientos.crear_en_muro"
-              : "dalas.crear_en_muro",
-            { tipo: tipo.nombre, muro: bajo.muro.globalid, ...extras },
-          );
-          // O043: el rechazo del núcleo (muro con cerramiento en ese nivel) se
-          // muestra como aviso, no solo como error, junto al modelo sin tocar.
-          if (!resultado && herramienta === "cerramiento" && get().error) {
-            set({ aviso: get().error });
-          }
+          await ejecutarResultado("dalas.crear_en_muro", {
+            tipo: tipo.nombre,
+            muro: bajo.muro.globalid,
+          });
           return;
         }
       }
@@ -2919,6 +2960,16 @@ export const useModelo = create<EstadoModelo>((set, get) => {
           get().abrirEditorTipos(tipo.globalid);
           return;
         }
+      }
+      if (herramienta === "cerramiento") {
+        set({
+          puntosHerramienta: [],
+          longitudTecleada: "",
+          ratonHerramienta: null,
+          engancheHerramienta: null,
+          aviso: "Cadena de cerramientos terminada.",
+        });
+        return;
       }
       if (esHerramientaLineal(herramienta) && get().puntosHerramienta.length > 0) {
         const destino = get().ratonHerramienta;

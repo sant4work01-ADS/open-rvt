@@ -671,3 +671,97 @@ export function plantaTomaNivelPropio(
   if (!propio) return false;
   return niveles.some((n) => n.elevacion < propio.elevacion - 1e-9);
 }
+
+export interface TramoCerramiento {
+  /** Muro al que se liga el tramo, o null si va libre. */
+  muro: string | null;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+/**
+ * O045: parte un trazo de cerramiento en los muros que tiene debajo.
+ *
+ * Un tramo es colineal con un muro cuando sus dos extremos quedan dentro de la
+ * mitad del espesor del muro y su proyección cae dentro de su largo. Si abarca
+ * varios muros seguidos se devuelve uno por muro, cortado en las juntas; los
+ * huecos sin muro se devuelven libres (muro null).
+ */
+export function tramosDeCerramiento(
+  referencias: Referencias,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  tolerancia = 0.01,
+): TramoCerramiento[] {
+  const largo = Math.hypot(x2 - x1, y2 - y1);
+  if (largo <= tolerancia) return [];
+  const ux = (x2 - x1) / largo;
+  const uy = (y2 - y1) / largo;
+  const ligados: Array<TramoCerramiento & { s0: number; s1: number }> = [];
+  for (const muro of referencias.muros) {
+    const longitud = Math.hypot(muro.x2 - muro.x1, muro.y2 - muro.y1);
+    if (longitud <= tolerancia) continue;
+    const mux = (muro.x2 - muro.x1) / longitud;
+    const muy = (muro.y2 - muro.y1) / longitud;
+    const alcance = muro.espesor / 2 + tolerancia;
+    const dist1 = Math.abs(mux * (y1 - muro.y1) - muy * (x1 - muro.x1));
+    const dist2 = Math.abs(mux * (y2 - muro.y1) - muy * (x2 - muro.x1));
+    if (dist1 > alcance || dist2 > alcance) continue;
+    const t1 = (x1 - muro.x1) * mux + (y1 - muro.y1) * muy;
+    const t2 = (x2 - muro.x1) * mux + (y2 - muro.y1) * muy;
+    const inicio = Math.max(0, Math.min(t1, t2));
+    const fin = Math.min(longitud, Math.max(t1, t2));
+    if (fin - inicio <= tolerancia) continue;
+    const qx1 = muro.x1 + mux * inicio;
+    const qy1 = muro.y1 + muy * inicio;
+    const qx2 = muro.x1 + mux * fin;
+    const qy2 = muro.y1 + muy * fin;
+    const s1 = ((qx1 - x1) * ux + (qy1 - y1) * uy) / largo;
+    const s2 = ((qx2 - x1) * ux + (qy2 - y1) * uy) / largo;
+    ligados.push({
+      muro: muro.globalid,
+      x1: qx1,
+      y1: qy1,
+      x2: qx2,
+      y2: qy2,
+      s0: Math.min(s1, s2),
+      s1: Math.max(s1, s2),
+    });
+  }
+  ligados.sort((a, b) => a.s0 - b.s0);
+  const salida: TramoCerramiento[] = [];
+  let cursor = 0;
+  for (const tramo of ligados) {
+    if (tramo.s0 > cursor + tolerancia) {
+      salida.push({
+        muro: null,
+        x1: x1 + ux * largo * cursor,
+        y1: y1 + uy * largo * cursor,
+        x2: x1 + ux * largo * tramo.s0,
+        y2: y1 + uy * largo * tramo.s0,
+      });
+    }
+    salida.push({
+      muro: tramo.muro,
+      x1: tramo.x1,
+      y1: tramo.y1,
+      x2: tramo.x2,
+      y2: tramo.y2,
+    });
+    cursor = Math.max(cursor, tramo.s1);
+  }
+  if (cursor < 1 - tolerancia) {
+    salida.push({
+      muro: null,
+      x1: x1 + ux * largo * cursor,
+      y1: y1 + uy * largo * cursor,
+      x2,
+      y2,
+    });
+  }
+  return salida;
+}

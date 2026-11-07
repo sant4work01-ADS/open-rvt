@@ -427,6 +427,16 @@ class Servidor:
                 params.get("separacion_max", 3.0),
                 params.get("nivel") or None,
             )
+        if metodo in ("cerramientos.crear", "cerramiento.crear"):
+            return self._exigir().cerramiento_crear(
+                str(params.get("tipo") or ""),
+                params.get("x1", 0.0),
+                params.get("y1", 0.0),
+                params.get("x2", 0.0),
+                params.get("y2", 0.0),
+                params.get("nivel") or None,
+                params.get("desfase"),
+            )
         if metodo in ("cerramientos.crear_en_muro", "cerramiento.crear_en_muro"):
             return self._exigir().cerramiento_crear_en_muro(
                 str(params.get("tipo") or ""),
