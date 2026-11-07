@@ -333,17 +333,8 @@ async function esperarAltura(ses, gid, esperado) {
 
 // Reporte del dueño (3-nov, 0.5.26): rectángulo de 4 muros con castillos en las esquinas; tres cerramientos salen y
 // el del muro izquierdo no se puede dibujar.
-function cerramientosDe(elementos) {
-  return elementos.filter((e) => e.estructura?.alias === "cerramiento");
-}
-
 function murosDe(elementos) {
   return elementos.filter((e) => e.clase === "IfcWall");
-}
-
-async function alturaMuro(ses, gid) {
-  const props = await invocar(ses, "modelo.propiedades", { globalid: gid });
-  return Number(props.psets?.OPENRVT_Muro?.Altura ?? NaN);
 }
 
 async function props(ses, gid) {
@@ -507,7 +498,9 @@ test("O045: cadena de 5 clics en un rectángulo de 7 × 5 deja uno por muro", as
         `el muro ${muro.globalid} cambió de altura`,
       );
       const p = await props(ses, cers[0].globalid);
-      assert.equal(Number(p.restricciones?.DesfaseBase), 0);
+      // O043/O050: en un modelo de un solo nivel no hay nivel intermedio que
+      // fuerce la base; el cerramiento cuelga de la corona del muro de 2.60.
+      assert.equal(Number(p.restricciones?.DesfaseBase), 2.6);
     }
     const cadenaPng = path.join(CAPTURAS, "03-rectangulo-cadena.png");
     await ses.captura(cadenaPng);
@@ -529,8 +522,9 @@ test("O045: cantidades descuentan cerramiento y castillos embebidos (16.08 m²)"
     await cambiarPestana(ses, "Modelar");
     await elegirVista(ses, "Planta Nivel 0");
     // Muro de 7 m de block 15 con altura 2.60 (la opción de la barra).
-    await fijarValor(ses, "muro-altura", "2.6");
     await activar(ses, "cmd-muro");
+    await fijarValor(ses, "muro-tipo", "Block 15 aplanado-yeso");
+    await fijarValor(ses, "muro-altura", "2.6");
     await clicMundo(ses, 0, 0);
     await clicMundo(ses, 7, 0);
     await tecla(ses, "Escape", "Escape");
@@ -539,6 +533,16 @@ test("O045: cantidades descuentan cerramiento y castillos embebidos (16.08 m²)"
     let elementos = await teselado(ses);
     const muro = murosDe(elementos)[0];
     assert.ok(muro, "no se dibujó el muro");
+    // Con el nivel 2.20 encima, el muro nace restringido a 2.20; el caso mide
+    // 2.60, así que su tope se fija en Nivel 0 + 2.60 como hace el usuario.
+    const niveles = await invocar(ses, "modelo.niveles");
+    const n0 = niveles.find((n) => n.nombre === "Nivel 0");
+    await invocar(ses, "restricciones.editar", {
+      globalid: muro.globalid,
+      nivel_tope: n0.globalid,
+      desfase_tope: 2.6,
+    });
+    await esperar(500);
     assert.ok(Math.abs((await alturaMuro(ses, muro.globalid)) - 2.6) < 1e-6, "altura del muro");
 
     // Cerramiento de 0 a 7 en la planta de 2.20, dibujado con la herramienta.
@@ -581,7 +585,9 @@ test("O045: cantidades descuentan cerramiento y castillos embebidos (16.08 m²)"
     assert.ok(block, "no está la partida de block");
     assert.equal(block.total, 16.08, `block: ${block.total}`);
     const acabados = medicion.partidas.filter(
-      (p) => p.unidad === "m2" && p.nombre.startsWith(("Pintura", "Aplanado", "Yeso")),
+      (p) =>
+        p.unidad === "m2" &&
+        ["Pintura", "Aplanado", "Yeso"].some((prefijo) => p.nombre.startsWith(prefijo)),
     );
     assert.ok(acabados.length >= 4, `acabados: ${acabados.length}`);
     for (const partida of acabados) {
