@@ -694,6 +694,18 @@ class ModeloNucleo(
         except Exception:
             psets = {}
 
+        # O052: la hoja no guarda su pset; vive en el vano. Se expone para que la
+        # planta sepa el lado de abatimiento (Espacio) y la distancia real.
+        if elemento.is_a("IfcDoor") or elemento.is_a("IfcWindow"):
+            for rel in getattr(elemento, "FillsVoids", ()) or ():
+                vano = getattr(rel, "RelatingOpeningElement", None)
+                if vano is None:
+                    continue
+                datos_vano = self._leer_pset(vano, "OPENRVT_Abertura")
+                if datos_vano:
+                    psets["OPENRVT_Abertura"] = datos_vano
+                break
+
         salida = {
             "globalid": _texto(elemento.GlobalId),
             "clase": elemento.is_a(),
