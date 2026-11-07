@@ -305,6 +305,8 @@ class ModeloNucleo(
         # O012: los archivos anteriores pueden traer vigas encimadas; se recortan
         # al abrir sin perder elementos.
         self._recalcular_uniones_estructura()
+        # O050: las losas con el punto de cierre repetido se reparan sin aviso.
+        self._reparar_losas_antiguas()
         # O045: los archivos con la regla vieja (muro cortado por su cerramiento)
         # recuperan la altura de sus propias restricciones, en un solo paso.
         migracion = self._restaurar_altura_muros_embebidos()

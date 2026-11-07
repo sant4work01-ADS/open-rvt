@@ -4630,8 +4630,63 @@ export function Visor3D({
         }
       }
     }
-    if (herramienta === "losa" && puntosHerramienta.length >= 2) {
-      polilinea(puntosHerramienta, puntosHerramienta.length >= 3);
+    if (herramienta === "losa" && puntosHerramienta.length > 0) {
+      // O050: polígono sombreado y cerrado hasta el cursor; el vértice de cierre
+      // nunca forma parte del contorno guardado.
+      const conCursor =
+        ratonHerramienta &&
+        Math.hypot(
+          ratonHerramienta[0] - puntosHerramienta[puntosHerramienta.length - 1][0],
+          ratonHerramienta[1] - puntosHerramienta[puntosHerramienta.length - 1][1],
+        ) > 1e-6
+          ? [...puntosHerramienta, ratonHerramienta]
+          : puntosHerramienta;
+      if (conCursor.length >= 3) {
+        const forma = new THREE.Shape();
+        forma.moveTo(conCursor[0][0], conCursor[0][1]);
+        for (const [x, y] of conCursor.slice(1)) forma.lineTo(x, y);
+        forma.closePath();
+        const malla = new THREE.Mesh(
+          new THREE.ShapeGeometry(forma),
+          new THREE.MeshBasicMaterial({
+            color: 0xf59e0b,
+            transparent: true,
+            opacity: 0.2,
+            depthTest: false,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+          }),
+        );
+        malla.position.z = z;
+        malla.renderOrder = 11;
+        grupoLocal.add(malla);
+      }
+      polilinea(conCursor, conCursor.length >= 3);
+      const sobrePrimero =
+        conCursor.length >= 3 &&
+        ratonHerramienta !== null &&
+        metrosPorPixel > 0 &&
+        Math.hypot(
+          ratonHerramienta[0] - puntosHerramienta[0][0],
+          ratonHerramienta[1] - puntosHerramienta[0][1],
+        ) <=
+          12 * metrosPorPixel;
+      if (sobrePrimero) {
+        const marca = new THREE.Mesh(
+          new THREE.CircleGeometry(tamano * 0.55, 24),
+          new THREE.MeshBasicMaterial({
+            color: 0x16a34a,
+            transparent: true,
+            opacity: 0.9,
+            depthTest: false,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+          }),
+        );
+        marca.position.set(puntosHerramienta[0][0], puntosHerramienta[0][1], z + 0.002);
+        marca.renderOrder = 15;
+        grupoLocal.add(marca);
+      }
     }
     if (puntosHerramienta.length > 0) {
       for (const [x, y] of puntosHerramienta) {
@@ -6857,6 +6912,16 @@ export function Visor3D({
         fijarPistaTab(textoPistaTab(siguiente));
         onSeleccionar(siguiente.globalid);
         return;
+      }
+      // O050: Espacio cierra la losa en curso (mínimo tres vértices).
+      if (evento.code === "Space" && herramienta === "losa") {
+        const estadoLosa = useModelo.getState();
+        if (estadoLosa.puntosHerramienta.length > 0) {
+          evento.preventDefault();
+          evento.stopPropagation();
+          void estadoLosa.dobleClicEnPlanta();
+          return;
+        }
       }
       if (evento.code === "Space") {
         espacio.current = true;

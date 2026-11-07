@@ -388,6 +388,15 @@ class Servidor:
             return self._exigir().soltar_enlace(
                 str(params.get("globalid") or params.get("elemento") or "")
             )
+        if metodo in (
+            "restricciones.editar_varios",
+            "elementos.restricciones_varios",
+        ):
+            return self._exigir().restricciones_editar_varios(
+                params.get("globalids") or params.get("elementos") or [],
+                params.get("nivel_base"),
+                params.get("desfase_base"),
+            )
         if metodo in ("restricciones.editar", "elementos.restricciones"):
             return self._exigir().restricciones_editar(
                 str(params.get("globalid") or ""),

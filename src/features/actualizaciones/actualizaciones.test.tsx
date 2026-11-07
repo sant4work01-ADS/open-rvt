@@ -219,6 +219,13 @@ describe("CA-8 · Linux descarga aparte", () => {
 
   it("en Tauri/Linux el diálogo ofrece Descargar en vez de instalar", async () => {
     (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
+    // La suite corre también en Windows: se simula el user agent de Linux que
+    // es lo que mira `esLinux()`.
+    const uaOriginal = navigator.userAgent;
+    Object.defineProperty(window.navigator, "userAgent", {
+      configurable: true,
+      value: "Mozilla/5.0 (X11; Linux x86_64)",
+    });
     try {
       useActualizaciones.getState().fijarServicio(servicioFalso().servicio);
       useActualizaciones.setState({
@@ -233,6 +240,10 @@ describe("CA-8 · Linux descarga aparte", () => {
       );
     } finally {
       delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+      Object.defineProperty(window.navigator, "userAgent", {
+        configurable: true,
+        value: uaOriginal,
+      });
     }
   });
 });

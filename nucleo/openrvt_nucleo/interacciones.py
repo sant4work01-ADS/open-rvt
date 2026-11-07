@@ -262,6 +262,9 @@ class InteraccionesMixin:
         self._regenerar_estructura(castillo)
         self._guardar_liga(castillo, {"Muro": _gid(muro), "Distancia": distancia})
         self._conectar(castillo, muro)
+        # O050: si el muro ya tiene cerramiento, el castillo nace en su cara
+        # inferior aunque se coloque después del cerramiento.
+        self._actualizar_castillos(muro)
         # O012b: con B/H del muro ya fijados, se recortan las vigas y el muro vecino.
         # O041: en la colocación por lotes se recalcula una sola vez al final.
         if recalcular:
@@ -634,6 +637,10 @@ class InteraccionesMixin:
                     tipo_entidad, None, px1, py1, px2, py2, restriccion
                 )
             )
+        # O050: los castillos de los muros tocados bajan a la cara inferior del
+        # cerramiento recién creado.
+        for muro in {id(tramo["muro"]): tramo["muro"] for tramo in tramos}.values():
+            self._actualizar_castillos(muro)
         self.con_cambios = True
         if len(creados) == 1 and creados[0] is not None:
             datos_viga = self._leer_pset(creados[0], "OPENRVT_Estructura")
@@ -860,19 +867,39 @@ class InteraccionesMixin:
         self._regenerar_estructura(elemento)
 
     def _actualizar_castillos(self, muro: Any) -> None:
-        """O045: los castillos van embebidos y llegan a la altura del muro.
+        """O050: el castillo llega a la cara inferior del cerramiento del muro.
 
-        Ya no terminan en la cara inferior del cerramiento: el muro no se corta y
-        el castillo ocupa todo el alto del muro como pieza embebida.
+        Sin cerramiento llega al tope del muro. Si el cerramiento queda por
+        encima del muro, el castillo no lo atraviesa: termina en la corona.
         """
         datos = self._datos_muro(muro)
+        tope = datos["z"] + datos["altura"]
+        fondos: list[float] = []
+        for dependiente in self._dependientes_de(muro):
+            if (
+                self._estructura_de_tipo(self._tipo_entidad(dependiente))
+                != "cerramiento"
+            ):
+                continue
+            try:
+                restriccion = self._restricciones_de(dependiente)
+                nivel = self._nivel_por_gid(_texto(restriccion.get("NivelBase")))
+                cara_superior = float(nivel.Elevation or 0.0) + float(
+                    restriccion.get("DesfaseBase") or 0.0
+                )
+                fondo = cara_superior - self._peralte_de(dependiente)
+            except Exception:
+                continue
+            if datos["z"] + TOLERANCIA_CALCULO < fondo < tope - TOLERANCIA_CALCULO:
+                fondos.append(fondo)
+        tope_castillo = min([tope, *fondos])
         for castillo in self._dependientes_de(muro):
             if self._estructura_de_tipo(self._tipo_entidad(castillo)) != "castillo":
                 continue
             pset = {
                 **self._leer_pset(castillo, "OPENRVT_Estructura"),
                 "Base": datos["z"],
-                "Altura": max(datos["altura"], 0.05),
+                "Altura": max(tope_castillo - datos["z"], 0.05),
             }
             self._guardar_pset(castillo, "OPENRVT_Estructura", pset)
             self._regenerar_estructura(castillo)
@@ -1745,12 +1772,11 @@ class InteraccionesMixin:
                 )
                 u1 = distancia - ancho / 2.0
                 u2 = distancia + ancho / 2.0
-                z0 = max(float(datos["z"]), float(pset.get("Base") or datos["z"]))
-                z1 = min(
-                    float(datos["z"]) + float(datos["altura"]),
-                    float(pset.get("Base") or datos["z"])
-                    + float(pset.get("Altura") or alto),
-                )
+                # O050: el castillo ya no atraviesa el cerramiento, pero la huella
+                # del muro lo excluye en todo su alto; para descontar bien el
+                # cerramiento se proyecta el castillo a la altura completa.
+                z0 = float(datos["z"])
+                z1 = float(datos["z"]) + float(datos["altura"])
             u1, u2 = max(0.0, min(u1, u2)), min(datos["longitud"], max(u1, u2))
             if u2 - u1 <= TOLERANCIA_CALCULO or z1 - z0 <= TOLERANCIA_CALCULO:
                 continue

@@ -688,6 +688,16 @@ class ModeladoMixin:
                     ("DesfaseBase", "NivelTope", "DesfaseTope", "AlturaSinConexion"),
                 )
             self._regenerar_estructura(elemento)
+            # O050: el castillo del muro sigue a la cara inferior del cerramiento
+            # en la misma instantánea (un solo paso de Deshacer).
+            muro_liga = self._muro_ligado_de(elemento)
+            if muro_liga:
+                try:
+                    self._actualizar_castillos(
+                        self._entidad_por_gid(muro_liga, ("IfcWall",))
+                    )
+                except Exception:
+                    LOG.debug("no se pudieron actualizar los castillos", exc_info=True)
             # O045: el cerramiento va embebido; no cambia la altura del muro.
             # O035: al cambiar el desplante o la posición de la cimentación, los
             # muros que se apoyan en ella recalculan su base.
@@ -1570,6 +1580,70 @@ class ModeladoMixin:
         self.con_cambios = True
         return self._resultado(
             modificados=[entidad], mensaje="Restricciones actualizadas."
+        )
+
+    def restricciones_editar_varios(
+        self,
+        globalids: Any,
+        nivel_base: str | None = None,
+        desfase_base: float | None = None,
+    ) -> dict[str, Any]:
+        """O050: mueve varios cerramientos de nivel en un solo paso de Deshacer.
+
+        Se valida cada cerramiento antes de tocar el modelo; si uno no es un
+        cerramiento o el nivel no existe, no se cambia ninguno.
+        """
+        self._exigir_modelo()
+        if isinstance(globalids, str):
+            globalids = [globalids]
+        if not isinstance(globalids, (list, tuple)) or not globalids:
+            raise self._error("Seleccione al menos un cerramiento.", -32602)
+        nivel = None
+        if nivel_base is not None:
+            nivel = self._nivel_por_gid(str(nivel_base))
+        try:
+            desfase = None if desfase_base is None else float(desfase_base)
+        except (TypeError, ValueError) as exc:
+            raise self._error("El desfase de base no es un número.", -32602) from exc
+        cambios: list[tuple[Any, dict[str, Any]]] = []
+        vistos: set[str] = set()
+        for gid in globalids:
+            entidad = self._entidad_por_gid(str(gid), ("IfcBeam",))
+            if _gid(entidad) in vistos:
+                continue
+            vistos.add(_gid(entidad))
+            if self._estructura_de_tipo(self._tipo_entidad(entidad)) != "cerramiento":
+                raise self._error(
+                    f"«{_nombre(entidad)}» no es un cerramiento.", -32602
+                )
+            restriccion = dict(self._restricciones_de(entidad))
+            if nivel is not None:
+                restriccion["NivelBase"] = _gid(nivel)
+            if desfase is not None:
+                restriccion["DesfaseBase"] = desfase
+            if not _texto(restriccion.get("NivelBase")):
+                raise self._error(
+                    f"El cerramiento «{_nombre(entidad)}» no tiene nivel.", -32602
+                )
+            cambios.append((entidad, restriccion))
+        self._instantanea()
+        try:
+            for entidad, restriccion in cambios:
+                self._aplicar_restriccion(entidad, restriccion)
+                spatial_api.assign_container(
+                    self.modelo,
+                    products=[entidad],
+                    relating_structure=self._nivel_por_gid(
+                        _texto(restriccion.get("NivelBase"))
+                    ),
+                )
+        except Exception:
+            self._revertir_instantanea()
+            raise
+        self.con_cambios = True
+        return self._resultado(
+            modificados=[entidad for entidad, _ in cambios],
+            mensaje=f"{len(cambios)} cerramiento(s) actualizado(s).",
         )
 
     # --------------------------------------------------- O028: enlaces a ejes
@@ -4833,6 +4907,84 @@ class ModeladoMixin:
         """O032: intercambia los lados exterior/interior sin mover la línea."""
         return self.elemento_editar(globalid, {"voltear": True})
 
+    def _reparar_contorno_losa(self, losa: Any) -> bool:
+        """O050: quita el punto de cierre repetido de una losa guardada.
+
+        El contorno y sus bordes se sanean con ``_limpiar_anillo``; el borde
+        degenerado que dejaba el clic sobre el primer vértice se descarta y los
+        lados reales conservan su referencia y su desfase.
+        """
+        datos = dict(self._leer_pset(losa, "OPENRVT_Losa"))
+        if not datos:
+            return False
+        crudo = datos.get("Contorno")
+        if crudo:
+            try:
+                from shapely import wkt
+
+                puntos = [
+                    (float(p[0]), float(p[1]))
+                    for p in wkt.loads(str(crudo)).exterior.coords[:-1]
+                ]
+            except Exception:
+                puntos = self._poligono_de_losa(losa)
+        else:
+            puntos = self._poligono_de_losa(losa)
+        limpios = _limpiar_anillo(list(puntos))
+        if len(limpios) < 3:
+            return False
+        cambio = len(limpios) != len(puntos) or int(datos.get("Puntos") or 0) != len(
+            limpios
+        )
+        bordes: list[dict[str, Any]] | None = None
+        crudo_bordes = datos.get("Bordes")
+        if crudo_bordes:
+            if isinstance(crudo_bordes, str):
+                try:
+                    crudo_bordes = json.loads(crudo_bordes)
+                except Exception:
+                    crudo_bordes = None
+            if isinstance(crudo_bordes, list):
+                bordes = [dict(b) for b in crudo_bordes if isinstance(b, dict)]
+                if len(bordes) != len(limpios):
+                    filtrados = []
+                    for borde in bordes:
+                        a = borde.get("punto_a")
+                        b = borde.get("punto_b")
+                        try:
+                            cero = (
+                                a is not None
+                                and b is not None
+                                and math.hypot(float(a[0]) - float(b[0]), float(a[1]) - float(b[1]))
+                                <= 1e-7
+                            )
+                        except (TypeError, ValueError, IndexError):
+                            cero = False
+                        if not cero:
+                            filtrados.append(borde)
+                    bordes = filtrados if len(filtrados) == len(limpios) else None
+        if bordes is not None:
+            normalizados = self._normalizar_bordes_losa(bordes, limpios)
+            datos["Bordes"] = json.dumps(normalizados, ensure_ascii=False)
+        elif "Bordes" in datos and len(crudo_bordes or []) != len(limpios):
+            datos.pop("Bordes", None)
+        if cambio or bordes is not None:
+            from shapely.geometry import Polygon
+
+            datos["Contorno"] = Polygon(limpios).wkt
+            datos["Puntos"] = len(limpios)
+            self._guardar_pset(losa, "OPENRVT_Losa", datos)
+            self._regenerar_losa(losa)
+            return True
+        return False
+
+    def _reparar_losas_antiguas(self) -> int:
+        reparadas = 0
+        for losa in self.modelo.by_type("IfcSlab"):
+            if self._reparar_contorno_losa(losa):
+                reparadas += 1
+        return reparadas
+
     def _regenerar_losa(self, losa: Any) -> None:
         """O012b: recorta la losa en planta contra trabes y columnas."""
         self._anotar_rebote(losa)
@@ -4894,6 +5046,10 @@ class ModeladoMixin:
             desfase = float(desfase)
         except (TypeError, ValueError, IndexError) as exc:
             raise self._error("El contorno de la losa no es válido.", -32602) from exc
+        # O050: cualquier cliente (pantalla, asistente o importación) entrega el
+        # contorno por el mismo saneado; el punto de cierre repetido nunca cuenta
+        # como un lado más.
+        poligono = _limpiar_anillo(poligono)
         if len(poligono) < 3:
             raise self._error("La losa necesita al menos tres vértices.", -32602)
         if abs(_poligono_area(poligono)) <= TOLERANCIA_CALCULO:
@@ -5375,6 +5531,44 @@ class ModeladoMixin:
                     "La abertura se traslapa con otra abertura del mismo muro.", -32024
                 )
 
+        # O050: una abertura que invade el cerramiento se crea igual; solo se
+        # avisa con la cara inferior del cerramiento (nunca se bloquea por eso).
+        aviso_cerramiento = ""
+        for dependiente in self._dependientes_de(muro_entidad):
+            if (
+                self._estructura_de_tipo(self._tipo_entidad(dependiente))
+                != "cerramiento"
+            ):
+                continue
+            liga = self._leer_liga(dependiente)
+            inicio_cerramiento = float(liga.get("Inicio") or 0.0)
+            fin_cerramiento = float(
+                liga.get("Fin") or datos_muro["longitud"]
+            )
+            if (
+                min(fin, fin_cerramiento) - max(distancia, inicio_cerramiento)
+                <= TOLERANCIA
+            ):
+                continue
+            try:
+                restriccion = self._restricciones_de(dependiente)
+                nivel = self._nivel_por_gid(_texto(restriccion.get("NivelBase")))
+                cara_superior = float(nivel.Elevation or 0.0) + float(
+                    restriccion.get("DesfaseBase") or 0.0
+                )
+                cara_inferior = cara_superior - self._peralte_de(dependiente)
+            except Exception:
+                continue
+            if (
+                cara_inferior < antepecho + alto - TOLERANCIA
+                and cara_superior > antepecho + TOLERANCIA
+            ):
+                aviso_cerramiento = (
+                    "La abertura invade el cerramiento "
+                    f"(cara inferior a {cara_inferior:.2f} m)."
+                )
+                break
+
         self._instantanea()
         vano = root.create_entity(self.modelo, ifc_class="IfcOpeningElement")
         vano.Name = "Vano"
@@ -5434,7 +5628,11 @@ class ModeladoMixin:
         return self._resultado(
             [vano, relleno],
             modificados=[muro_entidad],
-            mensaje=f"{'Puerta' if clase == 'IfcDoor' else 'Ventana'} colocada a {distancia:.2f} m.",
+            mensaje=(
+                f"{'Puerta' if clase == 'IfcDoor' else 'Ventana'} colocada a "
+                f"{distancia:.2f} m."
+                + (f" {aviso_cerramiento}" if aviso_cerramiento else "")
+            ),
         )
 
     # ------------------------------------------------------------------ edición general
@@ -6675,6 +6873,9 @@ class ModeladoMixin:
                     self._regenerar_relleno(relleno, vano)
                     modificados.append(relleno)
         elif entidad.is_a("IfcSlab"):
+            # O050: toda edición sanea antes el contorno viejo; si no, un borde
+            # de cierre repetido haría fallar «cambio_borde» para siempre.
+            self._reparar_contorno_losa(entidad)
             datos = self._leer_pset(entidad, "OPENRVT_Losa")
             poligono = self._poligono_de_losa(entidad)
             bordes_actuales = self._bordes_de_losa(entidad) or self._normalizar_bordes_losa(
@@ -6924,10 +7125,11 @@ class ModeladoMixin:
             try:
                 from shapely import wkt
 
-                return [
+                puntos = [
                     (float(p[0]), float(p[1]))
                     for p in wkt.loads(str(datos["Contorno"])).exterior.coords[:-1]
                 ]
+                return _limpiar_anillo(puntos)
             except Exception:
                 pass
         try:
@@ -6940,7 +7142,7 @@ class ModeladoMixin:
                 if len(coords) >= 2:
                     puntos.append((float(coords[0]), float(coords[1])))
             if len(puntos) >= 3:
-                return puntos
+                return _limpiar_anillo(puntos)
         except Exception:
             pass
         return [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]

@@ -9,6 +9,7 @@ las instancias se regenera al editar el tipo; el eje queda fijo según
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Iterable
 
 import ifcopenshell
@@ -16,6 +17,8 @@ import ifcopenshell.api.material as material_api
 import ifcopenshell.api.root as root
 import ifcopenshell.api.type as type_api
 import ifcopenshell.guid
+
+LOG = logging.getLogger(__name__)
 
 CORE = "núcleo"
 FUNCIONES = ("núcleo", "acabado", "aislante", "membrana")
@@ -1364,6 +1367,19 @@ class BibliotecaMixin:
             for instancia in modificados:
                 self._regenerar_estructura(instancia)
                 self._recolocar_cerramiento_vertical(instancia)
+                # O050: si cambia el peralte de un cerramiento, el castillo del
+                # muro sigue su nueva cara inferior.
+                muro_liga = self._muro_ligado_de(instancia)
+                if muro_liga:
+                    try:
+                        self._actualizar_castillos(
+                            self._entidad_por_gid(muro_liga, ("IfcWall",))
+                        )
+                    except Exception:
+                        LOG.debug(
+                            "no se pudieron actualizar los castillos del cerramiento",
+                            exc_info=True,
+                        )
             # O035: si cambia el peralte de la cimentación, los muros encima
             # vuelven a calcular su base.
             if cambio_geometria and alias in ("contratrabe", "zapata_corrida"):

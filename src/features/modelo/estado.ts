@@ -39,6 +39,7 @@ import {
   ejeBajoPunto,
   ejeConDistancia,
   ejeOrtogonal,
+  esCierreLosa,
   muroBajoPunto,
   opcionesCerramientoEnVista,
   puntoConLongitud,
@@ -490,6 +491,11 @@ interface EstadoModelo {
       /** O033: solo zapatas. */
       desplante?: number;
     },
+  ) => Promise<void>;
+  /** O050: mueve varios cerramientos de nivel en un solo paso de deshacer. */
+  editarRestriccionesVarios: (
+    globalids: string[],
+    cambios: { nivel_base?: string; desfase_base?: number },
   ) => Promise<void>;
 
   nuevo: () => Promise<boolean>;
@@ -1985,7 +1991,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       }
       const nombres: Record<Herramienta, string> = {
         muro: "Muro: primer punto en la planta.",
-        losa: "Losa: clic por vértice y doble clic para cerrar.",
+        losa: "Losa: clic por vértice. Clic en el primero, Enter o doble clic para cerrar.",
         puerta: "Puerta: clic sobre un muro. Espacio voltea el lado.",
         ventana: "Ventana: clic sobre un muro. Espacio voltea el lado.",
         eje: "Eje: dos clics. La etiqueta se asigna sola.",
@@ -2283,6 +2289,23 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     cancelarTrazo: () => {
       const herramienta = get().herramienta;
       if (!herramienta) return false;
+      // O050: Esc en la losa quita sólo el último vértice; sin vértices sale de
+      // la herramienta (nunca borra el contorno completo de golpe).
+      if (herramienta === "losa") {
+        const puntos = get().puntosHerramienta;
+        if (puntos.length === 0) return false;
+        const resto = puntos.slice(0, -1);
+        set({
+          puntosHerramienta: resto,
+          longitudTecleada: "",
+          aviso:
+            resto.length > 0
+              ? `Losa: ${resto.length} vértices. Clic en el primero, Enter o doble clic para cerrar.`
+              : null,
+        });
+        bitacoraHerramienta(herramienta, "cancelar_trazo");
+        return resto.length > 0;
+      }
       if (get().puntosHerramienta.length === 0 && !get().longitudTecleada) {
         return false;
       }
@@ -2667,6 +2690,23 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         return;
       }
       if (herramienta === "losa") {
+        // O050: con longitud tecleada, Enter agrega el vértice a esa distancia;
+        // con el campo vacío, cierra el polígono.
+        const texto = get().longitudTecleada.replace(",", ".");
+        const longitud = Number(texto);
+        if (texto !== "" && Number.isFinite(longitud) && longitud > 0) {
+          const origen = puntos[puntos.length - 1];
+          const raton = get().ratonHerramienta ?? origen;
+          const destino = puntoConLongitud(origen, raton, longitud, shift);
+          if (Math.hypot(destino[0] - origen[0], destino[1] - origen[1]) > 0.001) {
+            set({
+              puntosHerramienta: [...puntos, destino],
+              longitudTecleada: "",
+              aviso: `Losa: ${puntos.length + 1} vértices. Clic en el primero, Enter o doble clic para cerrar.`,
+            });
+          }
+          return;
+        }
         await get().dobleClicEnPlanta();
         return;
       }
@@ -2879,6 +2919,12 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         return;
       }
       if (herramienta === "losa") {
+        // O050: clic sobre el primer vértice (12 px) cierra; nunca se agrega el
+        // vértice de cierre al contorno.
+        if (esCierreLosa(puntos, p, metrosPorPixel ?? 0)) {
+          await get().dobleClicEnPlanta();
+          return;
+        }
         const repetido =
           puntos.length > 0 &&
           Math.hypot(p[0] - puntos[puntos.length - 1][0], p[1] - puntos[puntos.length - 1][1]) <
@@ -2886,7 +2932,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         if (!repetido) {
           set({
             puntosHerramienta: [...puntos, p],
-            aviso: `Losa: ${puntos.length + 1} vértice(s); doble clic para cerrar.`,
+            aviso: `Losa: ${puntos.length + 1} vértices. Clic en el primero, Enter o doble clic para cerrar.`,
           });
         }
         return;
@@ -3441,6 +3487,17 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       const ok = await ejecutar("restricciones.editar", { globalid, ...cambios });
       if (ok) await get().seleccionar(globalid);
       else await refrescarPropiedades(globalid);
+    },
+
+    editarRestriccionesVarios: async (globalids, cambios) => {
+      // O050: el núcleo aplica todos los cambios con una sola instantánea.
+      const ok = await ejecutar("restricciones.editar_varios", {
+        globalids,
+        ...cambios,
+      });
+      const elegido = globalids[globalids.length - 1];
+      if (ok) await get().seleccionarVarios(globalids);
+      else if (elegido) await refrescarPropiedades(elegido);
     },
 
     comprobarNucleo: async () => {
