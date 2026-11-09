@@ -230,15 +230,18 @@ async function activar(ses, testid, espera = 400) {
   }
 
   const grupos = await ses.driver.executeScript(() =>
-    Array.from(document.querySelectorAll('[data-grupo][data-colapsado="1"]')).map(
-      (g) => g.getAttribute("data-grupo"),
-    ),
+    Array.from(
+      document.querySelectorAll('[data-testid^="grupo-"][data-colapsado="1"]'),
+    ).map((g) => g.getAttribute("data-grupo") ?? g.getAttribute("data-testid")),
   );
   for (const nombre of grupos) {
     const abierto = await ses.driver.executeScript((nombre) => {
       const grupo = Array.from(
-        document.querySelectorAll('[data-grupo][data-colapsado="1"]'),
-      ).find((g) => g.getAttribute("data-grupo") === nombre);
+        document.querySelectorAll('[data-testid^="grupo-"][data-colapsado="1"]'),
+      ).find(
+        (g) =>
+          (g.getAttribute("data-grupo") ?? g.getAttribute("data-testid")) === nombre,
+      );
       const boton = grupo?.querySelector("button");
       if (!boton) return false;
       boton.click();
