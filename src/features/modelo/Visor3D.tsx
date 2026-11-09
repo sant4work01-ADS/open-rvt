@@ -6155,11 +6155,14 @@ export function Visor3D({
       const malla = mallas.find((m) => m.globalid === gid);
       if (!malla) return null;
       const candidatos = cacheCandidatos.current.obtener(malla, mallas);
+      // Margen de 0.05 m: cerca de aristas, esquinas y bordes sigue mandando el
+      // plano con sus inferencias (O046/O049); solo el interior claro de una cara
+      // inicia el empuje.
       const cara = caraPlanaEnPunto(
         { x: impacto.point.x, y: impacto.point.y, z: impacto.point.z },
         candidatos.caras ?? [],
         1e-4,
-        0.03,
+        0.05,
       );
       if (!cara || !cara.normal) return null;
       const largo = Math.hypot(cara.normal.x, cara.normal.y, cara.normal.z);
@@ -6388,13 +6391,19 @@ export function Visor3D({
           void confirmarEmpujar();
           return;
         }
+        const res = inferenciaEmpujarEn(clientX, clientY, shift);
+        const engancha = !!(res && res.punto && res.inf.tipo && res.inf.tipo !== "plano");
         const caraHover = caraBajoCursor(clientX, clientY);
-        if (caraHover) {
+        // Las caras horizontales (tope de muro, columna, etc.) son el asa del
+        // empuje aunque un borde cercano enganche; las verticales ceden ante un
+        // enganche (O049 conserva sus puntos medios sobre bordes de losa).
+        const caraArriba = !!caraHover && Math.abs(caraHover.normal[2]) > 0.5;
+        if (
+          caraHover &&
+          caraHover.clasificacion.accion !== "ninguna" &&
+          (caraArriba || !engancha)
+        ) {
           setCaraEmpujarHover(null);
-          if (caraHover.clasificacion.accion === "ninguna") {
-            fijarAviso(caraHover.clasificacion.motivo ?? "No se puede empujar este elemento.");
-            return;
-          }
           iniciarEmpujarCara({
             globalid: caraHover.globalid,
             normal: caraHover.normal,
@@ -6408,7 +6417,7 @@ export function Visor3D({
           });
           return;
         }
-        const res = inferenciaEmpujarEn(clientX, clientY, shift);
+        setCaraEmpujarHover(null);
         if (!res || !res.punto) return;
         // O049: si el primer punto cae sobre una cara superior, el contorno se
         // dibuja en su plano y el sólido nace con ese desfase.
@@ -7329,13 +7338,18 @@ export function Visor3D({
             y: evento.clientY - rect.top,
             tooltipIzquierda: evento.clientX - rect.left > rect.width * 0.7,
           });
-          setMarcadorEmpujar(null);
-          setGuiaEmpujar(null);
-          ultimaInferenciaEmpujar.current = null;
+        } else {
+          setCaraEmpujarHover(null);
+        }
+        const res = inferenciaEmpujarEn(evento.clientX, evento.clientY, evento.shiftKey);
+        // Los enganches (vértice, arista, punto medio, cara) mandan sobre la
+        // cara que haya debajo: así O049 sigue enganchando bordes de una losa
+        // aunque el rayo roce su cara lateral.
+        if (res && res.punto && res.inf.tipo && res.inf.tipo !== "plano") {
+          moverEmpujar([res.punto.x, res.punto.y]);
           return;
         }
-        setCaraEmpujarHover(null);
-        const res = inferenciaEmpujarEn(evento.clientX, evento.clientY, evento.shiftKey);
+        if (caraHover) return;
         if (res && res.punto) {
           moverEmpujar([res.punto.x, res.punto.y]);
           return;
