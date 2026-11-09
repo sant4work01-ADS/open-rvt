@@ -49,6 +49,30 @@ TOLERANCIA_CALCULO = 1e-6
 # O016: restricciones de base y tope por nivel.
 PSET_RESTRICCIONES = "OPENRVT_Restricciones"
 
+# O059: losas por uso. La clave es lo que guarda el pset y manda el cliente.
+USOS_LOSA: dict[str, dict[str, Any]] = {
+    "firme": {
+        "etiqueta": "Firme / losa de cimentación",
+        "predefinido": "BASESLAB",
+        "nombre": "Firme",
+        "espesor": 0.10,
+    },
+    "entrepiso": {
+        "etiqueta": "Entrepiso",
+        "predefinido": "FLOOR",
+        "nombre": "Losa de entrepiso",
+        "espesor": 0.12,
+    },
+    "azotea": {
+        "etiqueta": "Azotea",
+        "predefinido": "ROOF",
+        "nombre": "Losa de azotea",
+        "espesor": 0.12,
+    },
+}
+# Nombres que puso la herramienta: solo esos se pueden reemplazar al cambiar uso.
+NOMBRES_LOSA_OMISION = frozenset(datos["nombre"] for datos in USOS_LOSA.values())
+
 
 def altura_restringida(
     elev_base: float,
@@ -3305,6 +3329,7 @@ class ModeladoMixin:
                     "z0": float(zeta0),
                     "z1": float(zeta1),
                     "losa": es_losa,
+                    "uso": self.uso_de_losa(elemento) if es_losa else None,
                 }
             )
         return salida
@@ -3391,9 +3416,11 @@ class ModeladoMixin:
             ):
                 base = max(base, zeta1)
             # Cubierta: toca la corona nominal. O045: solo la losa recorta el
-            # muro; el cerramiento va embebido.
+            # muro; el cerramiento va embebido. O059: un firme nunca cubre la
+            # corona (solo apoya), así que no la baja.
             if (
                 elemento["losa"]
+                and elemento.get("uso") != "firme"
                 and zeta1 >= corona_nominal - TOLERANCIA_CALCULO
                 and zeta0 <= corona_nominal + TOLERANCIA_CALCULO
                 and zeta0 > base_nominal + TOLERANCIA_CALCULO
@@ -5193,19 +5220,57 @@ class ModeladoMixin:
         datos["Perimetro"] = round(float(recorte.length), 9)
         self._guardar_pset(losa, "OPENRVT_Losa", datos)
 
+    def _normalizar_uso_losa(self, uso: Any) -> str:
+        """O059: clave de uso validada; cualquier otra cosa es error -32602."""
+        clave = _texto(uso).strip().lower()
+        if clave not in USOS_LOSA:
+            raise self._error(
+                "El uso de la losa no es válido; use firme, entrepiso o azotea.",
+                -32602,
+            )
+        return clave
+
+    def uso_de_losa(self, losa: Any) -> str:
+        """O059: lectura única del uso de una losa (no escribe en el modelo).
+
+        Orden: ``Uso`` del pset OPENRVT_Losa → PredefinedType (BASESLAB/ROOF) →
+        FLOOR sin Uso en el nivel más bajo del proyecto = firme; si no, entrepiso.
+        """
+        entidad = losa
+        if isinstance(losa, str):
+            entidad = self._entidad_por_gid(losa, ("IfcSlab",))
+        datos = self._leer_pset(entidad, "OPENRVT_Losa")
+        clave = _texto(datos.get("Uso")).strip().lower()
+        if clave in USOS_LOSA:
+            return clave
+        predefinido = _texto(getattr(entidad, "PredefinedType", "")).upper()
+        if predefinido == "BASESLAB":
+            return "firme"
+        if predefinido == "ROOF":
+            return "azotea"
+        nivel = self._nivel_de_elemento(entidad)
+        inferiores = self._niveles_ordenados()
+        if nivel is not None and inferiores and _gid(nivel) == _gid(inferiores[0]):
+            return "firme"
+        return "entrepiso"
+
     def losa_crear(
         self,
         nivel: str,
         puntos: Any,
-        espesor: float = 0.12,
+        espesor: float | None = None,
         desfase: float = 0.0,
         bordes: Any = None,
+        uso: str = "entrepiso",
     ) -> dict[str, Any]:
         self._exigir_modelo()
         nivel_entidad = self._nivel_por_gid(nivel)
+        clave_uso = self._normalizar_uso_losa(uso)
         try:
             poligono = [(float(p[0]), float(p[1])) for p in puntos]
-            espesor = float(espesor)
+            espesor = float(
+                USOS_LOSA[clave_uso]["espesor"] if espesor is None else espesor
+            )
             desfase = float(desfase)
         except (TypeError, ValueError, IndexError) as exc:
             raise self._error("El contorno de la losa no es válido.", -32602) from exc
@@ -5225,8 +5290,8 @@ class ModeladoMixin:
 
         self._instantanea()
         losa = root.create_entity(self.modelo, ifc_class="IfcSlab")
-        losa.Name = "Losa"
-        losa.PredefinedType = "FLOOR"
+        losa.Name = USOS_LOSA[clave_uso]["nombre"]
+        losa.PredefinedType = USOS_LOSA[clave_uso]["predefinido"]
         elevacion = float(nivel_entidad.Elevation or 0.0) + desfase
         matriz = np.identity(4)
         matriz[0][3] = 0.0
@@ -5239,6 +5304,7 @@ class ModeladoMixin:
             {
                 "Espesor": espesor,
                 "Desfase": desfase,
+                "Uso": clave_uso,
                 "Puntos": len(poligono),
                 "Contorno": Polygon(poligono).wkt,
                 "Bordes": json.dumps(bordes_normalizados, ensure_ascii=False),
@@ -5595,8 +5661,10 @@ class ModeladoMixin:
         globalids: Any,
         lado: str = "exterior",
         desfase: float = 0.0,
+        uso: str = "entrepiso",
     ) -> dict[str, Any]:
         self._exigir_modelo()
+        clave_uso = self._normalizar_uso_losa(uso)
         if not isinstance(globalids, (list, tuple)):
             raise self._error("globalids debe ser una lista de muros.", -32602)
         try:
@@ -5643,9 +5711,10 @@ class ModeladoMixin:
         return self.losa_crear(
             nivel,
             contorno,
-            espesor=0.12,
+            espesor=None,
             desfase=0.0,
             bordes=bordes_normalizados,
+            uso=clave_uso,
         )
 
     # ------------------------------------------------------------------ aberturas
@@ -7562,6 +7631,16 @@ class ModeladoMixin:
             # de cierre repetido haría fallar «cambio_borde» para siempre.
             self._reparar_contorno_losa(entidad)
             datos = self._leer_pset(entidad, "OPENRVT_Losa")
+            if "uso" in cambios or "Uso" in cambios:
+                clave_uso = self._normalizar_uso_losa(
+                    cambios.get("uso", cambios.get("Uso"))
+                )
+                nombre_actual = _texto(getattr(entidad, "Name", "")).strip()
+                entidad.PredefinedType = USOS_LOSA[clave_uso]["predefinido"]
+                if not nombre_actual or nombre_actual in NOMBRES_LOSA_OMISION:
+                    entidad.Name = USOS_LOSA[clave_uso]["nombre"]
+                datos["Uso"] = clave_uso
+                self._guardar_pset(entidad, "OPENRVT_Losa", datos)
             poligono = self._poligono_de_losa(entidad)
             bordes_actuales = self._bordes_de_losa(entidad) or self._normalizar_bordes_losa(
                 None, poligono

@@ -205,6 +205,18 @@ class MedicionMixin:
             agregar("Muro", "area_nucleo")
             return salida
         if clase == "losa":
+            if elemento is not None and elemento.is_a("IfcSlab"):
+                # O059: el uso va en el nombre para que las partidas no se sumen
+                # entre firmes, entrepisos y azoteas.
+                sufijo = {
+                    "firme": "firme",
+                    "entrepiso": "losa de entrepiso",
+                    "azotea": "losa de azotea",
+                }.get(self.uso_de_losa(elemento), "losa de entrepiso")
+                agregar(f"Área de {sufijo}", "area")
+                agregar(f"Volumen de {sufijo}", "volumen")
+                agregar(f"Cimbra de borde de {sufijo}", "cimbra_borde")
+                return salida
             agregar(NOMBRES["area"], "area")
             agregar(NOMBRES["volumen"], "volumen")
             agregar(NOMBRES["cimbra_borde"], "cimbra_borde")

@@ -158,7 +158,7 @@ def test_partidas_en_su_capitulo_y_totales_a_mano() -> None:
     losa = next(
         p
         for p in estructura["partidas"]
-        if p["nombre"] == "Volumen de concreto" and p["clave_pp"] == ""
+        if p["nombre"] == "Volumen de losa de entrepiso" and p["clave_pp"] == ""
     )
     assert losa["unidad"] == "m3"
     assert losa["total"] == pytest.approx(1.60)
