@@ -55,6 +55,7 @@ import {
   type Referencias,
 } from "./herramientas";
 import { estilosPorDefecto, normalizarEstilos, type Estilos } from "./estilos";
+import type { Nota } from "./anotaciones3d";
 import {
   alturaPermitida,
   clasificarEmpujar,
@@ -103,7 +104,8 @@ export type Herramienta =
   | "recortar_extender"
   | "espejo"
   | "matriz"
-  | "empujar";
+  | "empujar"
+  | "nota";
 export type AlineacionMuro = "centro" | "interior" | "exterior";
 /** ED1: modos de la herramienta Recortar/Extender. */
 export type ModoRecorte = "esquina" | "elemento" | "varios";
@@ -266,6 +268,10 @@ interface EstadoModelo {
   arbol: NodoArbol | null;
   /** O039: árbol del presupuesto (modo Obra) devuelto por `modelo.arbol_obra`. */
   arbolObra: ArbolObra | null;
+  /** O055: notas 3D guardadas como IfcAnnotation. */
+  notas: Nota[];
+  /** O055: nota seleccionada en el visor o en el árbol. */
+  notaSeleccionada: string | null;
   /** O039: el árbol de Obra solo se calcula con el modo Obra abierto (medir todo es caro). */
   arbolObraActivo: boolean;
   fijarArbolObraActivo: (activo: boolean) => void;
@@ -401,6 +407,16 @@ interface EstadoModelo {
   borrarSeleccion: () => Promise<void>;
   deshacer: () => Promise<void>;
   rehacer: () => Promise<void>;
+  /** O055: crea una nota y devuelve su GlobalId (o null si falló). */
+  crearNota: (
+    texto: string,
+    posicion: [number, number, number],
+    nivel?: string,
+  ) => Promise<string | null>;
+  editarNota: (globalid: string, texto: string) => Promise<void>;
+  moverNota: (globalid: string, posicion: [number, number, number]) => Promise<void>;
+  borrarNota: (globalid: string) => Promise<void>;
+  seleccionarNota: (globalid: string | null) => void;
   validar: () => Promise<void>;
   crearNivel: (
     nombre: string,
@@ -752,7 +768,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
   const cargar = async (info: RespuestaInfo) => {
     const inicio = performance.now();
     const [niveles, elementos, teselado, vistasCrudas, tipos, referenciasCrudas, estilosCrudos,
-      tiposEstructura, arbol, arbolObra] = await Promise.all([
+      tiposEstructura, arbol, arbolObra, notas] = await Promise.all([
         rpc<Nivel[]>("modelo.niveles"),
         rpc<Elemento[]>("modelo.elementos"),
         rpc<RespuestaTeselado>("geometria.teselar", { globalids: null }),
@@ -767,6 +783,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         get().arbolObraActivo
           ? rpc<ArbolObra>("modelo.arbol_obra").catch(() => null)
           : Promise.resolve(null),
+        rpc<Nota[]>("notas.listar").catch(() => []),
       ]);
     const mallas = teselado.elementos.map(decodificarMalla);
     const caja = cajaDeMallas(mallas);
@@ -806,6 +823,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       aberturas,
       arbol,
       arbolObra,
+      notas,
       vistasPersistidas: persistidas,
       vistaActivaId: activa?.id ?? null,
       seleccion: null,
@@ -899,7 +917,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
   const refrescarDeComando = async (resultado: RespuestaComando) => {
     const tocados = [...new Set([...(resultado.creados ?? []), ...(resultado.modificados ?? [])])];
     const borrados = new Set(resultado.borrados ?? []);
-    const [info, niveles, elementos, referenciasCrudas, teselado, arbol, arbolObra] =
+    const [info, niveles, elementos, referenciasCrudas, teselado, arbol, arbolObra, notas] =
       await Promise.all([
       rpc<RespuestaInfo>("proyecto.info"),
       rpc<Nivel[]>("modelo.niveles"),
@@ -912,6 +930,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       get().arbolObraActivo
         ? rpc<ArbolObra>("modelo.arbol_obra").catch(() => get().arbolObra)
         : Promise.resolve(null),
+      rpc<Nota[]>("notas.listar").catch(() => get().notas),
       ]);
     let mallas = get().mallas.filter(
       (m) => !borrados.has(m.globalid) && !tocados.includes(m.globalid),
@@ -933,6 +952,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       aberturas,
       arbol,
       arbolObra,
+      notas,
       seleccion,
       seleccionados,
       propiedades: seleccion ? get().propiedades : null,
@@ -1447,6 +1467,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     aberturas: [],
     arbol: null,
     arbolObra: null,
+    notas: [],
+    notaSeleccionada: null,
     arbolObraActivo: false,
     fijarArbolObraActivo: (activo) => {
       if (get().arbolObraActivo === activo) return;
@@ -1977,6 +1999,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         !vista ||
         (vista.tipo !== "planta" &&
           herramienta !== "alinear" &&
+          herramienta !== "nota" &&
           !(
             (herramienta === "mover" || herramienta === "copiar") &&
             (vista.tipo === "alzado" || vista.tipo === "corte")
@@ -2011,6 +2034,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         espejo: "Espejo: clic en un eje o en un elemento lineal; o dos puntos del eje.",
         matriz: "Matriz: lineal con dos puntos o polar con un clic en el centro.",
         empujar: "Empujar/Tirar: clic en una esquina del nivel activo; luego la opuesta.",
+        nota: "Nota: clic en el punto donde va el texto; Enter confirma y Esc cancela.",
       };
       const conservarSeleccion =
         herramienta === "mover" ||
@@ -3082,6 +3106,11 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     voltearAbertura: () => set({ voltearSiguiente: !get().voltearSiguiente }),
 
     borrarSeleccion: async () => {
+      const nota = get().notaSeleccionada;
+      if (nota) {
+        await get().borrarNota(nota);
+        return;
+      }
       const gids = get().seleccionados;
       if (gids.length === 0) {
         set({ aviso: "Seleccione uno o varios elementos para borrar." });
@@ -3123,6 +3152,82 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         set({ error: e instanceof Error ? e.message : String(e) });
       }
     },
+
+    crearNota: async (texto, posicion, nivel) => {
+      try {
+        const resultado = await rpc<RespuestaComando>("notas.crear", {
+          texto,
+          x: posicion[0],
+          y: posicion[1],
+          z: posicion[2],
+          nivel: nivel ?? "",
+        });
+        const [notas, arbol] = await Promise.all([
+          rpc<Nota[]>("notas.listar"),
+          rpc<NodoArbol>("modelo.arbol").catch(() => get().arbol),
+        ]);
+        set({
+          notas,
+          arbol,
+          conCambios: true,
+          aviso: resultado.mensaje ?? "Nota creada.",
+          error: null,
+        });
+        return resultado.creados?.[0] ?? null;
+      } catch (e) {
+        set({ error: e instanceof Error ? e.message : String(e) });
+        return null;
+      }
+    },
+
+    editarNota: async (globalid, texto) => {
+      try {
+        const resultado = await rpc<RespuestaComando>("notas.editar", { globalid, texto });
+        const notas = await rpc<Nota[]>("notas.listar");
+        const arbol = await rpc<NodoArbol>("modelo.arbol").catch(() => get().arbol);
+        set({ notas, arbol, conCambios: true, aviso: resultado.mensaje ?? "Nota editada." });
+      } catch (e) {
+        set({ error: e instanceof Error ? e.message : String(e) });
+      }
+    },
+
+    moverNota: async (globalid, posicion) => {
+      try {
+        const resultado = await rpc<RespuestaComando>("notas.mover", {
+          globalid,
+          x: posicion[0],
+          y: posicion[1],
+          z: posicion[2],
+        });
+        const notas = await rpc<Nota[]>("notas.listar");
+        const arbol = await rpc<NodoArbol>("modelo.arbol").catch(() => get().arbol);
+        set({ notas, arbol, conCambios: true, aviso: resultado.mensaje ?? "Nota movida." });
+      } catch (e) {
+        set({ error: e instanceof Error ? e.message : String(e) });
+      }
+    },
+
+    borrarNota: async (globalid) => {
+      try {
+        const resultado = await rpc<RespuestaComando>("notas.borrar", { globalid });
+        const [notas, arbol] = await Promise.all([
+          rpc<Nota[]>("notas.listar"),
+          rpc<NodoArbol>("modelo.arbol").catch(() => get().arbol),
+        ]);
+        set({
+          notas,
+          arbol,
+          notaSeleccionada: null,
+          conCambios: true,
+          aviso: resultado.mensaje ?? "Nota borrada.",
+        });
+      } catch (e) {
+        set({ error: e instanceof Error ? e.message : String(e) });
+      }
+    },
+
+    seleccionarNota: (globalid) =>
+      set({ notaSeleccionada: globalid, seleccion: null, seleccionados: [] }),
 
     validar: async () => {
       try {

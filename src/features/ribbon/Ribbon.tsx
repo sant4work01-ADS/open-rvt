@@ -27,6 +27,7 @@ import { tr } from "@/i18n";
 const PESTANAS = (): { id: PestanaRibbon; texto: string }[] => [
   { id: "principal", texto: tr("ribbon.pestanasNombres.inicio", "Inicio") },
   { id: "modelar", texto: tr("ribbon.pestanasNombres.modelar", "Modelar") },
+  { id: "anotar", texto: tr("ribbon.pestanasNombres.anotar", "Anotar") },
   { id: "vista", texto: tr("ribbon.pestanasNombres.vista", "Vista") },
 ];
 

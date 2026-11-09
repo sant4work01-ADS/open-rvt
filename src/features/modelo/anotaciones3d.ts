@@ -49,6 +49,23 @@ export interface Cota3D {
   textoPos: Punto3;
 }
 
+export interface ConmutadoresAnotaciones3D {
+  ejes: boolean;
+  niveles: boolean;
+  cotas: boolean;
+  notas: boolean;
+}
+
+/** Estado de las 4 casillas de una vista 3D; las notas vienen encendidas. */
+export function conmutadoresAnotaciones3D(vista: Vista): ConmutadoresAnotaciones3D {
+  return {
+    ejes: vista.ejes3d === true,
+    niveles: vista.niveles3d === true,
+    cotas: vista.cotas3d === true,
+    notas: vista.notas3d !== false,
+  };
+}
+
 /** Elevación del nivel más bajo del modelo; 0 si no hay niveles. */
 export function elevacionBaseNiveles(niveles: Nivel[]): number {
   if (niveles.length === 0) return 0;

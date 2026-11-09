@@ -108,6 +108,15 @@ import {
 } from "./orbita";
 import { DESFASE_NOMBRE_CABEZA, elevacionDesdeCota, normalizarAjusteNivel } from "./niveles";
 import { baseTextoAnotacion } from "./anotacion";
+import {
+  calcularCotas3d,
+  calcularEjes3d,
+  calcularNiveles3d,
+  conmutadoresAnotaciones3D,
+  elevacionBaseNiveles,
+  notaVisibleEnVista,
+  type Nota,
+} from "./anotaciones3d";
 import { calcularLayoutAlzado, enlazarTramosCota, formatearNumero, segmentosTrazoPunto } from "./anotacionVista";
 import {
   categoriaOculta,
@@ -1221,6 +1230,13 @@ export function Visor3D({
   const opcionesNivel = useModelo((s) => s.opcionesNivel);
   const cotasNivel = useModelo((s) => s.cotasNivel);
   const dobleClicEnPlanta = useModelo((s) => s.dobleClicEnPlanta);
+  const notas = useModelo((s) => s.notas);
+  const notaSeleccionada = useModelo((s) => s.notaSeleccionada);
+  const seleccionarNota = useModelo((s) => s.seleccionarNota);
+  const crearNota = useModelo((s) => s.crearNota);
+  const editarNota = useModelo((s) => s.editarNota);
+  const moverNota = useModelo((s) => s.moverNota);
+  const actualizarVista = useModelo((s) => s.actualizarVista);
   // O038: el árbol pide «Ajustar» (doble clic) subiendo este contador.
   const ajustarToken = useModelo((s) => s.ajustarToken);
   const espacio = useRef(false);
@@ -1235,6 +1251,27 @@ export function Visor3D({
   const cotasInteraccion = useRef<CotaInteractiva[]>([]);
   // O011b: etiquetas de nivel y cotas del alzado, con su rectángulo, para las E2E.
   const anotacionesAlzado = useRef<AnotacionAlzado[]>([]);
+  // O055: grupo propio de las anotaciones 3D y notas proyectadas a pantalla.
+  const grupoAnotaciones3d = useRef<THREE.Group | null>(null);
+  const orientablesAnot3d = useRef<THREE.Object3D[]>([]);
+  const [notasPx, setNotasPx] = useState<Array<{ nota: Nota; x: number; y: number }>>([]);
+  const [notaEditando, setNotaEditando] = useState<{
+    globalid: string | null;
+    texto: string;
+    posicion: Punto3;
+    izquierda: number;
+    arriba: number;
+  } | null>(null);
+  const [textoNota, setTextoNota] = useState("");
+  const [panelAnotaciones, setPanelAnotaciones] = useState(false);
+  const [arrastreNota, setArrastreNota] = useState<{
+    globalid: string;
+    x0: number;
+    y0: number;
+    dx: number;
+    dy: number;
+    posicion: Punto3;
+  } | null>(null);
   const [cotaEditando, setCotaEditando] = useState<CotaEnEdicion | null>(null);
   const [textoCotaEditando, setTextoCotaEditando] = useState("");
   // O010: el error de una cota se muestra junto a la caja, no en la barra de estado.
@@ -1523,6 +1560,113 @@ export function Visor3D({
       y: rect.top + ((1 - p.y) / 2) * rect.height,
     };
   }, []);
+
+  /** O055: rayo de cámara bajo un punto de la ventana. */
+  const rayoDePantalla = useCallback((clientX: number, clientY: number) => {
+    const nodo = contenedor.current;
+    const camera = camara.current;
+    if (!nodo || !camera) return null;
+    const rect = nodo.getBoundingClientRect();
+    const raton = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    const rayo = new THREE.Raycaster();
+    rayo.setFromCamera(raton, camera);
+    return rayo;
+  }, []);
+
+  /**
+   * O055: punto 3D de una nota bajo el cursor. En 3D usa las inferencias de O049
+   * (caras, aristas y vértices); en planta cae a la elevación del nivel y en
+   * alzado/corte sobre el plano de la vista.
+   */
+  const puntoNotaEn = useCallback(
+    (clientX: number, clientY: number): Punto3 | null => {
+      const rayo = rayoDePantalla(clientX, clientY);
+      if (!rayo) return null;
+      const ctx = contextoEje.current;
+      if (ctx && ctx.tipo === "planta") {
+        const nivel = niveles.find((n) => n.globalid === vista.nivel);
+        const z = nivel?.elevacion ?? ctx.z;
+        const plano = new THREE.Plane(new THREE.Vector3(0, 0, 1), -z);
+        const punto = new THREE.Vector3();
+        if (!rayo.ray.intersectPlane(plano, punto)) return null;
+        return [punto.x, punto.y, z];
+      }
+      if (ctx) {
+        const normal = new THREE.Vector3(ctx.d[0], ctx.d[1], 0);
+        const plano = new THREE.Plane(normal, -ctx.profundidad);
+        const punto = new THREE.Vector3();
+        if (!rayo.ray.intersectPlane(plano, punto)) return null;
+        return [punto.x, punto.y, punto.z];
+      }
+      // 3D: candidatos de las mallas visibles cercanas, como Empujar/Tirar.
+      const nodo = contenedor.current;
+      if (!nodo) return null;
+      const rect = nodo.getBoundingClientRect();
+      const proyectar = (p: Vec3) => {
+        const camera = camara.current!;
+        camera.updateMatrixWorld();
+        const v = new THREE.Vector3(p.x, p.y, p.z).project(camera);
+        return {
+          x: rect.left + ((v.x + 1) / 2) * rect.width,
+          y: rect.top + ((1 - v.y) / 2) * rect.height,
+        };
+      };
+      const cercanas = filtrarPorCercania(mallas3d.current, proyectar, {
+        x: clientX,
+        y: clientY,
+      }, 60);
+      const candidatos = unirCandidatos(
+        cercanas.map((m) => cacheCandidatos.current.obtener(m.malla, mallas)),
+      );
+      const camera = camara.current;
+      if (!camera) return null;
+      camera.updateMatrixWorld();
+      const normalCamara = new THREE.Vector3();
+      camera.getWorldDirection(normalCamara);
+      const centro = centroCaja(caja);
+      const inf = inferir({
+        rayo: {
+          origen: {
+            x: rayo.ray.origin.x,
+            y: rayo.ray.origin.y,
+            z: rayo.ray.origin.z,
+          },
+          direccion: {
+            x: rayo.ray.direction.x,
+            y: rayo.ray.direction.y,
+            z: rayo.ray.direction.z,
+          },
+        },
+        proyectar,
+        candidatos,
+        planoTrabajo: {
+          punto: { x: centro[0], y: centro[1], z: centro[2] },
+          normal: { x: normalCamara.x, y: normalCamara.y, z: normalCamara.z },
+        },
+      });
+      if (inf.punto) {
+        const redondeado = redondearVec(inf.punto);
+        return [redondeado.x, redondeado.y, redondeado.z];
+      }
+      // Sin candidatos: el centro de la caja, en el plano de la cámara.
+      const centroCaja3d = new THREE.Vector3(
+        (caja.min[0] + caja.max[0]) / 2,
+        (caja.min[1] + caja.max[1]) / 2,
+        (caja.min[2] + caja.max[2]) / 2,
+      );
+      const plano = new THREE.Plane().setFromNormalAndCoplanarPoint(
+        normalCamara,
+        centroCaja3d,
+      );
+      const punto = new THREE.Vector3();
+      if (!rayo.ray.intersectPlane(plano, punto)) return null;
+      return [punto.x, punto.y, punto.z];
+    },
+    [caja, mallas, niveles, rayoDePantalla, vista.nivel],
+  );
 
   const asaEjeEn = useCallback((clientX: number, clientY: number) => {
     let mejor: (typeof ejesInteraccion.current)[number] | null = null;
@@ -1971,6 +2115,20 @@ export function Visor3D({
     const dibujar = () => {
       if (!vivo) return;
       if (camara.current && renderer.current && escena.current) {
+        // O055: el globo, la etiqueta y el texto de cota miran siempre a la cámara,
+        // también al orbitarla.
+        if (orientablesAnot3d.current.length > 0) {
+          const camera = camara.current;
+          const d = new THREE.Vector3();
+          camera.getWorldDirection(d);
+          const hacia: [number, number, number] = [-d.x, -d.y, -d.z];
+          for (const objeto of orientablesAnot3d.current) {
+            const fijo = objeto.userData.haciaCamaraFijo as
+              | [number, number, number]
+              | undefined;
+            orientarAnotacion(objeto, fijo ?? hacia);
+          }
+        }
         renderer.current.render(escena.current, camara.current);
       }
       requestAnimationFrame(dibujar);
@@ -4523,6 +4681,181 @@ export function Visor3D({
     zoomTick,
     elementosOcultos,
     elementosBloqueados,
+  ]);
+
+  // O055: ejes, niveles, cotas y notas de las vistas 3D. Se dibujan aparte del
+  // modelo para que ninguna de las tres formas de sombreado las tape y para no
+  // engordar el efecto principal del visor.
+  useEffect(() => {
+    const grupoLocal = grupo.current;
+    if (!grupoLocal) return;
+    if (grupoAnotaciones3d.current) {
+      grupoLocal.remove(grupoAnotaciones3d.current);
+      grupoAnotaciones3d.current.traverse((objeto) => {
+        const malla = objeto as THREE.Mesh;
+        malla.geometry?.dispose?.();
+        const material = malla.material;
+        if (Array.isArray(material)) material.forEach((m) => m.dispose());
+        else material?.dispose?.();
+      });
+    }
+    const grupoAnot = new THREE.Group();
+    grupoLocal.add(grupoAnot);
+    grupoAnotaciones3d.current = grupoAnot;
+    orientablesAnot3d.current = [];
+
+    const es3d = vista.tipo === "iso" || vista.tipo === "perspectiva";
+    const conmutadores = conmutadoresAnotaciones3D(vista);
+    const color = oscuro ? "#e8eaed" : "#1f2328";
+    const fondo = colorDeFondo(oscuro).getStyle();
+    const mundoPorPx = Math.max(mundoPorPxRef.current, 1e-6);
+    const altoTexto = Math.max(mundoPorPx * 12, 0.05);
+    const zBase = elevacionBaseNiveles(niveles);
+
+    const agregarLinea = (
+      puntos: Array<[number, number, number]>,
+      discontinuo = false,
+      cerrada = false,
+    ) => {
+      const geometria = new THREE.BufferGeometry();
+      const lista = cerrada ? [...puntos, puntos[0]] : puntos;
+      geometria.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(lista.flat(), 3),
+      );
+      const material = discontinuo
+        ? new THREE.LineDashedMaterial({
+            color: new THREE.Color(color),
+            dashSize: Math.max(mundoPorPx * 8, 0.08),
+            gapSize: Math.max(mundoPorPx * 5, 0.05),
+            depthTest: false,
+            depthWrite: false,
+            transparent: true,
+          })
+        : new THREE.LineBasicMaterial({
+            color: new THREE.Color(color),
+            depthTest: false,
+            depthWrite: false,
+            transparent: true,
+          });
+      const linea = new THREE.Line(geometria, material);
+      if (discontinuo) linea.computeLineDistances();
+      linea.renderOrder = 19;
+      grupoAnot.add(linea);
+      return linea;
+    };
+
+    const agregarOrientable = (objeto: THREE.Object3D) => {
+      grupoAnot.add(objeto);
+      orientablesAnot3d.current.push(objeto);
+    };
+
+    let globos = 0;
+    let nivelesDibujados = 0;
+    let cotasDibujadas = 0;
+
+    if (es3d && conmutadores.ejes) {
+      const ejes = calcularEjes3d(referencias.ejes, zBase);
+      for (const eje of ejes) {
+        agregarLinea([eje.inicio, eje.fin]);
+        for (const extremo of [eje.inicio, eje.fin]) {
+          const globo = burbujaEje(eje.etiqueta, color, fondo);
+          if (!globo) continue;
+          const diametro = Math.max(mundoPorPx * 22, 0.08);
+          globo.scale.setScalar(diametro);
+          globo.position.set(...extremo);
+          agregarOrientable(globo);
+          globos += 1;
+        }
+      }
+    }
+
+    if (es3d && conmutadores.niveles) {
+      const visibles = new Set(vista.nivelesVisibles);
+      const lista =
+        visibles.size === 0
+          ? niveles
+          : niveles.filter((n) => visibles.has(n.globalid));
+      for (const nivel of calcularNiveles3d(lista, caja)) {
+        agregarLinea(nivel.esquinas, true, true);
+        const etiqueta = textoCota(nivel.texto, color, fondo, altoTexto);
+        if (etiqueta) {
+          etiqueta.position.set(...nivel.etiqueta);
+          etiqueta.renderOrder = 22;
+          agregarOrientable(etiqueta);
+        }
+        nivelesDibujados += 1;
+      }
+    }
+
+    if (es3d && conmutadores.cotas) {
+      const familias = calcularFamiliasCotas(referencias.ejes, referencias.reticula);
+      for (const cota of calcularCotas3d(familias, zBase)) {
+        agregarLinea([cota.inicio, cota.fin]);
+        const texto = textoCota(cota.texto, color, fondo, altoTexto * 0.9);
+        if (texto) {
+          texto.position.set(...cota.textoPos);
+          texto.renderOrder = 22;
+          agregarOrientable(texto);
+        }
+        cotasDibujadas += 1;
+      }
+    }
+
+    // Notas: se ven en todas las vistas donde su punto cae dentro. En 3D respetan
+    // la casilla «Notas»; en planta, alzado y corte siempre están encendidas.
+    const notasVisiblesPx: Array<{ nota: Nota; x: number; y: number }> = [];
+    const nodoVisor = contenedor.current;
+    const mostradas: string[] = [];
+    if (!es3d || conmutadores.notas) {
+      for (const nota of notas) {
+        if (!notaVisibleEnVista(nota, vista, caja)) continue;
+        const pantalla = pantallaDePunto(nota.posicion);
+        if (!pantalla || !nodoVisor) continue;
+        const rect = nodoVisor.getBoundingClientRect();
+        notasVisiblesPx.push({
+          nota,
+          x: pantalla.x - rect.left,
+          y: pantalla.y - rect.top,
+        });
+        mostradas.push(nota.globalid);
+        // Punto ancla en el mundo, siempre encima de la geometría.
+        const ancla = new THREE.Mesh(
+          new THREE.SphereGeometry(Math.max(mundoPorPx * 4, 0.015), 12, 8),
+          new THREE.MeshBasicMaterial({
+            color: new THREE.Color(notaSeleccionada === nota.globalid ? "#f59e0b" : "#1f2328"),
+            depthTest: false,
+            depthWrite: false,
+          }),
+        );
+        ancla.position.set(...nota.posicion);
+        ancla.renderOrder = 30;
+        grupoAnot.add(ancla);
+      }
+    }
+    setNotasPx(notasVisiblesPx);
+
+    if (nodoVisor) {
+      nodoVisor.dataset.globosEjes3d = String(globos);
+      nodoVisor.dataset.niveles3d = String(nivelesDibujados);
+      nodoVisor.dataset.cotas3d = String(cotasDibujadas);
+      nodoVisor.dataset.notas3d = String(notasVisiblesPx.length);
+      nodoVisor.dataset.notasVisibles = mostradas.join(",");
+      nodoVisor.dataset.notasTexto = notasVisiblesPx.map((n) => n.nota.texto).join(" | ");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    vista,
+    niveles,
+    referencias,
+    caja,
+    notas,
+    oscuro,
+    zoomTick,
+    dimensiones.alto,
+    dimensiones.ancho,
+    notaSeleccionada,
+    mallas,
   ]);
 
   // O027: al cambiar de eje seleccionado se muestran solo sus asas (y todas si no
@@ -7654,6 +7987,76 @@ export function Visor3D({
     pantallaDePunto,
   ]);
 
+  // O055: herramienta Nota. El clic abre el editor en el punto 3D; Enter confirma
+  // (crear o editar) y Esc cancela.
+  const abrirEditorNotaNueva = (clientX: number, clientY: number) => {
+    const punto = puntoNotaEn(clientX, clientY);
+    const nodo = contenedor.current;
+    if (!punto || !nodo) return;
+    const rect = nodo.getBoundingClientRect();
+    setNotaEditando({
+      globalid: null,
+      texto: "",
+      posicion: punto,
+      izquierda: Math.max(90, Math.min(rect.width - 90, clientX - rect.left)),
+      arriba: Math.max(8, Math.min(rect.height - 90, clientY - rect.top - 60)),
+    });
+    setTextoNota("");
+  };
+
+  const abrirEditorNotaExistente = (nota: Nota, x: number, y: number) => {
+    setNotaEditando({
+      globalid: nota.globalid,
+      texto: nota.texto,
+      posicion: nota.posicion,
+      izquierda: Math.max(90, Math.min((contenedor.current?.clientWidth ?? 400) - 90, x)),
+      arriba: Math.max(8, Math.min((contenedor.current?.clientHeight ?? 400) - 90, y - 60)),
+    });
+    setTextoNota(nota.texto);
+    seleccionarNota(nota.globalid);
+  };
+
+  const confirmarNota = async () => {
+    const texto = textoNota.trim();
+    const edicion = notaEditando;
+    if (!edicion || !texto) {
+      setNotaEditando(null);
+      return;
+    }
+    setNotaEditando(null);
+    if (edicion.globalid) {
+      await editarNota(edicion.globalid, texto);
+    } else {
+      const gid = await crearNota(texto, edicion.posicion);
+      if (gid) seleccionarNota(gid);
+    }
+  };
+
+  /** Desplazamiento en pantalla → nueva posición de mundo de la nota. */
+  const posicionNotaArrastrada = (
+    posicion: Punto3,
+    dx: number,
+    dy: number,
+  ): Punto3 => {
+    const camera = camara.current;
+    if (!camera) return posicion;
+    const derecha = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+    const arriba = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
+    const wpp = Math.max(mundoPorPxRef.current, 1e-6);
+    return [
+      posicion[0] + derecha.x * dx * wpp + arriba.x * dy * wpp,
+      posicion[1] + derecha.y * dx * wpp + arriba.y * dy * wpp,
+      posicion[2] + derecha.z * dx * wpp + arriba.z * dy * wpp,
+    ];
+  };
+
+  const alHacerClicVisor = (evento: React.MouseEvent<HTMLDivElement>) => {
+    if (herramienta !== "nota") return;
+    const objetivo = evento.target as HTMLElement;
+    if (objetivo.closest("button, input, select, textarea, [role='menu']")) return;
+    abrirEditorNotaNueva(evento.clientX, evento.clientY);
+  };
+
   return (
     <div
       ref={contenedor}
@@ -7669,8 +8072,98 @@ export function Visor3D({
       data-seleccion={seleccion ?? undefined}
       data-recorte-preview={vistaPreviaRecorte ? "si" : "no"}
       data-ejes-ajustes={JSON.stringify(vista.ejes ?? {})}
+      onClick={alHacerClicVisor}
       className="relative min-h-0 flex-1 overflow-hidden bg-background"
     >
+      {notasPx.length > 0 && (
+        <div data-testid="notas-visor" className="pointer-events-none absolute inset-0 z-20">
+          {notasPx.map(({ nota, x, y }) => {
+            const arrastre =
+              arrastreNota?.globalid === nota.globalid ? arrastreNota : null;
+            return (
+              <div
+                key={nota.globalid}
+                data-testid={`nota-${nota.globalid}`}
+                data-seleccionada={notaSeleccionada === nota.globalid ? "si" : "no"}
+                className={`pointer-events-auto absolute flex -translate-y-1/2 items-center gap-1 whitespace-nowrap rounded border bg-white/85 px-1.5 py-0.5 text-[11px] text-neutral-900 shadow ${
+                  notaSeleccionada === nota.globalid ? "border-amber-500 ring-1 ring-amber-400" : "border-neutral-300"
+                }`}
+                style={{ left: x + (arrastre?.dx ?? 0), top: y + (arrastre?.dy ?? 0) }}
+                title="Clic para seleccionar; doble clic para editar; arrastre para mover"
+                onPointerDown={(evento) => {
+                  evento.stopPropagation();
+                  (evento.target as HTMLElement).setPointerCapture?.(evento.pointerId);
+                  setArrastreNota({
+                    globalid: nota.globalid,
+                    x0: evento.clientX,
+                    y0: evento.clientY,
+                    dx: 0,
+                    dy: 0,
+                    posicion: nota.posicion,
+                  });
+                  seleccionarNota(nota.globalid);
+                }}
+                onPointerMove={(evento) => {
+                  if (arrastre?.globalid !== nota.globalid) return;
+                  evento.stopPropagation();
+                  setArrastreNota({
+                    ...arrastre,
+                    dx: evento.clientX - arrastre.x0,
+                    dy: evento.clientY - arrastre.y0,
+                  });
+                }}
+                onPointerUp={(evento) => {
+                  if (arrastre?.globalid !== nota.globalid) return;
+                  evento.stopPropagation();
+                  const dx = evento.clientX - arrastre.x0;
+                  const dy = evento.clientY - arrastre.y0;
+                  setArrastreNota(null);
+                  if (Math.hypot(dx, dy) < 3) return;
+                  void moverNota(
+                    nota.globalid,
+                    posicionNotaArrastrada(arrastre.posicion, dx, dy),
+                  );
+                }}
+                onDoubleClick={(evento) => {
+                  evento.stopPropagation();
+                  abrirEditorNotaExistente(nota, x, y);
+                }}
+              >
+                <span className="inline-block h-2 w-2 rounded-full bg-neutral-900" />
+                {nota.texto}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {notaEditando && (
+        <div
+          data-testid="nota-editor"
+          className="absolute z-30 flex -translate-x-1/2 flex-col gap-1 rounded border bg-background p-2 text-xs shadow-lg"
+          style={{ left: notaEditando.izquierda, top: notaEditando.arriba }}
+        >
+          <span className="text-[10px] text-muted-foreground">
+            {notaEditando.globalid ? "Editar nota" : "Nueva nota"} · Enter confirma, Esc cancela
+          </span>
+          <input
+            data-testid="nota-campo"
+            autoFocus
+            value={textoNota}
+            onChange={(evento) => setTextoNota(evento.target.value)}
+            onKeyDown={(evento) => {
+              evento.stopPropagation();
+              if (evento.key === "Enter") {
+                evento.preventDefault();
+                void confirmarNota();
+              } else if (evento.key === "Escape") {
+                evento.preventDefault();
+                setNotaEditando(null);
+              }
+            }}
+            className="w-56 rounded border bg-background px-2 py-1"
+          />
+        </div>
+      )}
       {ventanaSeleccion && (
         <div
           data-testid="ventana-seleccion"
@@ -8031,6 +8524,53 @@ export function Visor3D({
           >
             Restablecer iso
           </button>
+        )}
+        {(vista.tipo === "iso" || vista.tipo === "perspectiva") && (
+          <div className="relative">
+            <button
+              type="button"
+              data-testid="visor-anotaciones"
+              aria-expanded={panelAnotaciones}
+              title="Mostrar u ocultar ejes, niveles, cotas y notas"
+              onClick={() => setPanelAnotaciones((abierto) => !abierto)}
+              className={
+                panelAnotaciones
+                  ? "rounded border bg-accent px-2 py-1 text-xs font-medium text-accent-foreground shadow-sm"
+                  : "rounded border bg-background/90 px-2 py-1 text-xs shadow-sm hover:bg-muted"
+              }
+            >
+              Anotaciones
+            </button>
+            {panelAnotaciones && (
+              <div
+                data-testid="visor-anotaciones-panel"
+                className="absolute left-0 top-8 z-30 flex w-44 flex-col gap-1 rounded border bg-background/95 p-2 text-[11px] shadow-lg"
+              >
+                {(
+                  [
+                    ["ejes3d", "Ejes"],
+                    ["niveles3d", "Niveles"],
+                    ["cotas3d", "Cotas"],
+                    ["notas3d", "Notas"],
+                  ] as const
+                ).map(([clave, nombre]) => (
+                  <label key={clave} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      data-testid={`visor-anotaciones-${clave}`}
+                      checked={
+                        clave === "notas3d" ? vista.notas3d !== false : vista[clave] === true
+                      }
+                      onChange={(evento) =>
+                        void actualizarVista(vista.id, { [clave]: evento.target.checked })
+                      }
+                    />
+                    {nombre}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
       {puedeAnotarEje && (

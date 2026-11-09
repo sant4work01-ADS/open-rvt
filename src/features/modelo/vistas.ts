@@ -314,6 +314,10 @@ export function crearVistas(niveles: Nivel[]): Vista[] {
     categorias: { ...categorias },
     estilo: "aristas",
     escala: 100,
+    ejes3d: false,
+    niveles3d: false,
+    cotas3d: false,
+    notas3d: true,
   });
   vistas.push({
     id: "perspectiva",
@@ -323,6 +327,10 @@ export function crearVistas(niveles: Nivel[]): Vista[] {
     categorias: { ...categorias },
     estilo: "sombreado",
     escala: 100,
+    ejes3d: false,
+    niveles3d: false,
+    cotas3d: false,
+    notas3d: true,
   });
   return vistas;
 }
@@ -477,6 +485,10 @@ export function normalizarVista(valor: unknown): Vista | null {
         ? v.alturaArriba
         : undefined,
     cotasEjes: v.cotasEjes !== false,
+    ejes3d: v.ejes3d === true,
+    niveles3d: v.niveles3d === true,
+    cotas3d: v.cotas3d === true,
+    notas3d: v.notas3d !== false,
     anotacionEscala:
       v.anotacionEscala === "papel" || v.anotacionEscala === "pantalla"
         ? v.anotacionEscala

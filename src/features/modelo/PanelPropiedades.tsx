@@ -398,6 +398,34 @@ export function PropiedadesVista({ vista }: { vista: Vista }) {
         </Seccion>
       )}
 
+      {(vista.tipo === "iso" || vista.tipo === "perspectiva") && (
+        <Seccion
+          id="anotaciones3d"
+          titulo="Anotaciones en 3D"
+          plegada={plegada("anotaciones3d")}
+          onAlternar={alternarSeccion}
+        >
+          {(
+            [
+              ["ejes3d", "Ejes", "Líneas de eje con globo en ambos extremos"],
+              ["niveles3d", "Niveles", "Rectángulo discontinuo en cada nivel"],
+              ["cotas3d", "Cotas", "Cotas automáticas entre ejes en la base"],
+              ["notas3d", "Notas", "Notas de texto visibles en la vista"],
+            ] as const
+          ).map(([clave, nombre, ayuda]) => (
+            <label key={clave} className="flex h-7 items-center gap-2" title={ayuda}>
+              <input
+                type="checkbox"
+                data-testid={`vista-${clave}`}
+                checked={clave === "notas3d" ? vista.notas3d !== false : vista[clave] === true}
+                onChange={(e) => cambiar({ [clave]: e.target.checked })}
+              />
+              <span>{nombre}</span>
+            </label>
+          ))}
+        </Seccion>
+      )}
+
       <Seccion
         id="niveles"
         titulo="Niveles visibles"
