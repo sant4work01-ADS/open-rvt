@@ -561,6 +561,29 @@ class Servidor:
             return self._exigir().validar()
         if metodo == "modelo.referencias":
             return self._exigir().referencias()
+        if metodo == "notas.listar":
+            return self._exigir().notas_listar()
+        if metodo == "notas.crear":
+            return self._exigir().nota_crear(
+                str(params.get("texto") or ""),
+                params.get("x", 0.0),
+                params.get("y", 0.0),
+                params.get("z", 0.0),
+                str(params.get("nivel") or ""),
+            )
+        if metodo == "notas.editar":
+            return self._exigir().nota_editar(
+                str(params.get("globalid") or ""), str(params.get("texto") or "")
+            )
+        if metodo == "notas.mover":
+            return self._exigir().nota_mover(
+                str(params.get("globalid") or ""),
+                params.get("x", 0.0),
+                params.get("y", 0.0),
+                params.get("z", 0.0),
+            )
+        if metodo == "notas.borrar":
+            return self._exigir().nota_borrar(str(params.get("globalid") or ""))
         if metodo == "historial.deshacer":
             return self._exigir().deshacer()
         if metodo == "historial.rehacer":

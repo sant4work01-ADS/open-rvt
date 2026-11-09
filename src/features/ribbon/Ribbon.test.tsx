@@ -26,6 +26,7 @@ function montar(extra: Partial<Parameters<typeof construirComandosRibbon>[0]> = 
     herramientaMover: vi.fn(),
     herramientaCopiar: vi.fn(),
     herramientaAlinear: vi.fn(),
+    herramientaNota: vi.fn(),
     herramientaZapata: vi.fn(),
     herramientaZapataCorrida: vi.fn(),
     herramientaContratrabe: vi.fn(),
@@ -58,7 +59,7 @@ function montar(extra: Partial<Parameters<typeof construirComandosRibbon>[0]> = 
 describe("Ribbon", () => {
   it("tiene las pestañas Inicio, Modelar y Vista, con Inicio activa", () => {
     montar();
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Inicio", "Modelar", "Vista"]);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Inicio", "Modelar", "Anotar", "Vista"]);
     expect(screen.getByRole("tab", { name: "Inicio" })).toHaveAttribute("aria-selected", "true");
   });
 
@@ -116,6 +117,7 @@ describe("Ribbon", () => {
           herramientaMover: vi.fn(),
           herramientaCopiar: vi.fn(),
           herramientaAlinear: vi.fn(),
+          herramientaNota: vi.fn(),
           herramientaZapata: vi.fn(),
           herramientaZapataCorrida: vi.fn(),
           herramientaContratrabe: vi.fn(),

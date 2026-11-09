@@ -21,6 +21,7 @@ import {
   Grid3X3,
   Layers,
   LibraryBig,
+  MessageSquareText,
   Monitor,
   Moon,
   Move,
@@ -39,7 +40,7 @@ import {
 } from "lucide-react";
 import { tr } from "@/i18n";
 
-export type PestanaRibbon = "archivo" | "principal" | "modelar" | "herramientas" | "vista";
+export type PestanaRibbon = "archivo" | "principal" | "modelar" | "anotar" | "herramientas" | "vista";
 /** Tamaño en el ribbon normal: grande (ícono 24 px + texto abajo) o chico (16 px + texto). */
 export type TamanoRibbon = "grande" | "chico";
 
@@ -118,6 +119,8 @@ export interface AccionesRibbon {
   herramientaMatriz?: () => void;
   herramientaCopiar: () => void;
   herramientaAlinear: () => void;
+  /** O055: herramienta Nota (planta, alzado, corte y 3D). */
+  herramientaNota?: () => void;
   /** O007b: herramientas de estructura (un clic o dos, según el elemento). */
   herramientaZapata: () => void;
   herramientaZapataCorrida: () => void;
@@ -624,6 +627,32 @@ export function construirComandosRibbon(a: AccionesRibbon): ComandoRibbon[] {
       habilitado: true,
       descripcion: "Rehacer el último comando deshecho",
       accion: a.rehacer,
+    },
+
+    // ---------- Anotar (O055) ----------
+    {
+      id: "nota",
+      texto: "Nota",
+      icono: MessageSquareText,
+      atajo: "NT",
+      grupo: "Anotar",
+      pestana: "anotar",
+      tamano: "grande",
+      habilitado: true,
+      activo: a.herramientaActiva === "nota",
+      descripcion: "Escribir una nota de texto en planta, alzado, corte o 3D",
+      accion: () => a.herramientaNota?.(),
+    },
+    {
+      id: "estilos-anotacion",
+      texto: "Estilos de anotación",
+      icono: Ruler,
+      grupo: "Anotar",
+      pestana: "anotar",
+      tamano: "chico",
+      habilitado: true,
+      descripcion: "Editar niveles, ejes y cotas del dibujo",
+      accion: a.estilosAnotacion,
     },
 
     // ---------- Editor de tipos (O007a) ----------

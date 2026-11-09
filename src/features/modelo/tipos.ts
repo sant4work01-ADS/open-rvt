@@ -99,6 +99,12 @@ export interface Vista {
   arbolOcultos?: string[];
   /** O038: claves de nodos del árbol del proyecto bloqueados en esta vista. */
   arbolBloqueados?: string[];
+  /** O055: conmutadores de anotaciones en las vistas 3D. Por omisión apagados,
+   *  salvo las notas. */
+  ejes3d?: boolean;
+  niveles3d?: boolean;
+  cotas3d?: boolean;
+  notas3d?: boolean;
 }
 
 export interface Nivel {

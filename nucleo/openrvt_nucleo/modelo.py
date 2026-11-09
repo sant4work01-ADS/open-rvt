@@ -641,13 +641,31 @@ class ModeloNucleo(
                 },
             ],
         }
+        notas = [
+            {
+                "clave": f"nota:{_texto(n.GlobalId)}",
+                "nombre": _texto(getattr(n, "Description", "")) or "Nota",
+                "tipo": "nota",
+                "globalid": _texto(n.GlobalId),
+                "conteo": 1,
+            }
+            for n in self.modelo.by_type("IfcAnnotation")
+            if _texto(getattr(n, "ObjectType", "")) == "OPENRVT_Nota"
+        ]
+        nodo_notas = {
+            "clave": "notas",
+            "nombre": "Notas",
+            "tipo": "grupo",
+            "conteo": len(notas),
+            "hijos": notas,
+        }
         total_elementos = sum(n["conteo"] for n in hijos_edificio)
         return {
             "clave": "edificio",
             "nombre": "Edificio",
             "tipo": "edificio",
             "conteo": total_elementos,
-            "hijos": [*hijos_edificio, referencias],
+            "hijos": [*hijos_edificio, referencias, nodo_notas],
         }
 
     def propiedades(self, globalid: str) -> dict[str, Any]:

@@ -383,6 +383,7 @@ export function App() {
         herramientaMatriz: () => useModelo.getState().activarHerramienta("matriz"),
         herramientaCopiar: () => useModelo.getState().activarHerramienta("copiar"),
         herramientaAlinear: () => useModelo.getState().activarHerramienta("alinear"),
+        herramientaNota: () => useModelo.getState().activarHerramienta("nota"),
         // O007b: herramientas de estructura.
         herramientaZapata: () => useModelo.getState().activarHerramienta("zapata"),
         herramientaZapataCorrida: () =>
