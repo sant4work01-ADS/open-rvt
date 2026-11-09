@@ -359,6 +359,13 @@ class Servidor:
             return self._exigir().elemento_editar(
                 str(params.get("globalid") or ""), params.get("cambios")
             )
+        if metodo == "elementos.empujar_cara":
+            return self._exigir().elementos_empujar_cara(
+                str(params.get("globalid") or ""),
+                params.get("normal"),
+                params.get("punto"),
+                params.get("distancia"),
+            )
         if metodo in ("restricciones.alinear", "elementos.alinear"):
             return self._exigir().alinear(
                 params.get("referencia"),
