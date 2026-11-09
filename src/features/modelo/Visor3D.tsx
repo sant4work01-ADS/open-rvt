@@ -1585,8 +1585,9 @@ export function Visor3D({
     (clientX: number, clientY: number): Punto3 | null => {
       const rayo = rayoDePantalla(clientX, clientY);
       if (!rayo) return null;
+      const es3d = vista.tipo === "iso" || vista.tipo === "perspectiva";
       const ctx = contextoEje.current;
-      if (ctx && ctx.tipo === "planta") {
+      if (!es3d && ctx && ctx.tipo === "planta") {
         const nivel = niveles.find((n) => n.globalid === vista.nivel);
         const z = nivel?.elevacion ?? ctx.z;
         const plano = new THREE.Plane(new THREE.Vector3(0, 0, 1), -z);
@@ -1594,7 +1595,7 @@ export function Visor3D({
         if (!rayo.ray.intersectPlane(plano, punto)) return null;
         return [punto.x, punto.y, z];
       }
-      if (ctx) {
+      if (!es3d && ctx) {
         const normal = new THREE.Vector3(ctx.d[0], ctx.d[1], 0);
         const plano = new THREE.Plane(normal, -ctx.profundidad);
         const punto = new THREE.Vector3();
@@ -1665,7 +1666,7 @@ export function Visor3D({
       if (!rayo.ray.intersectPlane(plano, punto)) return null;
       return [punto.x, punto.y, punto.z];
     },
-    [caja, mallas, niveles, rayoDePantalla, vista.nivel],
+    [caja, mallas, niveles, rayoDePantalla, vista.nivel, vista.tipo],
   );
 
   const asaEjeEn = useCallback((clientX: number, clientY: number) => {

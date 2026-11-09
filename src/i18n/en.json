@@ -37,7 +37,8 @@
       "inicio": "Home",
       "principal": "Home",
       "vista": "View",
-      "modelar": "Model"
+      "modelar": "Model",
+      "anotar": "Annotate"
     },
     "grupos": {
       "Archivo": "File",
