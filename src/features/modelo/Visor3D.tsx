@@ -8433,6 +8433,7 @@ export function Visor3D({
       data-nivel-seleccionado={nivelSeleccionado ?? undefined}
       data-enganche={engancheHerramienta?.tipo}
       data-largo-tecleado={longitudTecleada || undefined}
+      data-puntos-herramienta={puntosHerramienta.length}
       data-eje-seleccionado={ejeSeleccionado ?? undefined}
       data-seleccion={seleccion ?? undefined}
       data-recorte-preview={vistaPreviaRecorte ? "si" : "no"}
