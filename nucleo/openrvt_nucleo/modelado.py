@@ -2913,21 +2913,22 @@ class ModeladoMixin:
         temporales = []
         for poligono in poligonos:
             for pieza, z0 in self._partir_por_bajadas(poligono, base, bajadas):
-                for tramo_z0, tramo_z1 in self._tramos_verticales_muro(
+                for tramo_z0, tramo_z1, activos in self._tramos_verticales_muro(
                     z0, cima, intervalos
                 ):
-                    offset_z = tramo_z0 - datos["z"]
-                    alto = max(tramo_z1 - tramo_z0, 0.001)
-                    rep = geometry_api.add_slab_representation(
-                        self.modelo,
-                        context=self._contexto(),
-                        depth=alto,
-                        direction_sense="POSITIVE",
-                        offset=offset_z,
-                        polyline=pieza,
-                    )
-                    temporales.append(rep)
-                    items.extend(rep.Items)
+                    for trozo in self._recortar_tramo_muro(pieza, datos, activos):
+                        offset_z = tramo_z0 - datos["z"]
+                        alto = max(tramo_z1 - tramo_z0, 0.001)
+                        rep = geometry_api.add_slab_representation(
+                            self.modelo,
+                            context=self._contexto(),
+                            depth=alto,
+                            direction_sense="POSITIVE",
+                            offset=offset_z,
+                            polyline=trozo,
+                        )
+                        temporales.append(rep)
+                        items.extend(rep.Items)
         # La representación final es una sola con todos los tramos del muro.
         context = self._contexto()
         cuerpo = self.modelo.create_entity(
@@ -3336,43 +3337,91 @@ class ModeladoMixin:
 
     @staticmethod
     def _tramos_verticales_muro(
-        z0: float, z1: float, intervalos: list[tuple[float, float]]
-    ) -> list[tuple[float, float]]:
-        """Tramos [a, b] del muro entre z0 y z1 quitando los intermedios."""
+        z0: float, z1: float, intervalos: list[dict[str, Any]]
+    ) -> list[tuple[float, float, list[dict[str, Any]]]]:
+        """Tramos [a, b] del muro entre z0 y z1 con sus intermedios activos.
+
+        O061: un elemento intermedio no borra toda la franja del muro; solo se
+        resta su huella. Por eso cada tramo viaja con los intermedios que lo
+        cubren y el cuerpo decide qué parte de la pieza desaparece.
+        """
         if z1 - z0 <= TOLERANCIA_CALCULO:
-            return [(z0, z1)]
-        recortes = sorted(
-            (max(z0, a), min(z1, b))
-            for a, b in intervalos
-            if min(z1, b) - max(z0, a) > TOLERANCIA_CALCULO
+            return [(z0, z1, [])]
+        cortes = {z0, z1}
+        for intervalo in intervalos:
+            a, b = float(intervalo["z0"]), float(intervalo["z1"])
+            if min(z1, b) - max(z0, a) <= TOLERANCIA_CALCULO:
+                continue
+            cortes.update((max(z0, a), min(z1, b)))
+        ordenados = sorted(cortes)
+        salida: list[tuple[float, float, list[dict[str, Any]]]] = []
+        for a, b in zip(ordenados, ordenados[1:]):
+            if b - a <= TOLERANCIA_CALCULO:
+                continue
+            medio = (a + b) / 2.0
+            activos = [
+                intervalo
+                for intervalo in intervalos
+                if float(intervalo["z0"]) <= medio < float(intervalo["z1"])
+            ]
+            salida.append((a, b, activos))
+        return salida or [(z0, z1, [])]
+
+    def _recortar_tramo_muro(
+        self,
+        pieza: list[tuple[float, float]],
+        datos: dict[str, Any],
+        activos: list[dict[str, Any]],
+    ) -> list[list[tuple[float, float]]]:
+        """O061 regla 4: resta del tramo solo la huella real de cada intermedio."""
+        if not activos:
+            return [pieza]
+        from shapely.geometry import Polygon
+
+        mundo = Polygon([self._punto_local(datos, u, v) for u, v in pieza])
+        if not mundo.is_valid:
+            mundo = mundo.buffer(0)
+        for intervalo in activos:
+            huella = intervalo.get("huella")
+            if huella is None or huella.is_empty:
+                continue
+            if not huella.is_valid:
+                huella = huella.buffer(0)
+            if huella.is_empty or not mundo.intersects(huella):
+                continue
+            mundo = mundo.difference(huella)
+            if mundo.is_empty:
+                return []
+        piezas = [mundo] if mundo.geom_type == "Polygon" else list(
+            getattr(mundo, "geoms", [])
         )
-        unidos: list[tuple[float, float]] = []
-        for a, b in recortes:
-            if unidos and a <= unidos[-1][1] + TOLERANCIA_CALCULO:
-                unidos[-1] = (unidos[-1][0], max(unidos[-1][1], b))
-            else:
-                unidos.append((a, b))
-        salida: list[tuple[float, float]] = []
-        cursor = z0
-        for a, b in unidos:
-            if a - cursor > TOLERANCIA_CALCULO:
-                salida.append((cursor, a))
-            cursor = max(cursor, b)
-        if z1 - cursor > TOLERANCIA_CALCULO:
-            salida.append((cursor, z1))
-        return salida or [(z0, z1)]
+        salida: list[list[tuple[float, float]]] = []
+        for trozo in piezas:
+            if trozo.is_empty or trozo.area <= TOLERANCIA_CALCULO:
+                continue
+            trozo = trozo.simplify(1e-7, preserve_topology=True)
+            anillo = _limpiar_anillo(
+                [
+                    self._punto_en_local(datos, x, y)
+                    for x, y in list(trozo.exterior.coords)[:-1]
+                ]
+            )
+            if len(anillo) >= 3:
+                salida.append(anillo)
+        return salida
 
     def _intervalos_intermedios_muro(
         self, muro: Any, datos: dict[str, Any], base: float, cima: float
-    ) -> list[tuple[float, float]]:
-        """Intervalos verticales de elementos intermedios sobre la huella del muro.
+    ) -> list[dict[str, Any]]:
+        """Intervalos verticales y huella real de los elementos intermedios.
 
         O058 regla 3: solo cuenta el elemento cuya cara inferior está por encima de
         la base y cuya cara superior está por debajo de la corona; los que tocan
-        base o corona ya son apoyo/cubierta y no se restan.
+        base o corona ya son apoyo/cubierta y no se restan. O061: se guarda su
+        huella para restar únicamente lo que el elemento ocupa.
         """
         huella = self._huella_planta_muro(muro, datos)
-        intervalos: list[tuple[float, float]] = []
+        intervalos: list[dict[str, Any]] = []
         for elemento in self._horizontales_de_muro(muro, datos):
             z0, z1 = elemento["z0"], elemento["z1"]
             if z1 - z0 <= TOLERANCIA_CALCULO:
@@ -3384,7 +3433,9 @@ class ModeladoMixin:
                     continue
             except Exception:
                 continue
-            intervalos.append((z0, z1))
+            intervalos.append(
+                {"z0": z0, "z1": z1, "huella": elemento["huella"]}
+            )
         return intervalos
 
     def _limites_verticales_muro_nivel(
@@ -3935,6 +3986,95 @@ class ModeladoMixin:
         caras.append(list(range(lados, 2 * lados)))
         return vertices, caras
 
+    def _tramos_columna_por_losas(
+        self, elemento: Any, datos: dict[str, Any], altura: float
+    ) -> list[tuple[float, float]]:
+        """O061: tramos locales de un castillo, quitando la franja de cada losa.
+
+        El castillo se parte donde cruza una losa para que el concreto no se
+        cuente dos veces. Las losas se leen por su contorno completo (no por el
+        recorte viejo) para que la esquina del firme/azotea también cuente.
+        """
+        if self._estructura_de_tipo(self._tipo_entidad(elemento)) != "castillo":
+            return [(0.0, altura)]
+        barra = self._barra_de_elemento(elemento)
+        if barra is None:
+            return [(0.0, altura)]
+        from shapely import wkt
+        from shapely.geometry import Polygon
+
+        base = float(datos.get("Base") or 0.0)
+        tope = base + altura
+        huella = Polygon(uniones.huella(barra))
+        if not huella.is_valid:
+            huella = huella.buffer(0)
+        import ifcopenshell.util.placement as placement
+
+        bandas: list[tuple[float, float]] = []
+        for losa in self.modelo.by_type("IfcSlab"):
+            datos_losa = self._leer_pset(losa, "OPENRVT_Losa")
+            if not datos_losa:
+                continue
+            espesor = float(datos_losa.get("Espesor") or 0.12)
+            matriz = placement.get_local_placement(losa.ObjectPlacement)
+            z1 = float(matriz[2][3])
+            z0 = z1 - espesor
+            if min(tope, z1) - max(base, z0) <= TOLERANCIA_CALCULO:
+                continue
+            contorno = datos_losa.get("Contorno")
+            try:
+                huella_losa = (
+                    wkt.loads(str(contorno))
+                    if contorno
+                    else Polygon(self._poligono_de_losa(losa))
+                )
+            except Exception:
+                huella_losa = Polygon(self._poligono_de_losa(losa))
+            if not huella_losa.is_valid:
+                huella_losa = huella_losa.buffer(0)
+            if huella_losa.is_empty:
+                continue
+            if huella.intersection(huella_losa).area <= TOLERANCIA_CALCULO:
+                continue
+            bandas.append((max(base, z0), min(tope, z1)))
+        if not bandas:
+            return [(0.0, altura)]
+        bandas.sort()
+        unidas: list[tuple[float, float]] = []
+        for a, b in bandas:
+            if unidas and a <= unidas[-1][1] + TOLERANCIA_CALCULO:
+                unidas[-1] = (unidas[-1][0], max(unidas[-1][1], b))
+            else:
+                unidas.append((a, b))
+        tramos: list[tuple[float, float]] = []
+        cursor = base
+        for a, b in unidas:
+            if a - cursor > TOLERANCIA_CALCULO:
+                tramos.append((cursor - base, a - base))
+            cursor = max(cursor, b)
+        if tope - cursor > TOLERANCIA_CALCULO:
+            tramos.append((cursor - base, altura))
+        return tramos
+
+    def _cuerpo_columna_tramos(
+        self, seccion: dict[str, Any], tramos: list[tuple[float, float]]
+    ) -> Any:
+        cajas = []
+        if _texto(seccion.get("Forma") or "rectangular") == "circular":
+            radio = float(seccion.get("D") or 0.3) / 2.0
+            cajas = [
+                self._cilindro_malla(radio, z0, max(z1 - z0, 0.001))
+                for z0, z1 in tramos
+            ]
+        else:
+            ancho = float(seccion.get("B") or 0.15)
+            fondo = float(seccion.get("H") or 0.15)
+            cajas = [
+                self._caja_malla(ancho, fondo, max(z1 - z0, 0.001), z0=z0)
+                for z0, z1 in tramos
+            ]
+        return self._malla_de_cajas(cajas)
+
     def _cuerpo_columna(self, seccion: dict[str, Any], altura: float) -> Any:
         if _texto(seccion.get("Forma") or "rectangular") == "circular":
             vertices, caras = self._cilindro_malla(
@@ -4103,6 +4243,7 @@ class ModeladoMixin:
                 z0=base,
                 z1=base + alto,
                 rotacion=float(datos.get("Rotacion") or 0.0),
+                clase="castillo" if alias == "castillo" else "columna",
             )
         if self._es_viga_estructural(elemento):
             x1 = float(datos.get("X1") or 0.0)
@@ -4174,6 +4315,7 @@ class ModeladoMixin:
                 z0=z + peralte,
                 z1=z + peralte + dado_alto,
                 rotacion=float(datos.get("Rotacion") or 0.0),
+                clase="dado",
             )
         ]
 
@@ -4284,7 +4426,13 @@ class ModeladoMixin:
             altura = float(datos.get("Altura") or 0.0)
             if altura <= 0:
                 altura = 2.60
-            cuerpo = self._cuerpo_columna(seccion, altura)
+            # O061: el castillo se parte al cruzar una losa; el concreto de la
+            # franja de la losa no se cuenta dos veces.
+            tramos_columna = self._tramos_columna_por_losas(elemento, datos, altura)
+            if tramos_columna == [(0.0, altura)]:
+                cuerpo = self._cuerpo_columna(seccion, altura)
+            else:
+                cuerpo = self._cuerpo_columna_tramos(seccion, tramos_columna)
             matriz = self._matriz_colocacion(
                 float(datos.get("X") or 0.0), float(datos.get("Y") or 0.0),
                 float(datos.get("Base") or 0.0), float(datos.get("Rotacion") or 0.0),
@@ -5201,8 +5349,19 @@ class ModeladoMixin:
             else:
                 huella = Polygon(self._poligono_de_losa(losa))
         vigas, columnas = self._barras_estructura()
+        # O061: la losa se coloca en su elevación absoluta (nivel + desfase), pero
+        # el cuerpo se extruye en coordenadas locales. El recorte debe compararse
+        # con las barras en cotas absolutas, no con −espesor…0.
+        import ifcopenshell.util.placement as placement
+
+        matriz = placement.get_local_placement(losa.ObjectPlacement)
+        elevacion = float(matriz[2][3])
         recorte = uniones.recortar_losa(
-            list(huella.exterior.coords)[:-1], vigas, columnas, -espesor, 0.0
+            list(huella.exterior.coords)[:-1],
+            vigas,
+            columnas,
+            elevacion - espesor,
+            elevacion,
         )
         if recorte.is_empty:
             # Nunca se deja una losa sin cuerpo: se conserva la huella original.
@@ -7175,8 +7334,22 @@ class ModeladoMixin:
             return getattr(rel, "RelatingType", None)
         return None
 
+    def _actualizar_nombre_muro_por_tipo(self, muro: Any, tipo: Any) -> None:
+        """O061 regla 5: el Name de omisión de un tipo pasa al del nuevo tipo."""
+        actual = _texto(getattr(muro, "Name", ""))
+        omisiones = {
+            f"Muro {_nombre(candidato)}"
+            for candidato in self.modelo.by_type("IfcWallType")
+        }
+        if actual not in omisiones:
+            return
+        nuevo = f"Muro {_nombre(tipo)}"
+        if nuevo.strip() and muro.Name != nuevo:
+            muro.Name = nuevo
+
     def _cambiar_tipo_muro(self, muro: Any, tipo: Any) -> None:
         type_api.assign_type(self.modelo, related_objects=[muro], relating_type=tipo)
+        self._actualizar_nombre_muro_por_tipo(muro, tipo)
         datos = self._datos_muro(muro)
         espesor = self._espesor_tipo(tipo)
         self._guardar_pset(

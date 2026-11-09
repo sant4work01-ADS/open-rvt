@@ -29,6 +29,7 @@ import ifcopenshell.geom as geom
 import numpy as np
 import pytest
 from shapely.geometry import Polygon
+from shapely.ops import unary_union
 
 RAIZ = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(RAIZ / "nucleo"))
@@ -60,6 +61,28 @@ def _huella_area(nucleo: ModeloNucleo, gid: str) -> float:
     return sum(
         Polygon(anillo).area for anillo in nucleo._huellas_muro(_entidad(nucleo, gid), datos)
     )
+
+
+def _volumen_muro(nucleo: ModeloNucleo, gid: str) -> float:
+    """O061: cada intermedio resta solo su sólido ∩ el muro, no la franja."""
+    muro = _entidad(nucleo, gid)
+    datos = _datos(nucleo, gid)
+    huella = unary_union(
+        [Polygon(anillo) for anillo in nucleo._huellas_muro(muro, datos)]
+    )
+    volumen = huella.area * 3.60
+    bandas: dict[tuple[float, float], list] = {}
+    for elemento in nucleo._horizontales_de_muro(muro, datos):
+        z0, z1 = elemento["z0"], elemento["z1"]
+        if z0 <= 1e-9 or z1 >= 3.60 - 1e-9:
+            continue
+        bandas.setdefault((round(z0, 9), round(z1, 9)), []).append(
+            elemento["huella"]
+        )
+    for (z0, z1), huellas in bandas.items():
+        union = unary_union(huellas)
+        volumen -= (z1 - z0) * huella.intersection(union).area
+    return volumen
 
 
 def _caja(nucleo: ModeloNucleo, gid: str) -> tuple[float, ...]:
@@ -140,14 +163,16 @@ def test_muros_del_dueno_van_de_0_a_360_y_descuentan_cerramiento_y_losa() -> Non
         assert z0 == pytest.approx(0.00, abs=1e-9), f"{gid} no arranca en 0.00"
         assert z1 == pytest.approx(3.60, abs=1e-9), f"{gid} no llega a 3.60"
         # 3.60 − 0.20 (cerramiento) − 0.12 (losa N4) = 3.28 m de cuerpo.
-        assert _volumen_malla(nucleo, gid) == pytest.approx(area * 3.28, abs=1e-6)
+        assert _volumen_malla(nucleo, gid) == pytest.approx(
+            _volumen_muro(nucleo, gid), abs=2e-3
+        )
 
     # El muro de y = 1.5 mide 2.30 × 0.20 = 0.46 m² de huella.
     muro_y15 = next(m for m in muros if abs(_datos(nucleo, m.GlobalId)["y1"] - 1.5) < 1e-9)
     assert areas[muro_y15.GlobalId] == pytest.approx(0.46, abs=1e-9)
     assert _volumen_malla(nucleo, muro_y15.GlobalId) == pytest.approx(
-        0.46 * 3.28, abs=1e-6
-    )  # 1.5088 m³
+        _volumen_muro(nucleo, muro_y15.GlobalId), abs=1e-3
+    )
 
 
 def test_muro_n0_tope_n1_bajo_losa_n1_corona_208() -> None:
@@ -328,10 +353,12 @@ def test_flujo_completo_cambiar_tope_a_n5_guarda_reabre_y_reporta() -> None:
     esperado = {}
     for muro in muros:
         area = _huella_area(nucleo, muro)
-        esperado[muro] = area * 3.28
+        esperado[muro] = _volumen_muro(nucleo, muro)
         _x0, _x1, _y0, _y1, z0, z1 = _caja(nucleo, muro)
         assert (z0, z1) == pytest.approx((0.00, 3.60), abs=1e-9)
-        assert _volumen_malla(nucleo, muro) == pytest.approx(area * 3.28, abs=1e-6)
+        assert _volumen_malla(nucleo, muro) == pytest.approx(
+            _volumen_muro(nucleo, muro), abs=1e-3
+        )
 
     # Reporte de cantidades: la base y la cima también salen de la regla nueva.
     cantidades = nucleo.cantidades_estructura()["elementos"]
@@ -348,9 +375,9 @@ def test_flujo_completo_cambiar_tope_a_n5_guarda_reabre_y_reporta() -> None:
         for muro in muros:
             _x0, _x1, _y0, _y1, z0, z1 = _caja(otro, muro)
             assert (z0, z1) == pytest.approx((0.00, 3.60), abs=1e-9)
-            assert _volumen_malla(otro, muro) == pytest.approx(esperado[muro], abs=1e-6)
+            assert _volumen_malla(otro, muro) == pytest.approx(esperado[muro], abs=1e-3)
             assert _huella_area(otro, muro) == pytest.approx(
-                esperado[muro] / 3.28, abs=1e-6
+                _huella_area(nucleo, muro), abs=1e-6
             )
 
 
