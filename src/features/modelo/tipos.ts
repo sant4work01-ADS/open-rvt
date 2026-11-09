@@ -293,6 +293,8 @@ export interface PropiedadesElemento {
   alias?: string;
   /** O040: muro al que está ligado un cerramiento o dala. */
   muro_liga?: { muro: string; nombre: string };
+  /** O059: uso efectivo de una losa (firme, entrepiso o azotea). */
+  uso?: "firme" | "entrepiso" | "azotea";
 }
 
 export interface Caja {

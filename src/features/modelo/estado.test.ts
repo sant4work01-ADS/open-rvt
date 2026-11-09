@@ -282,7 +282,7 @@ describe("herramienta Losa", () => {
         [4, 3],
         [0, 3],
       ],
-      espesor: 0.12,
+      uso: "entrepiso",
       desfase: 0,
     });
     expect(useModelo.getState().herramienta).toBe("losa");

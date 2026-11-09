@@ -192,9 +192,12 @@ export interface OpcionesMuro {
 }
 
 /** O032: borde de losa al crear desde muros. */
+export type UsoLosa = "firme" | "entrepiso" | "azotea";
+
 export interface OpcionesLosa {
   lado: "exterior" | "eje" | "interior";
   desfase: number;
+  uso: UsoLosa;
 }
 
 /** O041: nivel y desfase de la herramienta «Cerramiento». Vacío = por omisión
@@ -1532,7 +1535,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       lineaUbicacion: "eje_nucleo",
       desfaseUbicacion: 0,
     },
-    opcionesLosa: { lado: "exterior", desfase: 0 },
+    opcionesLosa: { lado: "exterior", desfase: 0, uso: "entrepiso" },
     opcionesCerramiento: { nivel: "", desfase: "" },
     opcionesNivel: { nombre: "", nombreAutomatico: true, crearPlanta: true, elevacionTexto: "" },
     opcionesEspejo: { copiar: true },
@@ -3198,7 +3201,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       const ok = await ejecutar("losas.crear", {
         nivel,
         puntos,
-        espesor: 0.12,
+        uso: get().opcionesLosa.uso,
         desfase: 0,
       });
       if (ok) {
@@ -3557,6 +3560,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         globalids: gids,
         lado: opciones.lado,
         desfase: opciones.desfase,
+        uso: opciones.uso,
       });
     },
 

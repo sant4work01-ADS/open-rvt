@@ -7,6 +7,7 @@ import {
   esHerramientaPuntual,
   useModelo,
   type ModoRecorte,
+  type UsoLosa,
 } from "./estado";
 import { plantaTomaNivelPropio } from "./herramientas";
 import { textoDimensiones, type ClasificacionEmpujar } from "./empujar";
@@ -356,6 +357,21 @@ export function BarraHerramienta() {
           >
             Desde muros ({seleccionados.length})
           </button>
+          <label className="flex items-center gap-1">
+            <span className="text-muted-foreground">Uso</span>
+            <select
+              data-testid="losa-uso"
+              value={opcionesLosa.uso}
+              onChange={(e) =>
+                fijarOpcionesLosa({ uso: e.target.value as UsoLosa })
+              }
+              className="rounded border bg-background px-1 py-0.5"
+            >
+              <option value="firme">Firme / losa de cimentación</option>
+              <option value="entrepiso">Entrepiso</option>
+              <option value="azotea">Azotea</option>
+            </select>
+          </label>
           <label className="flex items-center gap-1">
             <span className="text-muted-foreground">Borde a</span>
             <select
