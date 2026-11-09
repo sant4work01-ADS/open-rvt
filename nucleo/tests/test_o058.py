@@ -6,11 +6,13 @@ Valores a mano (spec O058 y bitácora del dueño, 2026-11-09):
   N4 de 3.08 a 3.20; cuatro muros con base N0 y tope N5.
 - El cuerpo del muro va de 0.00 a 3.60 y se parte en tramos: 0.00–2.20 (muro),
   2.20–2.40 (cerramiento), 2.40–3.08 (muro), 3.08–3.20 (losa N4) y 3.20–3.60
-  (muro). Volumen = huella × (3.60 − 0.20 − 0.12) = huella × 3.28.
+  (muro). O061: cada intermedio resta solo su sólido ∩ el muro, no la franja
+  entera; la losa N4 llega a −0.075 y deja una franja de 0.025 en el borde.
   El IFC del dueño trae muros «Block 20» (Espesor 0.20), no Block 15 como dice
   la narrativa; por eso la huella se toma de `_huellas_muro`, como pide la spec:
   el muro de y = 1.5 mide 2.30 × 0.20 = 0.46 m² (2.50 de eje menos los dos
-  castillos de 0.15/2 a cada lado) y su volumen es 0.46 × 3.28 = 1.5088 m³.
+  castillos de 0.15/2 a cada lado); su volumen a mano es
+  0.46 × 3.48 − (0.15 × 2.30) × 0.20 + (2.30 × 0.025) × 0.12 = 1.5387 m³.
 - Muro N0 con tope N1 y losa N1 (2.08–2.20): la corona baja a 2.08; la losa toca
   la corona nominal 2.20, así que sí es cubierta. Base 0.00.
 - Muro sobre losa N0 (−0.12…0.00): la losa toca la base nominal 0.00 → base 0.00.
@@ -29,7 +31,6 @@ import ifcopenshell.geom as geom
 import numpy as np
 import pytest
 from shapely.geometry import Polygon
-from shapely.ops import unary_union
 
 RAIZ = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(RAIZ / "nucleo"))
@@ -61,28 +62,6 @@ def _huella_area(nucleo: ModeloNucleo, gid: str) -> float:
     return sum(
         Polygon(anillo).area for anillo in nucleo._huellas_muro(_entidad(nucleo, gid), datos)
     )
-
-
-def _volumen_muro(nucleo: ModeloNucleo, gid: str) -> float:
-    """O061: cada intermedio resta solo su sólido ∩ el muro, no la franja."""
-    muro = _entidad(nucleo, gid)
-    datos = _datos(nucleo, gid)
-    huella = unary_union(
-        [Polygon(anillo) for anillo in nucleo._huellas_muro(muro, datos)]
-    )
-    volumen = huella.area * 3.60
-    bandas: dict[tuple[float, float], list] = {}
-    for elemento in nucleo._horizontales_de_muro(muro, datos):
-        z0, z1 = elemento["z0"], elemento["z1"]
-        if z0 <= 1e-9 or z1 >= 3.60 - 1e-9:
-            continue
-        bandas.setdefault((round(z0, 9), round(z1, 9)), []).append(
-            elemento["huella"]
-        )
-    for (z0, z1), huellas in bandas.items():
-        union = unary_union(huellas)
-        volumen -= (z1 - z0) * huella.intersection(union).area
-    return volumen
 
 
 def _caja(nucleo: ModeloNucleo, gid: str) -> tuple[float, ...]:
@@ -155,23 +134,39 @@ def test_muros_del_dueno_van_de_0_a_360_y_descuentan_cerramiento_y_losa() -> Non
         nucleo._regenerar_muro(muro)
 
     areas = {}
+    # O061: valores a mano. A = huella; el cerramiento de 0.15 resta solo
+    # su sólido (0.15 × solape) y la azotea N4 (3.08–3.20) deja 0.025 de franja
+    # en el borde exterior porque su contorno llega a −0.075. En las esquinas
+    # a 45° el solape pierde un triángulo de 0.075² / 2 = 0.0028125.
+    esperados = {
+        # eje y=1.5: 0.46×3.48 − (0.15×2.30)×0.20 + (2.30×0.025)×0.12 = 1.5387.
+        "00gX8hgmr8fROaq_4TRyaB": 1.5387,
+        # eje x=2.5: 0.26×3.48 − (0.15×1.30)×0.20 + (1.30×0.025)×0.12 = 0.8697.
+        "0KjZGGVCz5uRbquvy4FH$a": 0.8697,
+        # eje y=0 (esquina 45°): cerramiento 0.15×2.40 − 0.0028125 = 0.3571875;
+        # franja 0.025×2.475 + 0.0003125 = 0.0621875;
+        # 0.48×3.48 − 0.3571875×0.20 + 0.0621875×0.12 = 1.606425.
+        "2$JKY6B6f4nuTR$iWYRmCb": 1.606425,
+        # eje x=0 (espejo): cerramiento 0.15×1.40 − 0.0028125 = 0.2071875;
+        # franja 0.025×1.475 + 0.0003125 = 0.0371875;
+        # 0.28×3.48 − 0.2071875×0.20 + 0.0371875×0.12 = 0.937425.
+        "0xg3GB_If8tvz7MLS9Vl76": 0.937425,
+    }
     for muro in muros:
         gid = muro.GlobalId
-        area = _huella_area(nucleo, gid)
-        areas[gid] = area
+        areas[gid] = _huella_area(nucleo, gid)
         _x0, _x1, _y0, _y1, z0, z1 = _caja(nucleo, gid)
         assert z0 == pytest.approx(0.00, abs=1e-9), f"{gid} no arranca en 0.00"
         assert z1 == pytest.approx(3.60, abs=1e-9), f"{gid} no llega a 3.60"
-        # 3.60 − 0.20 (cerramiento) − 0.12 (losa N4) = 3.28 m de cuerpo.
         assert _volumen_malla(nucleo, gid) == pytest.approx(
-            _volumen_muro(nucleo, gid), abs=2e-3
+            esperados[gid], abs=1e-6
         )
 
     # El muro de y = 1.5 mide 2.30 × 0.20 = 0.46 m² de huella.
     muro_y15 = next(m for m in muros if abs(_datos(nucleo, m.GlobalId)["y1"] - 1.5) < 1e-9)
     assert areas[muro_y15.GlobalId] == pytest.approx(0.46, abs=1e-9)
     assert _volumen_malla(nucleo, muro_y15.GlobalId) == pytest.approx(
-        _volumen_muro(nucleo, muro_y15.GlobalId), abs=1e-3
+        1.5387, abs=1e-6
     )
 
 
@@ -350,15 +345,19 @@ def test_flujo_completo_cambiar_tope_a_n5_guarda_reabre_y_reporta() -> None:
         nucleo.restricciones_editar(muro, nivel_tope=n5)
         assert _datos(nucleo, muro)["altura"] == pytest.approx(3.60, abs=1e-9)
 
-    esperado = {}
-    for muro in muros:
-        area = _huella_area(nucleo, muro)
-        esperado[muro] = _volumen_muro(nucleo, muro)
+    # O061: valores a mano. Los cerramientos se crean con AnchoDelMuro = True
+    # (B = 0.20), se cruzan en las esquinas y dejan dos triángulos de 0.005 en
+    # el tramo 2.20–2.40; la losa N4 (contorno a −0.075) deja en 3.08–3.20 una
+    # franja de 0.025 en el borde exterior. Muro largo (A = 0.50):
+    # 0.50×3.28 + 0.01×0.20 + 0.066875×0.12 = 1.650025.
+    # Muro corto (A = 0.30): 0.30×3.28 + 0.01×0.20 + 0.041875×0.12 = 0.991025.
+    esperados = [1.650025, 0.991025, 1.650025, 0.991025]
+    huellas: dict[str, float] = {}
+    for muro, esperado in zip(muros, esperados):
+        huellas[muro] = _huella_area(nucleo, muro)
         _x0, _x1, _y0, _y1, z0, z1 = _caja(nucleo, muro)
         assert (z0, z1) == pytest.approx((0.00, 3.60), abs=1e-9)
-        assert _volumen_malla(nucleo, muro) == pytest.approx(
-            _volumen_muro(nucleo, muro), abs=1e-3
-        )
+        assert _volumen_malla(nucleo, muro) == pytest.approx(esperado, abs=1e-6)
 
     # Reporte de cantidades: la base y la cima también salen de la regla nueva.
     cantidades = nucleo.cantidades_estructura()["elementos"]
@@ -372,12 +371,12 @@ def test_flujo_completo_cambiar_tope_a_n5_guarda_reabre_y_reporta() -> None:
         nucleo.guardar(str(ruta))
         otro = ModeloNucleo()
         otro.abrir(str(ruta))
-        for muro in muros:
+        for muro, esperado in zip(muros, esperados):
             _x0, _x1, _y0, _y1, z0, z1 = _caja(otro, muro)
             assert (z0, z1) == pytest.approx((0.00, 3.60), abs=1e-9)
-            assert _volumen_malla(otro, muro) == pytest.approx(esperado[muro], abs=1e-3)
+            assert _volumen_malla(otro, muro) == pytest.approx(esperado, abs=1e-6)
             assert _huella_area(otro, muro) == pytest.approx(
-                _huella_area(nucleo, muro), abs=1e-6
+                huellas[muro], abs=1e-6
             )
 
 
