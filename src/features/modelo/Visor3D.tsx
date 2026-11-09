@@ -6391,31 +6391,38 @@ export function Visor3D({
           void confirmarEmpujar();
           return;
         }
-        const res = inferenciaEmpujarEn(clientX, clientY, shift);
-        const engancha = !!(res && res.punto && res.inf.tipo && res.inf.tipo !== "plano");
         const caraHover = caraBajoCursor(clientX, clientY);
-        // Las caras horizontales (tope de muro, columna, etc.) son el asa del
-        // empuje aunque un borde cercano enganche; las verticales ceden ante un
-        // enganche (O049 conserva sus puntos medios sobre bordes de losa).
-        const caraArriba = !!caraHover && Math.abs(caraHover.normal[2]) > 0.5;
-        if (
-          caraHover &&
-          caraHover.clasificacion.accion !== "ninguna" &&
-          (caraArriba || !engancha)
-        ) {
-          setCaraEmpujarHover(null);
-          iniciarEmpujarCara({
-            globalid: caraHover.globalid,
-            normal: caraHover.normal,
-            punto: caraHover.punto,
-            accion: caraHover.clasificacion.accion as Exclude<
-              AccionEmpujarCara,
-              "ninguna"
-            >,
-            etiqueta: caraHover.clasificacion.etiqueta,
-            poligono: caraHover.poligono,
-          });
-          return;
+        const res = inferenciaEmpujarEn(clientX, clientY, shift);
+        // O056: una cara que se puede empujar manda sobre las inferencias; el
+        // enganche se usa después, al mover el ratón, para fijar la distancia.
+        // Excepción: en una cara vertical, un enganche a su borde superior
+        // (O049: el punto medio del borde de una losa) sigue dibujando sobre
+        // la superficie de arriba en vez de empujar el canto.
+        if (caraHover && caraHover.clasificacion.accion !== "ninguna") {
+          const vertical = Math.abs(caraHover.normal[2]) < 0.5;
+          const zMax = Math.max(...caraHover.poligono.map((p) => p.z));
+          const engancheArriba =
+            vertical &&
+            !!res &&
+            !!res.punto &&
+            !!res.inf.tipo &&
+            res.inf.tipo !== "plano" &&
+            res.punto.z >= zMax - 1e-6;
+          if (!engancheArriba) {
+            setCaraEmpujarHover(null);
+            iniciarEmpujarCara({
+              globalid: caraHover.globalid,
+              normal: caraHover.normal,
+              punto: caraHover.punto,
+              accion: caraHover.clasificacion.accion as Exclude<
+                AccionEmpujarCara,
+                "ninguna"
+              >,
+              etiqueta: caraHover.clasificacion.etiqueta,
+              poligono: caraHover.poligono,
+            });
+            return;
+          }
         }
         setCaraEmpujarHover(null);
         if (!res || !res.punto) return;
