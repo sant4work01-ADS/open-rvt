@@ -146,9 +146,10 @@ def test_losa_entre_cuatro_trabes_area_y_volumen_de_la_tabla() -> None:
     assert info["volumen_neto_m3"] == pytest.approx(1.78125, abs=1e-9)
 
     medicion = nucleo.medicion_calcular()["partidas"]
-    area = next(p for p in medicion if p["nombre"] == "Área de la losa")
+    # O059: la losa de entrepiso lleva su uso en el nombre de la partida.
+    area = next(p for p in medicion if p["nombre"] == "Área de losa de entrepiso")
     assert area["total"] == pytest.approx(17.8125, abs=1e-4)
-    volumen = next(p for p in medicion if p["nombre"] == "Volumen de concreto")
+    volumen = next(p for p in medicion if p["nombre"] == "Volumen de losa de entrepiso")
     renglon = next(r for r in volumen["renglones"] if r["globalid"] == losa)
     assert renglon["resultado"] == pytest.approx(1.7812, abs=1e-4)
 

@@ -748,6 +748,13 @@ class ModeloNucleo(
             "materiales": materiales,
             "psets": psets,
         }
+        # O059: el uso efectivo de una losa se calcula en un solo lugar, también
+        # para los IFC viejos que no traen la propiedad.
+        if elemento.is_a("IfcSlab"):
+            try:
+                salida["uso"] = self.uso_de_losa(elemento)
+            except Exception:
+                LOG.debug("no se pudo leer el uso de la losa", exc_info=True)
         # O016/O028: base y tope para todo lo estructural, también sin pset.
         if (
             elemento.is_a("IfcWall")

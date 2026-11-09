@@ -1305,6 +1305,25 @@ export function PropiedadesElemento() {
         )}
         {esLosa && (
           <>
+            <label className="flex items-center justify-between gap-2 text-xs">
+              <span className="text-muted-foreground">Uso</span>
+              <select
+                data-testid="prop-uso-losa"
+                value={
+                  propiedades.uso ??
+                  String(
+                    (propiedades.psets?.OPENRVT_Losa as Record<string, unknown>)
+                      ?.Uso ?? "entrepiso",
+                  )
+                }
+                onChange={(e) => void editar(gid, { uso: e.target.value })}
+                className="w-40 rounded border bg-background px-2 py-1"
+              >
+                <option value="firme">Firme / losa de cimentación</option>
+                <option value="entrepiso">Entrepiso</option>
+                <option value="azotea">Azotea</option>
+              </select>
+            </label>
             <CampoEditable
               etiqueta="Espesor (m)"
               testid="elemento-espesor"

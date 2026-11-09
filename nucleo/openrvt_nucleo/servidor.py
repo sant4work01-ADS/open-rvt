@@ -274,9 +274,10 @@ class Servidor:
             return self._exigir().losa_crear(
                 str(params.get("nivel") or ""),
                 params.get("puntos"),
-                params.get("espesor", 0.12),
+                params.get("espesor"),
                 params.get("desfase", 0.0),
                 params.get("bordes"),
+                str(params.get("uso") or "entrepiso"),
             )
         if metodo == "losas.desde_muros":
             return self._exigir().losa_desde_muros(
@@ -284,6 +285,7 @@ class Servidor:
                 params.get("globalids"),
                 str(params.get("lado") or "exterior"),
                 params.get("desfase", 0.0),
+                str(params.get("uso") or "entrepiso"),
             )
         if metodo == "genericos.crear":
             return self._exigir().generico_crear(

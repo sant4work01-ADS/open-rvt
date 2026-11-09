@@ -47,7 +47,7 @@ describe("O032: barra de opciones", () => {
   it("la losa ofrece borde a y desfase común", () => {
     useModelo.setState({
       herramienta: "losa",
-      opcionesLosa: { lado: "eje", desfase: 0.075 },
+      opcionesLosa: { lado: "eje", desfase: 0.075, uso: "entrepiso" },
     });
     render(<BarraHerramienta />);
     expect((screen.getByTestId("losa-borde-a") as HTMLSelectElement).value).toBe("eje");
