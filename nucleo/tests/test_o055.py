@@ -75,6 +75,7 @@ def test_guardar_y_reabrir_conserva_texto_y_posicion() -> None:
                 "texto": "Cota de nivel +3.00",
                 "posicion": [4.0, 5.5, 3.0],
                 "nivel": "Nivel 0",
+                "nivelGlobalid": nivel,
             }
         ]
         assert _posicion(otro, gid) == pytest.approx((4.0, 5.5, 3.0), abs=1e-9)
@@ -137,6 +138,7 @@ def test_el_servidor_expone_el_flujo_completo_de_notas() -> None:
             "texto": "Desde el servidor",
             "posicion": [2.5, 3.5, 1.25],
             "nivel": "Nivel 0",
+            "nivelGlobalid": nivel,
         }
     ]
     servidor.despachar("notas.editar", {"globalid": gid, "texto": "Editada"})

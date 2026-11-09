@@ -5269,6 +5269,7 @@ class ModeladoMixin:
             if n.Elevation is not None
         ]
         nivel = ""
+        nivel_gid = ""
         if niveles:
             inferior = max(
                 (n for n in niveles if float(n.Elevation) <= z + 1e-4),
@@ -5277,11 +5278,13 @@ class ModeladoMixin:
             )
             if inferior is not None:
                 nivel = _texto(inferior.Name)
+                nivel_gid = _texto(inferior.GlobalId)
         return {
             "globalid": _texto(nota.GlobalId),
             "texto": _texto(getattr(nota, "Description", "")),
             "posicion": [x, y, z],
             "nivel": nivel,
+            "nivelGlobalid": nivel_gid,
         }
 
     def notas_listar(self) -> list[dict[str, Any]]:
