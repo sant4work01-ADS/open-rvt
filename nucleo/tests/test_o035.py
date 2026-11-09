@@ -103,6 +103,18 @@ def _volumen_malla(nucleo: ModeloNucleo, gid: str) -> float:
     raise AssertionError(f"no se teseló {gid}")
 
 
+def _casi(actual, esperado, abs: float = 1e-9) -> bool:
+    """Compara elemento a elemento (pytest.approx no admite listas de tuplas)."""
+    if isinstance(esperado, (list, tuple)):
+        assert isinstance(actual, (list, tuple))
+        assert len(actual) == len(esperado)
+        for a, e in zip(actual, esperado):
+            _casi(a, e, abs)
+    else:
+        assert actual == pytest.approx(esperado, abs=abs)
+    return True
+
+
 def _contratrabe(
     nucleo: ModeloNucleo, nivel: str, x1: float, y1: float, x2: float, y2: float,
     desfase: float = -0.30,
@@ -117,13 +129,14 @@ def test_muro_sobre_contratrabe_baja_a_la_cara_superior() -> None:
 
     # El desplazamiento del muro no cambia: la base baja solo al modelar.
     assert _datos(nucleo, muro)["z"] == pytest.approx(0.0, abs=1e-9)
-    assert _bajadas(nucleo, muro) == pytest.approx([(0.0, 4.0, -0.30)], abs=1e-9)
-    assert nucleo._limites_verticales_muro(
-        _entidad(nucleo, muro), _datos(nucleo, muro)
-    ) == pytest.approx((-0.30, 2.60), abs=1e-9)
+    assert _casi(_bajadas(nucleo, muro), [(0.0, 4.0, -0.30)])
+    assert _casi(
+        nucleo._limites_verticales_muro(_entidad(nucleo, muro), _datos(nucleo, muro)),
+        (-0.30, 2.60),
+    )
 
     x0, x1, _y0, _y1, z0, z1 = _caja(nucleo, muro)
-    assert (x0, x1) == pytest.approx((0.0, 4.0), abs=1e-9)
+    assert _casi((x0, x1), (0.0, 4.0))
     assert z0 == pytest.approx(-0.30, abs=1e-9)
     assert z1 == pytest.approx(2.60, abs=1e-9)
 
@@ -141,7 +154,7 @@ def test_muro_sobre_zapata_corrida_baja_a_su_cara_superior() -> None:
     nucleo.zapata_corrida_crear(ZC, nivel, 0, 0, 4, 0, desplante=0.70)
     muro = nucleo.muro_crear(MURO, nivel, 0, 0, 4, 0, altura=2.60)["creados"][0]
 
-    assert _bajadas(nucleo, muro) == pytest.approx([(0.0, 4.0, -0.50)], abs=1e-9)
+    assert _casi(_bajadas(nucleo, muro), [(0.0, 4.0, -0.50)])
     assert _caja(nucleo, muro)[4] == pytest.approx(-0.50, abs=1e-9)
     info = _info(nucleo, muro)
     assert info["volumen_bruto_m3"] == pytest.approx(1.86, abs=1e-9)
@@ -155,7 +168,7 @@ def test_solo_baja_el_tramo_que_queda_sobre_la_contratrabe() -> None:
 
     tramos = _bajadas(nucleo, muro)
     assert len(tramos) == 1
-    assert tramos[0] == pytest.approx((0.0, 3.0, -0.30), abs=1e-9)
+    assert _casi(tramos[0], (0.0, 3.0, -0.30))
     _x0, _x1, _y0, _y1, z0, z1 = _caja(nucleo, muro)
     assert z0 == pytest.approx(-0.30, abs=1e-9)
     assert z1 == pytest.approx(2.60, abs=1e-9)
@@ -190,7 +203,7 @@ def test_casilla_desactivada_vuelve_a_nacer_en_el_nivel() -> None:
     assert _info(nucleo, muro)["volumen_bruto_m3"] == pytest.approx(1.56, abs=1e-9)
 
     nucleo.elemento_editar(muro, {"bajar_a_cimentacion": True})
-    assert _bajadas(nucleo, muro) == pytest.approx([(0.0, 4.0, -0.30)], abs=1e-9)
+    assert _casi(_bajadas(nucleo, muro), [(0.0, 4.0, -0.30)])
     assert _info(nucleo, muro)["volumen_bruto_m3"] == pytest.approx(1.74, abs=1e-9)
 
 
@@ -204,7 +217,7 @@ def test_mover_y_borrar_la_contratrabe_recalcula_y_deshacer_restaura() -> None:
     assert _info(nucleo, muro)["volumen_bruto_m3"] == pytest.approx(1.56, abs=1e-9)
 
     nucleo.deshacer()
-    assert _bajadas(nucleo, muro) == pytest.approx([(0.0, 4.0, -0.30)], abs=1e-9)
+    assert _casi(_bajadas(nucleo, muro), [(0.0, 4.0, -0.30)])
     assert _info(nucleo, muro)["volumen_bruto_m3"] == pytest.approx(1.74, abs=1e-9)
 
     nucleo.elementos_borrar([ct])
@@ -212,7 +225,7 @@ def test_mover_y_borrar_la_contratrabe_recalcula_y_deshacer_restaura() -> None:
     assert _info(nucleo, muro)["volumen_bruto_m3"] == pytest.approx(1.56, abs=1e-9)
 
     nucleo.deshacer()
-    assert _bajadas(nucleo, muro) == pytest.approx([(0.0, 4.0, -0.30)], abs=1e-9)
+    assert _casi(_bajadas(nucleo, muro), [(0.0, 4.0, -0.30)])
 
 
 def test_cambiar_el_peralte_y_el_desplante_recalcula_la_base() -> None:
@@ -225,12 +238,12 @@ def test_cambiar_el_peralte_y_el_desplante_recalcula_la_base() -> None:
 
     # Peralte 0.40 → 0.60: la cara superior sube a −0.20.
     nucleo.tipos_editar(tipo_gid, {"seccion": {"H": 0.60}})
-    assert _bajadas(nucleo, muro) == pytest.approx([(0.0, 4.0, -0.20)], abs=1e-9)
+    assert _casi(_bajadas(nucleo, muro), [(0.0, 4.0, -0.20)])
     assert _info(nucleo, muro)["volumen_bruto_m3"] == pytest.approx(1.68, abs=1e-9)
 
     # Desplante (desfase) a −0.50: la cara superior baja a −0.50.
     nucleo.elemento_editar(ct, {"desfase": -0.50})
-    assert _bajadas(nucleo, muro) == pytest.approx([(0.0, 4.0, -0.50)], abs=1e-9)
+    assert _casi(_bajadas(nucleo, muro), [(0.0, 4.0, -0.50)])
     assert _info(nucleo, muro)["volumen_bruto_m3"] == pytest.approx(1.86, abs=1e-9)
 
 
