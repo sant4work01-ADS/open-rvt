@@ -2600,7 +2600,7 @@ dependencies = [
 
 [[package]]
 name = "open-rvt"
-version = "0.5.31"
+version = "0.5.32"
 dependencies = [
  "chrono",
  "log",
