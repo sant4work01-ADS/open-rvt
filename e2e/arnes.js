@@ -204,4 +204,63 @@ class Sesion {
   }
 }
 
-module.exports = { Sesion, esperar, conTimeout, By, until, Key };
+/**
+ * Pulsa un botón por su `data-testid`. Si el comando no está en el DOM porque su
+ * grupo de la cinta quedó colapsado por falta de ancho, abre el desplegable del
+ * grupo que lo contiene (los grupos colapsados llevan `data-colapsado="1"` y su
+ * botón muestra en el menú los mismos `data-testid`) y vuelve a intentarlo.
+ */
+async function activar(ses, testid, espera = 400) {
+  const estado = () =>
+    ses.driver.executeScript((testid) => {
+      const el = document.querySelector(`[data-testid="${testid}"]`);
+      if (!el) return "falta";
+      if (el.disabled) return "deshabilitado";
+      el.click();
+      return "ok";
+    }, testid);
+
+  const primero = await estado();
+  if (primero === "ok") {
+    await esperar(espera);
+    return;
+  }
+  if (primero === "deshabilitado") {
+    throw new Error(`no se pudo pulsar ${testid}: está deshabilitado`);
+  }
+
+  const grupos = await ses.driver.executeScript(() =>
+    Array.from(document.querySelectorAll('[data-grupo][data-colapsado="1"]')).map(
+      (g) => g.getAttribute("data-grupo"),
+    ),
+  );
+  for (const nombre of grupos) {
+    const abierto = await ses.driver.executeScript((nombre) => {
+      const grupo = Array.from(
+        document.querySelectorAll('[data-grupo][data-colapsado="1"]'),
+      ).find((g) => g.getAttribute("data-grupo") === nombre);
+      const boton = grupo?.querySelector("button");
+      if (!boton) return false;
+      boton.click();
+      return true;
+    }, nombre);
+    if (!abierto) continue;
+    await esperar(200);
+    const segundo = await estado();
+    if (segundo === "ok") {
+      await esperar(espera);
+      return;
+    }
+    if (segundo === "deshabilitado") {
+      throw new Error(`no se pudo pulsar ${testid}: está deshabilitado`);
+    }
+    // Cierra el menú abierto antes de probar con el siguiente grupo.
+    await ses.driver.executeScript(() => {
+      document.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    });
+    await esperar(100);
+  }
+  throw new Error(`no se pudo pulsar ${testid}`);
+}
+
+module.exports = { Sesion, esperar, conTimeout, By, until, Key, activar };
