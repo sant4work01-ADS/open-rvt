@@ -41,6 +41,18 @@ export interface Rayo {
   direccion: Vec3;
 }
 
+/** Cara elegida para el empuje: la vista la fija y el ratón solo cambia `distancia`. */
+export interface CaraEmpujarActiva {
+  globalid: string;
+  normal: [number, number, number];
+  punto: [number, number, number];
+  accion: Exclude<AccionEmpujarCara, "ninguna">;
+  etiqueta: string;
+  distancia: number;
+  /** Polígono de la cara para la vista previa (opcional). */
+  poligono?: Vec3[];
+}
+
 const EPS = 1e-9;
 const COSENO_VERTICAL = 0.9;
 const COSENO_EJE = 0.7;
@@ -223,11 +235,26 @@ function puntoEnPoligono2D(p: [number, number], poligono: [number, number][]): b
   return dentro;
 }
 
+function distanciaPuntoSegmento2D(
+  p: [number, number],
+  a: [number, number],
+  b: [number, number],
+): number {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const largo2 = dx * dx + dy * dy;
+  if (largo2 < 1e-12) return Math.hypot(p[0] - a[0], p[1] - a[1]);
+  let t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / largo2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+}
+
 /** Cara plana que contiene el punto (para resaltar la cara completa tocada). */
 export function caraEnPunto(
   p: Vec3,
   caras: CaraPlana[],
   tolerancia = 1e-4,
+  margen = 0,
 ): CaraPlana | null {
   for (const cara of caras) {
     if (cara.poligono.length < 3) continue;
@@ -255,7 +282,23 @@ export function caraEnPunto(
       return [punto(r, ejeU), punto(r, ejeV)];
     };
     const poligono = cara.poligono.map(proyectar);
-    if (puntoEnPoligono2D(proyectar(p), poligono)) return cara;
+    const enPlano = proyectar(p);
+    if (!puntoEnPoligono2D(enPlano, poligono)) continue;
+    if (margen > 0) {
+      let borde = Infinity;
+      for (let i = 0; i < poligono.length; i += 1) {
+        borde = Math.min(
+          borde,
+          distanciaPuntoSegmento2D(
+            enPlano,
+            poligono[i],
+            poligono[(i + 1) % poligono.length],
+          ),
+        );
+      }
+      if (borde <= margen) continue;
+    }
+    return cara;
   }
   return null;
 }

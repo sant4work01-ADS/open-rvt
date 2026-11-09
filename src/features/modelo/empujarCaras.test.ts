@@ -212,4 +212,12 @@ describe("cara completa bajo el punto", () => {
   it("no confunde un punto fuera del polígono", () => {
     expect(caraEnPunto(fuera, [cara])).toBeNull();
   });
+
+  it("con margen no activa la cara en una esquina: los contornos de O046 siguen naciendo ahí", () => {
+    // La esquina (0,0) y un punto a 2 cm del borde no cuentan como cara; el
+    // centro de la tapa sí. Así un clic en la esquina sigue creando un sólido.
+    expect(caraEnPunto({ x: 0, y: 0, z: 2.6 }, [cara], 1e-4, 0.03)).toBeNull();
+    expect(caraEnPunto({ x: 0.02, y: 0.02, z: 2.6 }, [cara], 1e-4, 0.03)).toBeNull();
+    expect(caraEnPunto({ x: 0.5, y: 0.075, z: 2.6 }, [cara], 1e-4, 0.03)).toBe(cara);
+  });
 });

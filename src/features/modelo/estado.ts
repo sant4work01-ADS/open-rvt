@@ -69,6 +69,7 @@ import {
   type ClaseEmpujar,
   type RectanguloEmpujar,
 } from "./empujar";
+import type { CaraEmpujarActiva } from "./empujarCaras";
 import { cortarRectas, recortarRecta } from "./planta";
 import { construirAberturas } from "./aberturas";
 import { normalizarAjusteEje } from "./ejesVista";
@@ -369,11 +370,16 @@ interface EstadoModelo {
   empujarAltura: number | null;
   /** O049: cota del plano del contorno (cara superior) o null = nivel activo. */
   empujarZ: number | null;
+  /** O056: cara existente elegida para empujar/tirar (null = modo contorno). */
+  empujarCara: CaraEmpujarActiva | null;
   fijarClasificacionEmpujar: (clasificacion: ClasificacionEmpujar) => void;
   fijarAlturaEmpujar: (altura: number | null) => void;
   moverEmpujar: (punto: Punto2 | null) => void;
   clicEmpujar: (punto: Punto2, z?: number) => Promise<boolean>;
   confirmarEmpujar: () => Promise<boolean>;
+  iniciarEmpujarCara: (cara: Omit<CaraEmpujarActiva, "distancia">) => void;
+  moverEmpujarCara: (distancia: number) => void;
+  confirmarEmpujarCara: () => Promise<boolean>;
   /** O006d: el trazo de eje actual se dibuja libre (Ctrl o Alt). */
   ejeLibre: boolean;
   voltearSiguiente: boolean;
@@ -850,6 +856,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       empujarRect: null,
       empujarAltura: null,
       empujarZ: null,
+      empujarCara: null,
       opcionesMuro: {
         tipo: tipos.find((t) => t.nombre === "Block 15")?.nombre ?? tipos[0]?.nombre ?? "",
         altura: 2.6,
@@ -1539,6 +1546,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     empujarRect: null,
     empujarAltura: null,
     empujarZ: null,
+    empujarCara: null,
     ejeLibre: false,
     voltearSiguiente: false,
     etiquetaEje: "",
@@ -2056,6 +2064,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         empujarRect: null,
         empujarAltura: null,
         empujarZ: null,
+        empujarCara: null,
         ejeLibre: false,
         modoCorte: false,
         puntoCorte: null,
@@ -2085,6 +2094,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         empujarRect: null,
         empujarAltura: null,
         empujarZ: null,
+        empujarCara: null,
         ejeLibre: false,
         etiquetaEje: "",
         opcionesNivel: { ...get().opcionesNivel, elevacionTexto: "" },
@@ -2330,6 +2340,18 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         bitacoraHerramienta(herramienta, "cancelar_trazo");
         return resto.length > 0;
       }
+      // O056: Esc a medias de un empuje de cara no deja cambios.
+      if (get().empujarCara) {
+        set({
+          empujarCara: null,
+          ratonHerramienta: null,
+          engancheHerramienta: null,
+          longitudTecleada: "",
+          aviso: null,
+        });
+        bitacoraHerramienta(herramienta, "cancelar_trazo");
+        return true;
+      }
       if (get().puntosHerramienta.length === 0 && !get().longitudTecleada) {
         return false;
       }
@@ -2341,6 +2363,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
         empujarRect: null,
         empujarAltura: null,
         empujarZ: null,
+        empujarCara: null,
         ejeLibre: false,
         etiquetaEje: "",
         opcionesNivel: { ...get().opcionesNivel, elevacionTexto: "" },
@@ -2427,10 +2450,67 @@ export const useModelo = create<EstadoModelo>((set, get) => {
           empujarRect: null,
           empujarAltura: null,
           empujarZ: null,
+          empujarCara: null,
         });
         bitacoraHerramienta("empujar", "terminar");
       }
       return ok;
+    },
+
+    iniciarEmpujarCara: (cara) => {
+      set({
+        empujarCara: { ...cara, distancia: 0 },
+        empujarRect: null,
+        empujarAltura: null,
+        empujarZ: null,
+        puntosHerramienta: [],
+        ratonHerramienta: null,
+        engancheHerramienta: null,
+        longitudTecleada: "",
+        aviso: `Empujar/Tirar: ${cara.etiqueta}. Mueva el ratón o teclee la distancia y Enter.`,
+      });
+      bitacoraHerramienta("empujar", "cara", {
+        x: cara.punto[0],
+        y: cara.punto[1],
+      });
+    },
+
+    moverEmpujarCara: (distancia) => {
+      const cara = get().empujarCara;
+      if (!cara || !Number.isFinite(distancia)) return;
+      set({ empujarCara: { ...cara, distancia } });
+    },
+
+    confirmarEmpujarCara: async () => {
+      const cara = get().empujarCara;
+      if (!cara) return false;
+      if (Math.abs(cara.distancia) < 1e-9) {
+        set({ aviso: "Empujar/Tirar: falta la distancia." });
+        return false;
+      }
+      const resultado = await ejecutarResultado("elementos.empujar_cara", {
+        globalid: cara.globalid,
+        normal: cara.normal,
+        punto: cara.punto,
+        distancia: cara.distancia,
+      });
+      if (!resultado) return false;
+      const aviso = typeof resultado.aviso === "string" ? resultado.aviso : "";
+      set({
+        empujarCara: null,
+        puntosHerramienta: [],
+        ratonHerramienta: null,
+        engancheHerramienta: null,
+        longitudTecleada: "",
+        empujarRect: null,
+        empujarAltura: null,
+        empujarZ: null,
+        aviso:
+          aviso ||
+          `${cara.etiqueta}: ${cara.distancia >= 0 ? "+" : ""}${cara.distancia.toFixed(2)} m.`,
+      });
+      bitacoraHerramienta("empujar", "terminar");
+      return true;
     },
 
     fijarColumnaConZapata: (valor) => set({ columnaConZapata: valor }),
@@ -2573,7 +2653,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       }
       if (herramienta === "empujar") {
         const campo = get().longitudTecleada;
-        if (get().puntosHerramienta.length === 0) return;
+        if (get().puntosHerramienta.length === 0 && !get().empujarCara) return;
         let siguiente = campo;
         if (tecla === "Backspace") siguiente = campo.slice(0, -1);
         else if (tecla === "-" && campo === "") siguiente = "-";
@@ -2629,6 +2709,25 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       // confirma el sólido. Sin texto, Enter usa la altura que sigue al ratón.
       if (herramienta === "empujar") {
         const texto = get().longitudTecleada.trim();
+        const cara = get().empujarCara;
+        if (cara) {
+          const distancia = texto === "" ? cara.distancia : parsearAltura(texto);
+          if (distancia === null || Math.abs(distancia) < 1e-9) {
+            set({
+              aviso:
+                texto === ""
+                  ? "Empujar/Tirar: falta la distancia."
+                  : "Distancia no válida: escriba un número distinto de cero.",
+            });
+            return;
+          }
+          set({
+            empujarCara: { ...cara, distancia },
+            longitudTecleada: "",
+          });
+          await get().confirmarEmpujarCara();
+          return;
+        }
         if (!get().empujarRect) {
           const primero = puntos[0];
           if (!primero) return;
