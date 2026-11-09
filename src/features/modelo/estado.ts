@@ -1272,12 +1272,21 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       });
       if (!resultado) {
         // O043/O045: el rechazo del núcleo (tramo ya ocupado) se muestra como aviso.
-        if (get().error) set({ aviso: get().error });
+        // O057: tras el error se reinicia el trazo, sin conservar el primer punto
+        // (si no, el clic siguiente dibujaría un tramo diagonal).
+        set({
+          puntosHerramienta: [],
+          ...limpiarTrazoExtra(),
+          aviso: get().error ?? "No se pudo crear el cerramiento.",
+        });
         return false;
       }
       creados += resultado.creados.length;
     }
-    if (creados === 0) return false;
+    if (creados === 0) {
+      set({ puntosHerramienta: [], ...limpiarTrazoExtra() });
+      return false;
+    }
     set({ puntosHerramienta: [destino], ...limpiarTrazoExtra() });
     bitacoraHerramienta("cerramiento", "terminar", {
       x: destino[0], y: destino[1],
