@@ -953,7 +953,7 @@ function RestriccionesCerramiento({ globalid }: { globalid: string }) {
       )}
       {muroLiga && (
         <div className="text-muted-foreground" data-testid="cerramiento-leyenda">
-          Sigue el eje del muro {muroLiga.nombre}; la altura la manda el cerramiento.
+          Sigue el eje del muro {muroLiga.nombre}.
         </div>
       )}
       <label className="flex items-center justify-between gap-2">
@@ -1137,6 +1137,14 @@ export function PropiedadesElemento() {
     | Record<string, unknown>
     | undefined;
   const esEstructural = !!estructura;
+  // O054: «del núcleo» es lo normal; «del tipo» usa B × H del tipo.
+  const anchoDelNucleo = !(
+    estructura?.AnchoDelMuro === false ||
+    estructura?.AnchoDelMuro === "False" ||
+    estructura?.AnchoDelMuro === "false" ||
+    estructura?.AnchoDelMuro === 0 ||
+    estructura?.AnchoDelMuro === "0"
+  );
   const predefinido = String(propiedades.atributos.PredefinedType ?? "");
   // O033: zapata aislada o corrida (el contratrabe es una viga de cimentación).
   const esZapata = propiedades.clase === "IfcFooting" && predefinido !== "FOOTING_BEAM";
@@ -1317,6 +1325,26 @@ export function PropiedadesElemento() {
         )}
         {esEstructural && !esZapata && (
           <>
+            {["castillo", "trabe", "dala", "cerramiento"].includes(
+              String(propiedades.alias ?? ""),
+            ) && (
+              <label className="flex items-center justify-between gap-2 text-xs">
+                <span className="text-muted-foreground">Ancho</span>
+                <select
+                  data-testid="elemento-ancho-muro"
+                  value={anchoDelNucleo ? "nucleo" : "tipo"}
+                  onChange={(e) =>
+                    void editar(gid, {
+                      AnchoDelMuro: e.target.value === "nucleo",
+                    })
+                  }
+                  className="w-32 rounded border bg-background px-2 py-1"
+                >
+                  <option value="nucleo">del núcleo</option>
+                  <option value="tipo">del tipo</option>
+                </select>
+              </label>
+            )}
             {esCerramiento ? (
               <RestriccionesCerramiento globalid={gid} />
             ) : (

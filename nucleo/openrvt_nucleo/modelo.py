@@ -302,6 +302,8 @@ class ModeloNucleo(
         # O007a: si el archivo no trae biblioteca, se siembra al abrirlo.
         self._asegurar_biblioteca()
         self.crear_tipos_estructura()
+        # O054: los castillos de esquina viejos se reparan al abrir el archivo.
+        self._reparar_castillos_esquina()
         # O012: los archivos anteriores pueden traer vigas encimadas; se recortan
         # al abrir sin perder elementos.
         self._recalcular_uniones_estructura()
@@ -695,6 +697,16 @@ class ModeloNucleo(
                 psets[nombre] = _json_plano(valores)
         except Exception:
             psets = {}
+
+        # O054: en Propiedades, «Nivel» se muestra con el nombre del nivel (el
+        # GlobalId guardado en el IFC no cambia).
+        estructura = psets.get("OPENRVT_Estructura")
+        if isinstance(estructura, dict) and estructura.get("Nivel"):
+            try:
+                nivel = self._nivel_por_gid(_texto(estructura["Nivel"]))
+                estructura["Nivel"] = _texto(nivel.Name)
+            except Exception:
+                pass
 
         # O052: la hoja no guarda su pset; vive en el vano. Se expone para que la
         # planta sepa el lado de abatimiento (Espacio) y la distancia real.

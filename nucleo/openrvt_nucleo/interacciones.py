@@ -127,6 +127,139 @@ class InteraccionesMixin:
         y = datos["y1"] + datos["dy"] * distancia
         return x, y, math.atan2(datos["dy"], datos["dx"])
 
+    # ------------------------------------------------------- O054: medida real
+    @staticmethod
+    def _del_nucleo(valor: Any) -> bool:
+        """O054: AnchoDelMuro verdadero = «del núcleo»; falso = «del tipo»."""
+        return valor not in (False, "False", "false", 0, "0")
+
+    @staticmethod
+    def _medida_texto(valor: float) -> str:
+        cm = round(float(valor) * 100.0, 1)
+        if abs(cm - round(cm)) < 1e-6:
+            return str(int(round(cm)))
+        return f"{cm:.1f}"
+
+    def _nombre_seccion(self, alias: str, b: float, h: float) -> str:
+        return (
+            f"{alias.capitalize()} {self._medida_texto(b)}×"
+            f"{self._medida_texto(h)}"
+        )
+
+    def _castillo_esquina(
+        self, muro: Any, x: float, y: float
+    ) -> tuple[Any, tuple[float, float]] | None:
+        """O054: muro vecino y cruce de ejes si el castillo cae a ≤ 0.05 m."""
+        for otro in self.modelo.by_type("IfcWall"):
+            if otro == muro or self._conexion_entre(muro, otro) is None:
+                continue
+            punto = self._cruce_ejes_muro(muro, otro)
+            if punto is None:
+                continue
+            if math.hypot(punto[0] - x, punto[1] - y) <= 0.05:
+                return otro, punto
+        return None
+
+    def _seccion_castillo(
+        self, castillo: Any, muro: Any, x: float, y: float
+    ) -> tuple[float, float, float, float, float, bool, Any | None]:
+        """O054: sección real del castillo y su punto (se centra en el cruce).
+
+        Devuelve (x, y, rotación, B, H, es_esquina, muro_perpendicular).
+        """
+        datos = self._datos_muro(muro)
+        pset = self._leer_pset(castillo, "OPENRVT_Estructura")
+        tipo = self._tipo_entidad(castillo)
+        _, seccion, _ = self._seccion_y_armado(tipo)
+        b_tipo = float(seccion.get("B") or seccion.get("D") or 0.15)
+        h_tipo = float(seccion.get("H") or seccion.get("D") or b_tipo)
+        nucleo, _centro = self._capas_nucleo(muro)
+        rotacion = math.atan2(datos["dy"], datos["dx"])
+        esquina = self._castillo_esquina(muro, x, y)
+        if esquina is not None and self._del_nucleo(pset.get("AnchoDelMuro", True)):
+            otro, punto = esquina
+            nucleo_otro, _ = self._capas_nucleo(otro)
+            return punto[0], punto[1], rotacion, nucleo_otro, nucleo, True, otro
+        if self._del_nucleo(pset.get("AnchoDelMuro", True)):
+            return x, y, rotacion, b_tipo, nucleo, False, None
+        return x, y, rotacion, b_tipo, h_tipo, False, None
+
+    def _ajustar_castillo(self, castillo: Any, muro: Any) -> bool:
+        """O054: recalcula sección, centro y nombre de un castillo en su muro."""
+        datos = self._datos_muro(muro)
+        liga = dict(self._leer_liga(castillo))
+        try:
+            distancia = float(liga.get("Distancia") or 0.0)
+        except (TypeError, ValueError):
+            distancia = 0.0
+        distancia = min(max(distancia, 0.0), datos["longitud"])
+        x, y, _rot = self._punto_en_muro(muro, distancia)
+        x, y, rotacion, b, h, esquina, _otro = self._seccion_castillo(
+            castillo, muro, x, y
+        )
+        if esquina:
+            distancia = min(
+                max(
+                    (x - datos["x1"]) * datos["dx"]
+                    + (y - datos["y1"]) * datos["dy"],
+                    0.0,
+                ),
+                datos["longitud"],
+            )
+            liga["Muro"] = _gid(muro)
+            liga["Distancia"] = distancia
+            self._guardar_liga(castillo, liga)
+        pset = {
+            **self._leer_pset(castillo, "OPENRVT_Estructura"),
+            "X": x, "Y": y, "Rotacion": rotacion,
+            "Base": datos["z"], "B": b, "H": h,
+        }
+        self._guardar_pset(castillo, "OPENRVT_Estructura", pset)
+        self._regenerar_estructura(castillo)
+        return esquina
+
+    def _reparar_castillos_esquina(self) -> int:
+        """O054: repara al abrir los castillos viejos (sección y centro reales)."""
+        reparados = 0
+        for castillo in self.modelo.by_type("IfcColumn"):
+            if self._estructura_de_tipo(self._tipo_entidad(castillo)) != "castillo":
+                continue
+            pset = self._leer_pset(castillo, "OPENRVT_Estructura")
+            if not pset:
+                continue
+            if "AnchoDelMuro" not in pset:
+                pset["AnchoDelMuro"] = True
+                self._guardar_pset(castillo, "OPENRVT_Estructura", pset)
+            muro = None
+            liga = self._leer_liga(castillo)
+            if liga.get("Muro"):
+                try:
+                    muro = self._entidad_por_gid(_texto(liga["Muro"]), ("IfcWall",))
+                except Exception:
+                    muro = None
+            if muro is None:
+                x = float(pset.get("X") or 0.0)
+                y = float(pset.get("Y") or 0.0)
+                cercano = None
+                for candidato in self.modelo.by_type("IfcWall"):
+                    datos = self._datos_muro(candidato)
+                    t = (x - datos["x1"]) * datos["dx"] + (y - datos["y1"]) * datos["dy"]
+                    if t < -0.05 or t > datos["longitud"] + 0.05:
+                        continue
+                    distancia = abs(
+                        -(x - datos["x1"]) * datos["dy"] + (y - datos["y1"]) * datos["dx"]
+                    )
+                    if distancia > datos["espesor"] / 2.0 + 0.05:
+                        continue
+                    if cercano is None or distancia < cercano[0]:
+                        cercano = (distancia, candidato)
+                muro = cercano[1] if cercano is not None else None
+            if muro is None:
+                continue
+            if self._ajustar_castillo(castillo, muro):
+                reparados += 1
+        return reparados
+
     # ------------------------------------------------------------------ columnas / vigas base
     def _columna_nueva(
         self,
@@ -241,9 +374,28 @@ class InteraccionesMixin:
     ) -> Any:
         datos = self._datos_muro(muro)
         x, y, rotacion = self._punto_en_muro(muro, distancia)
-        nucleo, centro = self._capas_nucleo(muro)
+        nucleo, _centro = self._capas_nucleo(muro)
         _, seccion, _ = self._seccion_y_armado(tipo_entidad)
-        ancho = float(seccion.get("B") or 0.15)
+        ancho = float(seccion.get("B") or seccion.get("D") or 0.15)
+        # O054: en un cruce de muros el castillo se centra y mide núcleo × núcleo;
+        # fuera de él, a lo largo del muro manda la medida del tipo y en el
+        # espesor el núcleo del muro.
+        esquina = self._castillo_esquina(muro, x, y)
+        if esquina is not None:
+            otro, punto = esquina
+            nucleo_otro, _ = self._capas_nucleo(otro)
+            x, y = punto
+            ancho, alto = nucleo_otro, nucleo
+            distancia = min(
+                max(
+                    (x - datos["x1"]) * datos["dx"]
+                    + (y - datos["y1"]) * datos["dy"],
+                    0.0,
+                ),
+                datos["longitud"],
+            )
+        else:
+            alto = nucleo
         nivel_entidad = self._nivel_de_elemento(muro)
         # O045: el castillo va embebido y llega a la altura completa del muro.
         altura = datos["altura"]
@@ -255,8 +407,8 @@ class InteraccionesMixin:
         pset = {
             **self._leer_pset(castillo, "OPENRVT_Estructura"),
             "X": x, "Y": y, "Rotacion": rotacion, "Base": elevacion,
-            "Altura": altura, "B": ancho, "H": nucleo,
-            "AnchoDelMuro": abs(ancho - nucleo) > 1e-9,
+            "Altura": altura, "B": ancho, "H": alto,
+            "AnchoDelMuro": True,
         }
         self._guardar_pset(castillo, "OPENRVT_Estructura", pset)
         self._regenerar_estructura(castillo)
@@ -693,7 +845,7 @@ class InteraccionesMixin:
             "OPENRVT_Estructura",
             {
                 **self._leer_pset(viga, "OPENRVT_Estructura"),
-                "B": nucleo,
+                "B": nucleo, "AnchoDelMuro": True,
                 "Z": tope - alto / 2.0,
                 "Nivel": restriccion["NivelBase"],
                 "Desfase": restriccion["DesfaseBase"],
@@ -791,7 +943,7 @@ class InteraccionesMixin:
             "OPENRVT_Estructura",
             {
                 **self._leer_pset(viga, "OPENRVT_Estructura"),
-                "B": nucleo,
+                "B": nucleo, "AnchoDelMuro": True,
                 "Z": centro,
             },
         )
@@ -896,10 +1048,14 @@ class InteraccionesMixin:
         for castillo in self._dependientes_de(muro):
             if self._estructura_de_tipo(self._tipo_entidad(castillo)) != "castillo":
                 continue
+            # O054: el castillo de esquina manda sobre el cerramiento: atraviesa
+            # la franja para cerrar el cruce (el cerramiento se corta en su cara).
+            es_esquina = self._ajustar_castillo(castillo, muro)
+            altura = tope if es_esquina else tope_castillo
             pset = {
                 **self._leer_pset(castillo, "OPENRVT_Estructura"),
                 "Base": datos["z"],
-                "Altura": max(tope_castillo - datos["z"], 0.05),
+                "Altura": max(altura - datos["z"], 0.05),
             }
             self._guardar_pset(castillo, "OPENRVT_Estructura", pset)
             self._regenerar_estructura(castillo)
@@ -943,23 +1099,18 @@ class InteraccionesMixin:
             if not pset:
                 continue
             if alias == "castillo":
-                liga = self._leer_liga(dependiente)
-                distancia = min(
-                    max(float(liga.get("Distancia") or 0.0), 0.0), datos["longitud"]
-                )
-                x, y, rotacion = self._punto_en_muro(muro, distancia)
-                _, seccion, _ = self._seccion_y_armado(self._tipo_entidad(dependiente))
-                pset.update(
-                    {
-                        "X": x, "Y": y, "Rotacion": rotacion, "Base": datos["z"],
-                        "B": float(seccion.get("B") or 0.15), "H": nucleo,
-                    }
-                )
-                liga["Distancia"] = distancia
-                self._guardar_liga(dependiente, liga)
+                # O054: también aquí se recalcula la sección y, en un cruce, el
+                # castillo se vuelve a centrar en el eje del muro vecino.
+                self._ajustar_castillo(dependiente, muro)
+                modificados.append(dependiente)
+                continue
             elif alias in ("cerramiento", "dala"):
                 _, seccion, _ = self._seccion_y_armado(self._tipo_entidad(dependiente))
                 alto = float(pset.get("H") or seccion.get("H") or 0.20)
+                del_nucleo = self._del_nucleo(pset.get("AnchoDelMuro", True))
+                ancho = nucleo if del_nucleo else float(
+                    seccion.get("B") or nucleo
+                )
                 liga = self._leer_liga(dependiente)
                 # O045: el cerramiento puede cubrir solo un tramo del muro; sus
                 # distancias al inicio se guardan en la liga y se conservan.
@@ -980,9 +1131,11 @@ class InteraccionesMixin:
                     {
                         "X1": x1, "Y1": y1,
                         "X2": x2, "Y2": y2,
-                        "Longitud": d2 - d1, "B": nucleo,
+                        "Longitud": d2 - d1, "B": ancho,
                     }
                 )
+                if not del_nucleo:
+                    pset["H"] = float(seccion.get("H") or alto)
                 if alias == "dala":
                     pset["Z"] = datos["z"] + alto / 2.0
                 else:
@@ -2052,6 +2205,7 @@ class InteraccionesMixin:
         return {
             "globalid": _gid(elemento),
             "clase": clase,
+            "nombre": _texto(getattr(elemento, "Name", "")),
             "tipo": tipo_nombre,
             "alias": alias,
             "volumen_bruto_m3": round(bruto, 6),

@@ -4099,6 +4099,12 @@ class ModeladoMixin:
         for clave in ("B", "H"):
             if datos.get(clave):
                 seccion[clave] = float(datos[clave])
+        # O054: el nombre del ejemplar dice la sección real; el tipo conserva el suyo.
+        if alias in ("columna", "castillo", "trabe", "cerramiento", "dala", "contratrabe"):
+            b = float(seccion.get("B") or seccion.get("D") or 0.0)
+            h = float(seccion.get("H") or seccion.get("D") or 0.0)
+            if b > 0 and h > 0:
+                elemento.Name = self._nombre_seccion(alias, b, h)
         self._aplicar_predefinido(elemento, tipo)
         self._quitar_representaciones(elemento, "Body")
         if elemento.is_a("IfcColumn"):
@@ -7088,7 +7094,41 @@ class ModeladoMixin:
                 datos["Z"] = elevacion - float(datos.get("Desplante") or 0.80) + alto / 2.0
             else:
                 datos["Z"] = elevacion - float(datos.get("Desplante") or 1.0)
+            # O054: «Ancho: del núcleo / del tipo» para castillos, trabes, dalas y
+            # cerramientos ligados a un muro.
+            if "AnchoDelMuro" in cambios or "ancho_del_muro" in cambios:
+                datos["AnchoDelMuro"] = self._del_nucleo(
+                    cambios.get("AnchoDelMuro", cambios.get("ancho_del_muro"))
+                )
+                if alias in ("cerramiento", "dala", "trabe", "contratrabe"):
+                    liga = self._leer_liga(entidad)
+                    muro = None
+                    if liga.get("Muro"):
+                        try:
+                            muro = self._entidad_por_gid(
+                                _texto(liga["Muro"]), ("IfcWall",)
+                            )
+                        except Exception:
+                            muro = None
+                    if muro is not None and self._del_nucleo(datos["AnchoDelMuro"]):
+                        datos["B"] = self._capas_nucleo(muro)[0]
+                    else:
+                        datos["B"] = float(seccion.get("B") or 0.20)
+                    datos["H"] = float(seccion.get("H") or datos.get("H") or 0.40)
             self._guardar_pset(entidad, "OPENRVT_Estructura", datos)
+            if (
+                entidad.is_a("IfcColumn")
+                and self._estructura_de_tipo(self._tipo_entidad(entidad)) == "castillo"
+            ):
+                liga = self._leer_liga(entidad)
+                muro = None
+                if liga.get("Muro"):
+                    try:
+                        muro = self._entidad_por_gid(_texto(liga["Muro"]), ("IfcWall",))
+                    except Exception:
+                        muro = None
+                if muro is not None:
+                    self._ajustar_castillo(entidad, muro)
             if entidad.is_a("IfcColumn"):
                 restriccion = self._restricciones_de(entidad)
                 restriccion["NivelTope"] = _texto(datos.get("NivelSuperior"))
