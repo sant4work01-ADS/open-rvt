@@ -51,15 +51,6 @@ async function activar(ses, testid) {
   await esperar(300);
 }
 
-async function cambiarPestana(ses, nombre) {
-  const pestana = await ses.driver.wait(
-    until.elementLocated(By.xpath(`//*[@role="tab"][normalize-space(.)="${nombre}"]`)),
-    10_000,
-  );
-  await pestana.click();
-  await esperar(250);
-}
-
 async function elegirVista(ses, nombre) {
   const boton = await ses.driver.wait(
     until.elementLocated(
@@ -207,7 +198,7 @@ test("O061: losas completas, cerramientos al ancho del muro y capturas", async (
     assert.equal(Number(datosEsquina.B), 0.15);
     assert.equal(Number(datosEsquina.H), 0.15);
 
-    await cambiarPestana(ses, "Vista");
+    await activar(ses, "panel-pestana-vistas");
     await elegirVista(ses, "3D Isométrica");
     await captura(ses, "01-3d.png");
 
