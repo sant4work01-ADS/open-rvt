@@ -938,6 +938,23 @@ class InteraccionesMixin:
             self._guardar_pset(viga, "OPENRVT_Estructura", pset)
             self._regenerar_estructura(viga)
             reparados += 1
+        # O061 regla 3: los castillos con AnchoDelMuro también recuperan su
+        # sección real al abrir (B/H del tipo y del núcleo del muro).
+        for castillo in list(self.modelo.by_type("IfcColumn")):
+            if self._estructura_de_tipo(self._tipo_entidad(castillo)) != "castillo":
+                continue
+            pset = self._leer_pset(castillo, "OPENRVT_Estructura")
+            if not pset or not self._del_nucleo(pset.get("AnchoDelMuro", True)):
+                continue
+            gid = _texto(self._leer_liga(castillo).get("Muro"))
+            if not gid:
+                continue
+            try:
+                muro = self._entidad_por_gid(gid, ("IfcWall",))
+            except Exception:
+                continue
+            self._ajustar_castillo(castillo, muro)
+            reparados += 1
         return reparados
 
     def validar_cerramientos(self) -> list[dict[str, Any]]:
