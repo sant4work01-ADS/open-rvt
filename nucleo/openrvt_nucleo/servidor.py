@@ -461,6 +461,10 @@ class Servidor:
                 params.get("desfase"),
                 bool(params.get("desde_planta", False)),
             )
+        if metodo in ("cerramientos.validar", "cerramientos.validar_modelo"):
+            return self._exigir().validar_cerramientos()
+        if metodo in ("cerramientos.reparar", "cerramientos.reparar_modelo"):
+            return self._exigir().reparar_cerramientos()
         if metodo in ("cerramientos.soltar_del_muro", "elementos.soltar_del_muro"):
             return self._exigir().soltar_del_muro(
                 str(params.get("globalid") or params.get("elemento") or "")

@@ -19,6 +19,8 @@ export interface MuroReferencia {
   y2: number;
   espesor: number;
   altura: number;
+  /** O057: cota de la base del muro (para separar muros apilados). */
+  base?: number;
 }
 
 export interface EjeReferencia {
@@ -708,6 +710,31 @@ export interface TramoCerramiento {
  * varios muros seguidos se devuelve uno por muro, cortado en las juntas; los
  * huecos sin muro se devuelven libres (muro null).
  */
+/**
+ * O057: de varios muros apilados con la misma huella en planta solo sirve el de
+ * la corona más alta; los de pisos de abajo se ignoran al repartir el trazo.
+ */
+function murosApiladosUnicos(muros: readonly MuroReferencia[]): MuroReferencia[] {
+  const porHuella = new Map<string, MuroReferencia>();
+  for (const muro of muros) {
+    const a =
+      muro.x1 < muro.x2 || (muro.x1 === muro.x2 && muro.y1 <= muro.y2)
+        ? [muro.x1, muro.y1]
+        : [muro.x2, muro.y2];
+    const b =
+      a[0] === muro.x1 && a[1] === muro.y1
+        ? [muro.x2, muro.y2]
+        : [muro.x1, muro.y1];
+    const clave = [...a, ...b, muro.espesor]
+      .map((valor) => valor.toFixed(4))
+      .join("|");
+    const actual = porHuella.get(clave);
+    const corona = (m: MuroReferencia) => (m.base ?? 0) + m.altura;
+    if (!actual || corona(muro) > corona(actual)) porHuella.set(clave, muro);
+  }
+  return [...porHuella.values()];
+}
+
 export function tramosDeCerramiento(
   referencias: Referencias,
   x1: number,
@@ -721,7 +748,7 @@ export function tramosDeCerramiento(
   const ux = (x2 - x1) / largo;
   const uy = (y2 - y1) / largo;
   const ligados: Array<TramoCerramiento & { s0: number; s1: number }> = [];
-  for (const muro of referencias.muros) {
+  for (const muro of murosApiladosUnicos(referencias.muros)) {
     const longitud = Math.hypot(muro.x2 - muro.x1, muro.y2 - muro.y1);
     if (longitud <= tolerancia) continue;
     const mux = (muro.x2 - muro.x1) / longitud;

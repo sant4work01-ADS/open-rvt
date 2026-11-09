@@ -7739,6 +7739,8 @@ class ModeladoMixin:
                     "y2": _redondear(datos["y2"]),
                     "espesor": _redondear(datos["espesor"]),
                     "altura": _redondear(datos["altura"]),
+                    # O057: la base distingue los muros apilados en planta.
+                    "base": _redondear(datos["z"]),
                 }
             )
             extremos.extend(

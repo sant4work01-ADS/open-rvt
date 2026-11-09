@@ -623,6 +623,94 @@ class InteraccionesMixin:
             )
         return {"NivelBase": nivel, "DesfaseBase": desfase}
 
+    def _tramos_bajo_trazo(
+        self,
+        tipo_entidad: Any,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+        nivel_elegido: Any | None,
+        desfase: float | None,
+    ) -> list[dict[str, Any]]:
+        """O057: muros bajo el trazo que de verdad sostienen el cerramiento.
+
+        De todos los muros colineales bajo el trazo solo valen los de la corona
+        más alta que queda a la cara inferior del cerramiento (o por debajo): los
+        muros de pisos de abajo que tienen otro muro apilado encima se ignoran.
+        """
+        largo = math.hypot(x2 - x1, y2 - y1)
+        ux, uy = (x2 - x1) / largo, (y2 - y1) / largo
+        tramos: list[dict[str, Any]] = []
+        for muro in self.modelo.by_type("IfcWall"):
+            datos = self._datos_muro(muro)
+            longitud = datos["longitud"]
+            if longitud <= TOLERANCIA_CALCULO:
+                continue
+            wx, wy = datos["x1"], datos["y1"]
+            mux, muy = datos["dx"], datos["dy"]
+            tolerancia = datos["espesor"] / 2.0 + TOLERANCIA
+            dist1 = abs(mux * (y1 - wy) - muy * (x1 - wx))
+            dist2 = abs(mux * (y2 - wy) - muy * (x2 - wx))
+            if dist1 > tolerancia or dist2 > tolerancia:
+                continue
+            t1 = (x1 - wx) * mux + (y1 - wy) * muy
+            t2 = (x2 - wx) * mux + (y2 - wy) * muy
+            inicio = max(0.0, min(t1, t2))
+            fin = min(longitud, max(t1, t2))
+            if fin - inicio <= TOLERANCIA:
+                continue
+            qx1, qy1 = wx + mux * inicio, wy + muy * inicio
+            qx2, qy2 = wx + mux * fin, wy + muy * fin
+            s1 = ((qx1 - x1) * ux + (qy1 - y1) * uy) / largo
+            s2 = ((qx2 - x1) * ux + (qy2 - y1) * uy) / largo
+            tramos.append(
+                {
+                    "muro": muro,
+                    "inicio": inicio,
+                    "fin": fin,
+                    "x1": qx1, "y1": qy1, "x2": qx2, "y2": qy2,
+                    "s0": min(s1, s2), "s1": max(s1, s2),
+                    "corona": datos["z"] + datos["altura"],
+                }
+            )
+        _, seccion_tipo, _ = self._seccion_y_armado(tipo_entidad)
+        peralte = float(seccion_tipo.get("H") or 0.20)
+        if nivel_elegido is not None:
+            tope_cara = float(nivel_elegido.Elevation or 0.0) + (
+                0.0 if desfase is None else float(desfase)
+            )
+            cara_inferior = tope_cara - peralte
+        else:
+            cara_inferior = max(
+                (tramo["corona"] for tramo in tramos), default=None
+            )
+            tope_cara = (
+                None if cara_inferior is None else cara_inferior + peralte
+            )
+        if cara_inferior is None:
+            return []
+        debajo = [
+            tramo
+            for tramo in tramos
+            if tramo["corona"] <= cara_inferior + TOLERANCIA
+        ]
+        if not debajo:
+            # O045/O050: el cerramiento va embebido en un muro que sube por encima
+            # de su cara superior; si ningún muro queda por debajo de su cara
+            # inferior, se mantiene la regla anterior y se liga a esos muros.
+            if tope_cara is not None and any(
+                tramo["corona"] > tope_cara + TOLERANCIA for tramo in tramos
+            ):
+                return tramos
+            return []
+        corona_maxima = max(tramo["corona"] for tramo in debajo)
+        return [
+            tramo
+            for tramo in debajo
+            if abs(tramo["corona"] - corona_maxima) <= TOLERANCIA
+        ]
+
     def cerramiento_crear_en_muro(
         self,
         tipo: str,
@@ -674,38 +762,9 @@ class InteraccionesMixin:
             raise self._error("El cerramiento necesita dos puntos distintos.", -32602)
         nivel_elegido = self._nivel_por_gid(str(nivel)) if nivel else None
         ux, uy = (x2 - x1) / largo, (y2 - y1) / largo
-        tramos: list[dict[str, Any]] = []
-        for muro in self.modelo.by_type("IfcWall"):
-            datos = self._datos_muro(muro)
-            longitud = datos["longitud"]
-            if longitud <= TOLERANCIA_CALCULO:
-                continue
-            wx, wy = datos["x1"], datos["y1"]
-            mux, muy = datos["dx"], datos["dy"]
-            tolerancia = datos["espesor"] / 2.0 + TOLERANCIA
-            dist1 = abs(mux * (y1 - wy) - muy * (x1 - wx))
-            dist2 = abs(mux * (y2 - wy) - muy * (x2 - wx))
-            if dist1 > tolerancia or dist2 > tolerancia:
-                continue
-            t1 = (x1 - wx) * mux + (y1 - wy) * muy
-            t2 = (x2 - wx) * mux + (y2 - wy) * muy
-            inicio = max(0.0, min(t1, t2))
-            fin = min(longitud, max(t1, t2))
-            if fin - inicio <= TOLERANCIA:
-                continue
-            qx1, qy1 = wx + mux * inicio, wy + muy * inicio
-            qx2, qy2 = wx + mux * fin, wy + muy * fin
-            s1 = ((qx1 - x1) * ux + (qy1 - y1) * uy) / largo
-            s2 = ((qx2 - x1) * ux + (qy2 - y1) * uy) / largo
-            tramos.append(
-                {
-                    "muro": muro,
-                    "inicio": inicio,
-                    "fin": fin,
-                    "x1": qx1, "y1": qy1, "x2": qx2, "y2": qy2,
-                    "s0": min(s1, s2), "s1": max(s1, s2),
-                }
-            )
+        tramos = self._tramos_bajo_trazo(
+            tipo_entidad, x1, y1, x2, y2, nivel_elegido, desfase
+        )
         for tramo in tramos:
             if nivel_elegido is not None:
                 restriccion = {
@@ -803,6 +862,171 @@ class InteraccionesMixin:
             mensaje = f"Cerramientos creados ({len(creados)})."
         return self._resultado(creados, mensaje=mensaje)
 
+    def _es_cerramiento(self, elemento: Any) -> bool:
+        try:
+            return (
+                self._estructura_de_tipo(self._tipo_entidad(elemento))
+                == "cerramiento"
+            )
+        except Exception:
+            return False
+
+    def _muros_validos_cerramiento(
+        self, cerramiento: Any
+    ) -> tuple[list[dict[str, Any]], Any | None]:
+        """O057: tramos que de verdad sostienen un cerramiento ya existente."""
+        restriccion = self._restricciones_de(cerramiento)
+        gid_nivel = _texto(restriccion.get("NivelBase"))
+        if not gid_nivel:
+            return [], None
+        nivel = self._nivel_por_gid(gid_nivel)
+        datos = self._leer_pset(cerramiento, "OPENRVT_Estructura")
+        try:
+            x1 = float(datos.get("X1") or 0.0)
+            y1 = float(datos.get("Y1") or 0.0)
+            x2 = float(datos.get("X2") or 0.0)
+            y2 = float(datos.get("Y2") or 0.0)
+        except (TypeError, ValueError):
+            return [], nivel
+        if math.hypot(x2 - x1, y2 - y1) <= TOLERANCIA_CALCULO:
+            return [], nivel
+        tramos = self._tramos_bajo_trazo(
+            self._tipo_entidad(cerramiento),
+            x1, y1, x2, y2,
+            nivel,
+            float(restriccion.get("DesfaseBase") or 0.0),
+        )
+        return tramos, nivel
+
+    def validar_cerramientos(self) -> list[dict[str, Any]]:
+        """O057: reporta cerramientos mal ligados o fuera del storey de su base."""
+        self._exigir_modelo()
+        problemas: list[dict[str, Any]] = []
+        for viga in self.modelo.by_type("IfcBeam"):
+            if not self._es_cerramiento(viga):
+                continue
+            motivos: list[str] = []
+            restriccion = self._restricciones_de(viga)
+            gid_nivel = _texto(restriccion.get("NivelBase"))
+            nivel = None
+            if not gid_nivel:
+                motivos.append("sin_nivel")
+            else:
+                nivel = self._nivel_por_gid(gid_nivel)
+                contenedor = self._nivel_de_elemento(viga)
+                if _gid(contenedor) != gid_nivel:
+                    motivos.append("storey_incorrecto")
+            liga = self._leer_liga(viga)
+            muro_gid = _texto(liga.get("Muro"))
+            if muro_gid and nivel is not None:
+                tramos, _nivel = self._muros_validos_cerramiento(viga)
+                correctos = {_gid(tramo["muro"]) for tramo in tramos}
+                if muro_gid not in correctos:
+                    motivos.append("muro_incorrecto")
+            if motivos:
+                problemas.append(
+                    {"globalid": _gid(viga), "motivos": motivos}
+                )
+        return problemas
+
+    def reparar_cerramientos(self) -> dict[str, Any]:
+        """O057: recoloca los cerramientos mal ligados y respeta el tope del usuario."""
+        self._exigir_modelo()
+        self._instantanea()
+        reparados: list[Any] = []
+        borrados: list[str] = []
+        for viga in list(self.modelo.by_type("IfcBeam")):
+            if not self._es_cerramiento(viga):
+                continue
+            restriccion = self._restricciones_de(viga)
+            gid_nivel = _texto(restriccion.get("NivelBase"))
+            if not gid_nivel:
+                continue
+            nivel = self._nivel_por_gid(gid_nivel)
+            if _gid(self._nivel_de_elemento(viga)) != gid_nivel:
+                spatial_api.assign_container(
+                    self.modelo, products=[viga], relating_structure=nivel
+                )
+            liga = self._leer_liga(viga)
+            muro_gid = _texto(liga.get("Muro"))
+            if not muro_gid:
+                continue
+            tramos, _nivel = self._muros_validos_cerramiento(viga)
+            correctos = {_gid(tramo["muro"]) for tramo in tramos}
+            if muro_gid in correctos:
+                continue
+            # El muro ligado no es el que sostiene el cerramiento. Si ya hay un
+            # cerramiento válido en el muro correcto y el mismo nivel, este es el
+            # duplicado que dejó el error del paso 5: se borra. Si no, se re-liga.
+            duplicado = False
+            destino: dict[str, Any] | None = None
+            for tramo in tramos:
+                for dependiente in self._dependientes_de(tramo["muro"]):
+                    if dependiente == viga or not self._es_cerramiento(dependiente):
+                        continue
+                    if _texto(
+                        self._restricciones_de(dependiente).get("NivelBase")
+                    ) != gid_nivel:
+                        continue
+                    otra = self._leer_liga(dependiente)
+                    if otra.get("Inicio") is None:
+                        a, b = 0.0, self._datos_muro(tramo["muro"])["longitud"]
+                    else:
+                        a = float(otra.get("Inicio") or 0.0)
+                        b = float(otra.get("Fin") or a)
+                    if (
+                        min(b, tramo["fin"]) - max(a, tramo["inicio"])
+                        > TOLERANCIA
+                    ):
+                        duplicado = True
+                        break
+                if duplicado:
+                    break
+                if destino is None:
+                    destino = tramo
+            if duplicado:
+                self._quitar_conexiones(viga)
+                borrados.append(_gid(viga))
+                self.modelo.remove(viga)
+                continue
+            if destino is not None:
+                self._guardar_liga(
+                    viga,
+                    {
+                        **liga,
+                        "Muro": _gid(destino["muro"]),
+                        "Inicio": float(destino["inicio"]),
+                        "Fin": float(destino["fin"]),
+                        "Completo": False,
+                    },
+                )
+                self._conectar(viga, destino["muro"])
+            else:
+                self._quitar_claves_pset(viga, LIGA, ("Muro", "Inicio", "Fin", "Completo"))
+                self._quitar_conexiones(viga)
+            reparados.append(viga)
+        # Los castillos con NivelTope del usuario recuperan su altura real (regla 2).
+        muros: dict[int, Any] = {}
+        for castillo in self.modelo.by_type("IfcColumn"):
+            if self._estructura_de_tipo(self._tipo_entidad(castillo)) != "castillo":
+                continue
+            liga = self._leer_liga(castillo)
+            if not liga.get("Muro"):
+                continue
+            try:
+                muro = self._entidad_por_gid(_texto(liga["Muro"]), ("IfcWall",))
+            except Exception:
+                continue
+            muros[id(muro)] = muro
+        for muro in muros.values():
+            self._actualizar_castillos(muro)
+        self.con_cambios = True
+        return self._resultado(
+            reparados,
+            borrados=borrados,
+            mensaje=f"{len(reparados)} cerramiento(s) reparado(s); {len(borrados)} borrado(s).",
+        )
+
     def _cerramiento_tramo(
         self,
         tipo_entidad: Any,
@@ -815,12 +1039,11 @@ class InteraccionesMixin:
         inicio: float | None = None,
         fin: float | None = None,
     ) -> Any:
-        """Crea un cerramiento embebido en un tramo; sin muro queda libre."""
-        nivel_entidad = (
-            self._nivel_de_elemento(muro)
-            if muro is not None
-            else self._nivel_por_gid(_texto(restriccion.get("NivelBase")))
-        )
+        """Crea un cerramiento embebido en un tramo; sin muro queda libre.
+
+        O057: el cerramiento se contiene siempre en el storey de su NivelBase,
+        aunque cuelgue de un muro de otro nivel.
+        """
         nivel_restriccion = self._nivel_por_gid(
             _texto(restriccion.get("NivelBase"))
         )
@@ -829,16 +1052,15 @@ class InteraccionesMixin:
             if muro is not None
             else float(self._seccion_y_armado(tipo_entidad)[1].get("B") or 0.15)
         )
-        elevacion = float(nivel_entidad.Elevation or 0.0)
-        tope = float(nivel_restriccion.Elevation or 0.0) + float(
-            restriccion.get("DesfaseBase") or 0.0
-        )
+        elevacion = float(nivel_restriccion.Elevation or 0.0)
+        desfase = float(restriccion.get("DesfaseBase") or 0.0)
+        tope = elevacion + desfase
         alto = float(self._seccion_y_armado(tipo_entidad)[1].get("H") or 0.20)
         viga = self._viga_nueva(
             tipo_entidad,
-            nivel_entidad,
+            nivel_restriccion,
             x1, y1, x2, y2,
-            tope - elevacion,
+            desfase,
         )
         self._guardar_pset(
             viga,
@@ -959,6 +1181,17 @@ class InteraccionesMixin:
             # O041: la barra de opciones deja elegir nivel y desfase antes del
             # clic; el desfase se mide del nivel a la cara superior.
             self._guardar_pset(viga, PSET_RESTRICCIONES, restriccion)
+            # O057: el cerramiento vive en el storey de su NivelBase, no en el
+            # del muro del que cuelga (regla 3).
+            nivel_base_cerramiento = self._nivel_por_gid(
+                _texto(restriccion.get("NivelBase"))
+            )
+            if nivel_base_cerramiento is not None:
+                spatial_api.assign_container(
+                    self.modelo,
+                    products=[viga],
+                    relating_structure=nivel_base_cerramiento,
+                )
             self._guardar_pset(
                 viga,
                 "OPENRVT_Estructura",
@@ -1051,6 +1284,31 @@ class InteraccionesMixin:
             # O054: el castillo de esquina manda sobre el cerramiento: atraviesa
             # la franja para cerrar el cruce (el cerramiento se corta en su cara).
             es_esquina = self._ajustar_castillo(castillo, muro)
+            restriccion_castillo = self._restricciones_de(castillo)
+            # O057: si el usuario puso NivelTope, manda su altura
+            # (elevación del tope + DesfaseTope − base) y ninguna operación
+            # automática la pisa. Sin NivelTope sigue la regla O050/O054.
+            if _texto(restriccion_castillo.get("NivelTope")):
+                nivel_tope = self._nivel_por_gid(
+                    _texto(restriccion_castillo.get("NivelTope"))
+                )
+                base = float(
+                    self._nivel_por_gid(
+                        _texto(restriccion_castillo.get("NivelBase"))
+                    ).Elevation
+                    or 0.0
+                ) + float(restriccion_castillo.get("DesfaseBase") or 0.0)
+                tope_usuario = float(nivel_tope.Elevation or 0.0) + float(
+                    restriccion_castillo.get("DesfaseTope") or 0.0
+                )
+                pset = {
+                    **self._leer_pset(castillo, "OPENRVT_Estructura"),
+                    "Base": base,
+                    "Altura": max(tope_usuario - base, 0.05),
+                }
+                self._guardar_pset(castillo, "OPENRVT_Estructura", pset)
+                self._regenerar_estructura(castillo)
+                continue
             altura = tope if es_esquina else tope_castillo
             pset = {
                 **self._leer_pset(castillo, "OPENRVT_Estructura"),
