@@ -68,6 +68,14 @@ import {
   textoDimensiones,
 } from "./empujar";
 import {
+  caraEnPunto as caraPlanaEnPunto,
+  clasificarCaraEmpujar,
+  distanciaSobreNormal,
+  type AccionEmpujarCara,
+  type ElementoCara,
+  type ResultadoCara,
+} from "./empujarCaras";
+import {
   inferir,
   type Bloqueo,
   type CandidatosInferencia,
@@ -1174,6 +1182,17 @@ export function Visor3D({
     color: string;
     tipo: string;
   } | null>(null);
+  // O056: cara de un elemento bajo el cursor y su clasificación.
+  const [caraEmpujarHover, setCaraEmpujarHover] = useState<{
+    globalid: string;
+    normal: [number, number, number];
+    punto: [number, number, number];
+    poligono: Vec3[];
+    clasificacion: ResultadoCara;
+    x: number;
+    y: number;
+    tooltipIzquierda: boolean;
+  } | null>(null);
   const grosores = useRef<EntradaGrosor[]>([]);
   const navegacion = useRef<Navegacion | null>(null);
   // O010/O031: la cámara de cada vista se conserva al cambiar de vista, entre
@@ -1228,6 +1247,10 @@ export function Visor3D({
   const clicEmpujar = useModelo((s) => s.clicEmpujar);
   const confirmarEmpujar = useModelo((s) => s.confirmarEmpujar);
   const empujarZ = useModelo((s) => s.empujarZ);
+  const empujarCara = useModelo((s) => s.empujarCara);
+  const iniciarEmpujarCara = useModelo((s) => s.iniciarEmpujarCara);
+  const moverEmpujarCara = useModelo((s) => s.moverEmpujarCara);
+  const confirmarEmpujarCara = useModelo((s) => s.confirmarEmpujarCara);
   const opcionesNivel = useModelo((s) => s.opcionesNivel);
   const cotasNivel = useModelo((s) => s.cotasNivel);
   const dobleClicEnPlanta = useModelo((s) => s.dobleClicEnPlanta);
@@ -5243,6 +5266,111 @@ export function Visor3D({
     }
     if (herramienta !== "empujar") return;
     if (vista.tipo !== "iso" && vista.tipo !== "perspectiva") return;
+
+    // O056: resalta la cara tocada y previsualiza su posición al empujar.
+    const agregarCara = (
+      poligono: Vec3[],
+      normal: THREE.Vector3,
+      desplazamiento: number,
+      color: number,
+      opacidad: number,
+    ) => {
+      if (poligono.length < 3) return;
+      const posiciones: number[] = [];
+      const desplazar = (p: Vec3): [number, number, number] => [
+        p.x + normal.x * (0.006 + desplazamiento),
+        p.y + normal.y * (0.006 + desplazamiento),
+        p.z + normal.z * (0.006 + desplazamiento),
+      ];
+      for (let i = 1; i + 1 < poligono.length; i += 1) {
+        const a = desplazar(poligono[0]);
+        const b = desplazar(poligono[i]);
+        const c = desplazar(poligono[i + 1]);
+        posiciones.push(...a, ...b, ...c);
+      }
+      const geometria = new THREE.BufferGeometry();
+      geometria.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(posiciones, 3),
+      );
+      const malla = new THREE.Mesh(
+        geometria,
+        new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity: opacidad,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        }),
+      );
+      malla.renderOrder = 12;
+      grupoLocal.add(malla);
+      const borde = new THREE.BufferGeometry().setFromPoints(
+        [...poligono, poligono[0]].map((p) => {
+          const [x, y, z] = desplazar(p);
+          return new THREE.Vector3(x, y, z);
+        }),
+      );
+      const linea = new THREE.Line(
+        borde,
+        new THREE.LineBasicMaterial({ color, depthTest: false }),
+      );
+      linea.renderOrder = 15;
+      grupoLocal.add(linea);
+    };
+
+    if (empujarCara?.poligono) {
+      const normal = new THREE.Vector3(...empujarCara.normal).normalize();
+      agregarCara(empujarCara.poligono, normal, 0, 0x2563eb, 0.2);
+      agregarCara(
+        empujarCara.poligono,
+        normal,
+        empujarCara.distancia,
+        0x0ea5e9,
+        0.38,
+      );
+      const desde = empujarCara.poligono.map(
+        (p) => new THREE.Vector3(p.x, p.y, p.z),
+      );
+      const hasta = empujarCara.poligono.map(
+        (p) =>
+          new THREE.Vector3(
+            p.x + normal.x * empujarCara.distancia,
+            p.y + normal.y * empujarCara.distancia,
+            p.z + normal.z * empujarCara.distancia,
+          ),
+      );
+      const lineas: THREE.Vector3[] = [];
+      for (let i = 0; i < desde.length; i += 1) {
+        lineas.push(desde[i], hasta[i]);
+      }
+      const geometria = new THREE.BufferGeometry().setFromPoints(lineas);
+      const guia = new THREE.LineSegments(
+        geometria,
+        new THREE.LineDashedMaterial({
+          color: 0x0ea5e9,
+          dashSize: 0.12,
+          gapSize: 0.08,
+          depthTest: false,
+        }),
+      );
+      guia.computeLineDistances();
+      guia.renderOrder = 16;
+      grupoLocal.add(guia);
+      return;
+    }
+    if (caraEmpujarHover) {
+      const normal = new THREE.Vector3(...caraEmpujarHover.normal).normalize();
+      agregarCara(
+        caraEmpujarHover.poligono,
+        normal,
+        0,
+        0x2563eb,
+        caraEmpujarHover.clasificacion.accion === "ninguna" ? 0.18 : 0.32,
+      );
+      return;
+    }
+
     const rect =
       empujarRect ??
       (puntosHerramienta[0] && ratonHerramienta
@@ -5358,6 +5486,8 @@ export function Visor3D({
     ratonHerramienta,
     zEmpujar,
     empujarZ,
+    empujarCara,
+    caraEmpujarHover,
   ]);
 
   // O049: al terminar o cambiar de herramienta se apaga el marcador. La
@@ -5365,7 +5495,7 @@ export function Visor3D({
   useEffect(() => {
     if (
       herramienta !== "empujar" ||
-      (puntosHerramienta.length === 0 && !empujarRect)
+      (puntosHerramienta.length === 0 && !empujarRect && !empujarCara)
     ) {
       ultimaInferenciaEmpujar.current = null;
       bloqueoFlechas.current = null;
@@ -5373,10 +5503,11 @@ export function Visor3D({
       const id = setTimeout(() => {
         setMarcadorEmpujar(null);
         setGuiaEmpujar(null);
+        setCaraEmpujarHover(null);
       }, 0);
       return () => clearTimeout(id);
     }
-  }, [herramienta, puntosHerramienta.length, empujarRect]);
+  }, [herramienta, puntosHerramienta.length, empujarRect, empujarCara]);
 
   // Ajustar la cámara a la vista (botón y F). Es la única acción que reencuadra.
   const ajustar = useCallback(() => {
@@ -5989,6 +6120,99 @@ export function Visor3D({
       return { inf, candidatos, punto };
     };
 
+    // O056: elemento y cara real bajo el cursor. Se exige que el punto caiga
+    // dentro de la cara con un margen: en las esquinas (donde los E2E de O046 y
+    // O049 empiezan sus contornos) sigue mandando el plano y se crean sólidos.
+    const elementoDeMalla = (malla: ElementoMalla): ElementoCara => ({
+      clase: malla.clase,
+      alias: malla.estructura?.alias ?? null,
+      eje: malla.eje ?? null,
+      datos: malla.estructura?.datos ?? null,
+    });
+
+    const caraBajoCursor = (
+      clientX: number,
+      clientY: number,
+    ): {
+      globalid: string;
+      normal: [number, number, number];
+      punto: [number, number, number];
+      poligono: Vec3[];
+      clasificacion: ResultadoCara;
+    } | null => {
+      const camera = camara.current;
+      if (!camera) return null;
+      const rect = nodo.getBoundingClientRect();
+      const raton = new THREE.Vector2(
+        ((clientX - rect.left) / rect.width) * 2 - 1,
+        -((clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      const rayo = new THREE.Raycaster();
+      rayo.setFromCamera(raton, camera);
+      const impacto = rayo.intersectObjects(meshes.current, false)[0];
+      const gid = impacto?.object.userData.globalid as string | undefined;
+      if (!impacto || !gid) return null;
+      const malla = mallas.find((m) => m.globalid === gid);
+      if (!malla) return null;
+      const candidatos = cacheCandidatos.current.obtener(malla, mallas);
+      // Margen de 0.05 m: cerca de aristas, esquinas y bordes sigue mandando el
+      // plano con sus inferencias (O046/O049); solo el interior claro de una cara
+      // inicia el empuje.
+      const cara = caraPlanaEnPunto(
+        { x: impacto.point.x, y: impacto.point.y, z: impacto.point.z },
+        candidatos.caras ?? [],
+        1e-4,
+        0.05,
+      );
+      if (!cara || !cara.normal) return null;
+      const largo = Math.hypot(cara.normal.x, cara.normal.y, cara.normal.z);
+      if (largo < 1e-9) return null;
+      const normal: [number, number, number] = [
+        cara.normal.x / largo,
+        cara.normal.y / largo,
+        cara.normal.z / largo,
+      ];
+      let cx = 0;
+      let cy = 0;
+      let cz = 0;
+      for (const p of cara.poligono) {
+        cx += p.x;
+        cy += p.y;
+        cz += p.z;
+      }
+      const n = Math.max(cara.poligono.length, 1);
+      const centro = { x: cx / n, y: cy / n, z: cz / n };
+      const clasificacion = clasificarCaraEmpujar(elementoDeMalla(malla), {
+        normal: { x: normal[0], y: normal[1], z: normal[2] },
+        centro,
+      });
+      return {
+        globalid: gid,
+        normal,
+        punto: [centro.x, centro.y, centro.z],
+        poligono: cara.poligono,
+        clasificacion,
+      };
+    };
+
+    (nodo as unknown as Record<string, unknown>).__openrvtCaraEmpujarEn = (
+      clientX: number,
+      clientY: number,
+    ) => caraBajoCursor(clientX, clientY);
+
+    // O056: candidatos cercanos de los demás elementos para enganchar la distancia.
+    const candidatosSin = (globalid: string, clientX: number, clientY: number) => {
+      const cercanas = filtrarPorCercania(
+        mallas3d.current,
+        proyectarLienzo,
+        { x: clientX, y: clientY },
+        60,
+      ).filter((m) => m.globalid !== globalid);
+      return unirCandidatos(
+        cercanas.map((m) => cacheCandidatos.current.obtener(m.malla, mallas)),
+      );
+    };
+
     // O041: elementos bajo el cursor para Tab. En planta se detectan por geometría
     // (el cerramiento queda arriba del corte y no tiene malla que el rayo toque); en
     // alzado, corte y 3D se suma el rayo y la línea del cerramiento en pantalla.
@@ -6159,11 +6383,48 @@ export function Visor3D({
         herramienta === "empujar" &&
         (vista.tipo === "iso" || vista.tipo === "perspectiva")
       ) {
+        if (empujarCara) {
+          void confirmarEmpujarCara();
+          return;
+        }
         if (empujarRect) {
           void confirmarEmpujar();
           return;
         }
+        const caraHover = caraBajoCursor(clientX, clientY);
         const res = inferenciaEmpujarEn(clientX, clientY, shift);
+        // O056: una cara que se puede empujar manda sobre las inferencias; el
+        // enganche se usa después, al mover el ratón, para fijar la distancia.
+        // Excepción: en una cara vertical, un enganche a su borde superior
+        // (O049: el punto medio del borde de una losa) sigue dibujando sobre
+        // la superficie de arriba en vez de empujar el canto.
+        if (caraHover && caraHover.clasificacion.accion !== "ninguna") {
+          const vertical = Math.abs(caraHover.normal[2]) < 0.5;
+          const zMax = Math.max(...caraHover.poligono.map((p) => p.z));
+          const engancheArriba =
+            vertical &&
+            !!res &&
+            !!res.punto &&
+            !!res.inf.tipo &&
+            res.inf.tipo !== "plano" &&
+            res.punto.z >= zMax - 1e-6;
+          if (!engancheArriba) {
+            setCaraEmpujarHover(null);
+            iniciarEmpujarCara({
+              globalid: caraHover.globalid,
+              normal: caraHover.normal,
+              punto: caraHover.punto,
+              accion: caraHover.clasificacion.accion as Exclude<
+                AccionEmpujarCara,
+                "ninguna"
+              >,
+              etiqueta: caraHover.clasificacion.etiqueta,
+              poligono: caraHover.poligono,
+            });
+            return;
+          }
+        }
+        setCaraEmpujarHover(null);
         if (!res || !res.punto) return;
         // O049: si el primer punto cae sobre una cara superior, el contorno se
         // dibuja en su plano y el sólido nace con ese desfase.
@@ -7012,6 +7273,52 @@ export function Visor3D({
         evento.buttons === 0 &&
         !arrastre.current?.paneable
       ) {
+        if (empujarCara) {
+          const rayo = rayoPantalla(evento.clientX, evento.clientY);
+          if (!rayo) return;
+          const rayo3 = {
+            origen: { x: rayo.origen[0], y: rayo.origen[1], z: rayo.origen[2] },
+            direccion: {
+              x: rayo.direccion[0],
+              y: rayo.direccion[1],
+              z: rayo.direccion[2],
+            },
+          };
+          const normal = {
+            x: empujarCara.normal[0],
+            y: empujarCara.normal[1],
+            z: empujarCara.normal[2],
+          };
+          const puntoCara = {
+            x: empujarCara.punto[0],
+            y: empujarCara.punto[1],
+            z: empujarCara.punto[2],
+          };
+          const inf = inferir({
+            rayo: rayo3,
+            proyectar: proyectarLienzo,
+            candidatos: candidatosSin(
+              empujarCara.globalid,
+              evento.clientX,
+              evento.clientY,
+            ),
+            planoTrabajo: { punto: puntoCara, normal },
+          });
+          anotarInferenciaEmpujar(inf);
+          let distancia: number | null;
+          if (inf.punto && inf.tipo && inf.tipo !== "plano") {
+            distancia =
+              (inf.punto.x - puntoCara.x) * normal.x +
+              (inf.punto.y - puntoCara.y) * normal.y +
+              (inf.punto.z - puntoCara.z) * normal.z;
+          } else {
+            distancia = distanciaSobreNormal(rayo3, puntoCara, normal);
+          }
+          if (distancia !== null) {
+            moverEmpujarCara(Math.round(distancia * 1e6) / 1e6);
+          }
+          return;
+        }
         if (empujarRect) {
           setMarcadorEmpujar(null);
           setGuiaEmpujar(null);
@@ -7029,7 +7336,27 @@ export function Visor3D({
           }
           return;
         }
+        const caraHover = caraBajoCursor(evento.clientX, evento.clientY);
+        if (caraHover) {
+          const rect = nodo.getBoundingClientRect();
+          setCaraEmpujarHover({
+            ...caraHover,
+            x: evento.clientX - rect.left,
+            y: evento.clientY - rect.top,
+            tooltipIzquierda: evento.clientX - rect.left > rect.width * 0.7,
+          });
+        } else {
+          setCaraEmpujarHover(null);
+        }
         const res = inferenciaEmpujarEn(evento.clientX, evento.clientY, evento.shiftKey);
+        // Los enganches (vértice, arista, punto medio, cara) mandan sobre la
+        // cara que haya debajo: así O049 sigue enganchando bordes de una losa
+        // aunque el rayo roce su cara lateral.
+        if (res && res.punto && res.inf.tipo && res.inf.tipo !== "plano") {
+          moverEmpujar([res.punto.x, res.punto.y]);
+          return;
+        }
+        if (caraHover) return;
         if (res && res.punto) {
           moverEmpujar([res.punto.x, res.punto.y]);
           return;
@@ -7527,6 +7854,10 @@ export function Visor3D({
     moverEmpujar,
     clicEmpujar,
     confirmarEmpujar,
+    empujarCara,
+    iniciarEmpujarCara,
+    moverEmpujarCara,
+    confirmarEmpujarCara,
   ]);
 
   useEffect(() => {
@@ -7561,6 +7892,7 @@ export function Visor3D({
         puntos: estado.puntosHerramienta,
         rect: estado.empujarRect,
         altura: estado.empujarAltura,
+        cara: estado.empujarCara,
       };
     };
     // O014b: asa en pantalla de la cabeza de un nivel (para arrastrarla en E2E).
@@ -8316,15 +8648,52 @@ export function Visor3D({
           </span>
         </div>
       )}
+      {caraEmpujarHover && (
+        <div
+          className="pointer-events-none absolute z-30"
+          style={{ left: caraEmpujarHover.x, top: caraEmpujarHover.y }}
+        >
+          <span
+            data-testid="empujar-cara-tooltip"
+            data-accion={caraEmpujarHover.clasificacion.accion}
+            className={`absolute -top-2 whitespace-nowrap rounded bg-background/95 px-1 py-0.5 text-[11px] shadow ${
+              caraEmpujarHover.tooltipIzquierda ? "right-3" : "left-3"
+            }`}
+          >
+            {caraEmpujarHover.clasificacion.accion === "ninguna"
+              ? caraEmpujarHover.clasificacion.motivo
+              : caraEmpujarHover.clasificacion.etiqueta}
+          </span>
+        </div>
+      )}
+      {empujarCara && (
+        <div
+          data-testid="empujar-cara-distancia"
+          className="pointer-events-none absolute bottom-20 left-2 z-10 whitespace-nowrap rounded bg-background/95 px-2 py-1 text-[11px] shadow"
+        >
+          <strong>{empujarCara.etiqueta}</strong> ·{" "}
+          {empujarCara.distancia >= 0 ? "+" : ""}
+          {empujarCara.distancia.toFixed(2)} m
+        </div>
+      )}
       {herramienta === "empujar" &&
         (vista.tipo === "iso" || vista.tipo === "perspectiva") && (
           <div
             data-testid="empujar-preview"
-            data-paso={empujarRect ? "altura" : "contorno"}
+            data-paso={
+              empujarCara ? "cara" : empujarRect ? "altura" : "contorno"
+            }
             className="pointer-events-none absolute bottom-12 left-2 z-10 whitespace-nowrap rounded bg-background/95 px-2 py-1 text-[11px] shadow"
           >
             <strong>Empujar/Tirar</strong>
-            {empujarRect ? (
+            {empujarCara ? (
+              <>
+                {" "}
+                · {empujarCara.etiqueta} ·{" "}
+                {empujarCara.distancia >= 0 ? "+" : ""}
+                {empujarCara.distancia.toFixed(2)} m
+              </>
+            ) : empujarRect ? (
               <>
                 {" "}
                 · {textoDimensiones(empujarRect)}

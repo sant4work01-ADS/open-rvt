@@ -58,6 +58,7 @@ export function BarraHerramienta() {
   const fijarClasificacion = useModelo((s) => s.fijarClasificacionEmpujar);
   const empujarRect = useModelo((s) => s.empujarRect);
   const empujarAltura = useModelo((s) => s.empujarAltura);
+  const empujarCara = useModelo((s) => s.empujarCara);
   if (!herramienta) return null;
   const vistaActiva = vistas.find((v) => v.id === vistaActivaId);
   const esAlzadoOCorte =
@@ -98,10 +99,18 @@ export function BarraHerramienta() {
             </select>
           </label>
           <span className="text-muted-foreground" data-testid="empujar-paso">
-            {empujarRect
-              ? "Altura: clic, Enter o teclee la medida"
-              : "Contorno: dos esquinas del nivel activo (o teclee ancho,largo)"}
+            {empujarCara
+              ? `${empujarCara.etiqueta}: mueva el ratón o teclee la distancia`
+              : empujarRect
+                ? "Altura: clic, Enter o teclee la medida"
+                : "Contorno: dos esquinas del nivel activo (o teclee ancho,largo)"}
           </span>
+          {empujarCara && (
+            <span data-testid="empujar-cara-medida">
+              {empujarCara.distancia >= 0 ? "+" : ""}
+              {empujarCara.distancia.toFixed(2)} m
+            </span>
+          )}
           {empujarRect && (
             <span data-testid="empujar-medidas">
               {textoDimensiones(empujarRect)}

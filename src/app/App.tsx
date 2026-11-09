@@ -263,6 +263,7 @@ export function App() {
         estado.herramienta !== "puerta" &&
         estado.herramienta !== "ventana" &&
         (estado.puntosHerramienta.length > 0 ||
+          !!estado.empujarCara ||
           ((estado.herramienta === "copiar" || estado.herramienta === "mover") &&
             !!estado.nivelSeleccionado &&
             estado.seleccionados.length === 0))
