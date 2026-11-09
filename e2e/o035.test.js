@@ -10,7 +10,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { Sesion, esperar, By, until } = require("./arnes");
+const { Sesion, esperar, By, until, activar } = require("./arnes");
 
 const RAIZ = path.resolve(__dirname, "..");
 const CAPTURAS = path.join(RAIZ, "docs", "progreso", "O035");
@@ -37,17 +37,6 @@ async function invocar(ses, metodo, params = {}) {
   );
   assert.equal(respuesta.ok, true, `falló ${metodo}: ${respuesta.error}`);
   return respuesta.valor;
-}
-
-async function activar(ses, testid) {
-  const ok = await ses.driver.executeScript((testid) => {
-    const el = document.querySelector(`[data-testid="${testid}"]`);
-    if (!el || el.disabled) return false;
-    el.click();
-    return true;
-  }, testid);
-  assert.equal(ok, true, `no se pudo pulsar ${testid}`);
-  await esperar(400);
 }
 
 async function fijarValor(ses, testid, valor) {
