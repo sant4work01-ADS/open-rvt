@@ -2876,6 +2876,9 @@ class ModeladoMixin:
         datos = self._datos_muro(muro)
         poligonos = self._huellas_muro(muro, datos)
         base, cima = self._limites_verticales_muro_nivel(muro, datos)
+        # O058: los elementos horizontales que no tocan base ni corona parten el
+        # cuerpo en tramos verticales (muro abajo, elemento, muro arriba).
+        intervalos = self._intervalos_intermedios_muro(muro, datos, base, cima)
         # O035: la base baja por tramos hasta la cara superior de la zapata
         # corrida o la contratrabe que esté debajo en planta.
         bajadas = self._tramos_bajada_muro(muro, datos)
@@ -2886,18 +2889,21 @@ class ModeladoMixin:
         temporales = []
         for poligono in poligonos:
             for pieza, z0 in self._partir_por_bajadas(poligono, base, bajadas):
-                offset_z = z0 - datos["z"]
-                alto = max(cima - z0, 0.001)
-                rep = geometry_api.add_slab_representation(
-                    self.modelo,
-                    context=self._contexto(),
-                    depth=alto,
-                    direction_sense="POSITIVE",
-                    offset=offset_z,
-                    polyline=pieza,
-                )
-                temporales.append(rep)
-                items.extend(rep.Items)
+                for tramo_z0, tramo_z1 in self._tramos_verticales_muro(
+                    z0, cima, intervalos
+                ):
+                    offset_z = tramo_z0 - datos["z"]
+                    alto = max(tramo_z1 - tramo_z0, 0.001)
+                    rep = geometry_api.add_slab_representation(
+                        self.modelo,
+                        context=self._contexto(),
+                        depth=alto,
+                        direction_sense="POSITIVE",
+                        offset=offset_z,
+                        polyline=pieza,
+                    )
+                    temporales.append(rep)
+                    items.extend(rep.Items)
         # La representación final es una sola con todos los tramos del muro.
         context = self._contexto()
         cuerpo = self.modelo.create_entity(
@@ -3200,61 +3206,201 @@ class ModeladoMixin:
             return (min(cara for _u0, _u1, cara in bajadas), cima)
         return (base, cima)
 
-    def _limites_verticales_muro_nivel(
-        self, muro: Any, datos: dict[str, Any] | None = None
-    ) -> tuple[float, float]:
-        """(base, cima) del nivel: apoyos y cubiertas, sin la bajada O035."""
+    def _huella_planta_muro(self, muro: Any, datos: dict[str, Any]) -> Any:
+        """Huella del muro en planta (coordenadas de mundo) para cruzar elementos."""
         from shapely.geometry import Polygon
 
-        datos = datos or self._datos_muro(muro)
-        base = float(datos["z"])
-        cima = base + float(datos["altura"])
         offset = self._desfase_de_muro(muro, datos["espesor"])
         poligono = self._huella_local_muro(muro, datos, offset)
         huella = Polygon([self._punto_local(datos, u, v) for u, v in poligono])
         if not huella.is_valid:
             huella = huella.buffer(0)
+        return huella
+
+    def _horizontales_de_muro(
+        self, muro: Any, datos: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        """Elementos horizontales que cruzan la huella del muro (O058).
+
+        Devuelve huella en planta, cara inferior, cara superior y si es losa.
+        Incluye losa, dala, contratrabe, cerramiento y zapata corrida.
+        """
+        from shapely.geometry import Polygon
+
+        salida: list[dict[str, Any]] = []
         for elemento in self.modelo.by_type("IfcElement"):
+            if elemento is muro:
+                continue
             alias = self._estructura_de_tipo(self._tipo_entidad(elemento))
-            if elemento.is_a("IfcSlab"):
-                try:
+            try:
+                if elemento.is_a("IfcSlab"):
                     datos_losa = self._leer_pset(elemento, "OPENRVT_Losa")
                     if not datos_losa:
                         continue
                     nivel = self._nivel_de_elemento(elemento)
+                    if nivel is None:
+                        continue
                     zeta1 = float(nivel.Elevation or 0.0) + float(
                         datos_losa.get("Desfase") or 0.0
                     )
                     zeta0 = zeta1 - float(datos_losa.get("Espesor") or 0.12)
                     recorte = self._geometria_losa(elemento)
-                except Exception:
+                    es_losa = True
+                elif elemento.is_a("IfcFooting") and _texto(
+                    getattr(elemento, "PredefinedType", "")
+                ) == "STRIP_FOOTING":
+                    datos_f = self._leer_pset(elemento, "OPENRVT_Estructura")
+                    if not datos_f:
+                        continue
+                    _alias, seccion, _armado = self._seccion_y_armado(
+                        self._tipo_entidad(elemento)
+                    )
+                    x1 = float(datos_f.get("X1") or 0.0)
+                    y1 = float(datos_f.get("Y1") or 0.0)
+                    x2 = float(datos_f.get("X2") or 0.0)
+                    y2 = float(datos_f.get("Y2") or 0.0)
+                    largo = math.hypot(x2 - x1, y2 - y1)
+                    if largo <= TOLERANCIA_CALCULO:
+                        continue
+                    ux, uy = (x2 - x1) / largo, (y2 - y1) / largo
+                    pi = float(datos_f.get("ProlongacionInicio") or 0.0)
+                    pf = float(datos_f.get("ProlongacionFin") or 0.0)
+                    peralte = float(seccion.get("Peralte") or 0.20)
+                    z = float(datos_f.get("Z") or 0.0)
+                    barra = uniones.Barra(
+                        gid=_gid(elemento),
+                        tipo="viga",
+                        x1=x1 - ux * pi,
+                        y1=y1 - uy * pi,
+                        x2=x2 + ux * pf,
+                        y2=y2 + uy * pf,
+                        ancho=float(seccion.get("Ancho") or 0.60),
+                        z0=z - peralte / 2.0,
+                        z1=z + peralte / 2.0,
+                    )
+                    zeta0, zeta1 = barra.z0, barra.z1
+                    recorte = Polygon(uniones.huella(barra))
+                    es_losa = False
+                elif alias in ("contratrabe", "dala", "cerramiento"):
+                    barra = self._barra_de_elemento(elemento)
+                    if barra is None:
+                        continue
+                    zeta0, zeta1 = barra.z0, barra.z1
+                    recorte = Polygon(uniones.huella(barra))
+                    es_losa = False
+                else:
                     continue
-            elif alias in ("contratrabe", "dala"):
-                barra = self._barra_de_elemento(elemento)
-                if barra is None:
-                    continue
-                zeta0, zeta1 = barra.z0, barra.z1
-                recorte = Polygon(uniones.huella(barra))
+            except Exception:
+                LOG.debug("no se pudo leer un horizontal del muro", exc_info=True)
+                continue
+            if recorte is None or recorte.is_empty:
+                continue
+            if not recorte.is_valid:
+                recorte = recorte.buffer(0)
+            if recorte.is_empty:
+                continue
+            salida.append(
+                {
+                    "huella": recorte,
+                    "z0": float(zeta0),
+                    "z1": float(zeta1),
+                    "losa": es_losa,
+                }
+            )
+        return salida
+
+    @staticmethod
+    def _tramos_verticales_muro(
+        z0: float, z1: float, intervalos: list[tuple[float, float]]
+    ) -> list[tuple[float, float]]:
+        """Tramos [a, b] del muro entre z0 y z1 quitando los intermedios."""
+        if z1 - z0 <= TOLERANCIA_CALCULO:
+            return [(z0, z1)]
+        recortes = sorted(
+            (max(z0, a), min(z1, b))
+            for a, b in intervalos
+            if min(z1, b) - max(z0, a) > TOLERANCIA_CALCULO
+        )
+        unidos: list[tuple[float, float]] = []
+        for a, b in recortes:
+            if unidos and a <= unidos[-1][1] + TOLERANCIA_CALCULO:
+                unidos[-1] = (unidos[-1][0], max(unidos[-1][1], b))
             else:
+                unidos.append((a, b))
+        salida: list[tuple[float, float]] = []
+        cursor = z0
+        for a, b in unidos:
+            if a - cursor > TOLERANCIA_CALCULO:
+                salida.append((cursor, a))
+            cursor = max(cursor, b)
+        if z1 - cursor > TOLERANCIA_CALCULO:
+            salida.append((cursor, z1))
+        return salida or [(z0, z1)]
+
+    def _intervalos_intermedios_muro(
+        self, muro: Any, datos: dict[str, Any], base: float, cima: float
+    ) -> list[tuple[float, float]]:
+        """Intervalos verticales de elementos intermedios sobre la huella del muro.
+
+        O058 regla 3: solo cuenta el elemento cuya cara inferior está por encima de
+        la base y cuya cara superior está por debajo de la corona; los que tocan
+        base o corona ya son apoyo/cubierta y no se restan.
+        """
+        huella = self._huella_planta_muro(muro, datos)
+        intervalos: list[tuple[float, float]] = []
+        for elemento in self._horizontales_de_muro(muro, datos):
+            z0, z1 = elemento["z0"], elemento["z1"]
+            if z1 - z0 <= TOLERANCIA_CALCULO:
+                continue
+            if z0 <= base + TOLERANCIA_CALCULO or z1 >= cima - TOLERANCIA_CALCULO:
                 continue
             try:
-                if not recorte.is_valid:
-                    recorte = recorte.buffer(0)
-                if huella.intersection(recorte).area <= TOLERANCIA_CALCULO:
+                if huella.intersection(elemento["huella"]).area <= TOLERANCIA_CALCULO:
                     continue
             except Exception:
                 continue
-            if alias in ("contratrabe", "dala") or elemento.is_a("IfcSlab"):
-                # Elemento que soporta: la base sube a su cara superior.
-                if base + TOLERANCIA_CALCULO < zeta1 < cima - TOLERANCIA_CALCULO:
-                    base = max(base, zeta1)
-            if elemento.is_a("IfcSlab"):
-                # Elemento que cubre: la corona baja a su cara inferior.
-                # O045: el cerramiento va embebido y no recorta el muro.
-                if base + TOLERANCIA_CALCULO < zeta0 < cima - TOLERANCIA_CALCULO:
-                    cima = min(cima, zeta0)
+            intervalos.append((z0, z1))
+        return intervalos
+
+    def _limites_verticales_muro_nivel(
+        self, muro: Any, datos: dict[str, Any] | None = None
+    ) -> tuple[float, float]:
+        """(base, cima) del nivel: apoyos y cubiertas, sin la bajada O035.
+
+        O058: un elemento solo es apoyo si su cara inferior queda en la base
+        nominal y su cara superior la toca; solo es cubierta si toca la corona
+        nominal. Los elementos a media altura no mueven ni la base ni la corona.
+        """
+        datos = datos or self._datos_muro(muro)
+        base_nominal = float(datos["z"])
+        corona_nominal = base_nominal + float(datos["altura"])
+        base, cima = base_nominal, corona_nominal
+        huella = self._huella_planta_muro(muro, datos)
+        for elemento in self._horizontales_de_muro(muro, datos):
+            zeta0, zeta1 = elemento["z0"], elemento["z1"]
+            try:
+                if huella.intersection(elemento["huella"]).area <= TOLERANCIA_CALCULO:
+                    continue
+            except Exception:
+                continue
+            # Apoyo: toca la base nominal (cara inferior ≤ base ≤ cara superior).
+            if (
+                zeta0 <= base_nominal + TOLERANCIA_CALCULO
+                and zeta1 >= base_nominal - TOLERANCIA_CALCULO
+                and zeta1 < corona_nominal - TOLERANCIA_CALCULO
+            ):
+                base = max(base, zeta1)
+            # Cubierta: toca la corona nominal. O045: solo la losa recorta el
+            # muro; el cerramiento va embebido.
+            if (
+                elemento["losa"]
+                and zeta1 >= corona_nominal - TOLERANCIA_CALCULO
+                and zeta0 <= corona_nominal + TOLERANCIA_CALCULO
+                and zeta0 > base_nominal + TOLERANCIA_CALCULO
+            ):
+                cima = min(cima, zeta0)
         if cima - base <= TOLERANCIA_CALCULO:
-            return (float(datos["z"]), float(datos["z"]) + float(datos["altura"]))
+            return (base_nominal, corona_nominal)
         return (base, cima)
 
     # ------------------------------------------------ esquinas de muros (O010)
