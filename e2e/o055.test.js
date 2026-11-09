@@ -426,6 +426,34 @@ test("O055: ejes, niveles, cotas y notas en 3D, planta y alzado", async () => {
 
     // 6 ejes × 2 globos, 2 niveles y 6 cotas (2 parciales + 1 total por familia).
     await comprobarAnotaciones(ses, { globos: 12, niveles: 2, cotas: 6 }, "iso");
+
+    // La etiqueta del nivel va fuera de su rectángulo y su caja en pantalla no se
+    // cruza con ningún globo de eje ni con la otra etiqueta de nivel.
+    const cajasGlobos = JSON.parse(await dataset(ses, "globosEjesPx"));
+    const cajasNiveles = JSON.parse(await dataset(ses, "etiquetasNivelPx"));
+    assert.equal(cajasGlobos.length, 12, "faltan las 12 cajas de globos en pantalla");
+    assert.equal(cajasNiveles.length, 2, "faltan las 2 etiquetas de nivel en pantalla");
+    const seCruzan = (a, b) =>
+      a.x < b.x + b.ancho &&
+      b.x < a.x + a.ancho &&
+      a.y < b.y + b.alto &&
+      b.y < a.y + a.alto;
+    for (let i = 0; i < cajasNiveles.length; i += 1) {
+      for (let j = 0; j < cajasGlobos.length; j += 1) {
+        assert.equal(
+          seCruzan(cajasNiveles[i], cajasGlobos[j]),
+          false,
+          `la etiqueta de nivel ${i} se cruza con el globo ${j}: ${JSON.stringify(cajasNiveles[i])} vs ${JSON.stringify(cajasGlobos[j])}`,
+        );
+      }
+      for (let j = i + 1; j < cajasNiveles.length; j += 1) {
+        assert.equal(
+          seCruzan(cajasNiveles[i], cajasNiveles[j]),
+          false,
+          `las etiquetas de nivel ${i} y ${j} se cruzan`,
+        );
+      }
+    }
     await ses.captura(path.join(CAPTURAS, "iso-anotaciones.png"));
 
     // 5. Nota sobre la cara +Y del muro A. La cara se mide en su malla teselada.

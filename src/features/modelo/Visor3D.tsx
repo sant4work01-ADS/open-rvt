@@ -113,6 +113,7 @@ import {
   calcularEjes3d,
   calcularNiveles3d,
   conmutadoresAnotaciones3D,
+  elegirEsquinaEtiqueta,
   elevacionBaseNiveles,
   notaVisibleEnVista,
   type Nota,
@@ -4754,6 +4755,10 @@ export function Visor3D({
     let globos = 0;
     let nivelesDibujados = 0;
     let cotasDibujadas = 0;
+    // O055: cajas en pantalla para comprobar que ninguna etiqueta de nivel choca
+    // con un globo de eje ni con otra etiqueta de nivel.
+    const globosPx: Array<{ x: number; y: number; ancho: number; alto: number }> = [];
+    const etiquetasNivelPx: Array<{ x: number; y: number; ancho: number; alto: number }> = [];
 
     if (es3d && conmutadores.ejes) {
       const ejes = calcularEjes3d(referencias.ejes, zBase);
@@ -4767,6 +4772,16 @@ export function Visor3D({
           globo.position.set(...extremo);
           agregarOrientable(globo);
           globos += 1;
+          const centro = pantallaDePunto(extremo);
+          if (centro) {
+            const radio = diametro / (2 * mundoPorPx);
+            globosPx.push({
+              x: centro.x - radio,
+              y: centro.y - radio,
+              ancho: radio * 2,
+              alto: radio * 2,
+            });
+          }
         }
       }
     }
@@ -4781,9 +4796,24 @@ export function Visor3D({
         agregarLinea(nivel.esquinas, true, true);
         const etiqueta = textoCota(nivel.texto, color, fondo, altoTexto);
         if (etiqueta) {
-          etiqueta.position.set(...nivel.etiqueta);
+          // La caja del rótulo se aproxima con el ancho de `anchoTextoAprox` y el
+          // alto real en pantalla, con 2 px de holgura.
+          const anchoPx = Math.max(0.1, anchoTextoAprox(nivel.texto, altoTexto)) / mundoPorPx + 2;
+          const altoPx = altoTexto / mundoPorPx + 2;
+          const candidatas = nivel.esquinasEtiqueta.map((punto) => {
+            const centro = pantallaDePunto(punto);
+            return {
+              x: (centro?.x ?? 0) - anchoPx / 2,
+              y: (centro?.y ?? 0) - altoPx / 2,
+              ancho: anchoPx,
+              alto: altoPx,
+            };
+          });
+          const indice = elegirEsquinaEtiqueta(candidatas, [...globosPx, ...etiquetasNivelPx]);
+          etiqueta.position.set(...nivel.esquinasEtiqueta[indice]);
           etiqueta.renderOrder = 22;
           agregarOrientable(etiqueta);
+          etiquetasNivelPx.push(candidatas[indice]);
         }
         nivelesDibujados += 1;
       }
@@ -4838,6 +4868,8 @@ export function Visor3D({
 
     if (nodoVisor) {
       nodoVisor.dataset.globosEjes3d = String(globos);
+      nodoVisor.dataset.globosEjesPx = JSON.stringify(globosPx);
+      nodoVisor.dataset.etiquetasNivelPx = JSON.stringify(etiquetasNivelPx);
       nodoVisor.dataset.niveles3d = String(nivelesDibujados);
       nodoVisor.dataset.cotas3d = String(cotasDibujadas);
       nodoVisor.dataset.notas3d = String(notasVisiblesPx.length);

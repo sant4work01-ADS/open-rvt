@@ -34,8 +34,43 @@ export interface Nivel3D {
   texto: string;
   /** Esquinas del rectángulo discontinuo, en orden. */
   esquinas: Punto3[];
-  /** Esquina donde va la etiqueta. */
+  /** Esquina donde va la etiqueta (fuera del rectángulo). */
   etiqueta: Punto3;
+  /** Las cuatro esquinas candidatas, fuera del rectángulo, por si hay choque. */
+  esquinasEtiqueta: Punto3[];
+}
+
+/** Caja de un rótulo o globo proyectada a píxeles de pantalla. */
+export interface CajaPantalla {
+  x: number;
+  y: number;
+  ancho: number;
+  alto: number;
+}
+
+/** ¿Dos cajas de pantalla se solapan? Tocar el borde no cuenta. */
+export function seCruzan(a: CajaPantalla, b: CajaPantalla): boolean {
+  return (
+    a.x < b.x + b.ancho &&
+    b.x < a.x + a.ancho &&
+    a.y < b.y + b.alto &&
+    b.y < a.y + a.alto
+  );
+}
+
+/**
+ * Índice de la primera esquina cuya caja no choca con ninguna ocupada (globos y
+ * etiquetas de nivel ya colocadas). Si todas chocan se usa la primera para no
+ * dejar el nivel sin rótulo.
+ */
+export function elegirEsquinaEtiqueta(
+  candidatas: CajaPantalla[],
+  ocupadas: CajaPantalla[],
+): number {
+  for (let i = 0; i < candidatas.length; i += 1) {
+    if (!ocupadas.some((ocupada) => seCruzan(candidatas[i], ocupada))) return i;
+  }
+  return 0;
 }
 
 export interface Cota3D {
@@ -141,12 +176,15 @@ export function textoNivel3d(nivel: Nivel): string {
 
 /**
  * Un rectángulo discontinuo a la altura de cada nivel, rodeando la caja del modelo
- * con `margen` metros. La etiqueta se coloca en la esquina suroeste.
+ * con `margen` metros. La etiqueta va fuera del rectángulo, `desfase` metros más
+ * allá de la esquina suroeste; se devuelven las cuatro esquinas candidatas para
+ * que el visor elija la que no choque con globos ni con otras etiquetas.
  */
 export function calcularNiveles3d(
   niveles: Nivel[],
   caja: Caja,
   margen = 1,
+  desfase = 0.5,
 ): Nivel3D[] {
   const minX = caja.min[0] - margen;
   const minY = caja.min[1] - margen;
@@ -154,6 +192,12 @@ export function calcularNiveles3d(
   const maxY = caja.max[1] + margen;
   return niveles.map((nivel) => {
     const z = nivel.elevacion;
+    const esquinasEtiqueta: Punto3[] = [
+      [minX - desfase, minY - desfase, z],
+      [maxX + desfase, minY - desfase, z],
+      [maxX + desfase, maxY + desfase, z],
+      [minX - desfase, maxY + desfase, z],
+    ];
     return {
       globalid: nivel.globalid,
       nombre: nivel.nombre,
@@ -165,7 +209,8 @@ export function calcularNiveles3d(
         [maxX, maxY, z],
         [minX, maxY, z],
       ],
-      etiqueta: [minX, minY, z],
+      etiqueta: esquinasEtiqueta[0],
+      esquinasEtiqueta,
     };
   });
 }

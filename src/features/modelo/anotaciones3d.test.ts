@@ -9,8 +9,11 @@ import {
   calcularEjes3d,
   calcularNiveles3d,
   elevacionBaseNiveles,
+  elegirEsquinaEtiqueta,
   notaVisibleEnVista,
+  seCruzan,
   textoNivel3d,
+  type CajaPantalla,
   type Nota,
 } from "./anotaciones3d";
 
@@ -94,7 +97,37 @@ describe("O055: rectángulos de nivel", () => {
       [-1, 9, 0],
     ]);
     expect(niveles[1].esquinas[0]).toEqual([-1, -1, 3]);
-    expect(niveles[0].etiqueta).toEqual([-1, -1, 0]);
+    // La etiqueta va FUERA del rectángulo: 0.5 m más allá de la esquina suroeste.
+    expect(niveles[0].etiqueta).toEqual([-1.5, -1.5, 0]);
+    // Las cuatro esquinas candidatas también quedan fuera del rectángulo.
+    expect(niveles[0].esquinasEtiqueta).toEqual([
+      [-1.5, -1.5, 0],
+      [11.5, -1.5, 0],
+      [11.5, 9.5, 0],
+      [-1.5, 9.5, 0],
+    ]);
+  });
+
+  test("las cajas en pantalla se cruzan solo si se solapan de verdad", () => {
+    const a: CajaPantalla = { x: 100, y: 100, ancho: 50, alto: 20 };
+    // Pegada por el borde: no se cruza.
+    expect(seCruzan(a, { x: 150, y: 100, ancho: 30, alto: 20 })).toBe(false);
+    // Un píxel dentro: se cruza.
+    expect(seCruzan(a, { x: 149, y: 100, ancho: 30, alto: 20 })).toBe(true);
+    // Contenida: se cruza.
+    expect(seCruzan(a, { x: 110, y: 105, ancho: 5, alto: 5 })).toBe(true);
+  });
+
+  test("se elige la primera esquina libre; si choca, la siguiente", () => {
+    const globo: CajaPantalla = { x: 0, y: 0, ancho: 22, alto: 22 };
+    const choca = { x: 10, y: 10, ancho: 40, alto: 12 };
+    const libre = { x: 300, y: 300, ancho: 40, alto: 12 };
+    // Con la primera candidata libre se queda en el índice 0.
+    expect(elegirEsquinaEtiqueta([libre, { ...libre, x: 500 }], [globo])).toBe(0);
+    // Con la primera tapada por el globo salta a la segunda.
+    expect(elegirEsquinaEtiqueta([choca, libre], [globo])).toBe(1);
+    // Si todas chocan se usa la primera (nunca se deja sin etiqueta).
+    expect(elegirEsquinaEtiqueta([choca, { ...choca, x: 12 }], [globo])).toBe(0);
   });
 
   test("una elevación negativa se escribe con signo menos", () => {
