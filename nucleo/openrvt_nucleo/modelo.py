@@ -173,6 +173,12 @@ class ModeloNucleo(
         self.con_cambios = False
         self._deshacer: list[str] = []
         self._rehacer: list[str] = []
+        # O063: contador monótono de instantáneas y texto de la primera que se
+        # tomó durante el comando en curso. Sirven para revertir aunque el
+        # historial esté lleno y la longitud de ``_deshacer`` no crezca.
+        self._n_instantaneas = 0
+        self._ultima_instantanea_cmd: str | None = None
+        self._en_comando = False
         # O063: losas sin contorno detectadas al calcular cantidades.
         self._avisos_losa: list[dict[str, Any]] = []
 
@@ -186,8 +192,15 @@ class ModeloNucleo(
         """Guarda el modelo antes de un comando que lo modifica (máximo 50)."""
         if self.modelo is None:
             return
-        self._deshacer.append(self.modelo.to_string())
-        if len(self._deshacer) > MAX_HISTORIAL:
+        texto = self.modelo.to_string()
+        self._deshacer.append(texto)
+        self._n_instantaneas += 1
+        if self._ultima_instantanea_cmd is None:
+            self._ultima_instantanea_cmd = texto
+        # Mientras corre un comando no se poda: si falla hay que poder devolver
+        # el historial exacto que habia antes, incluida la instantanea mas vieja
+        # que de otro modo se perderia al llenarse el historial.
+        if not self._en_comando and len(self._deshacer) > MAX_HISTORIAL:
             del self._deshacer[0 : len(self._deshacer) - MAX_HISTORIAL]
         self._rehacer.clear()
 
@@ -1095,18 +1108,29 @@ class ModeloNucleo(
         return datos
 
     # ------------------------------------------------------------------ historial
-    def revertir_comando(self, indice: int) -> None:
-        """O063: descarta las instantáneas de un comando fallido y restaura su estado.
+    def revertir_comando(self, instantanea: str, cuantas: int) -> None:
+        """O063: restaura la primera instantánea de un comando fallido.
 
-        ``indice`` es la longitud del historial antes de ejecutar el comando; la
-        primera instantánea que agregó contiene exactamente ese estado.
+        ``instantanea`` es el texto del modelo tal como estaba al empezar el
+        comando y ``cuantas`` las instantáneas que llegó a tomar. Se quitan del
+        final del historial (nunca más de las que hay) y se restaura el modelo.
+        No depende de que la longitud del historial haya crecido: con el
+        historial lleno la instantánea nueva desplaza a la más vieja.
         """
-        if self.modelo is None or indice >= len(self._deshacer):
+        if self.modelo is None or cuantas <= 0:
             return
-        instantanea = self._deshacer[indice]
-        del self._deshacer[indice:]
+        cuantas = min(cuantas, len(self._deshacer))
+        if cuantas:
+            del self._deshacer[-cuantas:]
         self.modelo = ifcopenshell.file.from_string(instantanea)
         self._rehacer.clear()
+        self._ultima_instantanea_cmd = None
+
+    def cerrar_comando(self) -> None:
+        """O063: fin del comando; poda el historial que se dejó crecer mientras tanto."""
+        self._en_comando = False
+        if len(self._deshacer) > MAX_HISTORIAL:
+            del self._deshacer[0 : len(self._deshacer) - MAX_HISTORIAL]
 
     def deshacer(self) -> dict[str, Any]:
         self._exigir_modelo()
