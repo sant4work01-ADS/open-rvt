@@ -2102,6 +2102,11 @@ export function Visor3D({
       alpha: false,
       stencil: true,
       preserveDrawingBuffer: true,
+      // O062: con la piel de 0.015 las aristas del bolsillo interno quedan a
+      // 15 mm de la cara; el buffer de profundidad logarítmico mantiene la
+      // precisión suficiente de cerca y de lejos para que no se dibujen a
+      // través de la cara exterior.
+      logarithmicDepthBuffer: true,
     });
     rendererLocal.localClippingEnabled = true;
     rendererLocal.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
