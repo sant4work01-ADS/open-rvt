@@ -1,7 +1,8 @@
+/* eslint-disable react-hooks/immutability -- los refs del visor son mutables por diseño. */
 // OPEN-RVT: visor three.js del módulo Modelo. Dibuja mallas en coordenadas de mundo,
 // cámaras ortográficas para plantas/alzados/cortes y órbita libre en 3D, con recorte y
 // relleno de sección por stencil (técnica del ejemplo webgl_clipping_stencil).
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect } from "react";
 import * as THREE from "three";
 import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
@@ -11,7 +12,7 @@ import {
   dibujaSiluetaSobreCorte,
   elementoVisibleEnPlanta,
 } from "./vistas";
-import { crearRendererVisor } from "./visorRenderer";
+import {  } from "./visorRenderer";
 import { useModelo } from "./estado";
 import {
   calcularPlantaMuros,
@@ -29,26 +30,15 @@ import {
 } from "./seleccionCiclica";
 import {
   detectorRueda,
-  factorZoomRueda,
-  resumirGrabacion,
   textoResumenGrabacion,
-  useRueda,
-  type EventoGrabado,
-  type ResumenGrabacion,
-  type TipoEventoGrabado,
 } from "@/lib/rueda";
-import { listen } from "@tauri-apps/api/event";
+import {  } from "@tauri-apps/api/event";
 import { copiarTexto } from "@/lib/portapapeles";
-import { debeIgnorarGestoNativo, factorGestoZoom } from "@/lib/gestos";
-import { elegirDestinoDiagnostico } from "@/lib/dialogos";
-import { commands } from "@/lib/bindings";
+import {  } from "@/lib/dialogos";
+import {  } from "@/lib/bindings";
 import {
   buscarEnganche,
   colocarAbertura,
-  describirEnganche,
-  distanciaAEjeParalelo,
-  ejeOrtogonal,
-  restringirEje,
   type Punto2,
 } from "./herramientas";
 import {
@@ -60,8 +50,6 @@ import { bordesDePset } from "./bordesLosa";
 import {
   alturaEnEjeVertical,
   clasificarEmpujar,
-  crearRectangulo,
-  puntosRectangulo,
   textoDimensiones,
 } from "./empujar";
 import {
@@ -74,19 +62,15 @@ import {
 } from "./empujarCaras";
 import {
   inferir,
-  type Bloqueo,
   type CandidatosInferencia,
   type Inferencia,
   type Vec3,
 } from "./inferencias3d";
 import {
-  CacheCandidatosMallas,
   caraSuperiorEn,
   envolventeDeMalla,
   filtrarPorCercania,
   unirCandidatos,
-  type Envolvente,
-  type MallaCandidata,
 } from "./candidatos3d";
 import {
   asasDeLosa,
@@ -94,33 +78,16 @@ import {
   desfaseConArrastre,
   hayAsasLosa,
   leerPoligonoWkt,
-  type AsaLosa,
 } from "./asasLosa";
 import {
   calcularFamiliasCotas,
-  parsearCota,
-  parsearElevacion,
   posicionTextoEntreMarcas,
 } from "./cotas";
 import { ControlesZoom } from "./ControlesZoom";
 import {
   accionArrastre,
-  accionRuedaConShift,
-  guardarModoOrbitar,
-  leerModoOrbitar,
-  type AccionArrastre,
 } from "./orbita";
-import { DESFASE_NOMBRE_CABEZA, elevacionDesdeCota, normalizarAjusteNivel } from "./niveles";
-import {
-  calcularCotas3d,
-  calcularEjes3d,
-  calcularNiveles3d,
-  conmutadoresAnotaciones3D,
-  elegirEsquinaEtiqueta,
-  elevacionBaseNiveles,
-  notaVisibleEnVista,
-  type Nota,
-} from "./anotaciones3d";
+import { DESFASE_NOMBRE_CABEZA, normalizarAjusteNivel } from "./niveles";
 import { calcularLayoutAlzado, enlazarTramosCota, formatearNumero, segmentosTrazoPunto } from "./anotacionVista";
 import {
   categoriaOculta,
@@ -130,7 +97,6 @@ import {
   altoAnotacionMundo,
   mmAMundo,
   mmAMundoConMinimoPx,
-  mmAPx,
   rellenoDeElemento,
   type MaterialNombre,
   type PatronLinea,
@@ -148,9 +114,6 @@ import {
   type Punto3,
 } from "./seccion";
 import {
-  ajustarAspecto,
-  cajaConEjes,
-  camaraOrtografica,
   centroCaja,
   diagonalCaja,
   direccionAlzado,
@@ -168,17 +131,13 @@ import {
   agregarCodoEje,
   asasCodoVista,
   arrastrarExtremoEje,
-  copiarAjusteEje,
   extremoEje,
-  fijarExtremoEje,
   geometriaEje,
   globoVisibleEje,
   imanAlineacion,
   imanMultiplo,
-  interseccionesEje,
   mmPapelAMetros,
   normalizarAjusteEje,
-  quitarCodoEje,
   restablecerExtremoEje,
   candadoArrastreAsa,
   desplazamientoArrastreNivel,
@@ -199,15 +158,10 @@ import {
   redondearVec,
 } from "./visor/utilidades";
 import {
-  camarasPorVista,
   centroCorte,
   colorDeFondo,
-  crearCamaraDeVista,
-  crearNavegacion,
   normalCorte,
   planosVista,
-  type CamaraGuardada,
-  type Navegacion,
 } from "./visor/camara";
 import {
   crearMaterialLinea,
@@ -217,28 +171,28 @@ import {
   materialProyeccionTenue,
   materialRelleno,
   rayadoRectangulo,
-  type EntradaGrosor,
 } from "./visor/lineas";
 import {
   anchoTextoAprox,
   burbujaEje,
   crearAsaPunto,
-  etiquetaCota,
   orientarAnotacion,
   textoCota,
 } from "./visor/anotaciones";
-import type {
-  AnotacionAlzado,
-  CotaEnEdicion,
-  CotaInteractiva,
-  Props,
-} from "./visor/tipos";
+import { useEstadoVisor } from "./visor/useEstadoVisor";
+import { usePunteroVisor } from "./visor/usePunteroVisor";
+import { useAnotacionesVisor } from "./visor/useAnotacionesVisor";
+import { useHerramientaVisor } from "./visor/useHerramientaVisor";
+import { useControlesVisor } from "./visor/useControlesVisor";
+import { useRuedaVisor } from "./visor/useRuedaVisor";
+import { useOverlaysVisor } from "./visor/useOverlaysVisor";
+import { useGuiasVisor } from "./visor/useGuiasVisor";
+import type { CotaInteractiva, Props } from "./visor/tipos";
 
 /** Distancia de un punto a un segmento (para saber si un cerramiento tiene muro debajo). */
 
 
 const ARRIBA = new THREE.Vector3(0, 0, 1);
-let claveCamaras = "";
 
 export function Visor3D({
   vista,
@@ -261,1226 +215,200 @@ export function Visor3D({
   elementosOcultos = [],
   elementosBloqueados = [],
 }: Props) {
-  const contenedor = useRef<HTMLDivElement>(null);
-  const escena = useRef<THREE.Scene | null>(null);
-  const renderer = useRef<THREE.WebGLRenderer | null>(null);
-  const camara = useRef<THREE.Camera | null>(null);
-  const grupo = useRef<THREE.Group | null>(null);
-  const grupoHerramienta = useRef<THREE.Group | null>(null);
-  const meshes = useRef<THREE.Mesh[]>([]);
-  // O049: mallas visibles del último dibujo, caché de candidatos y bloqueos.
-  const mallas3d = useRef<
-    { globalid: string; malla: MallaCandidata; envolvente: Envolvente }[]
-  >([]);
-  const cacheCandidatos = useRef(new CacheCandidatosMallas());
-  const bloqueoFlechas = useRef<Bloqueo | null>(null);
-  const bloqueoShift = useRef<Bloqueo | null>(null);
-  const ultimaInferenciaEmpujar = useRef<{
-    punto: Vec3;
-    tipo: string | null;
-    etiqueta: string;
-  } | null>(null);
-  const [marcadorEmpujar, setMarcadorEmpujar] = useState<{
-    x: number;
-    y: number;
-    tipo: string;
-    etiqueta: string;
-    punto: Vec3;
-    tooltipIzquierda: boolean;
-  } | null>(null);
-  const [guiaEmpujar, setGuiaEmpujar] = useState<{
-    x1: number;
-    y1: number;
-    x2: number;
-    y2: number;
-    color: string;
-    tipo: string;
-  } | null>(null);
-  // O056: cara de un elemento bajo el cursor y su clasificación.
-  const [caraEmpujarHover, setCaraEmpujarHover] = useState<{
-    globalid: string;
-    normal: [number, number, number];
-    punto: [number, number, number];
-    poligono: Vec3[];
-    clasificacion: ResultadoCara;
-    x: number;
-    y: number;
-    tooltipIzquierda: boolean;
-  } | null>(null);
-  const grosores = useRef<EntradaGrosor[]>([]);
-  const navegacion = useRef<Navegacion | null>(null);
-  // O010/O031: la cámara de cada vista se conserva al cambiar de vista, entre
-  // redibujos y al volver de otro módulo (mapa a nivel de módulo).
-  const camarasGuardadas = useRef(camarasPorVista);
-  const vistaDeCamara = useRef<string | null>(null);
-  const arrastre = useRef<{
-    x: number;
-    y: number;
-    inicioX: number;
-    inicioY: number;
-    boton: number;
-    movido: boolean;
-    paneable: boolean;
-    /** O020: qué hace el arrastre, decidido al pulsar. */
-    accion: AccionArrastre;
-  } | null>(null);
-  // Coordenadas de página (como clientX/Y); `ox`/`oy` es la esquina del visor para
-  // dibujar el rectángulo dentro de él, que es `relative`.
-  const [ventanaSeleccion, setVentanaSeleccion] = useState<{
-    x1: number;
-    y1: number;
-    x2: number;
-    y2: number;
-    ox: number;
-    oy: number;
-  } | null>(null);
-  // O003b: estado de la herramienta activa.
-  const herramienta = useModelo((s) => s.herramienta);
-  const referenciaAlinear = useModelo((s) => s.referenciaAlinear);
-  const alineando = useModelo((s) => s.alineando);
-  const elegirReferenciaAlinear = useModelo((s) => s.elegirReferenciaAlinear);
-  const aplicarAlinear = useModelo((s) => s.aplicarAlinear);
-  const alternarCandadoAlinear = useModelo((s) => s.alternarCandadoAlinear);
-  const puntosHerramienta = useModelo((s) => s.puntosHerramienta);
-  const ratonHerramienta = useModelo((s) => s.ratonHerramienta);
-  const engancheHerramienta = useModelo((s) => s.engancheHerramienta);
-  const referencias = useModelo((s) => s.referencias);
-  const voltearSiguiente = useModelo((s) => s.voltearSiguiente);
-  const longitudTecleada = useModelo((s) => s.longitudTecleada);
-  const ejeLibre = useModelo((s) => s.ejeLibre);
-  const fijarRaton = useModelo((s) => s.fijarRatonHerramienta);
-  const clicEnPlanta = useModelo((s) => s.clicEnPlanta);
-  const clicNivel = useModelo((s) => s.clicNivel);
-  const vistaPreviaRecorte = useModelo((s) => s.vistaPreviaRecorte);
-  const clicRecorte = useModelo((s) => s.clicRecorte);
-  const empujarRect = useModelo((s) => s.empujarRect);
-  const empujarAltura = useModelo((s) => s.empujarAltura);
-  const empujarClasificacion = useModelo((s) => s.empujarClasificacion);
-  const fijarAlturaEmpujar = useModelo((s) => s.fijarAlturaEmpujar);
-  const moverEmpujar = useModelo((s) => s.moverEmpujar);
-  const clicEmpujar = useModelo((s) => s.clicEmpujar);
-  const confirmarEmpujar = useModelo((s) => s.confirmarEmpujar);
-  const empujarZ = useModelo((s) => s.empujarZ);
-  const empujarCara = useModelo((s) => s.empujarCara);
-  const iniciarEmpujarCara = useModelo((s) => s.iniciarEmpujarCara);
-  const moverEmpujarCara = useModelo((s) => s.moverEmpujarCara);
-  const confirmarEmpujarCara = useModelo((s) => s.confirmarEmpujarCara);
-  const opcionesNivel = useModelo((s) => s.opcionesNivel);
-  const cotasNivel = useModelo((s) => s.cotasNivel);
-  const dobleClicEnPlanta = useModelo((s) => s.dobleClicEnPlanta);
-  const notas = useModelo((s) => s.notas);
-  const notaSeleccionada = useModelo((s) => s.notaSeleccionada);
-  const seleccionarNota = useModelo((s) => s.seleccionarNota);
-  const crearNota = useModelo((s) => s.crearNota);
-  const editarNota = useModelo((s) => s.editarNota);
-  const moverNota = useModelo((s) => s.moverNota);
-  const actualizarVista = useModelo((s) => s.actualizarVista);
-  // O038: el árbol pide «Ajustar» (doble clic) subiendo este contador.
-  const ajustarToken = useModelo((s) => s.ajustarToken);
-  const espacio = useRef(false);
-  const ultimaZ = useRef(0);
-  const ultimoMedio = useRef(0);
-  const [oscuro, setOscuro] = useState(() =>
-    typeof document !== "undefined" ? document.documentElement.classList.contains("dark") : false,
-  );
-  const [dimensiones, setDimensiones] = useState({ ancho: 1, alto: 1 });
-  // O030: el zoom obliga a recalcular la anotación en modo «Pantalla».
-  const [zoomTick, setZoomTick] = useState(0);  // O006a: textos de cota dibujados y edición en el sitio.
-  const cotasInteraccion = useRef<CotaInteractiva[]>([]);
-  // O011b: etiquetas de nivel y cotas del alzado, con su rectángulo, para las E2E.
-  const anotacionesAlzado = useRef<AnotacionAlzado[]>([]);
-  // O055: grupo propio de las anotaciones 3D y notas proyectadas a pantalla.
-  const grupoAnotaciones3d = useRef<THREE.Group | null>(null);
-  const orientablesAnot3d = useRef<THREE.Object3D[]>([]);
-  const [notasPx, setNotasPx] = useState<Array<{ nota: Nota; x: number; y: number }>>([]);
-  const [notaEditando, setNotaEditando] = useState<{
-    globalid: string | null;
-    texto: string;
-    posicion: Punto3;
-    izquierda: number;
-    arriba: number;
-  } | null>(null);
-  const [textoNota, setTextoNota] = useState("");
-  const [panelAnotaciones, setPanelAnotaciones] = useState(false);
-  const [arrastreNota, setArrastreNota] = useState<{
-    globalid: string;
-    x0: number;
-    y0: number;
-    dx: number;
-    dy: number;
-    posicion: Punto3;
-  } | null>(null);
-  const [cotaEditando, setCotaEditando] = useState<CotaEnEdicion | null>(null);
-  const [textoCotaEditando, setTextoCotaEditando] = useState("");
-  // O010: el error de una cota se muestra junto a la caja, no en la barra de estado.
-  const [errorCota, setErrorCota] = useState<string | null>(null);
-  // O011: eje seleccionado, codos y extremos libres de la vista.
-  const [ejeSeleccionado, setEjeSeleccionado] = useState<string | null>(null);
-  // O021: `true` = candado abierto (solo este eje); `false` = cerrado (alineación común).
-  const [candados, setCandados] = useState<{ inicio: boolean; fin: boolean }>({
-    inicio: false,
-    fin: false,
+  const c1 = useEstadoVisor({
+    vista,
+    vistas,
+    niveles,
+    mallas,
+    estilos,
+    aberturas,
+    caja,
+    seleccion,
+    seleccionados,
+    modoCorte,
+    puntoCorte,
+    onSeleccionar,
+    onSeleccionarVarios,
+    onPuntoCorte,
+    onEscape,
+    onCambiarAnotacion,
+    claveModelo,
+    elementosOcultos,
+    elementosBloqueados,
   });
-  const [ajusteEnCurso, setAjusteEnCurso] = useState<Record<string, AjusteEjeVista> | null>(
-    null,
-  );
-  const [menuEje, setMenuEje] = useState<{
-    x: number;
-    y: number;
-    globalid: string;
-    lado: LadoEje;
-    indice: number | null;
-  } | null>(null);
-  // O021: diálogo para copiar el acomodo de un eje a vistas del mismo tipo.
-  const [dialogoCopiarEje, setDialogoCopiarEje] = useState<{
-    globalid: string;
-    seleccion: string[];
-  } | null>(null);
-  const arrastreEje = useRef<{
-    globalid: string;
-    etiqueta: string;
-    lado: LadoEje;
-    indice: number | null;
-    candado: boolean;
-    familia: "vertical" | "horizontal" | "alzado";
-    inicio: Punto2;
-    /** Posición del asa al pulsar (el destino parte de aquí, no del puntero). */
-    asaInicio: Punto2;
-    originales: Record<string, AjusteEjeVista>;
-    movido: boolean;
-    tipo: "globo" | "codo" | "codo-nuevo" | "base";
-    pantallaInicio: { x: number; y: number };
-    codoCreado: boolean;
-    /** O044: dirección elegida para el arrastre de V2 (eje, X o Y), fija hasta soltar. */
-    modoCodo: "eje" | "x" | "y" | null;
-  } | null>(null);
-  // O034: asas de los bordes de la losa seleccionada y su arrastre en planta.
-  const propiedades = useModelo((s) => s.propiedades);
-  const asasLosa = useRef<
-    Array<
-      AsaLosa & {
-        punto: [number, number, number];
-      }
-    >
-  >([]);
-  const arrastreLosa = useRef<{
-    globalid: string;
-    indice: number;
-    desfaseInicial: number;
-    desfase: number;
-    normal: Punto2;
-    medio: Punto2;
-    inicio: Punto2;
-    poligono: Punto2[] | null;
-    movido: boolean;
-    pantallaInicio: { x: number; y: number };
-  } | null>(null);
-  // O034: Escape cancela el arrastre; el pointerup que llega después no debe
-  // reinterpretarse como un clic de selección (descartaría la losa).
-  const soltarLosaCancelado = useRef(false);
-  const [previewLosaPx, setPreviewLosaPx] = useState<
-    Array<{ x: number; y: number }> | null
-  >(null);
-  const [editorDesfaseLosa, setEditorDesfaseLosa] = useState<{
-    globalid: string;
-    indice: number;
-    izquierda: number;
-    arriba: number;
-    valor: string;
-  } | null>(null);
-  // O027: píxeles de mundo del último dibujo y diámetro de globo de la vista, para
-  // imanes y cotas temporales sin recalcular la cámara en cada movimiento.
-  const mundoPorPxRef = useRef(1e-3);
-  const altoBurbujaRef = useRef(0.8);
-  const ejeSeleccionadoRef = useRef<string | null>(null);
-  // O041: candidato bajo el cursor que Tab convertiría en selección.
-  const [resaltado, setResaltado] = useState<string | null>(null);
-  const ultimoPuntero = useRef<{ x: number; y: number } | null>(null);
-  const resaltadoRef = useRef<string | null>(null);
-  // O027: guía y cota temporal que se dibujan sobre el visor mientras se arrastra.
-  const [guiaArrastre, setGuiaArrastre] = useState<{
-    x1: number;
-    y1: number;
-    x2: number;
-    y2: number;
-    texto: string;
-    enganchado: boolean;
-  } | null>(null);
-  // O044: guía de flecha sobre el pinzamiento de un codo. V1 solo en el sentido del
-  // eje; V2 en X y en Y (las dos direcciones que admite su arrastre).
-  const [guiaCodo, setGuiaCodo] = useState<{
-    x: number;
-    y: number;
-    vertical: boolean;
-    ambos: boolean;
-  } | null>(null);
-  const ejesInteraccion = useRef<
-    Array<{
-      globalid: string;
-      etiqueta: string;
-      lado: LadoEje;
-      tipo: "globo" | "codo" | "codo-nuevo" | "base";
-      indice: number | null;
-      punto: [number, number, number];
-    }>
-  >([]);
-  const lineasEje = useRef<Array<{ globalid: string; etiqueta: string; puntos: Array<[number, number, number]> }>>([]);
-  // O021b: líneas de nivel y de extensión para comprobar que ningún texto las cruza.
-  const lineasNivelRef = useRef<Array<{ tipo: string; elev?: number; puntos: Array<[number, number, number]> }>>([]);
-  // O021: globos dibujados, para medir en pantalla el centrado real de su texto.
-  const burbujasEje = useRef<Array<{ etiqueta: string; grupo: THREE.Group }>>([]);
-  // O014b: asas de las cabezas de nivel para arrastrarlas y devolverlas a automático.
-  const asasNivel = useRef<
-    Array<{
-      globalid: string;
-      nombre: string;
-      elev: number;
-      desplazamiento: number;
-      punto: [number, number, number];
-    }>
-  >([]);
-  const arrastreNivel = useRef<{
-    globalid: string;
-    elev: number;
-    desplazamiento: number;
-    /** Desplazamiento de la cabeza al pulsar; el arrastre suma lo que se mueve el puntero. */
-    desplazamientoInicial: number;
-    inicio: Punto2;
-    pantallaInicio: { x: number; y: number };
-    movido: boolean;
-  } | null>(null);
-  const [ajustesNivelEnCurso, setAjustesNivelEnCurso] = useState<
-    Record<string, { desplazamiento: number }>
-  >({});
-  const ajusteEnCursoRef = useRef<Record<string, AjusteEjeVista> | null>(null);
-  // O021: la selección del eje también vive en el estado para que el panel de
-  // propiedades pueda editarla; el visor conserva su copia local para los gestos.
-  const ejeSeleccionadoStore = useModelo((s) => s.ejeSeleccionado);
-  const nivelSeleccionado = useModelo((s) => s.nivelSeleccionado);
-  const fijarNivelSeleccionado = useModelo((s) => s.fijarNivelSeleccionado);
-  const fijarPistaTab = useModelo((s) => s.fijarPistaTab);
-  const fijarEjeSeleccionadoStore = useModelo((s) => s.fijarEjeSeleccionado);
-  const ejeStorePrevio = useRef(ejeSeleccionadoStore);
-  useEffect(() => {
-    // Solo reacciona a cambios venidos del panel; si no, el primer clic se borraría
-    // porque el estado global todavía conserva el valor anterior.
-    if (ejeSeleccionadoStore !== ejeStorePrevio.current) {
-      ejeStorePrevio.current = ejeSeleccionadoStore;
-      setEjeSeleccionado(ejeSeleccionadoStore);
-    }
-  }, [ejeSeleccionadoStore]);
-  useEffect(() => {
-    ejeStorePrevio.current = ejeSeleccionado;
-    fijarEjeSeleccionadoStore(ejeSeleccionado);
-  }, [ejeSeleccionado, fijarEjeSeleccionadoStore]);
-  const contextoEje = useRef<{
-    tipo: "planta" | "alzado" | "corte";
-    d: [number, number];
-    h: [number, number];
-    profundidad: number;
-    z: number;
-    bases: Record<string, { inicio: Punto2; fin: Punto2 }>;
-  } | null>(null);
-  const moverSiguientes = useModelo((s) => s.cotasMoverSiguientes);
-  const fijarMoverSiguientes = useModelo((s) => s.fijarCotasMoverSiguientes);
-  const separarEjes = useModelo((s) => s.separarEjes);
-  const editarRebase = useModelo((s) => s.editarRebase);
-  const separarNiveles = useModelo((s) => s.separarNiveles);
-  const fijarAjustesEjes = useModelo((s) => s.fijarAjustesEjes);
-  const fijarAjustesNiveles = useModelo((s) => s.fijarAjustesNiveles);
-  const editarNivel = useModelo((s) => s.editarNivel);
-  const fijarAviso = useModelo((s) => s.fijarAviso);
-  const preferenciaRueda = useRueda((s) => s.preferencia);
-  const fijarDetectado = useRueda((s) => s.fijarDetectado);
-  const ayudaVisible = useRueda((s) => s.ayudaVisible);
-  const cerrarAyuda = useRueda((s) => s.cerrarAyuda);
-  // O020: conmutador «Orbitar», recordado entre sesiones.
-  const [modoOrbitar, setModoOrbitar] = useState(leerModoOrbitar);
-  const alternarOrbitar = useCallback(() => {
-    setModoOrbitar((activo) => {
-      guardarModoOrbitar(!activo);
-      return !activo;
-    });
-  }, []);
-  const [diagnosticoRueda, setDiagnosticoRueda] = useState(false);
-  const [grabando, setGrabando] = useState(false);
-  const [eventosGrabados, setEventosGrabados] = useState<EventoGrabado[]>([]);
-  const [resumenGrabacion, setResumenGrabacion] = useState<ResumenGrabacion | null>(null);
-  const grabacionRef = useRef<{ inicio: number; eventos: EventoGrabado[] } | null>(null);
-  const temporizadorGrabacion = useRef<number | null>(null);
-  // O018: estado del gesto nativo y del anti doble zoom con Ctrl + rueda.
-  const actualizarGrosoresRef = useRef<() => void>(() => {});
-  const ultimoWheelCtrlRef = useRef<number | null>(null);
-  const distanciaGestoRef = useRef<number | null>(null);
-  const toquesNativosRef = useRef(new Map<number, { x: number; y: number }>());
+  const c2 = usePunteroVisor(c1);
 
-  const detenerGrabacion = useCallback(() => {
-    const grabacion = grabacionRef.current;
-    if (!grabacion) return;
-    if (temporizadorGrabacion.current !== null) {
-      window.clearTimeout(temporizadorGrabacion.current);
-      temporizadorGrabacion.current = null;
-    }
-    const eventos = [...grabacion.eventos].sort((a, b) => a.t - b.t);
-    grabacionRef.current = null;
-    setGrabando(false);
-    setEventosGrabados(eventos);
-    setResumenGrabacion(resumirGrabacion(eventos));
-  }, []);
-
-  const iniciarGrabacion = useCallback(() => {
-    if (grabacionRef.current) {
-      detenerGrabacion();
-      return;
-    }
-    grabacionRef.current = { inicio: performance.now(), eventos: [] };
-    setEventosGrabados([]);
-    setResumenGrabacion(null);
-    setGrabando(true);
-  }, [detenerGrabacion]);
-
-  // O017b: exporta la grabación con los ajustes reales de WebView2.
-  const exportarDiagnostico = useCallback(async () => {
-    const ahora = new Date();
-    const dos = (n: number) => String(n).padStart(2, "0");
-    const nombre =
-      `diagnostico-rueda-${ahora.getFullYear()}${dos(ahora.getMonth() + 1)}` +
-      `${dos(ahora.getDate())}-${dos(ahora.getHours())}${dos(ahora.getMinutes())}`;
-    const destino = await elegirDestinoDiagnostico(nombre);
-    if (!destino) return;
-    const version = await commands.versionApp();
-    const ajustes = await commands.diagnosticoWebview();
-    const datos = {
-      version_app: version.status === "ok" ? version.data : null,
-      fecha: ahora.toISOString(),
-      userAgent: navigator.userAgent,
-      devicePixelRatio: window.devicePixelRatio,
-      preferencia_rueda: preferenciaRueda,
-      dispositivo_detectado: detectorRueda.ultimoDispositivo(),
-      ajustes_webview: ajustes.status === "ok" ? ajustes.data : null,
-      resumen: resumenGrabacion ?? resumirGrabacion(eventosGrabados),
-      eventos: eventosGrabados,
-    };
-    const respuesta = await commands.guardarTexto(destino, JSON.stringify(datos, null, 2));
-    if (respuesta.status === "error") {
-      fijarAviso(`No se pudo guardar el diagnóstico: ${respuesta.error.mensaje}`);
-    }
-  }, [eventosGrabados, fijarAviso, preferenciaRueda, resumenGrabacion]);
-
-  // O046: plano del nivel activo en 3D (la vista 3D no guarda un nivel propio).
-  const zEmpujar = useMemo(() => {
-    const id = vista.nivel ?? niveles[0]?.globalid;
-    return niveles.find((n) => n.globalid === id)?.elevacion ?? 0;
-  }, [vista.nivel, niveles]);
-
-  const nivelGlobalidPorNombre = useMemo(() => {
-    const mapa = new Map<string, string>();
-    for (const nivel of niveles) mapa.set(nivel.nombre, nivel.globalid);
-    return mapa;
-  }, [niveles]);
-
-  // O011: helpers de anotación de ejes. Las coordenadas de la vista son (x, y) en
-  // planta y (s, z) en alzados y cortes; las asas se buscan en pantalla.
-  const ajusteActualEje = (globalid: string): AjusteEjeVista | undefined =>
-    ajusteEnCurso?.[globalid] ?? vista.ejes?.[globalid];
-
-  const pantallaDePunto = useCallback((
-    punto: [number, number, number],
-  ): { x: number; y: number } | null => {
-    const nodo = contenedor.current;
-    const camera = camara.current;
-    if (!nodo || !camera) return null;
-    camera.updateMatrixWorld();
-    const p = new THREE.Vector3(...punto).project(camera);
-    const rect = nodo.getBoundingClientRect();
-    return {
-      x: rect.left + ((p.x + 1) / 2) * rect.width,
-      y: rect.top + ((1 - p.y) / 2) * rect.height,
-    };
-  }, []);
-
-  /** O055: rayo de cámara bajo un punto de la ventana. */
-  const rayoDePantalla = useCallback((clientX: number, clientY: number) => {
-    const nodo = contenedor.current;
-    const camera = camara.current;
-    if (!nodo || !camera) return null;
-    const rect = nodo.getBoundingClientRect();
-    const raton = new THREE.Vector2(
-      ((clientX - rect.left) / rect.width) * 2 - 1,
-      -((clientY - rect.top) / rect.height) * 2 + 1,
-    );
-    const rayo = new THREE.Raycaster();
-    rayo.setFromCamera(raton, camera);
-    return rayo;
-  }, []);
-
-  /**
-   * O055: punto 3D de una nota bajo el cursor. En 3D usa las inferencias de O049
-   * (caras, aristas y vértices); en planta cae a la elevación del nivel y en
-   * alzado/corte sobre el plano de la vista.
-   */
-  const puntoNotaEn = useCallback(
-    (clientX: number, clientY: number): Punto3 | null => {
-      const rayo = rayoDePantalla(clientX, clientY);
-      if (!rayo) return null;
-      const es3d = vista.tipo === "iso" || vista.tipo === "perspectiva";
-      const ctx = contextoEje.current;
-      if (!es3d && ctx && ctx.tipo === "planta") {
-        const nivel = niveles.find((n) => n.globalid === vista.nivel);
-        const z = nivel?.elevacion ?? ctx.z;
-        const plano = new THREE.Plane(new THREE.Vector3(0, 0, 1), -z);
-        const punto = new THREE.Vector3();
-        if (!rayo.ray.intersectPlane(plano, punto)) return null;
-        return [punto.x, punto.y, z];
-      }
-      if (!es3d && ctx) {
-        const normal = new THREE.Vector3(ctx.d[0], ctx.d[1], 0);
-        const plano = new THREE.Plane(normal, -ctx.profundidad);
-        const punto = new THREE.Vector3();
-        if (!rayo.ray.intersectPlane(plano, punto)) return null;
-        return [punto.x, punto.y, punto.z];
-      }
-      // 3D: candidatos de las mallas visibles cercanas, como Empujar/Tirar.
-      const nodo = contenedor.current;
-      if (!nodo) return null;
-      const rect = nodo.getBoundingClientRect();
-      const proyectar = (p: Vec3) => {
-        const camera = camara.current!;
-        camera.updateMatrixWorld();
-        const v = new THREE.Vector3(p.x, p.y, p.z).project(camera);
-        return {
-          x: rect.left + ((v.x + 1) / 2) * rect.width,
-          y: rect.top + ((1 - v.y) / 2) * rect.height,
-        };
-      };
-      const cercanas = filtrarPorCercania(mallas3d.current, proyectar, {
-        x: clientX,
-        y: clientY,
-      }, 60);
-      const candidatos = unirCandidatos(
-        cercanas.map((m) => cacheCandidatos.current.obtener(m.malla, mallas)),
-      );
-      const camera = camara.current;
-      if (!camera) return null;
-      camera.updateMatrixWorld();
-      const normalCamara = new THREE.Vector3();
-      camera.getWorldDirection(normalCamara);
-      const centro = centroCaja(caja);
-      const inf = inferir({
-        rayo: {
-          origen: {
-            x: rayo.ray.origin.x,
-            y: rayo.ray.origin.y,
-            z: rayo.ray.origin.z,
-          },
-          direccion: {
-            x: rayo.ray.direction.x,
-            y: rayo.ray.direction.y,
-            z: rayo.ray.direction.z,
-          },
-        },
-        proyectar,
-        candidatos,
-        planoTrabajo: {
-          punto: { x: centro[0], y: centro[1], z: centro[2] },
-          normal: { x: normalCamara.x, y: normalCamara.y, z: normalCamara.z },
-        },
-      });
-      if (inf.punto) {
-        const redondeado = redondearVec(inf.punto);
-        return [redondeado.x, redondeado.y, redondeado.z];
-      }
-      // Sin candidatos: el centro de la caja, en el plano de la cámara.
-      const centroCaja3d = new THREE.Vector3(
-        (caja.min[0] + caja.max[0]) / 2,
-        (caja.min[1] + caja.max[1]) / 2,
-        (caja.min[2] + caja.max[2]) / 2,
-      );
-      const plano = new THREE.Plane().setFromNormalAndCoplanarPoint(
-        normalCamara,
-        centroCaja3d,
-      );
-      const punto = new THREE.Vector3();
-      if (!rayo.ray.intersectPlane(plano, punto)) return null;
-      return [punto.x, punto.y, punto.z];
-    },
-    [caja, mallas, niveles, rayoDePantalla, vista.nivel, vista.tipo],
-  );
-
-  const asaEjeEn = useCallback((clientX: number, clientY: number) => {
-    let mejor: (typeof ejesInteraccion.current)[number] | null = null;
-    let distancia = 16;
-    for (const asa of ejesInteraccion.current) {
-      const p = pantallaDePunto(asa.punto);
-      if (!p) continue;
-      const d = Math.hypot(p.x - clientX, p.y - clientY);
-      if (d < distancia) {
-        distancia = d;
-        mejor = asa;
-      }
-    }
-    return mejor;
-  }, [pantallaDePunto]);
-
-  // O034: asa de borde de losa bajo el puntero (solo existe en planta con una losa).
-  const asaLosaEn = useCallback((clientX: number, clientY: number) => {
-    let mejor: (typeof asasLosa.current)[number] | null = null;
-    let distancia = 16;
-    for (const asa of asasLosa.current) {
-      const p = pantallaDePunto(asa.punto);
-      if (!p) continue;
-      const d = Math.hypot(p.x - clientX, p.y - clientY);
-      if (d < distancia) {
-        distancia = d;
-        mejor = asa;
-      }
-    }
-    return mejor;
-  }, [pantallaDePunto]);
-
-  // Cota bajo el puntero: caja generosa alrededor del texto (antes ±18 px y solo con
-  // doble clic; el usuario tenía que atinarle muchas veces).
-  const cotaEn = useCallback((clientX: number, clientY: number): CotaInteractiva | null => {
-    let mejor: CotaInteractiva | null = null;
-    let mejorDistancia = Infinity;
-    for (const cota of cotasInteraccion.current) {
-      const p = pantallaDePunto(cota.punto);
-      if (!p) continue;
-      const medioAncho = Math.max(30, cota.texto.length * 8 + 12);
-      const dx = Math.abs(clientX - p.x);
-      const dy = Math.abs(clientY - p.y);
-      if (dx <= medioAncho && dy <= 24) {
-        const distancia = Math.hypot(dx, dy);
-        if (distancia < mejorDistancia) {
-          mejorDistancia = distancia;
-          mejor = cota;
-        }
-      }
-    }
-    return mejor;
-  }, [pantallaDePunto]);
-
-  const abrirEditorCota = useCallback(
-    (cota: CotaInteractiva, clientX: number, clientY: number) => {
-      const nodo = contenedor.current;
-      if (!nodo) return;
-      if (cota.tipo === "total") {
-        fijarAviso("La cota total es de lectura; edite una cota parcial.");
-        return;
-      }
-      const rect = nodo.getBoundingClientRect();
-      setCotaEditando({
-        tipo: cota.tipo,
-        referencia: cota.referencia,
-        mover: cota.mover,
-        nivel: cota.nivel,
-        nombre: cota.nombre,
-        valor: cota.valor,
-        izquierda: Math.max(90, Math.min(rect.width - 90, clientX - rect.left)),
-        arriba: Math.max(8, Math.min(rect.height - 90, clientY - rect.top - 70)),
-      });
-      setTextoCotaEditando(cota.valor.toFixed(2));
-      setErrorCota(null);
-    },
-    [fijarAviso],
-  );
-
-  // Esc cierra el editor de cota aunque el campo haya perdido el foco, y un clic
-  // fuera de él también lo cierra.
-  const editorCota = useRef<HTMLDivElement | null>(null);
-  const hayCotaEditando = cotaEditando !== null;
-  useEffect(() => {
-    if (!hayCotaEditando) return;
-    const alTecla = (evento: KeyboardEvent) => {
-      if (evento.key !== "Escape") return;
-      evento.preventDefault();
-      evento.stopPropagation();
-      setCotaEditando(null);
-    };
-    const alPresionar = (evento: PointerEvent) => {
-      const caja = editorCota.current;
-      if (caja && evento.target instanceof Node && caja.contains(evento.target)) return;
-      setCotaEditando(null);
-    };
-    window.addEventListener("keydown", alTecla, true);
-    window.addEventListener("pointerdown", alPresionar, true);
-    return () => {
-      window.removeEventListener("keydown", alTecla, true);
-      window.removeEventListener("pointerdown", alPresionar, true);
-    };
-  }, [hayCotaEditando]);
-
-  const asaNivelEn = useCallback((clientX: number, clientY: number) => {
-    let mejor: (typeof asasNivel.current)[number] | null = null;
-    let distancia = 14;
-    for (const asa of asasNivel.current) {
-      const p = pantallaDePunto(asa.punto);
-      if (!p) continue;
-      const d = Math.hypot(p.x - clientX, p.y - clientY);
-      if (d < distancia) {
-        distancia = d;
-        mejor = asa;
-      }
-    }
-    return mejor;
-  }, [pantallaDePunto]);
-
-  const lineaEjeEn = useCallback((clientX: number, clientY: number) => {
-    let mejor: string | null = null;
-    let distancia = 8;
-    for (const linea of lineasEje.current) {
-      for (let i = 0; i + 1 < linea.puntos.length; i += 1) {
-        const a = pantallaDePunto(linea.puntos[i]);
-        const b = pantallaDePunto(linea.puntos[i + 1]);
-        if (!a || !b) continue;
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const largo = Math.hypot(dx, dy);
-        const t = largo > 1e-9
-          ? Math.max(0, Math.min(1, ((clientX - a.x) * dx + (clientY - a.y) * dy) / (largo * largo)))
-          : 0;
-        const d = Math.hypot(clientX - (a.x + dx * t), clientY - (a.y + dy * t));
-        if (d < distancia) {
-          distancia = d;
-          mejor = linea.globalid;
-        }
-      }
-    }
-    return mejor;
-  }, [pantallaDePunto]);
-
-  /** O029: nivel cuya línea horizontal pasa bajo el cursor en alzado/corte. */
-  const lineaNivelEn = useCallback((clientX: number, clientY: number) => {
-    let mejor: string | null = null;
-    let distancia = 8;
-    for (const linea of lineasNivelRef.current) {
-      if (linea.tipo !== "nivel" || linea.elev === undefined) continue;
-      const nivel = niveles.find(
-        (n) => Math.abs(n.elevacion - (linea.elev ?? 0)) < 1e-6,
-      );
-      if (!nivel) continue;
-      for (let i = 0; i + 1 < linea.puntos.length; i += 1) {
-        const a = pantallaDePunto(linea.puntos[i]);
-        const b = pantallaDePunto(linea.puntos[i + 1]);
-        if (!a || !b) continue;
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const largo = Math.hypot(dx, dy);
-        const t = largo > 1e-9
-          ? Math.max(0, Math.min(1, ((clientX - a.x) * dx + (clientY - a.y) * dy) / (largo * largo)))
-          : 0;
-        const d = Math.hypot(clientX - (a.x + dx * t), clientY - (a.y + dy * t));
-        if (d < distancia) {
-          distancia = d;
-          mejor = nivel.globalid;
-        }
-      }
-    }
-    return mejor;
-  }, [pantallaDePunto, niveles]);
-
-  /** Punto de la vista bajo el cursor; `null` fuera del plano de dibujo. */
-  const puntoVistaDesdeEvento = useCallback((clientX: number, clientY: number): Punto2 | null => {
-    const nodo = contenedor.current;
-    const camera = camara.current;
-    const ctx = contextoEje.current;
-    if (!nodo || !camera || !ctx) return null;
-    const rect = nodo.getBoundingClientRect();
-    const raton = new THREE.Vector2(
-      ((clientX - rect.left) / rect.width) * 2 - 1,
-      -((clientY - rect.top) / rect.height) * 2 + 1,
-    );
-    const rayo = new THREE.Raycaster();
-    rayo.setFromCamera(raton, camera);
-    const punto = new THREE.Vector3();
-    if (ctx.tipo === "planta") {
-      const plano = new THREE.Plane(new THREE.Vector3(0, 0, 1), -ctx.z);
-      if (!rayo.ray.intersectPlane(plano, punto)) return null;
-      return [punto.x, punto.y];
-    }
-    const normal = new THREE.Vector3(ctx.d[0], ctx.d[1], 0);
-    const plano = new THREE.Plane(normal, -ctx.profundidad);
-    if (!rayo.ray.intersectPlane(plano, punto)) return null;
-    return [punto.x * ctx.h[0] + punto.y * ctx.h[1], punto.z];
-  }, []);
-
-  /** Punto de mundo (como el de las asas) en coordenadas de la vista. */
-  const puntoVistaDeMundo = useCallback((p: [number, number, number]): Punto2 | null => {
-    const ctx = contextoEje.current;
-    if (!ctx) return null;
-    if (ctx.tipo === "planta") return [p[0], p[1]];
-    return [p[0] * ctx.h[0] + p[1] * ctx.h[1], p[2]];
-  }, []);
-
-  const persistirAjusteEje = (globalid: string, ajuste: AjusteEjeVista | undefined) => {
-    void fijarAjustesEjes(vista.id, { [globalid]: normalizarAjusteEje(ajuste) ?? null });
-  };
-
-  const ejesVisiblesDeVista = () =>
-    referencias.ejes.filter((eje) => eje.globalid && eje.etiqueta);
-
-  /** O044: cruces reales del eje con los demás ejes de la planta (para el codo). */
-  const crucesDeEjeVista = (globalid: string): Punto2[] => {
-    const ctx = contextoEje.current;
-    const bases = ctx?.bases[globalid];
-    if (!ctx || ctx.tipo !== "planta" || !bases) return [];
-    const otros: Array<{ inicio: Punto2; fin: Punto2 }> = [];
-    for (const eje of ejesVisiblesDeVista()) {
-      if (!eje.globalid || eje.globalid === globalid) continue;
-      const b = ctx.bases[eje.globalid];
-      if (b) otros.push(b);
-    }
-    return interseccionesEje(bases.inicio, bases.fin, otros);
-  };
-
-  const agregarCodoVista = (globalid: string, lado: LadoEje) => {
-    const eje = ejesVisiblesDeVista().find((e) => e.globalid === globalid);
-    const bases = contextoEje.current?.bases[globalid];
-    if (!eje || !bases) return;
-    const ajuste = ajusteActualEje(globalid);
-    // O042: el codo parte del extremo de la línea (o del globo libre).
-    const g = geometriaEje(ajuste, bases.inicio, bases.fin, {
-      globoInicio: true,
-      diametroGlobo: mmPapelAMetros(8, vista.escala),
-    });
-    const globo = lado === "inicio" ? (g.globoInicio ?? bases.inicio) : g.globoFin;
-    const dx = bases.fin[0] - bases.inicio[0];
-    const dy = bases.fin[1] - bases.inicio[1];
-    const largo = Math.hypot(dx, dy);
-    if (largo < 1e-9) return;
-    // Sentido hacia afuera del eje: del interior al extremo que se anota.
-    const direccion: Punto2 =
-      lado === "inicio" ? [-dx / largo, -dy / largo] : [dx / largo, dy / largo];
-    // O044: cruces reales para que la diagonal no salga encima de otro eje.
-    const nuevo = agregarCodoEje(
-      ajuste,
-      lado,
-      globo,
-      direccion,
-      mmPapelAMetros(8, vista.escala),
-      crucesDeEjeVista(globalid),
-    );
-    persistirAjusteEje(globalid, nuevo);
-  };
-
-  const alternarCandadoVista = (globalid: string, lado: LadoEje) => {
-    const abierto = candados[lado];
-    if (abierto) {
-      // Al cerrar el candado el extremo vuelve a la alineación común.
-      persistirAjusteEje(globalid, fijarExtremoEje(ajusteActualEje(globalid), lado, null));
-    }
-    setCandados((c) => ({ ...c, [lado]: !abierto }));
-  };
-
-  const quitarCodoVista = (globalid: string, lado: LadoEje, indice: number) => {
-    persistirAjusteEje(globalid, quitarCodoEje(ajusteActualEje(globalid), lado, indice));
-  };
-
-  // O021: globos, restablecer y copiar el acomodo a otras vistas.
-  const fijarGlobos = (
-    globalid: string,
-    cambios: { globoInicio?: boolean; globoFin?: boolean },
-  ) => {
-    const actual = normalizarAjusteEje(ajusteActualEje(globalid)) ?? {};
-    persistirAjusteEje(globalid, normalizarAjusteEje({ ...actual, ...cambios }));
-  };
-
-  const restablecerEjeVista = (globalid: string) => {
-    persistirAjusteEje(globalid, undefined);
-  };
-
-  const restablecerTodosLosEjes = () => {
-    const ejes = vista.ejes ?? {};
-    const cambios = Object.fromEntries(Object.keys(ejes).map((gid) => [gid, null]));
-    if (Object.keys(cambios).length === 0) return;
-    void fijarAjustesEjes(vista.id, cambios);
-  };
-
-  const abrirCopiarAcomodo = (globalid: string) => {
-    const otras = vistas.filter((v) => v.id !== vista.id && v.tipo === vista.tipo);
-    setDialogoCopiarEje({
-      globalid,
-      seleccion: otras.map((v) => v.id),
-    });
-  };
-
-  const copiarAcomodoAVistas = () => {
-    if (!dialogoCopiarEje) return;
-    const ajuste = copiarAjusteEje(ajusteActualEje(dialogoCopiarEje.globalid));
-    for (const vid of dialogoCopiarEje.seleccion) {
-      void fijarAjustesEjes(vid, { [dialogoCopiarEje.globalid]: ajuste ?? null });
-    }
-    setDialogoCopiarEje(null);
-  };
-
-  // O006d: distancia al eje paralelo más cercano mientras se dibuja un eje.
-  const restriccionPrevia = useMemo(
-    () =>
-      herramienta === "eje" && puntosHerramienta.length > 0 && ratonHerramienta
-        ? restringirEje(
-            puntosHerramienta[0],
-            ejeOrtogonal(puntosHerramienta[0], ratonHerramienta).fin,
-            referencias.ejes,
-            ejeLibre,
-          )
-        : null,
-    [herramienta, puntosHerramienta, ratonHerramienta, referencias.ejes, ejeLibre],
-  );
-  const distanciaParalelo = useMemo(
-    () =>
-      restriccionPrevia && ratonHerramienta
-        ? distanciaAEjeParalelo(
-            ratonHerramienta,
-            referencias.ejes,
-            restriccionPrevia.vertical,
-          )
-        : null,
-    [restriccionPrevia, ratonHerramienta, referencias.ejes],
-  );
-  // O036b: sin familia el trazo también se previsualiza horizontal o vertical.
-  const trazoEjePrevio = useMemo(() => {
-    if (herramienta !== "eje" || puntosHerramienta.length === 0 || !ratonHerramienta) {
-      return null;
-    }
-    if (restriccionPrevia) {
-      return {
-        inicio: restriccionPrevia.inicio,
-        fin: restriccionPrevia.fin,
-        vertical: restriccionPrevia.vertical,
-      };
-    }
-    const forzado = ejeOrtogonal(puntosHerramienta[0], ratonHerramienta);
-    return { inicio: puntosHerramienta[0], fin: forzado.fin, vertical: forzado.vertical };
-  }, [herramienta, puntosHerramienta, ratonHerramienta, restriccionPrevia]);
-
-  // O005c: los ejes también encuadran la planta (burbujas incluidas).
-  const cajaVista = useMemo(() => {
-    let base = cajaConEjes(caja, referencias.ejes);
-    if (vista.tipo === "alzado" || vista.tipo === "corte") {
-      // O006a: la cámara debe dejar ver las cabezas de nivel y las cotas de afuera.
-      // O011b: las etiquetas van fuera del último eje y las cotas más afuera, así
-      // que se amplía el encuadre en el sentido horizontal de la vista.
-      const elevaciones = niveles.map((n) => n.elevacion);
-      const minZ = Math.min(base.min[2], ...elevaciones);
-      const maxZ = Math.max(base.max[2], ...elevaciones);
-      const d =
-        vista.tipo === "alzado"
-          ? direccionAlzado(vista.orientacion ?? "sur")
-          : normalCorte(vista);
-      let h: [number, number] = [-d[1], d[0]];
-      if (vista.tipo === "corte" && vista.puntoA && vista.puntoB) {
-        const dx = vista.puntoB[0] - vista.puntoA[0];
-        const dy = vista.puntoB[1] - vista.puntoA[1];
-        const largo = Math.hypot(dx, dy);
-        if (largo > 1e-9) h = [dx / largo, dy / largo];
-      }
-      const margenAnotacion = 8;
-      base = {
-        min: [
-          base.min[0] - 1 - (h[0] < 0 ? margenAnotacion : 0),
-          base.min[1] - 1 - (h[1] < 0 ? margenAnotacion : 0),
-          minZ - 0.6,
-        ],
-        max: [
-          base.max[0] + 1 + (h[0] > 0 ? margenAnotacion : 0),
-          base.max[1] + 1 + (h[1] > 0 ? margenAnotacion : 0),
-          maxZ + 0.6,
-        ],
-      };
-    } else if (vista.tipo === "planta" && vista.cotasEjes !== false) {
-      // Las cotas quedan afuera de las burbujas; el margen extra evita recortarlas.
-      const margen = 1.6;
-      base = {
-        min: [base.min[0] - margen, base.min[1] - margen, base.min[2]],
-        max: [base.max[0] + margen, base.max[1] + margen, base.max[2]],
-      };
-    }
-    return base;
-  }, [caja, referencias, niveles, vista]);
-
-  useEffect(() => {
-    const observador = new MutationObserver(() =>
-      setOscuro(document.documentElement.classList.contains("dark")),
-    );
-    observador.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    return () => observador.disconnect();
-  }, []);
-
-  // Escena, cámara, luces y bucle de dibujo.
-  useEffect(() => {
-    const nodo = contenedor.current;
-    if (!nodo) return;
-    const escenaLocal = new THREE.Scene();
-    const rendererLocal = crearRendererVisor(nodo, colorDeFondo(oscuro));
-
-    const grupoLocal = new THREE.Group();
-    escenaLocal.add(grupoLocal);
-    const grupoHerramientaLocal = new THREE.Group();
-    escenaLocal.add(grupoHerramientaLocal);
-    escenaLocal.add(new THREE.HemisphereLight(0xffffff, 0x6b7280, 1.5));
-    const luz = new THREE.DirectionalLight(0xffffff, 1.7);
-    luz.position.set(5, -8, 12);
-    escenaLocal.add(luz);
-
-    escena.current = escenaLocal;
-    renderer.current = rendererLocal;
-    grupo.current = grupoLocal;
-    grupoHerramienta.current = grupoHerramientaLocal;
-
-    const medir = () => {
-      const ancho = Math.max(nodo.clientWidth, 1);
-      const alto = Math.max(nodo.clientHeight, 1);
-      rendererLocal.setSize(ancho, alto, false);
-      setDimensiones({ ancho, alto });
-    };
-    medir();
-    const observador = new ResizeObserver(medir);
-    observador.observe(nodo);
-
-    let vivo = true;
-    const dibujar = () => {
-      if (!vivo) return;
-      if (camara.current && renderer.current && escena.current) {
-        // O055: el globo, la etiqueta y el texto de cota miran siempre a la cámara,
-        // también al orbitarla.
-        if (orientablesAnot3d.current.length > 0) {
-          const camera = camara.current;
-          const d = new THREE.Vector3();
-          camera.getWorldDirection(d);
-          const hacia: [number, number, number] = [-d.x, -d.y, -d.z];
-          for (const objeto of orientablesAnot3d.current) {
-            const fijo = objeto.userData.haciaCamaraFijo as
-              | [number, number, number]
-              | undefined;
-            orientarAnotacion(objeto, fijo ?? hacia);
-          }
-        }
-        renderer.current.render(escena.current, camara.current);
-      }
-      requestAnimationFrame(dibujar);
-    };
-    dibujar();
-    return () => {
-      vivo = false;
-      observador.disconnect();
-      rendererLocal.dispose();
-      if (rendererLocal.domElement.parentElement === nodo) nodo.removeChild(rendererLocal.domElement);
-      escena.current = null;
-      renderer.current = null;
-      grupo.current = null;
-      grupoHerramienta.current = null;
-      camara.current = null;
-    };
-    // La escena se crea una sola vez; el tema y el modelo se actualizan en otros efectos.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Fondo del tema claro/oscuro.
-  useEffect(() => {
-    renderer.current?.setClearColor(colorDeFondo(oscuro), 1);
-    if (escena.current) escena.current.background = colorDeFondo(oscuro);
-  }, [oscuro]);
-
-  /** O010: guarda el encuadre actual de la vista para restaurarlo después. */
-  const guardarCamaraActual = useCallback(() => {
-    const nav = navegacion.current;
-    const camera = camara.current;
-    const id = vistaDeCamara.current;
-    if (!nav || !camera || !id) return;
-    const guardada: CamaraGuardada = {
-      tipo: nav.tipo,
-      objetivo: [nav.objetivo.x, nav.objetivo.y, nav.objetivo.z],
-      direccion: [nav.direccion.x, nav.direccion.y, nav.direccion.z],
-      arriba: [nav.arriba.x, nav.arriba.y, nav.arriba.z],
-      distancia: nav.distancia,
-    };
-    if (camera instanceof THREE.OrthographicCamera) {
-      guardada.izquierda = camera.left;
-      guardada.derecha = camera.right;
-      guardada.arribaPlano = camera.top;
-      guardada.abajo = camera.bottom;
-    } else if (camera instanceof THREE.PerspectiveCamera) {
-      guardada.fov = camera.fov;
-    }
-    camarasGuardadas.current.set(id, guardada);
-  }, []);
-
-  const aplicarCamara = useCallback(() => {
-    const nav = navegacion.current;
-    const camera = camara.current;
-    if (!nav || !camera) return;
-    camera.up.copy(nav.arriba);
-    camera.position.copy(nav.objetivo).addScaledVector(nav.direccion, nav.distancia);
-    camera.lookAt(nav.objetivo);
-    if (camera instanceof THREE.OrthographicCamera) {
-      camera.near = 0.01;
-      camera.far = nav.distancia + diagonalCaja(cajaVista) * 3 + 10;
-      camera.updateProjectionMatrix();
-    } else if (camera instanceof THREE.PerspectiveCamera) {
-      // O010: un near proporcional a la distancia evita la pérdida de precisión de
-      // profundidad que hacía manchas y caras mal sombreadas en perspectiva.
-      camera.near = Math.max(0.01, Math.min(0.1, nav.distancia * 0.004));
-      camera.far = nav.distancia + diagonalCaja(cajaVista) * 4 + 10;
-      camera.updateProjectionMatrix();
-    }
-    camera.updateMatrixWorld();
-    const nodo = contenedor.current;
-    if (nodo) {
-      nodo.dataset.camara = JSON.stringify({
-        tipo: nav.tipo,
-        objetivo: [nav.objetivo.x, nav.objetivo.y, nav.objetivo.z],
-        direccion: [nav.direccion.x, nav.direccion.y, nav.direccion.z],
-        distancia: nav.distancia,
-        izquierda: camera instanceof THREE.OrthographicCamera ? camera.left : null,
-        derecha: camera instanceof THREE.OrthographicCamera ? camera.right : null,
-        arribaPlano: camera instanceof THREE.OrthographicCamera ? camera.top : null,
-        abajo: camera instanceof THREE.OrthographicCamera ? camera.bottom : null,
-        fov: camera instanceof THREE.PerspectiveCamera ? camera.fov : null,
-      });
-    }
-    guardarCamaraActual();
-  }, [cajaVista, guardarCamaraActual]);
-  // O018: único punto de zoom del visor. Lo usan `alRodar` y el gesto nativo de
-  // Windows (GID_ZOOM y dos contactos PT_TOUCHPAD), centrado en un punto de
-  // pantalla. El factor es el de la convención del visor: <1 acerca.
-  const aplicarZoom = useCallback(
-    (factor: number, puntoPantalla?: { x: number; y: number }) => {
-      const camera = camara.current;
-      const nav = navegacion.current;
-      const nodo = contenedor.current;
-      if (!camera || !nav || !Number.isFinite(factor) || factor <= 0) return;
-      const rect = nodo?.getBoundingClientRect();
-      const x = puntoPantalla?.x ?? (rect ? rect.left + rect.width / 2 : 0);
-      const y = puntoPantalla?.y ?? (rect ? rect.top + rect.height / 2 : 0);
-      if (camera instanceof THREE.OrthographicCamera) {
-        if (!rect) return;
-        const raton = new THREE.Vector2(
-          ((x - rect.left) / Math.max(rect.width, 1)) * 2 - 1,
-          -((y - rect.top) / Math.max(rect.height, 1)) * 2 + 1,
-        );
-        const rayo = new THREE.Raycaster();
-        rayo.setFromCamera(raton, camera);
-        const direccionVista = new THREE.Vector3();
-        camera.getWorldDirection(direccionVista);
-        const plano = new THREE.Plane().setFromNormalAndCoplanarPoint(
-          direccionVista,
-          nav.objetivo,
-        );
-        const punto = new THREE.Vector3();
-        const hayPunto = rayo.ray.intersectPlane(plano, punto) !== null;
-        camera.left *= factor;
-        camera.right *= factor;
-        camera.top *= factor;
-        camera.bottom *= factor;
-        if (hayPunto) {
-          nav.objetivo.sub(punto).multiplyScalar(factor).add(punto);
-        }
-        camera.updateProjectionMatrix();
-      } else if (camera instanceof THREE.PerspectiveCamera) {
-        nav.distancia = Math.max(0.5, nav.distancia * factor);
-      }
-      aplicarCamara();
-      actualizarGrosoresRef.current();
-    },
-    [aplicarCamara],
-  );
-  // O006e: metros de mundo por píxel de pantalla en la cámara actual. Es la base
-  // de la tolerancia de enganche (12 px) y del tamaño de su marca (10 px).
-  const metrosPorPixelActual = useCallback(() => {
-    const camera = camara.current;
-    const nodo = contenedor.current;
-    if (!camera || !nodo) return 0.02;
-    const alto = Math.max(nodo.clientHeight, 1);
-    if (camera instanceof THREE.OrthographicCamera) {
-      return Math.max((camera.top - camera.bottom) / alto, 1e-6);
-    }
-    if (camera instanceof THREE.PerspectiveCamera) {
-      const nav = navegacion.current;
-      return Math.max(
-        (2 * (nav?.distancia ?? 10) * Math.tan((camera.fov * Math.PI) / 360)) / alto,
-        1e-6,
-      );
-    }
-    return 0.02;
-  }, []);
-
-
-  // O031: al abrir otro modelo se descartan los encuadres guardados del anterior.
-  useEffect(() => {
-    if (claveCamaras !== claveModelo) {
-      camarasGuardadas.current.clear();
-      claveCamaras = claveModelo;
-    }
-  }, [claveModelo, camarasGuardadas]);
-
-  // O010: la cámara se crea/restaura solo al abrir una vista. Los cambios del modelo
-  // (cajaVista) NO la reencuadran: solo actualizan near/far más abajo.
-  useEffect(() => {
-    const nodo = contenedor.current;
-    if (!nodo || !renderer.current) return;
-    const aspecto = Math.max(nodo.clientWidth, 1) / Math.max(nodo.clientHeight, 1);
-    guardarCamaraActual();
-    vistaDeCamara.current = vista.id;
-
-    const nav = crearNavegacion(vista, cajaVista, aspecto);
-    const guardada = camarasGuardadas.current.get(vista.id);
-    if (guardada && guardada.tipo === nav.tipo) {
-      nav.objetivo.set(...guardada.objetivo);
-      nav.direccion.set(...guardada.direccion).normalize();
-      nav.arriba.set(...guardada.arriba);
-      nav.distancia = guardada.distancia;
-    }
-    navegacion.current = nav;
-    const camera = crearCamaraDeVista(vista, cajaVista, aspecto, nav);
-    if (guardada && guardada.tipo === nav.tipo) {
-      if (camera instanceof THREE.OrthographicCamera) {
-        camera.left = guardada.izquierda ?? camera.left;
-        camera.right = guardada.derecha ?? camera.right;
-        camera.top = guardada.arribaPlano ?? camera.top;
-        camera.bottom = guardada.abajo ?? camera.bottom;
-      } else if (camera instanceof THREE.PerspectiveCamera) {
-        camera.fov = guardada.fov ?? camera.fov;
-        camera.aspect = aspecto;
-      }
-    }
-    camara.current = camera;
-    aplicarCamara();
-    // `aplicarCamara` es estable por referencia del componente; se usa a través de refs.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vista.id, vista.tipo, vista.orientacion]);
-
-  // Al cambiar el tamaño del lienzo (por ejemplo, al redimensionar un panel) se
-  // conserva el zoom y el centro: solo se adapta el aspecto.
-  useEffect(() => {
-    const camera = camara.current;
-    if (!camera) return;
-    const nodo = contenedor.current;
-    if (!nodo) return;
-    const aspecto = Math.max(nodo.clientWidth, 1) / Math.max(nodo.clientHeight, 1);
-    if (camera instanceof THREE.OrthographicCamera) {
-      const alto = camera.top - camera.bottom;
-      const ancho = alto * aspecto;
-      camera.left = -ancho / 2;
-      camera.right = ancho / 2;
-    } else if (camera instanceof THREE.PerspectiveCamera) {
-      camera.aspect = aspecto;
-    }
-    aplicarCamara();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dimensiones.ancho, dimensiones.alto]);
-
-  // O049: el caché por elemento se invalida cuando cambia el modelo.
-  useEffect(() => {
-    cacheCandidatos.current.limpiar();
-  }, [mallas]);
-
-  // Los cambios del modelo solo ajustan el recorte de profundidad.
-  useEffect(() => {
-    aplicarCamara();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cajaVista]);
 
   // Vista activa y geometría: filtros de categorías/niveles, recorte y relleno.
+  const {
+    abrirCopiarAcomodo,
+    abrirEditorCota,
+    actualizarVista,
+    agregarCodoVista,
+    ajusteActualEje,
+    ajusteEnCurso,
+    ajusteEnCursoRef,
+    ajustesNivelEnCurso,
+    alternarCandadoAlinear,
+    alternarCandadoVista,
+    alternarOrbitar,
+    altoBurbujaRef,
+    anotacionesAlzado,
+    aplicarAlinear,
+    aplicarCamara,
+    arrastre,
+    arrastreEje,
+    arrastreLosa,
+    arrastreNivel,
+    arrastreNota,
+    asaEjeEn,
+    asaLosaEn,
+    asaNivelEn,
+    asasLosa,
+    asasNivel,
+    ayudaVisible,
+    bloqueoFlechas,
+    bloqueoShift,
+    burbujasEje,
+    cacheCandidatos,
+    cajaVista,
+    camara,
+    candados,
+    caraEmpujarHover,
+    cerrarAyuda,
+    clicEmpujar,
+    clicEnPlanta,
+    clicNivel,
+    clicRecorte,
+    confirmarEmpujar,
+    confirmarEmpujarCara,
+    contenedor,
+    contextoEje,
+    copiarAcomodoAVistas,
+    cotaEditando,
+    cotaEn,
+    cotasInteraccion,
+    cotasNivel,
+    crucesDeEjeVista,
+    detenerGrabacion,
+    diagnosticoRueda,
+    dialogoCopiarEje,
+    dimensiones,
+    distanciaParalelo,
+    dobleClicEnPlanta,
+    editorCota,
+    editorDesfaseLosa,
+    ejeSeleccionado,
+    ejeSeleccionadoRef,
+    ejesInteraccion,
+    elegirReferenciaAlinear,
+    empujarAltura,
+    empujarCara,
+    empujarClasificacion,
+    empujarRect,
+    empujarZ,
+    engancheHerramienta,
+    errorCota,
+    espacio,
+    eventosGrabados,
+    exportarDiagnostico,
+    fijarAjustesEjes,
+    fijarAjustesNiveles,
+    fijarAlturaEmpujar,
+    fijarAviso,
+    fijarGlobos,
+    fijarMoverSiguientes,
+    fijarNivelSeleccionado,
+    fijarPistaTab,
+    fijarRaton,
+    grabando,
+    grosores,
+    grupo,
+    guiaArrastre,
+    guiaCodo,
+    guiaEmpujar,
+    herramienta,
+    iniciarEmpujarCara,
+    iniciarGrabacion,
+    lineaEjeEn,
+    lineaNivelEn,
+    lineasEje,
+    lineasNivelRef,
+    longitudTecleada,
+    mallas3d,
+    marcadorEmpujar,
+    menuEje,
+    meshes,
+    metrosPorPixelActual,
+    modoOrbitar,
+    moverEmpujar,
+    moverEmpujarCara,
+    moverNota,
+    moverSiguientes,
+    mundoPorPxRef,
+    navegacion,
+    nivelGlobalidPorNombre,
+    nivelSeleccionado,
+    notaEditando,
+    notaSeleccionada,
+    notasPx,
+    opcionesNivel,
+    oscuro,
+    panelAnotaciones,
+    pantallaDePunto,
+    persistirAjusteEje,
+    previewLosaPx,
+    propiedades,
+    puntoVistaDeMundo,
+    puntoVistaDesdeEvento,
+    puntosHerramienta,
+    quitarCodoVista,
+    ratonHerramienta,
+    referenciaAlinear,
+    referencias,
+    renderer,
+    resaltado,
+    resaltadoRef,
+    restablecerEjeVista,
+    restablecerTodosLosEjes,
+    resumenGrabacion,
+    seleccionarNota,
+    setAjusteEnCurso,
+    setAjustesNivelEnCurso,
+    setArrastreNota,
+    setCandados,
+    setCaraEmpujarHover,
+    setCotaEditando,
+    setDiagnosticoRueda,
+    setDialogoCopiarEje,
+    setEditorDesfaseLosa,
+    setEjeSeleccionado,
+    setErrorCota,
+    setGuiaArrastre,
+    setGuiaCodo,
+    setGuiaEmpujar,
+    setMarcadorEmpujar,
+    setMenuEje,
+    setNotaEditando,
+    setPanelAnotaciones,
+    setPreviewLosaPx,
+    setResaltado,
+    setTextoCotaEditando,
+    setTextoNota,
+    setVentanaSeleccion,
+    soltarLosaCancelado,
+    textoCotaEditando,
+    textoNota,
+    trazoEjePrevio,
+    ultimaInferenciaEmpujar,
+    ultimaZ,
+    ultimoMedio,
+    ultimoPuntero,
+    ventanaSeleccion,
+    vistaPreviaRecorte,
+    zEmpujar,
+    zoomTick,
+  } = c2;
   useEffect(() => {
     const inicioEfecto = performance.now();
     const grupoLocal = grupo.current;
@@ -3812,1183 +2740,26 @@ export function Visor3D({
   // O055: ejes, niveles, cotas y notas de las vistas 3D. Se dibujan aparte del
   // modelo para que ninguna de las tres formas de sombreado las tape y para no
   // engordar el efecto principal del visor.
-  useEffect(() => {
-    const grupoLocal = grupo.current;
-    if (!grupoLocal) return;
-    if (grupoAnotaciones3d.current) {
-      grupoLocal.remove(grupoAnotaciones3d.current);
-      grupoAnotaciones3d.current.traverse((objeto) => {
-        const malla = objeto as THREE.Mesh;
-        malla.geometry?.dispose?.();
-        const material = malla.material;
-        if (Array.isArray(material)) material.forEach((m) => m.dispose());
-        else material?.dispose?.();
-      });
-    }
-    const grupoAnot = new THREE.Group();
-    grupoLocal.add(grupoAnot);
-    grupoAnotaciones3d.current = grupoAnot;
-    orientablesAnot3d.current = [];
-
-    const es3d = vista.tipo === "iso" || vista.tipo === "perspectiva";
-    const conmutadores = conmutadoresAnotaciones3D(vista);
-    const color = oscuro ? "#e8eaed" : "#1f2328";
-    const fondo = colorDeFondo(oscuro).getStyle();
-    const mundoPorPx = Math.max(mundoPorPxRef.current, 1e-6);
-    const altoTexto = Math.max(mundoPorPx * 12, 0.05);
-    const zBase = elevacionBaseNiveles(niveles);
-
-    const agregarLinea = (
-      puntos: Array<[number, number, number]>,
-      discontinuo = false,
-      cerrada = false,
-    ) => {
-      const geometria = new THREE.BufferGeometry();
-      const lista = cerrada ? [...puntos, puntos[0]] : puntos;
-      geometria.setAttribute(
-        "position",
-        new THREE.Float32BufferAttribute(lista.flat(), 3),
-      );
-      const material = discontinuo
-        ? new THREE.LineDashedMaterial({
-            color: new THREE.Color(color),
-            dashSize: Math.max(mundoPorPx * 8, 0.08),
-            gapSize: Math.max(mundoPorPx * 5, 0.05),
-            depthTest: false,
-            depthWrite: false,
-            transparent: true,
-          })
-        : new THREE.LineBasicMaterial({
-            color: new THREE.Color(color),
-            depthTest: false,
-            depthWrite: false,
-            transparent: true,
-          });
-      const linea = new THREE.Line(geometria, material);
-      if (discontinuo) linea.computeLineDistances();
-      linea.renderOrder = 19;
-      grupoAnot.add(linea);
-      return linea;
-    };
-
-    const agregarOrientable = (objeto: THREE.Object3D) => {
-      grupoAnot.add(objeto);
-      orientablesAnot3d.current.push(objeto);
-    };
-
-    let globos = 0;
-    let nivelesDibujados = 0;
-    let cotasDibujadas = 0;
-    // O055: cajas en pantalla para comprobar que ninguna etiqueta de nivel choca
-    // con un globo de eje ni con otra etiqueta de nivel.
-    const globosPx: Array<{ x: number; y: number; ancho: number; alto: number }> = [];
-    const etiquetasNivelPx: Array<{ x: number; y: number; ancho: number; alto: number }> = [];
-
-    if (es3d && conmutadores.ejes) {
-      const ejes = calcularEjes3d(referencias.ejes, zBase);
-      for (const eje of ejes) {
-        agregarLinea([eje.inicio, eje.fin]);
-        for (const extremo of [eje.inicio, eje.fin]) {
-          const globo = burbujaEje(eje.etiqueta, color, fondo);
-          if (!globo) continue;
-          const diametro = Math.max(mundoPorPx * 22, 0.08);
-          globo.scale.setScalar(diametro);
-          globo.position.set(...extremo);
-          agregarOrientable(globo);
-          globos += 1;
-          const centro = pantallaDePunto(extremo);
-          if (centro) {
-            const radio = diametro / (2 * mundoPorPx);
-            globosPx.push({
-              x: centro.x - radio,
-              y: centro.y - radio,
-              ancho: radio * 2,
-              alto: radio * 2,
-            });
-          }
-        }
-      }
-    }
-
-    if (es3d && conmutadores.niveles) {
-      const visibles = new Set(vista.nivelesVisibles);
-      const lista =
-        visibles.size === 0
-          ? niveles
-          : niveles.filter((n) => visibles.has(n.globalid));
-      for (const nivel of calcularNiveles3d(lista, caja)) {
-        agregarLinea(nivel.esquinas, true, true);
-        const etiqueta = textoCota(nivel.texto, color, fondo, altoTexto);
-        if (etiqueta) {
-          // La caja del rótulo se aproxima con el ancho de `anchoTextoAprox` y el
-          // alto real en pantalla, con 2 px de holgura.
-          const anchoPx = Math.max(0.1, anchoTextoAprox(nivel.texto, altoTexto)) / mundoPorPx + 2;
-          const altoPx = altoTexto / mundoPorPx + 2;
-          const candidatas = nivel.esquinasEtiqueta.map((punto) => {
-            const centro = pantallaDePunto(punto);
-            return {
-              x: (centro?.x ?? 0) - anchoPx / 2,
-              y: (centro?.y ?? 0) - altoPx / 2,
-              ancho: anchoPx,
-              alto: altoPx,
-            };
-          });
-          const indice = elegirEsquinaEtiqueta(candidatas, [...globosPx, ...etiquetasNivelPx]);
-          etiqueta.position.set(...nivel.esquinasEtiqueta[indice]);
-          etiqueta.renderOrder = 22;
-          agregarOrientable(etiqueta);
-          etiquetasNivelPx.push(candidatas[indice]);
-        }
-        nivelesDibujados += 1;
-      }
-    }
-
-    if (es3d && conmutadores.cotas) {
-      const familias = calcularFamiliasCotas(referencias.ejes, referencias.reticula);
-      for (const cota of calcularCotas3d(familias, zBase)) {
-        agregarLinea([cota.inicio, cota.fin]);
-        const texto = textoCota(cota.texto, color, fondo, altoTexto * 0.9);
-        if (texto) {
-          texto.position.set(...cota.textoPos);
-          texto.renderOrder = 22;
-          agregarOrientable(texto);
-        }
-        cotasDibujadas += 1;
-      }
-    }
-
-    // Notas: se ven en todas las vistas donde su punto cae dentro. En 3D respetan
-    // la casilla «Notas»; en planta, alzado y corte siempre están encendidas.
-    const notasVisiblesPx: Array<{ nota: Nota; x: number; y: number }> = [];
-    const nodoVisor = contenedor.current;
-    const mostradas: string[] = [];
-    if (!es3d || conmutadores.notas) {
-      for (const nota of notas) {
-        if (!notaVisibleEnVista(nota, vista, caja)) continue;
-        const pantalla = pantallaDePunto(nota.posicion);
-        if (!pantalla || !nodoVisor) continue;
-        const rect = nodoVisor.getBoundingClientRect();
-        notasVisiblesPx.push({
-          nota,
-          x: pantalla.x - rect.left,
-          y: pantalla.y - rect.top,
-        });
-        mostradas.push(nota.globalid);
-        // Punto ancla en el mundo, siempre encima de la geometría.
-        const ancla = new THREE.Mesh(
-          new THREE.SphereGeometry(Math.max(mundoPorPx * 4, 0.015), 12, 8),
-          new THREE.MeshBasicMaterial({
-            color: new THREE.Color(notaSeleccionada === nota.globalid ? "#f59e0b" : "#1f2328"),
-            depthTest: false,
-            depthWrite: false,
-          }),
-        );
-        ancla.position.set(...nota.posicion);
-        ancla.renderOrder = 30;
-        grupoAnot.add(ancla);
-      }
-    }
-    setNotasPx(notasVisiblesPx);
-
-    if (nodoVisor) {
-      nodoVisor.dataset.globosEjes3d = String(globos);
-      nodoVisor.dataset.globosEjesPx = JSON.stringify(globosPx);
-      nodoVisor.dataset.etiquetasNivelPx = JSON.stringify(etiquetasNivelPx);
-      nodoVisor.dataset.niveles3d = String(nivelesDibujados);
-      nodoVisor.dataset.cotas3d = String(cotasDibujadas);
-      nodoVisor.dataset.notas3d = String(notasVisiblesPx.length);
-      nodoVisor.dataset.notasVisibles = mostradas.join(",");
-      nodoVisor.dataset.notasTexto = notasVisiblesPx.map((n) => n.nota.texto).join(" | ");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    vista,
-    niveles,
-    referencias,
-    caja,
-    notas,
-    oscuro,
-    zoomTick,
-    dimensiones.alto,
-    dimensiones.ancho,
-    notaSeleccionada,
-    mallas,
-  ]);
-
-  // O027: al cambiar de eje seleccionado se muestran solo sus asas (y todas si no
-  // hay selección) para que no queden dibujadas tras deseleccionar.
-  useEffect(() => {
-    ejeSeleccionadoRef.current = ejeSeleccionado;
-    for (const objeto of grupo.current?.children ?? []) {
-      const asa = objeto.userData?.asaEje as { globalid?: string } | undefined;
-      if (asa) {
-        // eslint-disable-next-line react-hooks/immutability -- la escena es mutable por diseño
-        objeto.visible = ejeSeleccionado === null || asa.globalid === ejeSeleccionado;
-      }
-    }
-  }, [ejeSeleccionado]);
+  const c4 = useAnotacionesVisor(c2);
 
   // O003b: marcadores de la herramienta de dibujo (puntos, snap y vista previa).
-  useEffect(() => {
-    const grupoLocal = grupoHerramienta.current;
-    if (!grupoLocal) return;
-    while (grupoLocal.children.length) {
-      const hijo = grupoLocal.children.pop()!;
-      hijo.traverse((objeto) => {
-        const malla = objeto as THREE.Mesh;
-        if (malla.geometry) malla.geometry.dispose();
-        const material = malla.material;
-        if (Array.isArray(material)) material.forEach((m) => m.dispose());
-        else if (material) material.dispose();
-      });
-    }
-    if (vista.tipo !== "planta" || !herramienta) return;
-    const z = (vista.alturaPlano ?? caja.max[2]) + 0.03;
-    const metrosPorPixel = metrosPorPixelActual();
-    const escala = Math.max(diagonalCaja(cajaVista), 2);
-    const tamano = Math.max(escala * 0.018, 0.06);
-    const colorPuntos = new THREE.Color(0xd97706);
-    const colorSnap = new THREE.Color(0x0ea5e9);
-    const materialLinea = new THREE.LineBasicMaterial({
-      color: colorPuntos,
-      depthTest: false,
-      transparent: true,
-      opacity: 0.95,
-    });
-    materialLinea.depthTest = false;
-
-    const polilinea = (puntos: Punto2[], cerrada = false) => {
-      if (puntos.length < 2) return;
-      const lista = cerrada ? [...puntos, puntos[0]] : puntos;
-      const geometria = new THREE.BufferGeometry().setFromPoints(
-        lista.map(([x, y]) => new THREE.Vector3(x, y, z)),
-      );
-      const linea = new THREE.Line(geometria, materialLinea);
-      linea.renderOrder = 12;
-      grupoLocal.add(linea);
-    };
-
-    polilinea(puntosHerramienta);
-    // O006d: con familia existente el eje se previsualiza paralelo, con sus extremos.
-    const restriccionEje =
-      herramienta === "eje" && puntosHerramienta.length > 0 && ratonHerramienta
-        ? restringirEje(
-            puntosHerramienta[0],
-            ejeOrtogonal(puntosHerramienta[0], ratonHerramienta).fin,
-            referencias.ejes,
-            ejeLibre,
-          )
-        : null;
-    const trazoEje =
-      restriccionEje ??
-      (trazoEjePrevio
-        ? {
-            inicio: trazoEjePrevio.inicio,
-            fin: trazoEjePrevio.fin,
-            vertical: trazoEjePrevio.vertical,
-          }
-        : null);
-    if (trazoEje) {
-      polilinea([trazoEje.inicio, trazoEje.fin]);
-      const cercano = distanciaAEjeParalelo(
-        ratonHerramienta ?? trazoEje.fin,
-        referencias.ejes,
-        trazoEje.vertical,
-      );
-      if (cercano && cercano.distancia > 0.02) {
-        const medio: Punto2 = trazoEje.vertical
-          ? [trazoEje.inicio[0], (trazoEje.inicio[1] + trazoEje.fin[1]) / 2]
-          : [(trazoEje.inicio[0] + trazoEje.fin[0]) / 2, trazoEje.inicio[1]];
-        const enEje: Punto2 = trazoEje.vertical
-          ? [cercano.referencia.x1, medio[1]]
-          : [medio[0], cercano.referencia.y1];
-        polilinea([enEje, medio]);
-        const texto = `${cercano.distancia.toFixed(2)} m`;
-        const cota = etiquetaCota(
-          texto,
-          oscuro ? "#bae6fd" : "#0369a1",
-          oscuro ? "#262b33" : "#ffffff",
-          Math.max(tamano * 0.026, 0.2),
-        );
-        if (cota) {
-          cota.position.set(
-            (enEje[0] + medio[0]) / 2,
-            (enEje[1] + medio[1]) / 2,
-            z + 0.08,
-          );
-          cota.renderOrder = 19;
-          grupoLocal.add(cota);
-        }
-      }
-    } else if (puntosHerramienta.length > 0 && ratonHerramienta) {
-      polilinea([puntosHerramienta[puntosHerramienta.length - 1], ratonHerramienta]);
-      // O005c: cota temporal mientras se traza (muro, eje, losa, mover y copiar).
-      const origen = puntosHerramienta[puntosHerramienta.length - 1];
-      const largo = Math.hypot(
-        ratonHerramienta[0] - origen[0],
-        ratonHerramienta[1] - origen[1],
-      );
-      if (largo > 0.02) {
-        const texto = `${largo.toFixed(2)} m`;
-        const cota = etiquetaCota(
-          texto,
-          oscuro ? "#e8eaed" : "#1f2328",
-          oscuro ? "#262b33" : "#ffffff",
-          Math.max(tamano * 0.028, 0.22),
-        );
-        if (cota) {
-          cota.position.set(
-            (origen[0] + ratonHerramienta[0]) / 2,
-            (origen[1] + ratonHerramienta[1]) / 2,
-            z + 0.06,
-          );
-          cota.renderOrder = 18;
-          grupoLocal.add(cota);
-        }
-      }
-    }
-    if (herramienta === "losa" && puntosHerramienta.length > 0) {
-      // O050: polígono sombreado y cerrado hasta el cursor; el vértice de cierre
-      // nunca forma parte del contorno guardado.
-      const conCursor =
-        ratonHerramienta &&
-        Math.hypot(
-          ratonHerramienta[0] - puntosHerramienta[puntosHerramienta.length - 1][0],
-          ratonHerramienta[1] - puntosHerramienta[puntosHerramienta.length - 1][1],
-        ) > 1e-6
-          ? [...puntosHerramienta, ratonHerramienta]
-          : puntosHerramienta;
-      if (conCursor.length >= 3) {
-        const forma = new THREE.Shape();
-        forma.moveTo(conCursor[0][0], conCursor[0][1]);
-        for (const [x, y] of conCursor.slice(1)) forma.lineTo(x, y);
-        forma.closePath();
-        const malla = new THREE.Mesh(
-          new THREE.ShapeGeometry(forma),
-          new THREE.MeshBasicMaterial({
-            color: 0xf59e0b,
-            transparent: true,
-            opacity: 0.2,
-            depthTest: false,
-            depthWrite: false,
-            side: THREE.DoubleSide,
-          }),
-        );
-        malla.position.z = z;
-        malla.renderOrder = 11;
-        grupoLocal.add(malla);
-      }
-      polilinea(conCursor, conCursor.length >= 3);
-      const sobrePrimero =
-        conCursor.length >= 3 &&
-        ratonHerramienta !== null &&
-        metrosPorPixel > 0 &&
-        Math.hypot(
-          ratonHerramienta[0] - puntosHerramienta[0][0],
-          ratonHerramienta[1] - puntosHerramienta[0][1],
-        ) <=
-          12 * metrosPorPixel;
-      if (sobrePrimero) {
-        const marca = new THREE.Mesh(
-          new THREE.CircleGeometry(tamano * 0.55, 24),
-          new THREE.MeshBasicMaterial({
-            color: 0x16a34a,
-            transparent: true,
-            opacity: 0.9,
-            depthTest: false,
-            depthWrite: false,
-            side: THREE.DoubleSide,
-          }),
-        );
-        marca.position.set(puntosHerramienta[0][0], puntosHerramienta[0][1], z + 0.002);
-        marca.renderOrder = 15;
-        grupoLocal.add(marca);
-      }
-    }
-    if (puntosHerramienta.length > 0) {
-      for (const [x, y] of puntosHerramienta) {
-        const geometria = new THREE.BufferGeometry().setFromPoints([
-          new THREE.Vector3(x - tamano / 2, y, z),
-          new THREE.Vector3(x + tamano / 2, y, z),
-          new THREE.Vector3(x, y - tamano / 2, z),
-          new THREE.Vector3(x, y + tamano / 2, z),
-        ]);
-        const cruz = new THREE.LineSegments(
-          geometria,
-          new THREE.LineBasicMaterial({ color: colorPuntos, depthTest: false }),
-        );
-        cruz.renderOrder = 13;
-        grupoLocal.add(cruz);
-      }
-    }
-
-    // Vista previa de puerta/ventana sobre el muro.
-    if ((herramienta === "puerta" || herramienta === "ventana") && ratonHerramienta) {
-      const ancho = herramienta === "puerta" ? 0.9 : 1.2;
-      const colocada = colocarAbertura(referencias, ratonHerramienta, ancho);
-      if (colocada) {
-        const { muro } = colocada;
-        const largo = Math.hypot(muro.x2 - muro.x1, muro.y2 - muro.y1) || 1;
-        const ux = (muro.x2 - muro.x1) / largo;
-        const uy = (muro.y2 - muro.y1) / largo;
-        const nx = -uy;
-        const ny = ux;
-        const medio = muro.espesor / 2;
-        const esquinas: Punto2[] = [];
-        for (const [d, lado] of [
-          [colocada.distancia, -medio],
-          [colocada.distancia + ancho, -medio],
-          [colocada.distancia + ancho, medio],
-          [colocada.distancia, medio],
-        ] as Array<[number, number]>) {
-          esquinas.push([
-            muro.x1 + ux * d + nx * lado * (voltearSiguiente ? -1 : 1),
-            muro.y1 + uy * d + ny * lado * (voltearSiguiente ? -1 : 1),
-          ]);
-        }
-        const geometria = new THREE.BufferGeometry().setFromPoints(
-          [...esquinas, esquinas[0]].map(([x, y]) => new THREE.Vector3(x, y, z)),
-        );
-        const linea = new THREE.Line(
-          geometria,
-          new THREE.LineBasicMaterial({ color: 0x2563eb, depthTest: false }),
-        );
-        linea.renderOrder = 14;
-        grupoLocal.add(linea);
-      }
-    }
-
-    if (herramienta === "recortar_extender" && vistaPreviaRecorte) {
-      const geometria = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(vistaPreviaRecorte.x1, vistaPreviaRecorte.y1, z + 0.05),
-        new THREE.Vector3(vistaPreviaRecorte.x2, vistaPreviaRecorte.y2, z + 0.05),
-      ]);
-      const linea = new THREE.Line(
-        geometria,
-        new THREE.LineBasicMaterial({
-          color: 0xf59e0b,
-          transparent: true,
-          opacity: 0.55,
-          depthTest: false,
-        }),
-      );
-      linea.renderOrder = 20;
-      grupoLocal.add(linea);
-    }
-
-    if (engancheHerramienta) {
-      const [x, y] = engancheHerramienta.punto;
-      // O006e: símbolo de 10 px de pantalla, independiente del zoom.
-      const r = Math.max(metrosPorPixel * 5, 1e-5);
-      const puntosForma: Record<string, THREE.Vector3[]> = {
-        extremo: [
-          new THREE.Vector3(x - r, y - r, z),
-          new THREE.Vector3(x + r, y - r, z),
-          new THREE.Vector3(x + r, y + r, z),
-          new THREE.Vector3(x - r, y + r, z),
-          new THREE.Vector3(x - r, y - r, z),
-        ],
-        medio: [
-          new THREE.Vector3(x, y - r, z),
-          new THREE.Vector3(x + r, y + r, z),
-          new THREE.Vector3(x - r, y + r, z),
-          new THREE.Vector3(x, y - r, z),
-        ],
-        interseccion: [
-          new THREE.Vector3(x - r, y - r, z),
-          new THREE.Vector3(x + r, y + r, z),
-          new THREE.Vector3(x + r, y - r, z),
-          new THREE.Vector3(x - r, y + r, z),
-        ],
-        cuadricula: [],
-        perpendicular: [
-          new THREE.Vector3(x, y, z),
-          new THREE.Vector3(x, y + r, z),
-          new THREE.Vector3(x + r * 0.8, y + r * 0.8, z),
-          new THREE.Vector3(x - r * 0.8, y + r * 0.8, z),
-          new THREE.Vector3(x, y, z),
-        ],
-      };
-      const forma = puntosForma[engancheHerramienta.tipo] ?? [];
-      if (forma.length >= 2) {
-        const geometria = new THREE.BufferGeometry().setFromPoints(forma);
-        const marcador = new THREE.Line(
-          geometria,
-          new THREE.LineBasicMaterial({ color: colorSnap, depthTest: false }),
-        );
-        marcador.renderOrder = 15;
-        grupoLocal.add(marcador);
-      }
-      const etiqueta = etiquetaCota(
-        describirEnganche(engancheHerramienta, referencias),
-        "#0ea5e9",
-        oscuro ? "#141416" : "#ffffff",
-        Math.max(metrosPorPixel * 10, 1e-4),
-      );
-      if (etiqueta) {
-        etiqueta.position.set(
-          x + metrosPorPixel * 10,
-          y - metrosPorPixel * 13,
-          z + 0.002,
-        );
-        etiqueta.renderOrder = 16;
-        grupoLocal.add(etiqueta);
-      }
-    }
-  }, [
-    herramienta,
-    puntosHerramienta,
-    ratonHerramienta,
-    engancheHerramienta,
-    referencias,
-    voltearSiguiente,
-    vista,
-    cajaVista,
-    oscuro,
-    ejeLibre,
-    trazoEjePrevio,
-    metrosPorPixelActual,
-    vistaPreviaRecorte,
-  ]);
-
-  // O046: vista previa del empujar/tirar en 3D: contorno, relleno y sólido.
-  useEffect(() => {
-    const grupoLocal = grupoHerramienta.current;
-    if (!grupoLocal) return;
-    while (grupoLocal.children.length) {
-      const hijo = grupoLocal.children.pop()!;
-      hijo.traverse((objeto) => {
-        const malla = objeto as THREE.Mesh;
-        if (malla.geometry) malla.geometry.dispose();
-        const material = malla.material;
-        if (Array.isArray(material)) material.forEach((m) => m.dispose());
-        else if (material) material.dispose();
-      });
-    }
-    if (herramienta !== "empujar") return;
-    if (vista.tipo !== "iso" && vista.tipo !== "perspectiva") return;
-
-    // O056: resalta la cara tocada y previsualiza su posición al empujar.
-    const agregarCara = (
-      poligono: Vec3[],
-      normal: THREE.Vector3,
-      desplazamiento: number,
-      color: number,
-      opacidad: number,
-    ) => {
-      if (poligono.length < 3) return;
-      const posiciones: number[] = [];
-      const desplazar = (p: Vec3): [number, number, number] => [
-        p.x + normal.x * (0.006 + desplazamiento),
-        p.y + normal.y * (0.006 + desplazamiento),
-        p.z + normal.z * (0.006 + desplazamiento),
-      ];
-      for (let i = 1; i + 1 < poligono.length; i += 1) {
-        const a = desplazar(poligono[0]);
-        const b = desplazar(poligono[i]);
-        const c = desplazar(poligono[i + 1]);
-        posiciones.push(...a, ...b, ...c);
-      }
-      const geometria = new THREE.BufferGeometry();
-      geometria.setAttribute(
-        "position",
-        new THREE.Float32BufferAttribute(posiciones, 3),
-      );
-      const malla = new THREE.Mesh(
-        geometria,
-        new THREE.MeshBasicMaterial({
-          color,
-          transparent: true,
-          opacity: opacidad,
-          depthWrite: false,
-          side: THREE.DoubleSide,
-        }),
-      );
-      malla.renderOrder = 12;
-      grupoLocal.add(malla);
-      const borde = new THREE.BufferGeometry().setFromPoints(
-        [...poligono, poligono[0]].map((p) => {
-          const [x, y, z] = desplazar(p);
-          return new THREE.Vector3(x, y, z);
-        }),
-      );
-      const linea = new THREE.Line(
-        borde,
-        new THREE.LineBasicMaterial({ color, depthTest: false }),
-      );
-      linea.renderOrder = 15;
-      grupoLocal.add(linea);
-    };
-
-    if (empujarCara?.poligono) {
-      const normal = new THREE.Vector3(...empujarCara.normal).normalize();
-      agregarCara(empujarCara.poligono, normal, 0, 0x2563eb, 0.2);
-      agregarCara(
-        empujarCara.poligono,
-        normal,
-        empujarCara.distancia,
-        0x0ea5e9,
-        0.38,
-      );
-      const desde = empujarCara.poligono.map(
-        (p) => new THREE.Vector3(p.x, p.y, p.z),
-      );
-      const hasta = empujarCara.poligono.map(
-        (p) =>
-          new THREE.Vector3(
-            p.x + normal.x * empujarCara.distancia,
-            p.y + normal.y * empujarCara.distancia,
-            p.z + normal.z * empujarCara.distancia,
-          ),
-      );
-      const lineas: THREE.Vector3[] = [];
-      for (let i = 0; i < desde.length; i += 1) {
-        lineas.push(desde[i], hasta[i]);
-      }
-      const geometria = new THREE.BufferGeometry().setFromPoints(lineas);
-      const guia = new THREE.LineSegments(
-        geometria,
-        new THREE.LineDashedMaterial({
-          color: 0x0ea5e9,
-          dashSize: 0.12,
-          gapSize: 0.08,
-          depthTest: false,
-        }),
-      );
-      guia.computeLineDistances();
-      guia.renderOrder = 16;
-      grupoLocal.add(guia);
-      return;
-    }
-    if (caraEmpujarHover) {
-      const normal = new THREE.Vector3(...caraEmpujarHover.normal).normalize();
-      agregarCara(
-        caraEmpujarHover.poligono,
-        normal,
-        0,
-        0x2563eb,
-        caraEmpujarHover.clasificacion.accion === "ninguna" ? 0.18 : 0.32,
-      );
-      return;
-    }
-
-    const rect =
-      empujarRect ??
-      (puntosHerramienta[0] && ratonHerramienta
-        ? crearRectangulo(puntosHerramienta[0], ratonHerramienta)
-        : null);
-    if (!rect) return;
-    const esquinas = puntosRectangulo(rect);
-    const ancho = Math.abs(rect.x2 - rect.x1);
-    const largo = Math.abs(rect.y2 - rect.y1);
-    if (ancho < 1e-6 || largo < 1e-6) return;
-    const cotaPlano = empujarZ ?? zEmpujar;
-    const z = cotaPlano + 0.02;
-    const clase =
-      empujarClasificacion === "auto"
-        ? clasificarEmpujar(rect, empujarAltura ?? 0).clase
-        : empujarClasificacion;
-    const color =
-      clase === "losa"
-        ? 0x64748b
-        : clase === "muro"
-          ? 0x2563eb
-          : clase === "columna"
-            ? 0x16a34a
-            : 0xd97706;
-
-    // Relleno translúcido del contorno.
-    const relleno = new THREE.BufferGeometry();
-    relleno.setAttribute(
-      "position",
-      new THREE.Float32BufferAttribute(
-        [
-          esquinas[0][0], esquinas[0][1], z,
-          esquinas[1][0], esquinas[1][1], z,
-          esquinas[2][0], esquinas[2][1], z,
-          esquinas[0][0], esquinas[0][1], z,
-          esquinas[2][0], esquinas[2][1], z,
-          esquinas[3][0], esquinas[3][1], z,
-        ],
-        3,
-      ),
-    );
-    const mallaRelleno = new THREE.Mesh(
-      relleno,
-      new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: 0.18,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      }),
-    );
-    mallaRelleno.renderOrder = 11;
-    grupoLocal.add(mallaRelleno);
-
-    const borde = new THREE.BufferGeometry().setFromPoints(
-      [...esquinas, esquinas[0]].map(([x, y]) => new THREE.Vector3(x, y, z)),
-    );
-    const linea = new THREE.Line(
-      borde,
-      new THREE.LineBasicMaterial({ color, depthTest: false }),
-    );
-    linea.renderOrder = 14;
-    grupoLocal.add(linea);
-
-    const altura = empujarAltura ?? 0;
-    if (empujarRect && Math.abs(altura) > 1e-6) {
-      const centroX = (rect.x1 + rect.x2) / 2;
-      const centroY = (rect.y1 + rect.y2) / 2;
-      const cajaSolido = new THREE.BoxGeometry(ancho, largo, Math.abs(altura));
-      const material = new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: 0.3,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      });
-      const solido = new THREE.Mesh(cajaSolido, material);
-      solido.position.set(centroX, centroY, cotaPlano + altura / 2);
-      solido.renderOrder = 10;
-      grupoLocal.add(solido);
-      const aristas = new THREE.LineSegments(
-        new THREE.EdgesGeometry(cajaSolido),
-        new THREE.LineBasicMaterial({ color, depthTest: false }),
-      );
-      aristas.position.copy(solido.position);
-      aristas.renderOrder = 15;
-      grupoLocal.add(aristas);
-      // Línea de altura en la primera esquina.
-      const vertical = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(esquinas[0][0], esquinas[0][1], cotaPlano),
-        new THREE.Vector3(esquinas[0][0], esquinas[0][1], cotaPlano + altura),
-      ]);
-      const lineaAltura = new THREE.Line(
-        vertical,
-        new THREE.LineDashedMaterial({
-          color,
-          dashSize: 0.12,
-          gapSize: 0.08,
-          depthTest: false,
-        }),
-      );
-      lineaAltura.computeLineDistances();
-      lineaAltura.renderOrder = 16;
-      grupoLocal.add(lineaAltura);
-    }
-  }, [
-    herramienta,
-    vista.tipo,
-    empujarRect,
-    empujarAltura,
-    empujarClasificacion,
-    puntosHerramienta,
-    ratonHerramienta,
-    zEmpujar,
-    empujarZ,
-    empujarCara,
-    caraEmpujarHover,
-  ]);
+  const c5 = useHerramientaVisor(c4);
 
   // O049: al terminar o cambiar de herramienta se apaga el marcador. La
   // limpieza se aplaza para no encadenar renders dentro del efecto.
-  useEffect(() => {
-    if (
-      herramienta !== "empujar" ||
-      (puntosHerramienta.length === 0 && !empujarRect && !empujarCara)
-    ) {
-      ultimaInferenciaEmpujar.current = null;
-      bloqueoFlechas.current = null;
-      bloqueoShift.current = null;
-      const id = setTimeout(() => {
-        setMarcadorEmpujar(null);
-        setGuiaEmpujar(null);
-        setCaraEmpujarHover(null);
-      }, 0);
-      return () => clearTimeout(id);
-    }
-  }, [herramienta, puntosHerramienta.length, empujarRect, empujarCara]);
-
-  // Ajustar la cámara a la vista (botón y F). Es la única acción que reencuadra.
-  const ajustar = useCallback(() => {
-    const nodo = contenedor.current;
-    if (!nodo) return;
-    const aspecto = Math.max(nodo.clientWidth, 1) / Math.max(nodo.clientHeight, 1);
-    const nav = crearNavegacion(vista, cajaVista, aspecto);
-    navegacion.current = nav;
-    vistaDeCamara.current = vista.id;
-    camara.current = crearCamaraDeVista(vista, cajaVista, aspecto, nav);
-    aplicarCamara();
-  }, [aplicarCamara, vista, cajaVista]);
-
-  // O038: el árbol pide «Ajustar» con el doble clic; la primera vez no dispara.
-  const ajustarTokenPrevio = useRef(ajustarToken);
-  useEffect(() => {
-    if (ajustarToken === ajustarTokenPrevio.current) return;
-    ajustarTokenPrevio.current = ajustarToken;
-    ajustar();
-  }, [ajustarToken, ajustar]);
-
-  // O006d: zoom con + y − desde el teclado, centrado en la vista.
-  const zoomEnCentro = useCallback(
-    (factor: number) => {
-      const camera = camara.current;
-      const nav = navegacion.current;
-      if (!camera || !nav) return;
-      if (camera instanceof THREE.OrthographicCamera) {
-        camera.left *= factor;
-        camera.right *= factor;
-        camera.top *= factor;
-        camera.bottom *= factor;
-        camera.updateProjectionMatrix();
-      } else if (camera instanceof THREE.PerspectiveCamera) {
-        nav.distancia = Math.max(0.5, nav.distancia * factor);
-      }
-      aplicarCamara();
-      setZoomTick((tick) => tick + 1);
-    },
-    [aplicarCamara],
-  );
-
-  // O030: 100 % de papel: 1 mm de papel mide 1 mm en pantalla (96 px/pulgada CSS).
-  const zoomAl100 = useCallback(() => {
-    const camera = camara.current;
-    const nodo = contenedor.current;
-    if (!(camera instanceof THREE.OrthographicCamera) || !nodo) return;
-    const altoPx = Math.max(nodo.clientHeight, 1);
-    const mundoPorPx = (vista.escala / 1000) * (25.4 / 96);
-    const altoActual = camera.top - camera.bottom;
-    if (!(altoActual > 0)) return;
-    const factor = (mundoPorPx * altoPx) / altoActual;
-    zoomEnCentro(factor);
-  }, [vista.escala, zoomEnCentro]);
-
-  const restablecerIso = useCallback(() => {    const nav = navegacion.current;
-    if (!nav) return;
-    nav.direccion.copy(nav.inicial.direccion);
-    nav.objetivo.copy(nav.inicial.objetivo);
-    nav.distancia = nav.inicial.distancia;
-    const camera = camara.current;
-    if (camera instanceof THREE.OrthographicCamera) {
-      const nodo = contenedor.current;
-      const aspecto = nodo
-        ? Math.max(nodo.clientWidth, 1) / Math.max(nodo.clientHeight, 1)
-        : 1;
-      const inicial = crearNavegacion(vista, cajaVista, aspecto);
-      const limites = ajustarAspecto(
-        camaraOrtografica(cajaVista, [nav.direccion.x, nav.direccion.y, nav.direccion.z]),
-        aspecto,
-      );
-      camera.left = limites.izquierda;
-      camera.right = limites.derecha;
-      camera.top = limites.arriba;
-      camera.bottom = limites.abajo;
-      nav.distancia = inicial.distancia;
-    }
-    aplicarCamara();
-  }, [aplicarCamara, cajaVista, vista]);
-
-  const confirmarCota = async () => {
-    if (!cotaEditando) return;
-    const valor =
-      cotaEditando.tipo === "elevacion"
-        ? parsearElevacion(textoCotaEditando)
-        : parsearCota(textoCotaEditando);
-    if (valor === null) {
-      setErrorCota(
-        cotaEditando.tipo === "elevacion"
-          ? "Cota no válida: use .1, 0,1, 10cm, 100mm o un número negativo."
-          : "Cota no válida: use .15, 0,15, 15cm o 150mm (mayor que cero).",
-      );
-      return;
-    }
-    setErrorCota(null);
-    const edicion = cotaEditando;
-    setCotaEditando(null);
-    if (edicion.tipo === "parcial" && edicion.referencia && edicion.mover) {
-      await separarEjes(edicion.referencia, edicion.mover, valor, moverSiguientes);
-    } else if (edicion.tipo === "rebase") {
-      await editarRebase(valor);
-    } else if (edicion.tipo === "nivel" && edicion.referencia && edicion.mover) {
-      await separarNiveles(edicion.referencia, edicion.mover, valor, moverSiguientes);
-    } else if (edicion.tipo === "elevacion" && edicion.nivel && edicion.nombre) {
-      await editarNivel(edicion.nivel, edicion.nombre, valor);
-    }
-  };
+  const c6 = useControlesVisor(c5);
 
   // Rueda: zoom hacia el cursor en ortográficas y acercamiento en 3D.
-  useEffect(() => {
-    const nodo = contenedor.current;
-    if (!nodo) return;
-    const actualizarGrosores = () => {
-      const camera = camara.current;
-      if (!camera) return;
-      const alto = Math.max(nodo.clientHeight, 1);
-      const ancho = Math.max(nodo.clientWidth, 1);
-      let mundoPorPx = diagonalCaja(cajaVista) / alto;
-      if (camera instanceof THREE.OrthographicCamera) {
-        mundoPorPx = Math.max((camera.top - camera.bottom) / alto, 1e-6);
-      } else if (camera instanceof THREE.PerspectiveCamera) {
-        const nav = navegacion.current;
-        mundoPorPx = Math.max(
-          (2 * (nav?.distancia ?? 10) * Math.tan((camera.fov * Math.PI) / 360)) / alto,
-          1e-6,
-        );
-      }
-      for (const entrada of grosores.current) {
-        entrada.material.linewidth = Math.max(
-          mmAPx(entrada.mm, entrada.escala, mundoPorPx),
-          0.8,
-        );
-        entrada.material.resolution.set(ancho, alto);
-      }
-    };
-    actualizarGrosoresRef.current = actualizarGrosores;
-    const escalaActual = () => {
-      const camera = camara.current;
-      const nav = navegacion.current;
-      if (!camera || !nav) return undefined;
-      if (camera instanceof THREE.OrthographicCamera) return camera.top - camera.bottom;
-      if (camera instanceof THREE.PerspectiveCamera) return nav.distancia;
-      return undefined;
-    };
-    const alRodar = (evento: WheelEvent) => {
-      evento.preventDefault();
-      // O018: si el pellizco llega como wheel con Ctrl, el gesto nativo se ignora.
-      if (evento.ctrlKey) ultimoWheelCtrlRef.current = performance.now();
-      const camera = camara.current;
-      const nav = navegacion.current;
-      if (!camera || !nav) return;
-      const accion = detectorRueda.clasificar(evento, preferenciaRueda);
-      const dispositivo = detectorRueda.ultimoDispositivo();
-      if (dispositivo) fijarDetectado(dispositivo);
-      const escalaAntes = escalaActual();
-      const factor = accion === "zoom" ? factorZoomRueda(evento, dispositivo) : undefined;
-      if (accion === "zoom" && factor !== undefined) {
-        aplicarZoom(factor, { x: evento.clientX, y: evento.clientY });
-      } else {
-        // O006e: en 3D, Shift + dos dedos orbita; en planta panea en horizontal.
-        // O020: orbita con cualquier dispositivo detectado (el touchpad ELAN se
-        // confunde con ratón y antes solo paneaba).
-        const es3d = vista.tipo === "iso" || vista.tipo === "perspectiva";
-        if (evento.shiftKey && accionRuedaConShift(es3d) === "orbitar") {
-          const yaw = new THREE.Quaternion().setFromAxisAngle(
-            new THREE.Vector3(0, 0, 1),
-            (evento.deltaX || evento.deltaY) * 0.006,
-          );
-          nav.direccion.applyQuaternion(yaw);
-          const derecha = new THREE.Vector3().crossVectors(ARRIBA, nav.direccion).normalize();
-          const pitch = new THREE.Quaternion().setFromAxisAngle(
-            derecha,
-            evento.deltaY * 0.006,
-          );
-          nav.direccion.applyQuaternion(pitch).normalize();
-          if (nav.direccion.z < 0.05) {
-            nav.direccion.z = 0.05;
-            nav.direccion.normalize();
-          }
-        } else {
-          const alto = Math.max(nodo.clientHeight, 1);
-          let escala = 1;
-          if (camera instanceof THREE.OrthographicCamera) {
-            escala = Math.max((camera.top - camera.bottom) / alto, 1e-6);
-          } else if (camera instanceof THREE.PerspectiveCamera) {
-            escala =
-              (2 * nav.distancia * Math.tan((camera.fov * Math.PI) / 360)) / alto;
-          }
-          const dx =
-            accion === "paneo-horizontal"
-              ? evento.deltaX || evento.deltaY
-              : evento.deltaX;
-          const dy = accion === "paneo-horizontal" ? 0 : evento.deltaY;
-          const derecha = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
-          const arriba = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
-          nav.objetivo
-            .add(derecha.multiplyScalar(dx * escala))
-            .add(arriba.multiplyScalar(-dy * escala));
-        }
-      }
-      aplicarCamara();
-      actualizarGrosores();
-      // O017b: el diagnóstico guarda la escala real antes y después de este zoom.
-      const grabacion = grabacionRef.current;
-      if (grabacion && grabacion.eventos.length < 5000) {
-        grabacion.eventos.push({
-          t: performance.now() - grabacion.inicio,
-          tipo: "wheel",
-          ctrlKey: evento.ctrlKey,
-          shiftKey: evento.shiftKey,
-          deltaX: evento.deltaX,
-          deltaY: evento.deltaY,
-          deltaMode: evento.deltaMode,
-          accion,
-          dispositivo: dispositivo ?? undefined,
-          factor,
-          escalaAntes: accion === "zoom" ? escalaAntes : undefined,
-          escalaDespues: accion === "zoom" ? escalaActual() : undefined,
-        });
-      }
-    };
-    nodo.addEventListener("wheel", alRodar, { passive: false });
-    return () => nodo.removeEventListener("wheel", alRodar);
-  }, [
-    aplicarCamara,
-    aplicarZoom,
-    cajaVista,
-    preferenciaRueda,
-    fijarDetectado,
-    vista.tipo,
-  ]);
-
-  // O017b: grabación de 10 s con puntero, toques y Control. Los `wheel` los
-  // registra `alRodar` para poder anotar la escala antes y después del zoom.
-  useEffect(() => {
-    if (!grabando) return;
-    const grabacion = grabacionRef.current ?? { inicio: performance.now(), eventos: [] };
-    grabacionRef.current = grabacion;
-    const registrar = (tipo: TipoEventoGrabado, evento: Event) => {
-      if (grabacion.eventos.length >= 5000) return;
-      const base: EventoGrabado = {
-        t: performance.now() - grabacion.inicio,
-        tipo,
-        ctrlKey: Boolean((evento as MouseEvent).ctrlKey),
-        shiftKey: Boolean((evento as MouseEvent).shiftKey),
-      };
-      if (tipo.startsWith("pointer")) {
-        base.pointerType = (evento as PointerEvent).pointerType;
-      } else if (tipo.startsWith("touch")) {
-        base.toques = (evento as TouchEvent).touches?.length ?? 0;
-      } else if (tipo.startsWith("key")) {
-        base.key = (evento as KeyboardEvent).key;
-      }
-      grabacion.eventos.push(base);
-    };
-    const opciones: AddEventListenerOptions = { capture: true, passive: true };
-    const tipos: TipoEventoGrabado[] = [
-      "pointerdown",
-      "pointermove",
-      "pointerup",
-      "touchstart",
-      "touchmove",
-      "touchend",
-    ];
-    const alPuntero = (evento: Event) => registrar(evento.type as TipoEventoGrabado, evento);
-    for (const tipo of tipos) window.addEventListener(tipo, alPuntero, opciones);
-    const alTecla = (evento: Event) => {
-      const tecla = evento as KeyboardEvent;
-      if (tecla.key !== "Control") return;
-      registrar(tecla.type === "keydown" ? "keydown" : "keyup", tecla);
-    };
-    window.addEventListener("keydown", alTecla, opciones);
-    window.addEventListener("keyup", alTecla, opciones);
-    temporizadorGrabacion.current = window.setTimeout(() => detenerGrabacion(), 10_000);
-    return () => {
-      if (temporizadorGrabacion.current !== null) {
-        window.clearTimeout(temporizadorGrabacion.current);
-        temporizadorGrabacion.current = null;
-      }
-      for (const tipo of tipos) window.removeEventListener(tipo, alPuntero, opciones);
-      window.removeEventListener("keydown", alTecla, opciones);
-      window.removeEventListener("keyup", alTecla, opciones);
-    };
-  }, [grabando, detenerGrabacion]);
-
-  // O018: gestos que Windows entrega por la escucha nativa. Se registran en la
-  // grabación como `nativo:<mensaje>` y, si nadie los duplicó con Ctrl + rueda,
-  // mueven el zoom con la misma `aplicarZoom` de la rueda.
-  useEffect(() => {
-    interface CargaGestoNativo {
-      ms: number;
-      ventana: string;
-      mensaje: string;
-      detalle?: Record<string, unknown>;
-    }
-    const puntoDelDetalle = (detalle: Record<string, unknown> | undefined) => {
-      const x = Number(detalle?.x);
-      const y = Number(detalle?.y);
-      if (!Number.isFinite(x) || !Number.isFinite(y) || (x === 0 && y === 0)) {
-        return undefined;
-      }
-      // Windows entrega píxeles físicos de pantalla; el visor usa píxeles CSS.
-      const dpr = window.devicePixelRatio || 1;
-      return { x: x / dpr - window.screenX, y: y / dpr - window.screenY };
-    };
-    const manejar = (carga: CargaGestoNativo) => {
-      const { mensaje, detalle, ventana } = carga;
-      const grabacion = grabacionRef.current;
-      if (grabacion && grabacion.eventos.length < 5000) {
-        grabacion.eventos.push({
-          t: performance.now() - grabacion.inicio,
-          tipo: `nativo:${mensaje}`,
-          ctrlKey: Boolean(detalle?.control),
-          shiftKey: false,
-          ventana,
-          detalle,
-        });
-      }
-      const ahora = performance.now();
-      if (mensaje.startsWith("WM_MOUSEWHEEL") || mensaje.startsWith("WM_MOUSEHWHEEL")) {
-        if (detalle?.control) ultimoWheelCtrlRef.current = ahora;
-        return;
-      }
-      if (mensaje === "GID_ZOOM") {
-        const actual = Number(detalle?.ullArguments);
-        const flags = Number(detalle?.flags ?? 0);
-        if (flags & 1) distanciaGestoRef.current = null;
-        const anterior = distanciaGestoRef.current;
-        distanciaGestoRef.current = actual > 0 ? actual : null;
-        if (anterior === null) return;
-        const factor = factorGestoZoom(anterior, actual);
-        if (factor === 1 || debeIgnorarGestoNativo(ultimoWheelCtrlRef.current, ahora)) {
-          return;
-        }
-        aplicarZoom(1 / factor, puntoDelDetalle(detalle));
-        return;
-      }
-      if (!mensaje.startsWith("WM_POINTER")) return;
-      if (mensaje === "WM_POINTERUP") {
-        toquesNativosRef.current.delete(Number(detalle?.pointerId));
-        distanciaGestoRef.current = null;
-        return;
-      }
-      if (detalle?.tipo !== "touchpad") return;
-      const id = Number(detalle?.pointerId);
-      const x = Number(detalle?.x) || 0;
-      const y = Number(detalle?.y) || 0;
-      toquesNativosRef.current.set(id, { x, y });
-      if (toquesNativosRef.current.size !== 2) {
-        distanciaGestoRef.current = null;
-        return;
-      }
-      const [a, b] = [...toquesNativosRef.current.values()];
-      const distancia = Math.hypot(a.x - b.x, a.y - b.y);
-      const anterior = distanciaGestoRef.current;
-      distanciaGestoRef.current = distancia > 0 ? distancia : null;
-      if (anterior === null) return;
-      const factor = factorGestoZoom(anterior, distancia);
-      if (factor === 1 || debeIgnorarGestoNativo(ultimoWheelCtrlRef.current, ahora)) {
-        return;
-      }
-      aplicarZoom(1 / factor, puntoDelDetalle(detalle));
-    };
-    let vivo = true;
-    let quitar: (() => void) | undefined;
-    listen<CargaGestoNativo>("gesto-nativo", (evento) => manejar(evento.payload))
-      .then((desuscribir) => {
-        if (vivo) quitar = desuscribir;
-        else desuscribir();
-      })
-      .catch(() => {
-        /* fuera de Tauri (vitest) no hay bus de eventos */
-      });
-    return () => {
-      vivo = false;
-      quitar?.();
-    };
-  }, [aplicarZoom]);
+  const c7 = useRuedaVisor(c6);
 
   // Paneo, órbita, selección, toques y puntos del corte.
+  const {
+    ajustar,
+    confirmarCota,
+    restablecerIso,
+    zoomAl100,
+    zoomEnCentro,
+  } = c7;
   useEffect(() => {
     const nodo = contenedor.current;
     if (!nodo) return;
@@ -6961,568 +4732,26 @@ export function Visor3D({
     confirmarEmpujarCara,
   ]);
 
-  useEffect(() => {
-    const nodo = contenedor.current;
-    if (nodo) nodo.style.cursor = modoCorte || herramienta ? "crosshair" : "";
-  }, [modoCorte, herramienta]);
+  const c9 = useOverlaysVisor(c7);
 
-  // Utilidad de las pruebas E2E: proyecta un punto del modelo a coordenadas de pantalla.
-  useEffect(() => {
-    const nodo = contenedor.current;
-    if (!nodo) return;
-    (nodo as unknown as Record<string, unknown>).__openrvtMundoAPantalla = (
-      x: number,
-      y: number,
-      z = 0,
-    ) => {
-      const camera = camara.current;
-      if (!camera) return null;
-      camera.updateMatrixWorld();
-      const punto = new THREE.Vector3(x, y, z).project(camera);
-      const rect = nodo.getBoundingClientRect();
-      return {
-        x: rect.left + ((punto.x + 1) / 2) * rect.width,
-        y: rect.top + ((1 - punto.y) / 2) * rect.height,
-      };
-    };
-    // O049: estado vivo de la herramienta para las pruebas E2E (puntos 2D y cota).
-    (nodo as unknown as Record<string, unknown>).__openrvtEmpujar = () => {
-      const estado = useModelo.getState();
-      return {
-        z: estado.empujarZ,
-        puntos: estado.puntosHerramienta,
-        rect: estado.empujarRect,
-        altura: estado.empujarAltura,
-        cara: estado.empujarCara,
-      };
-    };
-    // O014b: asa en pantalla de la cabeza de un nivel (para arrastrarla en E2E).
-    (nodo as unknown as Record<string, unknown>).__openrvtNivelAPantalla = (
-      globalid: string,
-    ) => {
-      const asa = asasNivel.current.find((a) => a.globalid === globalid);
-      if (!asa) return null;
-      return pantallaDePunto(asa.punto);
-    };
-    // O034: asas de borde de losa en pantalla (índice de borde del pset).
-    (nodo as unknown as Record<string, unknown>).__openrvtAsaLosaAPantalla = (
-      indice: number,
-    ) => {
-      const asa = asasLosa.current.find((a) => a.indice === indice);
-      if (!asa) return null;
-      return pantallaDePunto(asa.punto);
-    };
-    (nodo as unknown as Record<string, unknown>).__openrvtAsasLosa = () =>
-      asasLosa.current.map((a) => ({
-        indice: a.indice,
-        medio: a.medio,
-        normal: a.normal,
-        desfase: a.desfase,
-      }));
-    // O026: mover un eje desde la E2E por el mismo comando que la interfaz.
-    (nodo as unknown as Record<string, unknown>).__openrvtMoverEje = (
-      globalid: string,
-      desplazamiento: number,
-    ) => useModelo.getState().moverEje(globalid, desplazamiento);
-    // O011: posición en pantalla de un globo o extremo de eje (para las E2E).
-    (nodo as unknown as Record<string, unknown>).__openrvtEjeAPantalla = (
-      etiqueta: string,
-      lado: LadoEje = "fin",
-      indiceCodo?: number,
-      tipoAsa?: "globo" | "base",
-    ) => {
-      const camera = camara.current;
-      if (!camera) return null;
-      const asa = ejesInteraccion.current.find((a) => {
-        // WebDriver envía `undefined` como null: ambos significan «sin codo».
-        if (indiceCodo !== undefined && indiceCodo !== null) {
-          return (
-            a.etiqueta === etiqueta &&
-            a.lado === lado &&
-            a.tipo === "codo" &&
-            a.indice === indiceCodo
-          );
-        }
-        if (a.etiqueta !== etiqueta || a.lado !== lado || a.tipo === "codo") return false;
-        // O031: con globos desplazados, la asa «globo» ya no sirve para arrastrar
-        // el extremo real; las pruebas piden explícitamente la asa «base».
-        return tipoAsa === undefined || a.tipo === tipoAsa;
-      });
-      if (!asa) return null;
-      camera.updateMatrixWorld();
-      const punto = new THREE.Vector3(...asa.punto).project(camera);
-      const rect = nodo.getBoundingClientRect();
-      return {
-        x: rect.left + ((punto.x + 1) / 2) * rect.width,
-        y: rect.top + ((1 - punto.y) / 2) * rect.height,
-      };
-    };
-    // O011: centro y radio en pantalla del globo, para medir la nitidez del borde.
-    (nodo as unknown as Record<string, unknown>).__openrvtEjeBurbujaPantalla = (
-      etiqueta: string,
-    ) => {
-      const camera = camara.current;
-      if (!camera) return null;
-      // O042: el globo con codo ya no tiene asa; se mide su grupo dibujado para
-      // que las capturas y las pruebas sigan viendo el centro real.
-      const burbuja = burbujasEje.current.find((b) => b.etiqueta === etiqueta);
-      if (!burbuja) return null;
-      camera.updateMatrixWorld();
-      const centro = burbuja.grupo.position.clone();
-      const radioMundo = mmAMundo(8, vista.escala) / 2;
-      const derecha = new THREE.Vector3()
-        .setFromMatrixColumn(camera.matrixWorld, 0)
-        .normalize()
-        .multiplyScalar(radioMundo);
-      const borde = centro.clone().add(derecha);
-      const pc = centro.clone().project(camera);
-      const pb = borde.clone().project(camera);
-      const rect = nodo.getBoundingClientRect();
-      const x = rect.left + ((pc.x + 1) / 2) * rect.width;
-      const y = rect.top + ((1 - pc.y) / 2) * rect.height;
-      const xb = rect.left + ((pb.x + 1) / 2) * rect.width;
-      const yb = rect.top + ((1 - pb.y) / 2) * rect.height;
-      return {
-        x,
-        y,
-        radio: Math.hypot(xb - x, yb - y),
-        anchoVentana: window.innerWidth,
-        altoVentana: window.innerHeight,
-        dpr: window.devicePixelRatio || 1,
-        colorAnillo: oscuro ? "#e0b07a" : estilos.categorias.ejes.color,
-        colorFondo: oscuro ? "#1f2328" : "#ffffff",
-      };
-    };
-    // O021: caja en pantalla del texto real del globo y desviación de su centro
-    // respecto del centro del globo (para medir el centrado con 1, 2 o 3 caracteres).
-    (nodo as unknown as Record<string, unknown>).__openrvtEjeTextoGloboPantalla = (
-      etiqueta: string,
-    ) => {
-      const camera = camara.current;
-      if (!camera) return null;
-      const entrada = burbujasEje.current.find((b) => b.etiqueta === etiqueta);
-      if (!entrada) return null;
-      const texto = entrada.grupo.children.find(
-        (hijo) => (hijo as THREE.Object3D & { text?: string }).text !== undefined,
-      ) as (THREE.Mesh & { textRenderInfo?: { visibleBounds?: [number, number, number, number] } }) | undefined;
-      if (!texto) return null;
-      camera.updateMatrixWorld();
-      entrada.grupo.updateMatrixWorld(true);
-      const rect = nodo.getBoundingClientRect();
-      if (!texto.geometry) return null;
-      texto.geometry.computeBoundingBox();
-      const caja = texto.geometry.boundingBox;
-      if (!caja) return null;
-      const cajaLocal = {
-        x0: caja.min.x + texto.position.x,
-        x1: caja.max.x + texto.position.x,
-        y0: caja.min.y + texto.position.y,
-        y1: caja.max.y + texto.position.y,
-      };
-      const puntos: Array<{ x: number; y: number }> = [];
-      for (const x of [cajaLocal.x0, cajaLocal.x1]) {
-        for (const y of [cajaLocal.y0, cajaLocal.y1]) {
-          const p = new THREE.Vector3(x, y, texto.position.z).applyMatrix4(texto.matrixWorld).project(camera);
-          puntos.push({
-            x: rect.left + ((p.x + 1) / 2) * rect.width,
-            y: rect.top + ((1 - p.y) / 2) * rect.height,
-          });
-        }
-      }
-      const mundoGlobo = new THREE.Vector3();
-      entrada.grupo.getWorldPosition(mundoGlobo);
-      const centroGlobo = pantallaDePunto([mundoGlobo.x, mundoGlobo.y, mundoGlobo.z]);
-      if (!centroGlobo) return null;
-      const x0 = Math.min(...puntos.map((p) => p.x));
-      const x1 = Math.max(...puntos.map((p) => p.x));
-      const y0 = Math.min(...puntos.map((p) => p.y));
-      const y1 = Math.max(...puntos.map((p) => p.y));
-      return {
-        etiqueta,
-        x0,
-        y0,
-        x1,
-        y1,
-        centro: { x: (x0 + x1) / 2, y: (y0 + y1) / 2 },
-        centroGlobo,
-        desviacion: Math.hypot((x0 + x1) / 2 - centroGlobo.x, (y0 + y1) / 2 - centroGlobo.y),
-      };
-    };
-    // O011b: rectángulos de etiquetas, globos y líneas de eje en pantalla, para
-    // comprobar que nada se encima en el alzado.
-    (nodo as unknown as Record<string, unknown>).__openrvtAlzadoAnotacionesPantalla = () => {
-      const camera = camara.current;
-      if (!camera) return null;
-      camera.updateMatrixWorld();
-      const rect = nodo.getBoundingClientRect();
-      const proyectar = (x: number, y: number, z: number) => {
-        const punto = new THREE.Vector3(x, y, z).project(camera);
-        return {
-          x: rect.left + ((punto.x + 1) / 2) * rect.width,
-          y: rect.top + ((1 - punto.y) / 2) * rect.height,
-        };
-      };
-      const etiquetas = anotacionesAlzado.current.map((anotacion) => {
-        const [x, y, z] = anotacion.centro;
-        const hw = anotacion.ancho / 2;
-        const hh = anotacion.alto / 2;
-        const esquinas = [
-          proyectar(x - anotacion.h[0] * hw, y - anotacion.h[1] * hw, z + hh),
-          proyectar(x + anotacion.h[0] * hw, y + anotacion.h[1] * hw, z + hh),
-          proyectar(x + anotacion.h[0] * hw, y + anotacion.h[1] * hw, z - hh),
-          proyectar(x - anotacion.h[0] * hw, y - anotacion.h[1] * hw, z - hh),
-        ];
-        return {
-          tipo: anotacion.tipo,
-          texto: anotacion.texto,
-          x0: Math.min(...esquinas.map((p) => p.x)),
-          y0: Math.min(...esquinas.map((p) => p.y)),
-          x1: Math.max(...esquinas.map((p) => p.x)),
-          y1: Math.max(...esquinas.map((p) => p.y)),
-        };
-      });
-      const globos = ejesInteraccion.current
-        .filter((asa) => asa.tipo === "globo")
-        .map((asa) => {
-          const centro = new THREE.Vector3(...asa.punto);
-          const radioMundo = mmAMundo(8, vista.escala) / 2;
-          const derecha = new THREE.Vector3()
-            .setFromMatrixColumn(camera.matrixWorld, 0)
-            .normalize()
-            .multiplyScalar(radioMundo);
-          const borde = centro.clone().add(derecha);
-          const pc = centro.clone().project(camera);
-          const pb = borde.clone().project(camera);
-          return {
-            etiqueta: asa.etiqueta,
-            x: rect.left + ((pc.x + 1) / 2) * rect.width,
-            y: rect.top + ((1 - pc.y) / 2) * rect.height,
-            radio: Math.hypot(
-              ((pb.x - pc.x) / 2) * rect.width,
-              ((pc.y - pb.y) / 2) * rect.height,
-            ),
-          };
-        });
-      const lineas = lineasEje.current.map((linea) => ({
-        etiqueta: linea.etiqueta,
-        puntos: linea.puntos.map(([x, y, z]) => proyectar(x, y, z)),
-      }));
-      const lineasNivel = lineasNivelRef.current.map((linea) => ({
-        tipo: linea.tipo,
-        elev: linea.elev,
-        puntos: linea.puntos.map(([x, y, z]) => proyectar(x, y, z)),
-      }));
-      return { etiquetas, globos, lineas, lineasNivel };
-    };
-    // Utilidad de las E2E: acercar o alejar por un factor exacto (0.125 = ×8).
-    (nodo as unknown as Record<string, unknown>).__openrvtZoom = (factor: number) => {
-      zoomEnCentro(factor);
-    };
-    // Punto medio de la línea del eje (para seleccionarlo con un clic).
-    (nodo as unknown as Record<string, unknown>).__openrvtEjeLineaAPantalla = (
-      etiqueta: string,
-    ) => {
-      const camera = camara.current;
-      if (!camera) return null;
-      const linea = lineasEje.current.find((l) => l.etiqueta === etiqueta);
-      if (!linea || linea.puntos.length === 0) return null;
-      const medio = linea.puntos[Math.floor(linea.puntos.length / 2)];
-      camera.updateMatrixWorld();
-      const punto = new THREE.Vector3(...medio).project(camera);
-      const rect = nodo.getBoundingClientRect();
-      return {
-        x: rect.left + ((punto.x + 1) / 2) * rect.width,
-        y: rect.top + ((1 - punto.y) / 2) * rect.height,
-      };
-    };
-    // O012: cuenta las aristas dibujadas dentro de una caja del modelo (E2E de uniones).
-    (nodo as unknown as Record<string, unknown>).__openrvtAristasEnCaja = (
-      minimo: [number, number, number],
-      maximo: [number, number, number],
-    ) => {
-      const grupoActual = grupo.current;
-      if (!grupoActual) return 0;
-      let total = 0;
-      grupoActual.traverse((objeto) => {
-        const lineas = objeto as THREE.LineSegments;
-        if (!lineas.isLineSegments || !lineas.userData.globalid) return;
-        const posiciones = lineas.geometry?.getAttribute("position");
-        if (!posiciones) return;
-        for (let i = 0; i + 1 < posiciones.count; i += 2) {
-          const x = (posiciones.getX(i) + posiciones.getX(i + 1)) / 2;
-          const y = (posiciones.getY(i) + posiciones.getY(i + 1)) / 2;
-          const z = (posiciones.getZ(i) + posiciones.getZ(i + 1)) / 2;
-          const dentro =
-            x >= minimo[0] - 1e-6 && x <= maximo[0] + 1e-6 &&
-            y >= minimo[1] - 1e-6 && y <= maximo[1] + 1e-6 &&
-            z >= minimo[2] - 1e-6 && z <= maximo[2] + 1e-6;
-          if (dentro) total += 1;
-        }
-      });
-      return total;
-    };
-    // O019: cuenta las aristas verticales únicas dibujadas (E2E de esquinas en 3D).
-    // Deduplica por posición: dos muros ingleteados comparten la misma vertical.
-    (nodo as unknown as Record<string, unknown>).__openrvtAristasVerticales = (
-      detalle = false,
-    ) => {
-      const grupoActual = grupo.current;
-      if (!grupoActual) return 0;
-      const vistas = new Set<string>();
-      grupoActual.traverse((objeto) => {
-        const lineas = objeto as THREE.LineSegments;
-        if (!lineas.isLineSegments || !lineas.userData.globalid) return;
-        const posiciones = lineas.geometry?.getAttribute("position");
-        if (!posiciones) return;
-        for (let i = 0; i + 1 < posiciones.count; i += 2) {
-          const x1 = posiciones.getX(i);
-          const y1 = posiciones.getY(i);
-          const z1 = posiciones.getZ(i);
-          const x2 = posiciones.getX(i + 1);
-          const y2 = posiciones.getY(i + 1);
-          const z2 = posiciones.getZ(i + 1);
-          if (Math.abs(x2 - x1) > 1e-4 || Math.abs(y2 - y1) > 1e-4) continue;
-          if (Math.abs(z2 - z1) < 1e-4) continue;
-          vistas.add(
-            [x1, y1, Math.min(z1, z2), Math.max(z1, z2)]
-              .map((valor) => valor.toFixed(4))
-              .join(","),
-          );
-        }
-      });
-      return detalle ? [...vistas] : vistas.size;
-    };
-    // O006a: posición en pantalla de un texto de cota (para el doble clic de las E2E).
-    (nodo as unknown as Record<string, unknown>).__openrvtCotaAPantalla = (
-      texto: string,
-      indice = 0,
-    ) => {
-      const camera = camara.current;
-      if (!camera) return null;
-      const candidatas = cotasInteraccion.current.filter((c) => c.texto === texto);
-      const cota = candidatas[indice];
-      if (!cota) return null;
-      camera.updateMatrixWorld();
-      const punto = new THREE.Vector3(...cota.punto).project(camera);
-      const rect = nodo.getBoundingClientRect();
-      return {
-        x: rect.left + ((punto.x + 1) / 2) * rect.width,
-        y: rect.top + ((1 - punto.y) / 2) * rect.height,
-      };
-    };
-  });
+  const c10 = useGuiasVisor(c9);
 
-  const ejeSeleccionadoDatos = referencias.ejes.find((e) => e.globalid === ejeSeleccionado);
-  const ajusteSeleccionado = ejeSeleccionado ? ajusteActualEje(ejeSeleccionado) : undefined;
-  const codosInicioSel = ajusteSeleccionado?.codosInicio?.length ?? 0;
-  const codosFinSel = ajusteSeleccionado?.codosFin?.length ?? 0;
-  const puedeAnotarEje =
-    !!ejeSeleccionadoDatos &&
-    (vista.tipo === "planta" || vista.tipo === "alzado" || vista.tipo === "corte");
-
-  // O026: guía azul punteada de la referencia y candado de la alineación.
-  // Se proyecta en un efecto: durante el render no se leen refs de cámara.
-  const [guiaAlinear, setGuiaAlinear] = useState<{
-    x1: number;
-    y1: number;
-    x2: number;
-    y2: number;
-    candado: { x: number; y: number } | null;
-    bloqueada: boolean;
-  } | null>(null);
-  useEffect(() => {
-    if (!referenciaAlinear) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- la guía depende de la cámara y de la selección
-      setGuiaAlinear(null);
-      return;
-    }
-    const z = vista.tipo === "planta" ? 0.05 : (vista.alturaPlano ?? 1.2);
-    let a: [number, number, number] | null = null;
-    let b: [number, number, number] | null = null;
-    if (referenciaAlinear.tipo === "eje") {
-      const eje = referencias.ejes.find((e) => e.globalid === referenciaAlinear.globalid);
-      if (eje) {
-        a = [eje.x1, eje.y1, z];
-        b = [eje.x2, eje.y2, z];
-      }
-    } else if (referenciaAlinear.tipo === "elemento") {
-      const malla = mallas.find((m) => m.globalid === referenciaAlinear.globalid);
-      const recta = malla ? rectaDeMalla(malla) : null;
-      if (malla?.eje) {
-        a = [malla.eje[0], malla.eje[1], z];
-        b = [malla.eje[2], malla.eje[3], z];
-      } else if (recta) {
-        a = [recta.x - recta.ux * 1.5, recta.y - recta.uy * 1.5, z];
-        b = [recta.x + recta.ux * 1.5, recta.y + recta.uy * 1.5, z];
-      }
-    }
-    const rectNodo = contenedor.current?.getBoundingClientRect();
-    if (!a || !b || !rectNodo) {
-      setGuiaAlinear(null);
-      return;
-    }
-    const pa = pantallaDePunto(a);
-    const pb = pantallaDePunto(b);
-    if (!pa || !pb) {
-      setGuiaAlinear(null);
-      return;
-    }
-    const candado = alineando
-      ? pantallaDePunto([alineando.punto[0], alineando.punto[1], z])
-      : null;
-    setGuiaAlinear({
-      x1: pa.x - rectNodo.left,
-      y1: pa.y - rectNodo.top,
-      x2: pb.x - rectNodo.left,
-      y2: pb.y - rectNodo.top,
-      candado: candado
-        ? { x: candado.x - rectNodo.left, y: candado.y - rectNodo.top }
-        : null,
-      bloqueada: !!alineando?.bloqueada,
-    });
-  }, [referenciaAlinear, alineando, vista, mallas, referencias.ejes, pantallaDePunto]);
-
-  // O029: alzado con la herramienta Nivel. La elevación objetivo es la tecleada
-  // (si la hay); con ella se dibujan la línea fantasma y las dos cotas temporales.
-  const esAlzadoOCorte = vista.tipo === "alzado" || vista.tipo === "corte";
-  const zNivelHerramienta =
-    herramienta === "nivel" && ratonHerramienta
-      ? (() => {
-          const texto = (opcionesNivel.elevacionTexto || "").trim();
-          if (texto !== "") {
-            const z = elevacionDesdeCota(cotasNivel?.inferior ?? null, texto);
-            if (z !== null) return z;
-          }
-          return ratonHerramienta[1];
-        })()
-      : null;
-  const [lineaFantasmaNivel, setLineaFantasmaNivel] = useState<{
-    y: number;
-    x1: number;
-    x2: number;
-  } | null>(null);
-  const [cotasFantasma, setCotasFantasma] = useState<
-    Array<{ y1: number; y2: number; texto: string }>
-  >([]);
-  useEffect(() => {
-    if (herramienta !== "nivel" || zNivelHerramienta === null || !esAlzadoOCorte) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- la vista fantasma depende de la cámara, que vive en un ref
-      setLineaFantasmaNivel(null);
-      setCotasFantasma([]);
-      return;
-    }
-    const rect = contenedor.current?.getBoundingClientRect();
-    const centro = centroCaja(caja);
-    const enPantalla = (z: number) => pantallaDePunto([centro[0], centro[1], z]);
-    const cursor = enPantalla(zNivelHerramienta);
-    if (!rect || !cursor) {
-      setLineaFantasmaNivel(null);
-      setCotasFantasma([]);
-      return;
-    }
-    setLineaFantasmaNivel({
-      y: cursor.y - rect.top,
-      x1: 8,
-      x2: Math.max(8, rect.width - 8),
-    });
-    const filas: Array<{ y1: number; y2: number; texto: string }> = [];
-    for (const [lado, cota] of [
-      ["inferior", cotasNivel?.inferior],
-      ["superior", cotasNivel?.superior],
-    ] as const) {
-      if (!cota) continue;
-      const yNivel = enPantalla(cota.elevacion);
-      if (!yNivel) continue;
-      const desfase =
-        lado === "inferior"
-          ? zNivelHerramienta - cota.elevacion
-          : cota.elevacion - zNivelHerramienta;
-      filas.push({
-        y1: yNivel.y - rect.top,
-        y2: cursor.y - rect.top,
-        texto: `${cota.nombre} ${lado === "inferior" ? "+" : "−"} ${desfase.toFixed(2)}`,
-      });
-    }
-    setCotasFantasma(filas);
-  }, [
-    herramienta,
-    zNivelHerramienta,
+  const {
+    abrirEditorNotaExistente,
+    ajusteSeleccionado,
+    alHacerClicVisor,
+    codosFinSel,
+    codosInicioSel,
+    confirmarNota,
+    cotasFantasma,
+    ejeSeleccionadoDatos,
     esAlzadoOCorte,
-    cotasNivel,
-    caja,
-    pantallaDePunto,
-  ]);
-
-  // O055: herramienta Nota. El clic abre el editor en el punto 3D; Enter confirma
-  // (crear o editar) y Esc cancela.
-  const abrirEditorNotaNueva = (clientX: number, clientY: number) => {
-    const punto = puntoNotaEn(clientX, clientY);
-    const nodo = contenedor.current;
-    if (!punto || !nodo) return;
-    const rect = nodo.getBoundingClientRect();
-    setNotaEditando({
-      globalid: null,
-      texto: "",
-      posicion: punto,
-      izquierda: Math.max(90, Math.min(rect.width - 90, clientX - rect.left)),
-      arriba: Math.max(8, Math.min(rect.height - 90, clientY - rect.top - 60)),
-    });
-    setTextoNota("");
-  };
-
-  const abrirEditorNotaExistente = (nota: Nota, x: number, y: number) => {
-    setNotaEditando({
-      globalid: nota.globalid,
-      texto: nota.texto,
-      posicion: nota.posicion,
-      izquierda: Math.max(90, Math.min((contenedor.current?.clientWidth ?? 400) - 90, x)),
-      arriba: Math.max(8, Math.min((contenedor.current?.clientHeight ?? 400) - 90, y - 60)),
-    });
-    setTextoNota(nota.texto);
-    seleccionarNota(nota.globalid);
-  };
-
-  const confirmarNota = async () => {
-    const texto = textoNota.trim();
-    const edicion = notaEditando;
-    if (!edicion || !texto) {
-      setNotaEditando(null);
-      return;
-    }
-    setNotaEditando(null);
-    if (edicion.globalid) {
-      await editarNota(edicion.globalid, texto);
-    } else {
-      const gid = await crearNota(texto, edicion.posicion);
-      if (gid) seleccionarNota(gid);
-    }
-  };
-
-  /** Desplazamiento en pantalla → nueva posición de mundo de la nota. */
-  const posicionNotaArrastrada = (
-    posicion: Punto3,
-    dx: number,
-    dy: number,
-  ): Punto3 => {
-    const camera = camara.current;
-    if (!camera) return posicion;
-    const derecha = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
-    const arriba = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
-    const wpp = Math.max(mundoPorPxRef.current, 1e-6);
-    return [
-      posicion[0] + derecha.x * dx * wpp + arriba.x * dy * wpp,
-      posicion[1] + derecha.y * dx * wpp + arriba.y * dy * wpp,
-      posicion[2] + derecha.z * dx * wpp + arriba.z * dy * wpp,
-    ];
-  };
-
-  const alHacerClicVisor = (evento: React.MouseEvent<HTMLDivElement>) => {
-    if (herramienta !== "nota") return;
-    const objetivo = evento.target as HTMLElement;
-    if (objetivo.closest("button, input, select, textarea, [role='menu']")) return;
-    abrirEditorNotaNueva(evento.clientX, evento.clientY);
-  };
-
+    guiaAlinear,
+    lineaFantasmaNivel,
+    posicionNotaArrastrada,
+    puedeAnotarEje,
+    zNivelHerramienta,
+  } = c10;
   return (
     <div
       ref={contenedor}
@@ -8082,13 +5311,13 @@ export function Visor3D({
           data-testid="eje-acciones"
           className="absolute left-2 top-11 z-20 flex max-w-[min(640px,80vw)] flex-wrap items-center gap-1 rounded border bg-background/95 p-1.5 text-[11px] shadow-md"
         >
-          <span className="px-1 font-semibold">Eje {ejeSeleccionadoDatos.etiqueta}</span>
+          <span className="px-1 font-semibold">Eje {ejeSeleccionadoDatos!.etiqueta}</span>
           <button
             type="button"
             data-testid="eje-candado-inicio"
             aria-pressed={candados.inicio}
             title="Candado del extremo de inicio: cerrado mueve los ejes alineados; abierto mueve solo este eje"
-            onClick={() => alternarCandadoVista(ejeSeleccionadoDatos.globalid, "inicio")}
+            onClick={() => alternarCandadoVista(ejeSeleccionadoDatos!.globalid, "inicio")}
             className={`rounded border px-1.5 py-0.5 ${
               candados.inicio ? "bg-amber-200 text-amber-950" : "hover:bg-muted"
             }`}
@@ -8100,7 +5329,7 @@ export function Visor3D({
             data-testid="eje-candado-fin"
             aria-pressed={candados.fin}
             title="Candado del extremo final: cerrado mueve los ejes alineados; abierto mueve solo este eje"
-            onClick={() => alternarCandadoVista(ejeSeleccionadoDatos.globalid, "fin")}
+            onClick={() => alternarCandadoVista(ejeSeleccionadoDatos!.globalid, "fin")}
             className={`rounded border px-1.5 py-0.5 ${
               candados.fin ? "bg-amber-200 text-amber-950" : "hover:bg-muted"
             }`}
@@ -8113,7 +5342,7 @@ export function Visor3D({
               data-testid="eje-globo-inicio"
               checked={globoVisibleEje(ajusteSeleccionado, "inicio")}
               onChange={(e) =>
-                fijarGlobos(ejeSeleccionadoDatos.globalid, { globoInicio: e.target.checked })
+                fijarGlobos(ejeSeleccionadoDatos!.globalid, { globoInicio: e.target.checked })
               }
             />
             Globo inicio
@@ -8124,7 +5353,7 @@ export function Visor3D({
               data-testid="eje-globo-fin"
               checked={globoVisibleEje(ajusteSeleccionado, "fin")}
               onChange={(e) =>
-                fijarGlobos(ejeSeleccionadoDatos.globalid, { globoFin: e.target.checked })
+                fijarGlobos(ejeSeleccionadoDatos!.globalid, { globoFin: e.target.checked })
               }
             />
             Globo fin
@@ -8133,7 +5362,7 @@ export function Visor3D({
             type="button"
             data-testid="eje-codo-inicio-agregar"
             disabled={codosInicioSel >= MAXIMO_CODOS}
-            onClick={() => agregarCodoVista(ejeSeleccionadoDatos.globalid, "inicio")}
+            onClick={() => agregarCodoVista(ejeSeleccionadoDatos!.globalid, "inicio")}
             className="rounded border px-1.5 py-0.5 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
           >
             Agregar codo (inicio) {codosInicioSel}/{MAXIMO_CODOS}
@@ -8142,7 +5371,7 @@ export function Visor3D({
             type="button"
             data-testid="eje-codo-fin-agregar"
             disabled={codosFinSel >= MAXIMO_CODOS}
-            onClick={() => agregarCodoVista(ejeSeleccionadoDatos.globalid, "fin")}
+            onClick={() => agregarCodoVista(ejeSeleccionadoDatos!.globalid, "fin")}
             className="rounded border px-1.5 py-0.5 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
           >
             Agregar codo (fin) {codosFinSel}/{MAXIMO_CODOS}

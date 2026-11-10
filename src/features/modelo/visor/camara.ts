@@ -45,8 +45,7 @@ export interface CamaraGuardada {
 // entre módulos (al volver de «Niveles» el visor se vuelve a montar). Se vacía al
 // cambiar de modelo para no heredar el encuadre de otro archivo.
 export const camarasPorVista = new Map<string, CamaraGuardada>();
-export let claveCamaras = "";
-const ARRIBA = new THREE.Vector3(0, 0, 1);
+export const ARRIBA = new THREE.Vector3(0, 0, 1);
 
 /** Dirección y arriba con los que se encuadra una vista (sin tocar el modelo). */
 export function direccionDeVista(vista: Vista): {
