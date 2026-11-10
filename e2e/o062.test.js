@@ -113,8 +113,9 @@ async function fijarCheck(ses, testid, valor) {
   await esperar(120);
 }
 
-async function soloMuros(ses) {
+async function todasCategorias(ses) {
   for (const id of [
+    "muros",
     "losas",
     "columnas",
     "vigas",
@@ -124,9 +125,14 @@ async function soloMuros(ses) {
     "escaleras",
     "otros",
   ]) {
-    await fijarCheck(ses, `categoria-${id}`, false);
+    await fijarCheck(ses, `categoria-${id}`, true);
   }
-  await fijarCheck(ses, "categoria-muros", true);
+}
+
+async function conAnotaciones(ses) {
+  for (const id of ["ejes3d", "niveles3d", "cotas3d", "notas3d"]) {
+    await fijarCheck(ses, `vista-${id}`, true);
+  }
 }
 
 async function sinAnotaciones(ses) {
@@ -173,22 +179,37 @@ test("O062: caras del muro continuas en las franjas de cerramiento y losa", asyn
       .elementos;
     const muros = elementos.filter((e) => e.clase === "IfcWall");
     assert.equal(muros.length, 4, `muros: ${muros.length}`);
-    assert.ok(
-      elementos.some((e) => e.clase === "IfcSlab"),
-      "no se teselaron las losas",
+    assert.equal(
+      elementos.filter((e) => e.clase === "IfcSlab").length,
+      2,
+      "losas del dueño",
+    );
+    assert.equal(
+      elementos.filter((e) => e.clase === "IfcBeam").length,
+      4,
+      "cerramientos del dueño",
+    );
+    assert.equal(
+      elementos.filter((e) => e.clase === "IfcColumn").length,
+      4,
+      "castillos del dueño",
     );
 
     await activar(ses, "panel-pestana-vistas");
     await elegirVista(ses, "3D Isométrica");
-    // Iso con «Ajustar»: la vista completa, sin herencia de encuadres previos.
+    // Iso con «Ajustar» y todas las categorías, como las ve el dueño: niveles y
+    // ejes encendidos, que es donde se ven las cuñas y líneas enrasadas.
+    await todasCategorias(ses);
+    await conAnotaciones(ses);
     await activar(ses, "visor-zoom-ajustar");
     await esperar(900);
     await captura(ses, "01-3d.png");
 
-    // Solo muros y sin anotaciones: cualquier línea de las franjas es del muro.
-    await soloMuros(ses);
+    // Todas las categorías (muros, losas y estructura) sin anotaciones: cualquier
+    // línea o cuña sobre la cara del muro viene de los elementos enrasados.
+    await todasCategorias(ses);
     await sinAnotaciones(ses);
-    await captura(ses, "02-3d-solo-muros.png");
+    await captura(ses, "02-3d-todas-sin-anotaciones.png");
 
     // Acercamiento 3D a la franja de la azotea en la cara sur (y = −0.10).
     await zoomEn(ses, 1.25, -0.10, 2.75, 0.6);
