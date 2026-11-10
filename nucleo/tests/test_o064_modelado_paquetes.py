@@ -91,9 +91,11 @@ def test_conserva_las_operaciones_publicas_de_cada_tema():
 def test_cada_import_from_modelado_de_los_otros_modulos_resuelve():
     paquete = CARPETA.parent
     def es_modelado(nodo):
-        return (nodo.level == 1 and nodo.module == "modelado") or nodo.module == "openrvt_nucleo.modelado"
+        # O065: interacciones/ es paquete; sus módulos importan con ``from ..modelado``.
+        return (nodo.level in (1, 2) and nodo.module == "modelado") or nodo.module == "openrvt_nucleo.modelado"
     revisados = 0
-    for archivo in sorted(paquete.glob("*.py")):
+    archivos = sorted(paquete.glob("*.py")) + sorted((paquete / "interacciones").glob("*.py"))
+    for archivo in archivos:
         arbol = ast.parse(archivo.read_text(encoding="utf-8"))
         for nodo in ast.walk(arbol):
             if isinstance(nodo, ast.ImportFrom) and es_modelado(nodo):
