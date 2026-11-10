@@ -1,14 +1,10 @@
 // OPEN-RVT: visor three.js del módulo Modelo. Dibuja mallas en coordenadas de mundo,
 // cámaras ortográficas para plantas/alzados/cortes y órbita libre en 3D, con recorte y
 // relleno de sección por stencil (técnica del ejemplo webgl_clipping_stencil).
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { Line2 } from "three/examples/jsm/lines/Line2.js";
-import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
-import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
 import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
-import { Text, configureTextBuilder } from "troika-three-text";
 import type { Abertura, AjusteEjeVista, Caja, ElementoMalla, Nivel, Vista } from "./tipos";
 import {
   categoriaVisible,
@@ -106,7 +102,6 @@ import {
   parsearElevacion,
   posicionTextoEntreMarcas,
 } from "./cotas";
-import { altoTextoBurbuja, desplazamientoCentrado } from "./centrado";
 import { ControlesZoom } from "./ControlesZoom";
 import {
   accionArrastre,
@@ -116,7 +111,6 @@ import {
   type AccionArrastre,
 } from "./orbita";
 import { DESFASE_NOMBRE_CABEZA, elevacionDesdeCota, normalizarAjusteNivel } from "./niveles";
-import { baseTextoAnotacion } from "./anotacion";
 import {
   calcularCotas3d,
   calcularEjes3d,
@@ -137,12 +131,10 @@ import {
   mmAMundo,
   mmAMundoConMinimoPx,
   mmAPx,
-  PATRONES_LINEA_DASH,
   rellenoDeElemento,
   type Estilos,
   type MaterialNombre,
   type PatronLinea,
-  type PatronRelleno,
   type RelacionCorte,
 } from "./estilos";
 import {
@@ -158,14 +150,11 @@ import {
 } from "./seccion";
 import {
   ajustarAspecto,
-  ARRIBA_PLANTA,
   cajaConEjes,
   camaraOrtografica,
-  camaraPerspectiva,
   centroCaja,
   diagonalCaja,
   direccionAlzado,
-  vectorIso,
 } from "./vistas";
 import {
   aristasInternasUniones,
@@ -202,42 +191,45 @@ import {
   type LadoEje,
   type TipoAsaArrastre,
 } from "./ejesVista";
+import {
+  bloqueoDeInferencia,
+  colorDeGuia,
+  etiquetaInferencia,
+  formaDeMarcador,
+  muroBajoCerramiento,
+  redondearVec,
+} from "./visor/utilidades";
+import {
+  camarasPorVista,
+  centroCorte,
+  colorDeFondo,
+  crearCamaraDeVista,
+  crearNavegacion,
+  normalCorte,
+  planosVista,
+  type CamaraGuardada,
+  type Navegacion,
+} from "./visor/camara";
+import {
+  crearMaterialLinea,
+  esquinasRectangulo,
+  geometriaProyeccionLosa,
+  lineaCerrada,
+  materialProyeccionTenue,
+  materialRelleno,
+  rayadoRectangulo,
+  type EntradaGrosor,
+} from "./visor/lineas";
+import {
+  anchoTextoAprox,
+  burbujaEje,
+  crearAsaPunto,
+  etiquetaCota,
+  orientarAnotacion,
+  textoCota,
+} from "./visor/anotaciones";
 
 /** Distancia de un punto a un segmento (para saber si un cerramiento tiene muro debajo). */
-function distanciaPuntoSegmento(
-  px: number,
-  py: number,
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-): number {
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const largo2 = dx * dx + dy * dy;
-  if (largo2 <= 1e-12) return Math.hypot(px - x1, py - y1);
-  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / largo2));
-  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
-}
-
-/** O041: el cerramiento se dibuja con contorno completo si no hay muro debajo. */
-function muroBajoCerramiento(
-  eje: [number, number, number, number],
-  mallas: readonly ElementoMalla[],
-): boolean {
-  const [x1, y1, x2, y2] = eje;
-  const mx = (x1 + x2) / 2;
-  const my = (y1 + y2) / 2;
-  return mallas.some((malla) => {
-    if (malla.clase !== "IfcWall" || !malla.eje) return false;
-    const [wx1, wy1, wx2, wy2] = malla.eje;
-    return (
-      distanciaPuntoSegmento(x1, y1, wx1, wy1, wx2, wy2) <= 0.06 &&
-      distanciaPuntoSegmento(x2, y2, wx1, wy1, wx2, wy2) <= 0.06 &&
-      distanciaPuntoSegmento(mx, my, wx1, wy1, wx2, wy2) <= 0.06
-    );
-  });
-}
 
 interface Props {
   vista: Vista;
@@ -263,94 +255,6 @@ interface Props {
   elementosOcultos?: string[];
   /** O038: GlobalIds de elementos bloqueados (visibles pero no seleccionables). */
   elementosBloqueados?: string[];
-}
-
-interface Navegacion {
-  tipo: "orto" | "perspectiva";
-  objetivo: THREE.Vector3;
-  direccion: THREE.Vector3;
-  distancia: number;
-  arriba: THREE.Vector3;
-  inicial: {
-    objetivo: THREE.Vector3;
-    direccion: THREE.Vector3;
-    distancia: number;
-  };
-}
-
-/**
- * O010: estado de cámara que se conserva por vista. Guarda lo que el usuario dejó
- * (paneo, zoom, órbita) para restaurarlo al volver a la vista; los cambios del modelo
- * solo actualizan el recorte de profundidad.
- */
-interface CamaraGuardada {
-  tipo: "orto" | "perspectiva";
-  objetivo: [number, number, number];
-  direccion: [number, number, number];
-  arriba: [number, number, number];
-  distancia: number;
-  izquierda?: number;
-  derecha?: number;
-  arribaPlano?: number;
-  abajo?: number;
-  fov?: number;
-}
-
-// O031: el encuadre de cada vista se guarda fuera del componente para que viaje
-// entre módulos (al volver de «Niveles» el visor se vuelve a montar). Se vacía al
-// cambiar de modelo para no heredar el encuadre de otro archivo.
-const camarasPorVista = new Map<string, CamaraGuardada>();
-let claveCamaras = "";
-
-/** Dirección y arriba con los que se encuadra una vista (sin tocar el modelo). */
-function direccionDeVista(vista: Vista): {
-  direccion: [number, number, number];
-  arriba: [number, number, number];
-} {
-  if (vista.tipo === "planta") {
-    return { direccion: [0, 0, 1], arriba: [...ARRIBA_PLANTA] };
-  }
-  if (vista.tipo === "alzado") {
-    return { direccion: direccionAlzado(vista.orientacion ?? "sur"), arriba: [0, 0, 1] };
-  }
-  if (vista.tipo === "corte") {
-    const [nx, ny] = normalCorte(vista);
-    return { direccion: [-nx, -ny, 0], arriba: [0, 0, 1] };
-  }
-  return { direccion: vectorIso(), arriba: [0, 0, 1] };
-}
-
-/** Crea la cámara de una vista con la navegación indicada (o la inicial de la caja). */
-function crearCamaraDeVista(
-  vista: Vista,
-  caja: Caja,
-  aspecto: number,
-  nav: Navegacion,
-): THREE.Camera {
-  if (nav.tipo === "perspectiva") {
-    const perspectiva = camaraPerspectiva(caja, { aspecto });
-    const camera = new THREE.PerspectiveCamera(
-      perspectiva.fov,
-      aspecto,
-      perspectiva.cerca,
-      perspectiva.lejos,
-    );
-    return camera;
-  }
-  const { direccion, arriba } = direccionDeVista(vista);
-  const inicial = camaraOrtografica(caja, direccion, {
-    arriba,
-    centro: [nav.objetivo.x, nav.objetivo.y, nav.objetivo.z],
-  });
-  const limites = ajustarAspecto(inicial, aspecto);
-  return new THREE.OrthographicCamera(
-    limites.izquierda,
-    limites.derecha,
-    limites.arriba,
-    limites.abajo,
-    inicial.cerca,
-    inicial.lejos,
-  );
 }
 
 /** O006a: texto de cota que se puede editar con doble clic. */
@@ -388,746 +292,7 @@ interface CotaEnEdicion {
 }
 
 const ARRIBA = new THREE.Vector3(0, 0, 1);
-
-function colorDeFondo(oscuro: boolean): THREE.Color {
-  if (typeof document === "undefined") return new THREE.Color(oscuro ? 0x141416 : 0xffffff);
-  const valor = getComputedStyle(document.documentElement)
-    .getPropertyValue("--background")
-    .trim();
-  const partes = valor.replace(/%/g, "").split(/\s+/).map(Number);
-  if (partes.length >= 3 && partes.every((n) => Number.isFinite(n))) {
-    return new THREE.Color().setHSL(partes[0] / 360, partes[1] / 100, partes[2] / 100);
-  }
-  return new THREE.Color(oscuro ? 0x141416 : 0xffffff);
-}
-
-function normalCorte(vista: Vista): [number, number] {
-  if (vista.direccion) return vista.direccion;
-  if (vista.puntoA && vista.puntoB) {
-    const dx = vista.puntoB[0] - vista.puntoA[0];
-    const dy = vista.puntoB[1] - vista.puntoA[1];
-    const largo = Math.hypot(dx, dy) || 1;
-    return [-dy / largo, dx / largo];
-  }
-  return [0, 1];
-}
-
-function centroCorte(vista: Vista, caja: Caja): THREE.Vector3 {
-  const centro = centroCaja(caja);
-  if (vista.puntoA && vista.puntoB) {
-    return new THREE.Vector3(
-      (vista.puntoA[0] + vista.puntoB[0]) / 2,
-      (vista.puntoA[1] + vista.puntoB[1]) / 2,
-      vista.alturaPlano ?? centro[2],
-    );
-  }
-  return new THREE.Vector3(centro[0], centro[1], vista.alturaPlano ?? centro[2]);
-}
-
-function crearNavegacion(vista: Vista, caja: Caja, aspecto: number): Navegacion {
-  const centro = centroCaja(caja);
-  if (vista.tipo === "perspectiva") {
-    const camara = camaraPerspectiva(caja, { aspecto, fov: 50 });
-    const objetivo = new THREE.Vector3(...camara.objetivo);
-    const direccion = new THREE.Vector3(...camara.posicion).sub(objetivo).normalize();
-    return {
-      tipo: "perspectiva",
-      objetivo,
-      direccion,
-      distancia: camara.distancia,
-      arriba: ARRIBA.clone(),
-      inicial: {
-        objetivo: objetivo.clone(),
-        direccion: direccion.clone(),
-        distancia: camara.distancia,
-      },
-    };
-  }
-  let direccion: [number, number, number];
-  let arriba: [number, number, number] = [0, 0, 1];
-  let centroVista = new THREE.Vector3(centro[0], centro[1], centro[2]);
-  if (vista.tipo === "planta") {
-    direccion = [0, 0, 1];
-    arriba = [...ARRIBA_PLANTA];
-    centroVista = new THREE.Vector3(centro[0], centro[1], vista.alturaPlano ?? centro[2]);
-  } else if (vista.tipo === "alzado") {
-    direccion = direccionAlzado(vista.orientacion ?? "sur");
-  } else if (vista.tipo === "corte") {
-    const [nx, ny] = normalCorte(vista);
-    direccion = [-nx, -ny, 0];
-    centroVista = centroCorte(vista, caja);
-  } else {
-    direccion = vectorIso();
-  }
-  const camara = camaraOrtografica(caja, direccion, {
-    arriba,
-    centro: [centroVista.x, centroVista.y, centroVista.z],
-  });
-  const objetivo = new THREE.Vector3(...camara.objetivo);
-  const dir = new THREE.Vector3(...direccion).normalize();
-  return {
-    tipo: "orto",
-    objetivo,
-    direccion: dir,
-    distancia: new THREE.Vector3(...camara.posicion).distanceTo(objetivo),
-    arriba: new THREE.Vector3(...camara.arriba),
-    inicial: {
-      objetivo: objetivo.clone(),
-      direccion: dir.clone(),
-      distancia: new THREE.Vector3(...camara.posicion).distanceTo(objetivo),
-    },
-  };
-}
-
-interface EntradaGrosor {
-  material: LineMaterial;
-  mm: number;
-  escala: Vista["escala"];
-}
-
-interface OpcionesLinea {
-  mm: number;
-  escala: Vista["escala"];
-  color: string;
-  patron?: PatronLinea;
-  profundidad?: boolean;
-  registro?: EntradaGrosor[];
-  mundoPorPx: number;
-}
-
-/** Crea un LineMaterial con grosor en mm de papel, patrón y registro para el zoom. */
-function crearMaterialLinea(opciones: OpcionesLinea): LineMaterial {
-  const grosor = Math.max(mmAPx(opciones.mm, opciones.escala, opciones.mundoPorPx), 0.8);
-  const material = new LineMaterial({
-    color: new THREE.Color(opciones.color),
-    linewidth: grosor,
-    worldUnits: false,
-    depthTest: opciones.profundidad !== false,
-    transparent: true,
-  });
-  const patron = opciones.patron ?? "continua";
-  if (patron !== "continua") {
-    const dash = PATRONES_LINEA_DASH[patron];
-    material.dashed = true;
-    material.dashSize = dash.dash;
-    material.gapSize = dash.gap;
-  }
-  const resolucion = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
-  material.resolution.set(window.innerWidth * resolucion, window.innerHeight * resolucion);
-  opciones.registro?.push({ material, mm: opciones.mm, escala: opciones.escala });
-  return material;
-}
-
-/** Contorno cerrado con Line2 (grosor real en WebGL). */
-function lineaCerrada(
-  puntos: Array<[number, number, number]>,
-  material: LineMaterial,
-  orden: number,
-  grupo: THREE.Group,
-): Line2 {
-  const geometria = new LineGeometry();
-  geometria.setPositions(puntos.flat());
-  const linea = new Line2(geometria, material);
-  linea.computeLineDistances();
-  linea.renderOrder = orden;
-  grupo.add(linea);
-  return linea;
-}
-
-/** O007b: esquinas de un rectángulo en planta, girado alrededor de su centro. */
-function esquinasRectangulo(
-  cx: number,
-  cy: number,
-  angulo: number,
-  ancho: number,
-  fondo: number,
-): Array<[number, number]> {
-  const coseno = Math.cos(angulo);
-  const seno = Math.sin(angulo);
-  const hx = ancho / 2;
-  const hy = fondo / 2;
-  return [
-    [-hx, -hy],
-    [hx, -hy],
-    [hx, hy],
-    [-hx, hy],
-  ].map(([x, y]) => [cx + x * coseno - y * seno, cy + x * seno + y * coseno]);
-}
-
-/** Rayado diagonal (45°) de una sección rectangular, en coordenadas locales. */
-function rayadoRectangulo(
-  ancho: number,
-  fondo: number,
-  paso = 0.08,
-): Array<[[number, number], [number, number]]> {
-  const w = ancho / 2;
-  const h = fondo / 2;
-  const lineas: Array<[[number, number], [number, number]]> = [];
-  for (let d = -w - h; d <= w + h; d += paso) {
-    const puntos: Array<[number, number]> = [];
-    const agregar = (x: number, y: number) => {
-      if (Math.abs(x) <= w + 1e-9 && Math.abs(y) <= h + 1e-9) {
-        if (!puntos.some(([px, py]) => Math.hypot(px - x, py - y) < 1e-9)) {
-          puntos.push([x, y]);
-        }
-      }
-    };
-    agregar(-w, -w - d);
-    agregar(w, w - d);
-    agregar(-h + d, -h);
-    agregar(h + d, h);
-    if (puntos.length >= 2) lineas.push([puntos[0], puntos[1]]);
-  }
-  return lineas;
-}
-
-// Las texturas se reutilizan entre elementos y vistas.
-const CACHE_TEXTURAS = new Map<string, THREE.Texture>();
-
-// O011: la anotación se dibuja con vectores (anillo y texto SDF), no con sprites de
-// mapa de bits. Así el globo y los números siguen nítidos con cualquier zoom.
-// El tiposet se hace en el hilo principal: el WebView de Tauri no permite workers
-// creados desde un blob con la CSP de la aplicación.
-configureTextBuilder({ useWorker: false });
-const FUENTE_ANOTACION = "/fonts/DejaVuSans-Bold.ttf";
-
-function orientarAnotacion(grupo: THREE.Object3D, haciaCamara: [number, number, number]): void {
-  // O014b: la base pura garantiza que +X del texto sea la derecha de la pantalla
-  // (y +Y su arriba), sin espejos en cortes con cualquier dirección.
-  const base = baseTextoAnotacion(haciaCamara);
-  const matriz = new THREE.Matrix4().makeBasis(
-    new THREE.Vector3(...base.derecha),
-    new THREE.Vector3(...base.arriba),
-    new THREE.Vector3(...base.normal),
-  );
-  grupo.quaternion.setFromRotationMatrix(matriz);
-}
-
-function crearTextoAnotacion(
-  texto: string,
-  color: string,
-  fondo: string,
-  altoMundo: number,
-  alineacion: "centro" | "izquierda" = "centro",
-): Text {
-  const texto3d = new Text();
-  texto3d.text = texto;
-  texto3d.font = FUENTE_ANOTACION;
-  texto3d.fontSize = altoMundo;
-  texto3d.color = color;
-  texto3d.anchorX = alineacion === "izquierda" ? "left" : "center";
-  texto3d.anchorY = "middle";
-  const materialTexto = texto3d.material as THREE.Material;
-  materialTexto.depthTest = false;
-  materialTexto.depthWrite = false;
-  materialTexto.transparent = true;
-  // Halo del color del fondo para que se lea sobre una línea, sin rasterizar.
-  texto3d.outlineWidth = altoMundo * 0.08;
-  texto3d.outlineColor = fondo;
-  texto3d.frustumCulled = false;
-  texto3d.renderOrder = 22;
-  // O014a: centrar el glifo visible (no la caja del renglón) en el origen del grupo.
-  // `sync` es asíncrono, por eso el ajuste se aplica en su callback.
-  texto3d.sync(() => {
-    const info = texto3d as unknown as {
-      textRenderInfo?: { visibleBounds?: [number, number, number, number] };
-    };
-    const limites = info.textRenderInfo?.visibleBounds;
-    // O021: centrar con la caja real de los glifos ya triangulados. La geometría
-    // puede no estar lista dentro de `sync`; en ese caso se reintenta en los dos
-    // cuadros siguientes hasta que exista.
-    const centrar = (): boolean => {
-      const geometria = texto3d.geometry;
-      if (!geometria) return false;
-      geometria.computeBoundingBox();
-      const caja = geometria.boundingBox;
-      if (!caja || caja.max.x - caja.min.x < 1e-9 || caja.max.y - caja.min.y < 1e-9) {
-        return false;
-      }
-      if (alineacion === "izquierda") {
-        texto3d.position.set(-caja.min.x, -(caja.min.y + caja.max.y) / 2, 0);
-      } else {
-        texto3d.position.set(
-          -(caja.min.x + caja.max.x) / 2,
-          -(caja.min.y + caja.max.y) / 2,
-          0,
-        );
-      }
-      return true;
-    };
-    if (centrar()) return;
-    // Mientras la geometría se construye, se usa la caja del renglón como respaldo.
-    if (limites) {
-      if (alineacion === "izquierda") {
-        texto3d.position.set(-limites[0], -(limites[1] + limites[3]) / 2, 0);
-      } else {
-        const [dx, dy] = desplazamientoCentrado(limites);
-        texto3d.position.set(dx, dy, 0);
-      }
-    }
-    if (typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(() => {
-        if (!centrar()) requestAnimationFrame(centrar);
-      });
-    }
-  });
-  return texto3d;
-}
-
-/** O011: ancho aproximado del texto para colocarlo entre marcas (sin medir píxeles). */
-function anchoTextoAprox(texto: string, altoMundo: number): number {
-  return Math.max(0.1, texto.length * altoMundo * 0.62);
-}
-
-/**
- * O011: globo de eje vectorial: relleno circular, anillo de 64 segmentos y texto SDF.
- * Se construye con diámetro 1 para que el llamador lo escale a 8 mm de papel.
- */
-function burbujaEje(
-  texto: string,
-  color: string,
-  fondo: string,
-  normal: [number, number, number] = [0, 0, 1],
-): THREE.Group | null {
-  if (typeof document === "undefined") return null;
-  const grupo = new THREE.Group();
-  const relleno = new THREE.Mesh(
-    new THREE.CircleGeometry(0.43, 64),
-    new THREE.MeshBasicMaterial({
-      color: new THREE.Color(fondo),
-      transparent: true,
-      depthTest: false,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    }),
-  );
-  relleno.renderOrder = 20;
-  grupo.add(relleno);
-  const anillo = new THREE.Mesh(
-    new THREE.RingGeometry(0.43, 0.5, 64),
-    new THREE.MeshBasicMaterial({
-      color: new THREE.Color(color),
-      transparent: true,
-      depthTest: false,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    }),
-  );
-  anillo.renderOrder = 21;
-  grupo.add(anillo);
-  // O014a: el alto de fuente se achica con la cantidad de caracteres para que el
-  // texto quepa en el 80 % del diámetro interior del globo («A.1» se salía).
-  const texto3d = crearTextoAnotacion(texto, color, fondo, altoTextoBurbuja(texto));
-  texto3d.position.z = 0.01;
-  grupo.add(texto3d);
-  orientarAnotacion(grupo, normal);
-  return grupo;
-}
-
-/** O005c: cota temporal de la herramienta (p. ej. «4.50 m»). */
-function etiquetaCota(
-  texto: string,
-  color: string,
-  fondo: string,
-  altoMundo: number,
-  normal: [number, number, number] = [0, 0, 1],
-): THREE.Group | null {
-  if (typeof document === "undefined") return null;
-  const grupo = new THREE.Group();
-  const texto3d = crearTextoAnotacion(texto, color, fondo, altoMundo);
-  grupo.add(texto3d);
-  orientarAnotacion(grupo, normal);
-  return grupo;
-}
-
-/**
- * O006a: texto de cota sin recuadro, con un halo del color del fondo para que se lea
- * sobre la línea. La altura se da en unidades de mundo (mm de papel ya convertidos).
- */
-function textoCota(
-  texto: string,
-  color: string,
-  fondo: string,
-  altoMundo: number,
-  normal: [number, number, number] = [0, 0, 1],
-  alineacion: "centro" | "izquierda" = "centro",
-): THREE.Group | null {
-  if (typeof document === "undefined") return null;
-  const grupo = new THREE.Group();
-  grupo.add(crearTextoAnotacion(texto, color, fondo, altoMundo, alineacion));
-  orientarAnotacion(grupo, normal);
-  return grupo;
-}
-
-// O027: asas de eje/nivel de tamaño constante en pantalla (3 px de umbral, 12 px de
-// diámetro). Se dibujan con `THREE.Points`, cuyo tamaño va en píxeles cuando
-// `sizeAttenuation` es falso.
-let TEXTURA_ASA: THREE.CanvasTexture | null = null;
-function texturaAsa(): THREE.CanvasTexture | null {
-  if (TEXTURA_ASA) return TEXTURA_ASA;
-  if (typeof document === "undefined") return null;
-  const canvas = document.createElement("canvas");
-  canvas.width = 64;
-  canvas.height = 64;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  ctx.clearRect(0, 0, 64, 64);
-  ctx.beginPath();
-  ctx.arc(32, 32, 28, 0, Math.PI * 2);
-  ctx.fillStyle = "#ffffff";
-  ctx.fill();
-  ctx.lineWidth = 8;
-  ctx.strokeStyle = "#1f2328";
-  ctx.stroke();
-  TEXTURA_ASA = new THREE.CanvasTexture(canvas);
-  TEXTURA_ASA.needsUpdate = true;
-  return TEXTURA_ASA;
-}
-
-function crearAsaPunto(color: string): THREE.Points {
-  const geometria = new THREE.BufferGeometry();
-  geometria.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0], 3));
-  const material = new THREE.PointsMaterial({
-    size: 12,
-    sizeAttenuation: false,
-    map: texturaAsa() ?? undefined,
-    color: new THREE.Color(color),
-    transparent: true,
-    alphaTest: 0.15,
-    depthTest: false,
-    depthWrite: false,
-  });
-  const punto = new THREE.Points(geometria, material);
-  punto.renderOrder = 30;
-  punto.frustumCulled = false;
-  return punto;
-}
-
-/** Genera la textura de un patrón de relleno (un período de escala en mm de papel). */
-function texturaPatron(
-  patron: PatronRelleno,
-  escalaMm: number,
-  color: string,
-): THREE.CanvasTexture | null {
-  if (patron === "tierra" || patron === "vidrio") return null;
-  const clave = `${patron}-${escalaMm}-${color}`;
-  const existente = CACHE_TEXTURAS.get(clave);
-  if (existente) return existente as THREE.CanvasTexture;
-  if (typeof document === "undefined") return null;
-  const canvas = document.createElement("canvas");
-  canvas.width = 64;
-  canvas.height = 64;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  ctx.clearRect(0, 0, 64, 64);
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = 1.4;
-  const linea = (x1: number, y1: number, x2: number, y2: number) => {
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-  };
-  switch (patron) {
-    case "diagonal":
-      for (const d of [-64, 0, 64]) linea(d, 64, d + 64, 0);
-      break;
-    case "diagonal-doble":
-      for (const d of [-64, 0, 64]) {
-        linea(d, 64, d + 64, 0);
-        linea(d, 0, d + 64, 64);
-      }
-      break;
-    case "concreto":
-      for (const [x, y] of [[8, 12], [26, 40], [46, 10], [58, 34], [18, 58], [52, 58]]) {
-        ctx.beginPath();
-        ctx.arc(x, y, 1.6, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      for (const [x, y] of [[14, 30], [38, 22], [30, 52]]) {
-        ctx.beginPath();
-        ctx.moveTo(x, y - 3);
-        ctx.lineTo(x + 3, y + 2);
-        ctx.lineTo(x - 3, y + 2);
-        ctx.closePath();
-        ctx.fill();
-      }
-      break;
-    case "ondas":
-      for (let fila = 0; fila < 2; fila += 1) {
-        ctx.beginPath();
-        for (let x = 0; x <= 64; x += 2) {
-          const y = 16 + fila * 32 + Math.sin((x / 64) * Math.PI * 4) * 5;
-          if (x === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-      }
-      break;
-    case "madera":
-      for (let x = 8; x < 64; x += 12) {
-        ctx.beginPath();
-        for (let y = 0; y <= 64; y += 4) {
-          const xx = x + Math.sin((y / 64) * Math.PI * 3 + x) * 2.5;
-          if (y === 0) ctx.moveTo(xx, y);
-          else ctx.lineTo(xx, y);
-        }
-        ctx.stroke();
-      }
-      break;
-    default:
-      return null;
-  }
-  const textura = new THREE.CanvasTexture(canvas);
-  textura.wrapS = THREE.RepeatWrapping;
-  textura.wrapT = THREE.RepeatWrapping;
-  // Un período del patrón ocupa `escalaMm` de papel = escalaMm × 0,1 m a 1:100.
-  const periodo = Math.max(escalaMm * 0.1, 0.02);
-  textura.repeat.set(1 / periodo, 1 / periodo);
-  textura.colorSpace = THREE.SRGBColorSpace;
-  CACHE_TEXTURAS.set(clave, textura);
-  return textura;
-}
-
-/**
- * O015: huella de una losa proyectada sobre el plano de planta. Se toman los
- * triángulos horizontales de su cara superior (su z más alta); si la malla no
- * trae ninguno, se usan todos los horizontales. Así una losa debajo del corte se
- * ve con relleno tenue sin inventar un rectángulo que no corresponde a su forma.
- */
-function geometriaProyeccionLosa(
-  elemento: ElementoMalla,
-  z: number,
-): THREE.BufferGeometry | null {
-  const v = elemento.vertices;
-  const indices = elemento.indices;
-  let maxZ = -Infinity;
-  for (let i = 2; i < v.length; i += 3) maxZ = Math.max(maxZ, v[i]);
-  const horizontales: number[] = [];
-  const superiores: number[] = [];
-  for (let t = 0; t + 2 < indices.length; t += 3) {
-    const ia = indices[t] * 3;
-    const ib = indices[t + 1] * 3;
-    const ic = indices[t + 2] * 3;
-    const ax = v[ia];
-    const ay = v[ia + 1];
-    const az = v[ia + 2];
-    const bx = v[ib];
-    const by = v[ib + 1];
-    const bz = v[ib + 2];
-    const cx = v[ic];
-    const cy = v[ic + 1];
-    const cz = v[ic + 2];
-    const ux = bx - ax;
-    const uy = by - ay;
-    const uz = bz - az;
-    const wx = cx - ax;
-    const wy = cy - ay;
-    const wz = cz - az;
-    const nx = uy * wz - uz * wy;
-    const ny = uz * wx - ux * wz;
-    const nz = ux * wy - uy * wx;
-    const largo = Math.hypot(nx, ny, nz);
-    if (largo < 1e-9) continue;
-    if (Math.abs(nz) / largo <= 0.5) continue;
-    const triangulo = [ax, ay, z, bx, by, z, cx, cy, z];
-    horizontales.push(...triangulo);
-    if (az >= maxZ - 0.01 && bz >= maxZ - 0.01 && cz >= maxZ - 0.01) {
-      superiores.push(...triangulo);
-    }
-  }
-  const elegidos = superiores.length > 0 ? superiores : horizontales;
-  if (elegidos.length === 0) return null;
-  const geometria = new THREE.BufferGeometry();
-  geometria.setAttribute("position", new THREE.BufferAttribute(new Float32Array(elegidos), 3));
-  return geometria;
-}
-
-/** Relleno de proyección tenue de una losa en planta (gris claro al 15 %). */
-function materialProyeccionTenue(): THREE.MeshBasicMaterial {
-  return new THREE.MeshBasicMaterial({
-    color: new THREE.Color(0x9aa0a6),
-    transparent: true,
-    opacity: 0.15,
-    side: THREE.DoubleSide,
-    depthWrite: false,
-    polygonOffset: true,
-    polygonOffsetFactor: -1,
-  });
-}
-
-/** Material de relleno para un material de la tabla. */
-function materialRelleno(
-  nombre: MaterialNombre,
-  estilos: Estilos,
-  colorTrazo: string,
-): THREE.Material {
-  const estilo = estilos.materiales[nombre];
-  if (estilo.patron === "generico") {
-    return new THREE.MeshBasicMaterial({
-      color: new THREE.Color(colorTrazo),
-      transparent: true,
-      opacity: 0.3,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      polygonOffset: true,
-      polygonOffsetFactor: -2,
-    });
-  }
-  const textura = texturaPatron(estilo.patron, estilo.escala, colorTrazo);
-  if (!textura) {
-    return new THREE.MeshBasicMaterial({ visible: false });
-  }
-  return new THREE.MeshBasicMaterial({
-    map: textura,
-    transparent: true,
-    side: THREE.DoubleSide,
-    depthWrite: false,
-    polygonOffset: true,
-    polygonOffsetFactor: -2,
-  });
-}
-
-function planosVista(vista: Vista, caja: Caja): {  planos: THREE.Plane[];
-  relleno: { plano: THREE.Plane; origen: THREE.Vector3 } | null;
-} {
-  const centro = centroCaja(caja);
-  if (vista.tipo === "planta") {
-    const corte = vista.alturaPlano ?? caja.max[2] + 1;
-    const fondo = vista.profundidad ?? caja.min[2] - 1;
-    return {
-      planos: [
-        // Se conserva lo que queda por debajo del plano de corte y por encima del fondo.
-        new THREE.Plane(new THREE.Vector3(0, 0, -1), corte),
-        new THREE.Plane(new THREE.Vector3(0, 0, 1), -fondo),
-      ],
-      relleno: {
-        plano: new THREE.Plane(new THREE.Vector3(0, 0, 1), -corte),
-        origen: new THREE.Vector3(centro[0], centro[1], corte),
-      },
-    };
-  }
-  if (vista.tipo === "corte") {
-    const [nx, ny] = normalCorte(vista);
-    const n = new THREE.Vector3(nx, ny, 0).normalize();
-    const origen = centroCorte(vista, caja);
-    const profundidad = Math.max(vista.profundidad ?? 10, 0.01);
-    return {
-      planos: [
-        new THREE.Plane(n.clone(), -n.dot(origen)),
-        new THREE.Plane(n.clone().negate(), n.dot(origen) + profundidad),
-      ],
-      relleno: { plano: new THREE.Plane(n.clone(), -n.dot(origen)), origen },
-    };
-  }
-  return { planos: [], relleno: null };
-}
-
-
-function etiquetaInferencia(tipo: string | null): string {
-  switch (tipo) {
-    case "extremo": return "Extremo";
-    case "medio": return "Punto medio";
-    case "sobre_arista": return "En arista";
-    case "interseccion": return "Intersección";
-    case "sobre_cara": return "En cara";
-    case "eje_x": return "Eje X";
-    case "eje_y": return "Eje Y";
-    case "eje_z": return "Eje Z";
-    case "paralelo": return "Paralelo";
-    case "perpendicular": return "Perpendicular";
-    default: return "Plano";
-  }
-}
-
-function colorDeGuia(tipo: string | null): string {
-  if (tipo === "eje_x") return "#dc2626";
-  if (tipo === "eje_y") return "#16a34a";
-  if (tipo === "eje_z") return "#2563eb";
-  if (tipo === "paralelo" || tipo === "perpendicular") return "#0891b2";
-  return "#64748b";
-}
-
-function formaDeMarcador(tipo: string): CSSProperties {
-  if (tipo === "extremo") {
-    return { width: 10, height: 10, background: "#16a34a", borderRadius: 1 };
-  }
-  if (tipo === "medio") {
-    return {
-      width: 0,
-      height: 0,
-      borderLeft: "6px solid transparent",
-      borderRight: "6px solid transparent",
-      borderBottom: "11px solid #06b6d4",
-    };
-  }
-  if (tipo === "sobre_arista") {
-    return {
-      width: 10,
-      height: 10,
-      background: "#dc2626",
-      transform: "rotate(45deg)",
-      borderRadius: 1,
-    };
-  }
-  if (tipo === "sobre_cara") {
-    return {
-      width: 10,
-      height: 10,
-      background: "#2563eb",
-      transform: "rotate(45deg)",
-      borderRadius: 1,
-    };
-  }
-  if (tipo === "interseccion") {
-    return {
-      width: 12,
-      height: 12,
-      color: "#16a34a",
-      fontSize: 16,
-      lineHeight: "12px",
-      fontWeight: 700,
-    };
-  }
-  const color = tipo === "eje_x"
-    ? "#dc2626"
-    : tipo === "eje_y"
-      ? "#16a34a"
-      : tipo === "eje_z"
-        ? "#2563eb"
-        : "#0891b2";
-  return { width: 9, height: 9, background: color, borderRadius: "50%" };
-}
-
-function redondearVec(p: Vec3): Vec3 {
-  const r = (v: number) => {
-    const n = Math.round(v * 1e6) / 1e6;
-    return Object.is(n, -0) ? 0 : n;
-  };
-  return { x: r(p.x), y: r(p.y), z: r(p.z) };
-}
-
-function bloqueoDeInferencia(
-  inf: Inferencia,
-  candidatos: CandidatosInferencia,
-): Bloqueo | null {
-  if (inf.tipo === "eje_x") return { tipo: "eje", eje: "x" };
-  if (inf.tipo === "eje_y") return { tipo: "eje", eje: "y" };
-  if (inf.tipo === "eje_z") return { tipo: "eje", eje: "z" };
-  if (inf.tipo === "paralelo" && inf.referencia !== null) {
-    const arista = candidatos.aristas?.[inf.referencia];
-    if (arista) {
-      return {
-        tipo: "arista",
-        inicio: arista.inicio,
-        fin: arista.fin,
-        referencia: inf.referencia,
-      };
-    }
-  }
-  return null;
-}
+let claveCamaras = "";
 
 export function Visor3D({
   vista,
