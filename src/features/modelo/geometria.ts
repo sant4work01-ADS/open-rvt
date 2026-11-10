@@ -160,7 +160,7 @@ function clavePunto(x: number, y: number, z: number, decimales = 5): string {
   return `${x.toFixed(decimales)},${y.toFixed(decimales)},${z.toFixed(decimales)}`;
 }
 
-function claveSegmento(
+export function claveSegmento(
   a: [number, number, number],
   b: [number, number, number],
 ): string {
@@ -169,13 +169,13 @@ function claveSegmento(
   return ka <= kb ? `${ka}|${kb}` : `${kb}|${ka}`;
 }
 
-interface AristaCruda {
+export interface AristaCruda {
   a: [number, number, number];
   b: [number, number, number];
   normales: Array<[number, number, number]>;
 }
 
-function aristasCrudas(
+export function aristasCrudas(
   vertices: Float32Array,
   indices: Uint32Array,
 ): AristaCruda[] {
@@ -209,7 +209,7 @@ function aristasCrudas(
   return [...mapa.values()];
 }
 
-function esAristaDeSilueta(arista: AristaCruda, umbral = 30): boolean {
+export function esAristaDeSilueta(arista: AristaCruda, umbral = 30): boolean {
   if (arista.normales.length === 1) return true;
   const coseno = Math.cos((umbral * Math.PI) / 180);
   for (let i = 0; i < arista.normales.length; i += 1) {
