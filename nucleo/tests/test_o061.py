@@ -292,20 +292,25 @@ def test_muro_conserva_franjas_junto_a_cerramiento_estrecho() -> None:
     huella_cerramiento = Polygon([(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
     # Altura 3.48: −0.12 de azotea; el cerramiento de 0.20 de alto resta
     # solo los 0.15 de ancho que ocupa, no la franja entera del muro.
+    # O062: main + piel de 2 mm en las dos caras que cruza la azotea
+    # (0.12 × (2.30 + 2.70) × 0.002 = 0.0012). El cerramiento de 0.15 deja
+    # franjas de 0.025, así que no toca la piel.
     esperado = (
         huella_muro.area * (3.48 - 0.12)
         - 0.20 * huella_muro.intersection(huella_cerramiento).area
+        + 0.12 * (2.30 + 2.70) * 0.002
     )
     assert _volumen_malla(nucleo, muro) == pytest.approx(esperado, abs=1e-3)
 
     vertices = _vertices(nucleo, muro)
-    # La cara exterior y = −0.10 llega de 0.12 a 3.60 sin hueco en 2.20–2.40.
+    # La cara exterior y = −0.10 es una piel continua de 0.12 a 3.60: O062 no
+    # deja vértices de corte en 2.20 ni en 2.40 sobre esa cara.
     cara = vertices[np.abs(vertices[:, 1] + 0.10) < 1e-6]
     assert cara[:, 2].min() == pytest.approx(0.12, abs=1e-9)
     assert cara[:, 2].max() == pytest.approx(3.60, abs=1e-9)
     for corte in (2.20, 2.40):
-        assert np.any(np.abs(cara[:, 2] - corte) < 1e-9), (
-            f"la cara exterior no tiene vértice en z = {corte}"
+        assert not np.any(np.abs(cara[:, 2] - corte) < 1e-9), (
+            f"la cara exterior tiene un vértice de corte en z = {corte}"
         )
     # El cerramiento deja dos franjas: el borde interior está en y = −0.075.
     franja = vertices[np.abs(vertices[:, 1] + 0.075) < 1e-6]
