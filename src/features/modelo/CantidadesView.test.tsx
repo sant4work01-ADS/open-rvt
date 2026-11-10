@@ -117,6 +117,34 @@ describe("vista Cantidades", () => {
     expect(await screen.findByTestId("cantidades-error-gid-losa")).toBeInTheDocument();
   });
 
+  it("muestra un total por unidad y no un total general mezclado", async () => {
+    preparar();
+    llamar.mockImplementation(async (metodo: string) => {
+      if (metodo === "medicion.calcular") {
+        return {
+          partidas: [
+            { ...PARTIDAS[0], unidad: "m2", total: 18.25 },
+            { ...PARTIDAS[1], unidad: "m2", total: 4.5 },
+            {
+              ...PARTIDAS[0],
+              clave: "LOSA",
+              nombre: "Losa de entrepiso",
+              unidad: "m3",
+              total: 2,
+            },
+          ],
+        };
+      }
+      return {};
+    });
+    render(<CantidadesView />);
+    // A mano: 18.25 + 4.5 = 22.75 m²; la losa son 2 m³.
+    expect(await screen.findByTestId("cantidades-total-m2")).toHaveTextContent("22.75 m²");
+    expect(screen.getByTestId("cantidades-total-m3")).toHaveTextContent("2 m³");
+    expect(screen.getByTestId("cantidades-total")).toHaveTextContent("3 partidas");
+    expect(screen.getByTestId("cantidades-total")).not.toHaveTextContent("en total");
+  });
+
   it("exporta con el diálogo de guardar y la ruta elegida", async () => {
     preparar();
     render(<CantidadesView />);

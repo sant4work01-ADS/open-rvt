@@ -7,6 +7,7 @@ import { elegirDestinoMedicion } from "@/lib/dialogos";
 import { textoDeError } from "@/lib/ipc";
 import { Button } from "@/components/ui/button";
 import { useModelo } from "./estado";
+import { ETIQUETA_UNIDAD, totalesOrdenados } from "./cantidadesUnidad";
 
 export interface RenglonMedicion {
   eje: string;
@@ -33,14 +34,6 @@ export interface ErrorMedicion {
   globalid: string;
   mensaje: string;
 }
-
-const UNIDAD: Record<string, string> = {
-  m: "m",
-  m2: "m²",
-  m3: "m³",
-  kg: "kg",
-  pza: "pza",
-};
 
 function numero(valor: number): string {
   return valor.toLocaleString("es-MX", {
@@ -91,10 +84,8 @@ export function CantidadesView() {
     };
   }, [nivel, conCambios]);
 
-  const totalGeneral = useMemo(
-    () => partidas.reduce((suma, partida) => suma + partida.total, 0),
-    [partidas],
-  );
+  // O063: un total por unidad; sumar m² con m³ no dice nada.
+  const totales = useMemo(() => totalesOrdenados(partidas), [partidas]);
 
   const alternar = (clave: string) => {
     setAbiertas((actual) => {
@@ -143,8 +134,14 @@ export function CantidadesView() {
             ))}
           </select>
         </label>
-        <span className="text-xs text-muted-foreground" data-testid="cantidades-total">
-          {partidas.length} partidas · {numero(totalGeneral)} en total
+        <span className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
+          <span data-testid="cantidades-total">{partidas.length} partidas</span>
+          {totales.map(([unidad, total]) => (
+            <span key={unidad} data-testid={`cantidades-total-${unidad}`}>
+              <span className="font-medium text-foreground">{numero(total)}</span>{" "}
+              {ETIQUETA_UNIDAD[unidad] ?? unidad}
+            </span>
+          ))}
         </span>
         <Button
           type="button"
@@ -221,7 +218,9 @@ export function CantidadesView() {
                         </span>
                       )}
                     </td>
-                    <td className="px-2 py-1">{UNIDAD[partida.unidad] ?? partida.unidad}</td>
+                    <td className="px-2 py-1">
+                      {ETIQUETA_UNIDAD[partida.unidad] ?? partida.unidad}
+                    </td>
                     <td className="px-2 py-1 text-right tabular-nums">
                       {numero(partida.total)}
                     </td>
