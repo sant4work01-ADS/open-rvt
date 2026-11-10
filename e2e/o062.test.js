@@ -180,6 +180,9 @@ test("O062: caras del muro continuas en las franjas de cerramiento y losa", asyn
 
     await activar(ses, "panel-pestana-vistas");
     await elegirVista(ses, "3D Isométrica");
+    // Iso con «Ajustar»: la vista completa, sin herencia de encuadres previos.
+    await activar(ses, "visor-zoom-ajustar");
+    await esperar(900);
     await captura(ses, "01-3d.png");
 
     // Solo muros y sin anotaciones: cualquier línea de las franjas es del muro.
@@ -197,6 +200,13 @@ test("O062: caras del muro continuas en las franjas de cerramiento y losa", asyn
     // Acercamiento a la esquina y a la cara este (x = 2.60).
     await zoomEn(ses, 2.60, 0.75, 2.75, 0.6);
     await captura(ses, "05-cara-este-3d.png");
+
+    // Muy lejos (zoom fuera desde el encuadre ajustado): la piel tiene que
+    // seguir tapando las aristas internas sin líneas tenues ni parpadeo.
+    await activar(ses, "visor-zoom-ajustar");
+    for (let i = 0; i < 4; i += 1) await activar(ses, "visor-zoom-menos");
+    await esperar(900);
+    await captura(ses, "06-iso-muy-lejos.png");
   } finally {
     await ses.cerrar();
   }
