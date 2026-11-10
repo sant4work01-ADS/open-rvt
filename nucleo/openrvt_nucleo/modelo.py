@@ -304,6 +304,8 @@ class ModeloNucleo(
         self.crear_tipos_estructura()
         # O054: los castillos de esquina viejos se reparan al abrir el archivo.
         self._reparar_castillos_esquina()
+        # O061: los cerramientos con AnchoDelMuro recuperan el espesor del muro.
+        self._reparar_ancho_del_muro()
         # O012: los archivos anteriores pueden traer vigas encimadas; se recortan
         # al abrir sin perder elementos.
         self._recalcular_uniones_estructura()

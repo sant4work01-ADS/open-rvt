@@ -212,8 +212,12 @@ class InteraccionesMixin:
         pset = {
             **self._leer_pset(castillo, "OPENRVT_Estructura"),
             "X": x, "Y": y, "Rotacion": rotacion,
-            "Base": datos["z"], "B": b, "H": h,
+            "B": b, "H": h,
         }
+        # O061: el castillo conserva su Base y su Altura; una losa puede dejarlo
+        # arrancando por debajo del nivel del muro (0.00 frente a 0.12).
+        if pset.get("Base") is None:
+            pset["Base"] = datos["z"]
         self._guardar_pset(castillo, "OPENRVT_Estructura", pset)
         self._regenerar_estructura(castillo)
         return esquina
@@ -898,6 +902,61 @@ class InteraccionesMixin:
         )
         return tramos, nivel
 
+    def _muros_de_cerramiento(self, cerramiento: Any) -> list[Any]:
+        """O061: muros que sostienen un cerramiento, por liga o por geometría."""
+        liga = self._leer_liga(cerramiento)
+        gid = _texto(liga.get("Muro"))
+        if gid:
+            try:
+                return [self._entidad_por_gid(gid, ("IfcWall",))]
+            except Exception:
+                pass
+        tramos, _nivel = self._muros_validos_cerramiento(cerramiento)
+        vistos: dict[int, Any] = {}
+        for tramo in tramos:
+            vistos[id(tramo["muro"])] = tramo["muro"]
+        return list(vistos.values())
+
+    def _reparar_ancho_del_muro(self) -> int:
+        """O061 regla 3: AnchoDelMuro = True recupera el espesor real del muro."""
+        reparados = 0
+        for viga in list(self.modelo.by_type("IfcBeam")):
+            if not self._es_cerramiento(viga):
+                continue
+            pset = dict(self._leer_pset(viga, "OPENRVT_Estructura"))
+            if not pset:
+                continue
+            if not self._del_nucleo(pset.get("AnchoDelMuro", True)):
+                continue
+            muros = self._muros_de_cerramiento(viga)
+            if not muros:
+                continue
+            ancho = max(self._capas_nucleo(muro)[0] for muro in muros)
+            if abs(float(pset.get("B") or 0.0) - ancho) <= TOLERANCIA_CALCULO:
+                continue
+            pset["B"] = ancho
+            self._guardar_pset(viga, "OPENRVT_Estructura", pset)
+            self._regenerar_estructura(viga)
+            reparados += 1
+        # O061 regla 3: los castillos con AnchoDelMuro también recuperan su
+        # sección real al abrir (B/H del tipo y del núcleo del muro).
+        for castillo in list(self.modelo.by_type("IfcColumn")):
+            if self._estructura_de_tipo(self._tipo_entidad(castillo)) != "castillo":
+                continue
+            pset = self._leer_pset(castillo, "OPENRVT_Estructura")
+            if not pset or not self._del_nucleo(pset.get("AnchoDelMuro", True)):
+                continue
+            gid = _texto(self._leer_liga(castillo).get("Muro"))
+            if not gid:
+                continue
+            try:
+                muro = self._entidad_por_gid(gid, ("IfcWall",))
+            except Exception:
+                continue
+            self._ajustar_castillo(castillo, muro)
+            reparados += 1
+        return reparados
+
     def validar_cerramientos(self) -> list[dict[str, Any]]:
         """O057: reporta cerramientos mal ligados o fuera del storey de su base."""
         self._exigir_modelo()
@@ -1351,7 +1410,19 @@ class InteraccionesMixin:
         datos = self._datos_muro(muro)
         nucleo, _centro = self._capas_nucleo(muro)
         modificados: list[Any] = []
-        for dependiente in self._dependientes_de(muro):
+        dependientes = list(self._dependientes_de(muro))
+        vistos = {id(dependiente) for dependiente in dependientes}
+        # O061: los cerramientos viejos sin liga «Muro» se reconocen por su
+        # geometría; al cambiar el tipo del muro también recuperan su ancho.
+        for candidato in self.modelo.by_type("IfcBeam"):
+            if id(candidato) in vistos or not self._es_cerramiento(candidato):
+                continue
+            if self._leer_liga(candidato).get("Muro"):
+                continue
+            if muro in self._muros_de_cerramiento(candidato):
+                dependientes.append(candidato)
+                vistos.add(id(candidato))
+        for dependiente in dependientes:
             alias = self._estructura_de_tipo(self._tipo_entidad(dependiente))
             pset = dict(self._leer_pset(dependiente, "OPENRVT_Estructura"))
             if not pset:

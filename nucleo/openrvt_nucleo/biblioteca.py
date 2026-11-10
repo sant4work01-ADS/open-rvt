@@ -1457,6 +1457,8 @@ class BibliotecaMixin:
         )
         modificados = [elemento]
         if elemento.is_a("IfcWall"):
+            # O061 regla 5: si el Name era el de omisión de un tipo, se actualiza.
+            self._actualizar_nombre_muro_por_tipo(elemento, tipo_entidad)
             datos = self._datos_muro(elemento)
             espesor = self._espesor_tipo(tipo_entidad)
             # Reporte 2-nov: con castillos, al pasar de Block 12 a uno de 15 con

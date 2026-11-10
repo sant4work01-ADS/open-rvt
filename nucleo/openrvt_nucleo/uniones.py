@@ -453,6 +453,10 @@ def recortar_losa(
     if not huella_losa.is_valid:
         huella_losa = huella_losa.buffer(0)
     for barra in [*vigas, *columnas]:
+        # O061: castillos y dados nunca recortan una losa; la losa es continua
+        # sobre ellos y solo las vigas/trabes que se traslapan la recortan.
+        if barra.clase in ("castillo", "dado"):
+            continue
         solape = min(z1, barra.z1) - max(z0, barra.z0)
         if solape <= TOLERANCIA:
             continue
