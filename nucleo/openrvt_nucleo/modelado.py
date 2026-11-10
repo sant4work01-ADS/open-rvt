@@ -45,6 +45,9 @@ TOLERANCIA = 0.01  # unión automática de muros: ±1 cm
 # O006e: un extremo a menos de 25 cm de la cara o del eje de otro muro se lleva al eje.
 TOLERANCIA_UNION = 0.25
 TOLERANCIA_CALCULO = 1e-6
+# O062: piel mínima que el muro conserva en una cara exterior cuando un
+# elemento horizontal queda enrasado con ella o la cruza de cara a cara.
+PIEL_MURO = 0.002
 
 # O016: restricciones de base y tope por nivel.
 PSET_RESTRICCIONES = "OPENRVT_Restricciones"
@@ -142,6 +145,27 @@ def _limpiar_anillo(
                 cambio = True
                 break
     return limpios
+
+
+def _anillo_desde_arista_corta(
+    anillo: list[tuple[float, float]],
+) -> list[tuple[float, float]]:
+    """Rota el anillo para que su primer segmento sea el más corto.
+
+    O062: OpenCASCADE descarta una franja de 2 mm si el perfil empieza por su
+    arista larga; empezando por la corta se tesela sin problema.
+    """
+    n = len(anillo)
+    if n < 3:
+        return anillo
+    mejor, mejor_largo = 0, None
+    for i in range(n):
+        x1, y1 = anillo[i]
+        x2, y2 = anillo[(i + 1) % n]
+        largo = math.hypot(x2 - x1, y2 - y1)
+        if mejor_largo is None or largo < mejor_largo - 1e-12:
+            mejor, mejor_largo = i, largo
+    return anillo[mejor:] + anillo[:mejor]
 
 
 def _poligono_area(puntos: list[tuple[float, float]]) -> float:
@@ -2909,27 +2933,58 @@ class ModeladoMixin:
         if base > float(datos["z"]) + TOLERANCIA_CALCULO:
             # El muro ya se apoya en algo por encima de su nivel: no se baja.
             bajadas = []
-        items = []
+        items: list[Any] = []
         temporales = []
+        offset_cuerpo = self._desfase_de_muro(muro, datos["espesor"])
         for poligono in poligonos:
             for pieza, z0 in self._partir_por_bajadas(poligono, base, bajadas):
-                for tramo_z0, tramo_z1, activos in self._tramos_verticales_muro(
-                    z0, cima, intervalos
-                ):
-                    for trozo in self._recortar_tramo_muro(pieza, datos, activos):
-                        offset_z = tramo_z0 - datos["z"]
-                        alto = max(tramo_z1 - tramo_z0, 0.001)
-                        rep = geometry_api.add_slab_representation(
+                alto = cima - z0
+                if alto <= TOLERANCIA_CALCULO:
+                    continue
+                # O062: el muro es un solo prisma de base a corona; los
+                # intermedios se restan como bolsillos que dejan una piel de
+                # 2 mm en las caras exteriores. Sin tramos apilados no hay
+                # tapas internas ni aristas horizontales sobre la cara plana.
+                rep = geometry_api.add_slab_representation(
+                    self.modelo,
+                    context=self._contexto(),
+                    depth=alto,
+                    direction_sense="POSITIVE",
+                    offset=z0 - datos["z"],
+                    polyline=pieza,
+                )
+                temporales.append(rep)
+                if not rep.Items:
+                    continue
+                item = rep.Items[0]
+                cortes = self._cortes_intermedios_muro(
+                    pieza, datos, intervalos, z0, cima, offset_cuerpo
+                )
+                temporales.extend(cortes[0])
+                if cortes[1]:
+                    try:
+                        creados = geometry_api.add_boolean(
                             self.modelo,
-                            context=self._contexto(),
-                            depth=alto,
-                            direction_sense="POSITIVE",
-                            offset=offset_z,
-                            polyline=trozo,
+                            first_item=item,
+                            second_items=cortes[1],
+                            operator="DIFFERENCE",
                         )
-                        temporales.append(rep)
-                        items.extend(rep.Items)
-        # La representación final es una sola con todos los tramos del muro.
+                    except Exception:
+                        LOG.warning(
+                            "no se pudo restar un intermedio del muro", exc_info=True
+                        )
+                        creados = None
+                    if creados:
+                        item = (
+                            creados[-1]
+                            if isinstance(creados, (list, tuple))
+                            else creados
+                        )
+                items.append(item)
+        # O062: si hay varias piezas (castillos o bajadas) se funden en un solo
+        # sólido compartido.
+        items = self._unir_solidos(items)
+        # La representación final es una sola con el sólido del muro.
         context = self._contexto()
         cuerpo = self.modelo.create_entity(
             "IfcShapeRepresentation",
@@ -3404,29 +3459,183 @@ class ModeladoMixin:
             salida.append((a, b, activos))
         return salida or [(z0, z1, [])]
 
+    def _recorte_intermedio_local(
+        self, datos: dict[str, Any], huella: Any, offset: float
+    ) -> Any:
+        """O062: parte del intermedio que sí se resta del muro.
+
+        Si el horizontal queda enrasado con una cara exterior (o la cruza de
+        cara a cara), no se resta la franja de 2 mm pegada a esa cara: así el
+        muro conserva una piel continua en su cara exterior.
+        """
+        from shapely.affinity import affine_transform
+        from shapely.geometry import Polygon
+
+        dx, dy = datos["dx"], datos["dy"]
+        x1, y1 = datos["x1"], datos["y1"]
+        local = affine_transform(
+            huella, [dx, dy, -dy, dx, -dx * x1 - dy * y1, dy * x1 - dx * y1]
+        )
+        if local.is_empty:
+            return local
+        v_bajo = float(offset)
+        v_alto = v_bajo + float(datos["espesor"])
+        xmin, ymin, xmax, ymax = local.bounds
+        u0, u1 = xmin - 1.0, xmax + 1.0
+        if ymin <= v_bajo + TOLERANCIA_CALCULO:
+            local = local.intersection(
+                Polygon(
+                    [
+                        (u0, v_bajo + PIEL_MURO),
+                        (u1, v_bajo + PIEL_MURO),
+                        (u1, v_bajo + 1.0),
+                        (u0, v_bajo + 1.0),
+                    ]
+                )
+            )
+        if ymax >= v_alto - TOLERANCIA_CALCULO:
+            local = local.intersection(
+                Polygon(
+                    [
+                        (u0, v_alto - 1.0),
+                        (u1, v_alto - 1.0),
+                        (u1, v_alto - PIEL_MURO),
+                        (u0, v_alto - PIEL_MURO),
+                    ]
+                )
+            )
+        return local
+
+    def _cortes_intermedios_muro(
+        self,
+        pieza: list[tuple[float, float]],
+        datos: dict[str, Any],
+        intervalos: list[dict[str, Any]],
+        z0: float,
+        cima: float,
+        offset: float,
+    ) -> tuple[list[Any], list[Any]]:
+        """Prismas que se restan del prisma del muro (representaciones y sólidos)."""
+        from shapely.geometry import Polygon
+
+        reps: list[Any] = []
+        items: list[Any] = []
+        if not intervalos:
+            return reps, items
+        try:
+            base = Polygon([(u, v) for u, v in pieza])
+        except Exception:
+            return reps, items
+        if not base.is_valid:
+            base = base.buffer(0)
+        for intervalo in intervalos:
+            a = max(float(intervalo["z0"]), z0)
+            b = min(float(intervalo["z1"]), cima)
+            if b - a <= TOLERANCIA_CALCULO:
+                continue
+            huella = intervalo.get("huella")
+            if huella is None or huella.is_empty:
+                continue
+            recorte = self._recorte_intermedio_local(datos, huella, offset)
+            if recorte is None or recorte.is_empty:
+                continue
+            trozo = recorte.intersection(base)
+            piezas = (
+                [trozo]
+                if trozo.geom_type == "Polygon"
+                else list(getattr(trozo, "geoms", []))
+            )
+            for pol in piezas:
+                if pol.is_empty or pol.area <= TOLERANCIA_CALCULO:
+                    continue
+                anillo = _anillo_desde_arista_corta(
+                    _limpiar_anillo(
+                        [(x, y) for x, y in list(pol.exterior.coords)[:-1]]
+                    )
+                )
+                if len(anillo) < 3:
+                    continue
+                rep = geometry_api.add_slab_representation(
+                    self.modelo,
+                    context=self._contexto(),
+                    depth=b - a,
+                    direction_sense="POSITIVE",
+                    offset=a - datos["z"],
+                    polyline=anillo,
+                )
+                reps.append(rep)
+                items.extend(rep.Items)
+        return reps, items
+
     def _recortar_tramo_muro(
         self,
         pieza: list[tuple[float, float]],
         datos: dict[str, Any],
         activos: list[dict[str, Any]],
+        offset: float | None = None,
     ) -> list[list[tuple[float, float]]]:
-        """O061 regla 4: resta del tramo solo la huella real de cada intermedio."""
+        """O061 regla 4: resta del tramo solo la huella real de cada intermedio.
+
+        O062: si el intermedio queda enrasado con una cara exterior del muro o
+        la cruza de cara a cara, no se resta la franja de 2 mm pegada a esa
+        cara. Así la cara exterior sigue siendo una superficie continua (sin
+        aristas horizontales en las franjas) y el horizontal no parpadea.
+        """
         if not activos:
             return [pieza]
+        from shapely.affinity import affine_transform
         from shapely.geometry import Polygon
 
-        mundo = Polygon([self._punto_local(datos, u, v) for u, v in pieza])
+        if offset is None:
+            offset = min(v for _u, v in pieza)
+        v_bajo = float(offset)
+        v_alto = v_bajo + float(datos["espesor"])
+        mundo = Polygon([(u, v) for u, v in pieza])
         if not mundo.is_valid:
             mundo = mundo.buffer(0)
+        dx, dy = datos["dx"], datos["dy"]
+        x1, y1 = datos["x1"], datos["y1"]
+        # Mundo → local: u = dx·x + dy·y + cte, v = −dy·x + dx·y + cte.
+        a_mundo = [-dx * x1 - dy * y1, dy * x1 - dx * y1]
         for intervalo in activos:
             huella = intervalo.get("huella")
             if huella is None or huella.is_empty:
                 continue
             if not huella.is_valid:
                 huella = huella.buffer(0)
-            if huella.is_empty or not mundo.intersects(huella):
+            if huella.is_empty:
                 continue
-            mundo = mundo.difference(huella)
+            local = affine_transform(huella, [dx, dy, -dy, dx, *a_mundo])
+            if local.is_empty:
+                continue
+            xmin, ymin, xmax, ymax = local.bounds
+            recorte = local
+            u0, u1 = xmin - 1.0, xmax + 1.0
+            if ymin <= v_bajo + TOLERANCIA_CALCULO:
+                # Enrasado o cruzando la cara inferior: deja la piel.
+                piel = Polygon(
+                    [
+                        (u0, v_bajo + PIEL_MURO),
+                        (u1, v_bajo + PIEL_MURO),
+                        (u1, v_bajo + 1.0),
+                        (u0, v_bajo + 1.0),
+                    ]
+                )
+                recorte = recorte.intersection(piel)
+            if ymax >= v_alto - TOLERANCIA_CALCULO:
+                # Enrasado o cruzando la cara superior: deja la piel.
+                piel = Polygon(
+                    [
+                        (u0, v_alto - 1.0),
+                        (u1, v_alto - 1.0),
+                        (u1, v_alto - PIEL_MURO),
+                        (u0, v_alto - PIEL_MURO),
+                    ]
+                )
+                recorte = recorte.intersection(piel)
+            if recorte.is_empty or mundo.intersects(recorte) is False:
+                continue
+            mundo = mundo.difference(recorte)
             if mundo.is_empty:
                 return []
         piezas = [mundo] if mundo.geom_type == "Polygon" else list(
@@ -3438,13 +3647,12 @@ class ModeladoMixin:
                 continue
             trozo = trozo.simplify(1e-7, preserve_topology=True)
             anillo = _limpiar_anillo(
-                [
-                    self._punto_en_local(datos, x, y)
-                    for x, y in list(trozo.exterior.coords)[:-1]
-                ]
+                [(x, y) for x, y in list(trozo.exterior.coords)[:-1]]
             )
             if len(anillo) >= 3:
-                salida.append(anillo)
+                # O062: OpenCASCADE no tesela una franja fina cuyo primer
+                # segmento es el largo; empieza por la arista más corta.
+                salida.append(_anillo_desde_arista_corta(anillo))
         return salida
 
     def _intervalos_intermedios_muro(
@@ -3993,6 +4201,35 @@ class ModeladoMixin:
         ]
         return vertices, caras
 
+    def _unir_solidos(self, items: list[Any]) -> list[Any]:
+        """O062: funde los sólidos apilados en uno solo.
+
+        La unión booleana comparte vértices y quita las tapas internas entre
+        tramos consecutivos con la misma sección; solo deja las caras donde la
+        sección cambia. Si alguna unión falla se conserva el sólido aparte para
+        no perder cuerpo.
+        """
+        if len(items) <= 1:
+            return list(items)
+        unido = items[0]
+        resto: list[Any] = []
+        for extra in items[1:]:
+            try:
+                creados = geometry_api.add_boolean(
+                    self.modelo,
+                    first_item=unido,
+                    second_items=[extra],
+                    operator="UNION",
+                )
+            except Exception:
+                LOG.warning("no se pudo unir un tramo del cuerpo", exc_info=True)
+                creados = None
+            if creados:
+                unido = creados[-1] if isinstance(creados, (list, tuple)) else creados
+            else:
+                resto.append(extra)
+        return [unido, *resto]
+
     def _malla_de_cajas(self, cajas: list[tuple[list[list[float]], list[list[int]]]]) -> Any:
         vertices: list[list[float]] = []
         caras: list[list[int]] = []
@@ -4003,6 +4240,13 @@ class ModeladoMixin:
         rep = geometry_api.add_mesh_representation(
             self.modelo, context=self._contexto(), vertices=[vertices], faces=[caras]
         )
+        # O062: los tramos de un mismo cuerpo se funden en un solo sólido para
+        # que no queden tapas internas entre cajas con la misma sección.
+        if len(cajas) > 1:
+            body = rep.RepresentationIdentifier
+            items = self._unir_solidos(list(rep.Items))
+            rep.Items = items
+            rep.RepresentationIdentifier = body or "Body"
         rep.RepresentationIdentifier = "Body"
         return rep
 
