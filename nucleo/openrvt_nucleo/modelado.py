@@ -2891,7 +2891,7 @@ class ModeladoMixin(MuroPielMixin):
                     continue
                 # O062: el muro es un solo prisma de base a corona; los
                 # intermedios se restan como bolsillos que dejan una piel de
-                # 2 mm en las caras exteriores. Sin tramos apilados no hay
+                # 0.015 m en las caras exteriores. Sin tramos apilados no hay
                 # tapas internas ni aristas horizontales sobre la cara plana.
                 rep = geometry_api.add_slab_representation(
                     self.modelo,
