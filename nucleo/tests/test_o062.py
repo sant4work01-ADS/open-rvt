@@ -14,29 +14,33 @@ Volúmenes a mano (obra del dueño `o061-fallo-dueno.ifc`; base O061):
   0.008125 m² en cada muro. Volumen de main:
     largo: 0.4775 × (3.48 − 0.20 − 0.12) + 0.008125 × 0.20 = 1.510525
     corto: 0.2775 × 3.16 + 0.008125 × 0.20 = 0.878525
-- Piel de 2 mm (decisión del gerente): donde el horizontal cruza la cara del
-  muro, el muro conserva 0.002 m. Las franjas continuas miden, en el muro largo,
-  2.35 en la cara de 0.10 y 2.30 (+ dos puntas de inglete de 0.002²/2) en la de
-  −0.10; en el corto, 1.35 y 1.30. La losa conserva 2.70 y 2.30 en el largo y
-  1.70 y 1.30 en el corto. Piel:
-    largo cerramiento: 0.20 × (2.35×0.002 + 2.30×0.002 + 2×0.000002) = 0.0018608
-    largo losa:        0.12 × (2.70×0.002 + 2.30×0.002 + 2×0.000002) = 0.0012000
-    corto cerramiento: 0.20 × (1.35×0.002 + 1.30×0.002 + 2×0.000002) = 0.0010608
-    corto losa:        0.12 × (1.70×0.002 + 1.30×0.002 + 2×0.000002) = 0.0007200
+- Piel de PIEL_MURO = 0.015 m (espesor típico de un aplanado): donde el
+  horizontal cruza la cara del muro, el muro conserva 0.015 m. Las franjas
+  continuas miden, en el muro largo, 2.35 en la cara de 0.10 y 2.30 (+ dos
+  puntas de inglete de 0.015²/2) en la de −0.10; en el corto, 1.35 y 1.30. La
+  losa conserva 2.70 y 2.30 en el largo y 1.70 y 1.30 en el corto. El
+  cerramiento no llega a las puntas ingleteadas (deja los 0.008125 m² de main),
+  así que la piel da la vuelta al inglete con dos triángulos de 0.015²/2 por
+  muro; la losa cubre toda la huella, así que sus franjas se cortan a escuadra
+  en el extremo y no añaden punta. Piel:
+    largo cerramiento: 0.20 × (2.35×0.015 + 2.30×0.015 + 2×0.0001125) = 0.013995
+    largo losa:        0.12 × (2.70×0.015 + 2.30×0.015) = 0.009
+    corto cerramiento: 0.20 × (1.35×0.015 + 1.30×0.015 + 2×0.0001125) = 0.007995
+    corto losa:        0.12 × (1.70×0.015 + 1.30×0.015) = 0.0054
   Volumen de la malla = main + piel:
-    largo: 1.510525 + 0.0018608 + 0.0012 = 1.5135858
-    corto: 0.878525 + 0.0010608 + 0.00072 = 0.8803058
+    largo: 1.510525 + 0.013995 + 0.009 = 1.53352
+    corto: 0.878525 + 0.007995 + 0.0054 = 0.89192
 - O058 (`o058-muro-n0-n5.ifc`), valores de main ya documentados en test_o058:
-    y = 1.50: 1.5387; piel 0.12 × 2.30 × 0.002 = 0.000552 → 1.539252
-    x = 2.50: 0.8697; piel 0.12 × 1.30 × 0.002 = 0.000312 → 0.870012
-    y = 0.00: 1.6051125; piel 0.12 × (2.30×0.002 + 0.000002) + 0.20 × 0.15×0.002
-              = 0.00055224 + 0.00006 = 0.00061224 → 1.60572474
+    y = 1.50: 1.5387; piel 0.12 × 2.30 × 0.015 = 0.00414 → 1.54284
+    x = 2.50: 0.8697; piel 0.12 × 1.30 × 0.015 = 0.00234 → 0.87204
+    y = 0.00: 1.6051125; piel 0.12 × (2.30×0.015 + 0.0001125) + 0.20 × 0.15×0.015
+              = 0.0041535 + 0.00045 = 0.0046035 → 1.609716
     x = 0.00: main 0.9361125 = 0.28×3.28 + 0.06625×0.20 + 0.0371875×0.12
               (el cerramiento de 0.15 deja DOS franjas de 0.025 a los lados,
               2×0.025×1.325 = 0.06625); la malla de main vieja daba 0.9294875
               porque su polígono de la franja se solapaba y perdía una franja.
-              Piel: 0.12 × (1.30×0.002 + 0.000002) + 0.20 × 0.15×0.002
-              = 0.00031224 + 0.00006 = 0.00037224 → 0.93648474
+              Piel: 0.12 × (1.30×0.015 + 0.0001125) + 0.20 × 0.15×0.015
+              = 0.0023535 + 0.00045 = 0.0028035 → 0.938916
 """
 
 from __future__ import annotations
@@ -217,10 +221,10 @@ def test_b_sin_aristas_marcadas_sobre_caras_exteriores() -> None:
 
 
 def test_c_volumen_de_la_malla_del_dueno_es_main_mas_piel() -> None:
-    """(c) Malla = main + piel de 2 mm, calculada a mano arriba."""
+    """(c) Malla = main + piel de 0.015 m, calculada a mano arriba."""
     nucleo = ModeloNucleo()
     nucleo.abrir(str(DUENO))
-    esperados = {"largo": 1.5135858, "corto": 0.8803058}
+    esperados = {"largo": 1.53352, "corto": 0.89192}
     for muro in _paredes(nucleo):
         vertices, caras = _malla(nucleo, muro)
         clase = "largo" if _es_largo(nucleo, muro) else "corto"
@@ -234,10 +238,10 @@ def test_d_muro_de_o058_sin_lineas_y_con_volumen_main_mas_piel() -> None:
     nucleo = ModeloNucleo()
     nucleo.abrir(str(O058))
     esperados = {
-        "00gX8hgmr8fROaq_4TRyaB": 1.539252,
-        "0KjZGGVCz5uRbquvy4FH$a": 0.870012,
-        "2$JKY6B6f4nuTR$iWYRmCb": 1.60572474,
-        "0xg3GB_If8tvz7MLS9Vl76": 0.93648474,
+        "00gX8hgmr8fROaq_4TRyaB": 1.54284,
+        "0KjZGGVCz5uRbquvy4FH$a": 0.87204,
+        "2$JKY6B6f4nuTR$iWYRmCb": 1.609716,
+        "0xg3GB_If8tvz7MLS9Vl76": 0.938916,
     }
     for muro in _paredes(nucleo):
         vertices, caras = _malla(nucleo, muro)

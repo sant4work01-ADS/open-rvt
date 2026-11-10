@@ -292,13 +292,13 @@ def test_muro_conserva_franjas_junto_a_cerramiento_estrecho() -> None:
     huella_cerramiento = Polygon([(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
     # Altura 3.48: −0.12 de azotea; el cerramiento de 0.20 de alto resta
     # solo los 0.15 de ancho que ocupa, no la franja entera del muro.
-    # O062: main + piel de 2 mm en las dos caras que cruza la azotea
-    # (0.12 × (2.30 + 2.70) × 0.002 = 0.0012). El cerramiento de 0.15 deja
+    # O062: main + piel de 0.015 m en las dos caras que cruza la azotea
+    # (0.12 × (2.30 + 2.70) × 0.015 = 0.009). El cerramiento de 0.15 deja
     # franjas de 0.025, así que no toca la piel.
     esperado = (
         huella_muro.area * (3.48 - 0.12)
         - 0.20 * huella_muro.intersection(huella_cerramiento).area
-        + 0.12 * (2.30 + 2.70) * 0.002
+        + 0.12 * (2.30 + 2.70) * 0.015
     )
     assert _volumen_malla(nucleo, muro) == pytest.approx(esperado, abs=1e-3)
 

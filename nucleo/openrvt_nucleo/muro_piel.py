@@ -1,9 +1,11 @@
-"""O062: piel de 2 mm del muro en las caras que tapa un horizontal.
+"""O062: piel de 15 mm del muro en las caras que tapa un horizontal.
 
 El cuerpo del muro se extruye una sola vez; los cerramientos y losas
-intermedios se restan como bolsillos que dejan 0.002 m de muro en las caras
-exteriores que el horizontal enrasa o cruza. Así la cara exterior es continua
-(sin aristas horizontales en las franjas) y no hay parpadeo.
+intermedios se restan como bolsillos que dejan ``PIEL_MURO`` (0.015 m, espesor
+típico de un aplanado) de muro en las caras exteriores que el horizontal enrasa
+o cruza. Así la cara exterior es continua (sin aristas horizontales en las
+franjas) y las aristas del bolsillo quedan lo bastante separadas de la cara
+como para que el visor no las dibuje a través de la piel.
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ import ifcopenshell.api.geometry as geometry_api
 LOG = logging.getLogger("openrvt_nucleo.muro_piel")
 
 TOLERANCIA_CALCULO = 1e-6
-PIEL_MURO = 0.002
+PIEL_MURO = 0.015
 
 
 def _limpiar_anillo(
@@ -53,7 +55,7 @@ def _anillo_desde_arista_corta(
 ) -> list[tuple[float, float]]:
     """Rota el anillo para que su primer segmento sea el más corto.
 
-    OpenCASCADE descarta una franja de 2 mm si el perfil empieza por su arista
+    OpenCASCADE descarta una franja fina si el perfil empieza por su arista
     larga; empezando por la corta se tesela sin problema.
     """
     n = len(anillo)
@@ -78,7 +80,7 @@ class MuroPielMixin:
         """O062: parte del intermedio que sí se resta del muro.
 
         Si el horizontal queda enrasado con una cara exterior (o la cruza de
-        cara a cara), no se resta la franja de 2 mm pegada a esa cara: así el
+        cara a cara), no se resta la franja de PIEL_MURO pegada a esa cara: así el
         muro conserva una piel continua en su cara exterior.
         """
         from shapely.affinity import affine_transform
@@ -190,7 +192,7 @@ class MuroPielMixin:
         """O061 regla 4: resta del tramo solo la huella real de cada intermedio.
 
         O062: si el intermedio queda enrasado con una cara exterior del muro o
-        la cruza de cara a cara, no se resta la franja de 2 mm pegada a esa
+        la cruza de cara a cara, no se resta la franja de PIEL_MURO pegada a esa
         cara. Así la cara exterior sigue siendo una superficie continua (sin
         aristas horizontales en las franjas) y el horizontal no parpadea.
         """

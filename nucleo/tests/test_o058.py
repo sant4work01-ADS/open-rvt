@@ -139,28 +139,28 @@ def test_muros_del_dueno_van_de_0_a_360_y_descuentan_cerramiento_y_losa() -> Non
     # en el borde exterior porque su contorno llega a −0.075. En las esquinas
     # a 45° el solape pierde un triángulo de 0.075² / 2 = 0.0028125.
     esperados = {
-        # O062: main + piel de 2 mm en cada cara que el horizontal cruza.
+        # O062: main + piel de 0.015 m en cada cara que el horizontal cruza.
         # eje y=1.5: main 0.46×3.48 − (0.15×2.30)×0.20 + (2.30×0.025)×0.12
-        # = 1.5387; piel 0.12×2.30×0.002 = 0.000552 → 1.539252.
-        "00gX8hgmr8fROaq_4TRyaB": 1.539252,
-        # eje x=2.5: main 0.8697; piel 0.12×1.30×0.002 = 0.000312 → 0.870012.
-        "0KjZGGVCz5uRbquvy4FH$a": 0.870012,
+        # = 1.5387; piel 0.12×2.30×0.015 = 0.00414 → 1.54284.
+        "00gX8hgmr8fROaq_4TRyaB": 1.54284,
+        # eje x=2.5: main 0.8697; piel 0.12×1.30×0.015 = 0.00234 → 0.87204.
+        "0KjZGGVCz5uRbquvy4FH$a": 0.87204,
         # eje y=0 (inglete 45°): A = 2.50×0.20 − 0.20²/2 = 0.48. En 2.20–2.40
         # el cerramiento (0.15) deja dos franjas de 0.025: la superior mide
         # 2.325 y la inferior 2.3125, más la punta del inglete 0.0003125:
         # 0.025×2.325 + 0.025×2.3125 + 0.0003125 = 0.11625. En 3.08–3.20 la
         # losa deja la franja exterior 0.025×2.475 + 0.0003125 = 0.0621875.
         # main = 0.48×3.28 + 0.11625×0.20 + 0.0621875×0.12 = 1.6051125.
-        # piel: 0.12×(2.30×0.002 + 2×0.000002) + 0.20×0.15×0.002
-        # = 0.00055224 + 0.00006 = 0.00061224 → 1.60572474.
-        "2$JKY6B6f4nuTR$iWYRmCb": 1.60572474,
+        # piel: 0.12×(2.30×0.015 + 0.0001125) + 0.20×0.15×0.015
+        # = 0.0041535 + 0.00045 = 0.0046035 → 1.609716.
+        "2$JKY6B6f4nuTR$iWYRmCb": 1.609716,
         # eje x=0: A = 0.28. El cerramiento de 0.15 deja DOS franjas de 0.025
         # a los lados (2×0.025×1.325 = 0.06625), no una. main = 0.28×3.28
         # + 0.06625×0.20 + 0.0371875×0.12 = 0.9361125 (la malla vieja daba
         # 0.9294875 porque su polígono de franja se solapaba y perdía una).
-        # piel: 0.12×(1.30×0.002 + 2×0.000002) + 0.20×0.15×0.002
-        # = 0.00031224 + 0.00006 = 0.00037224 → 0.93648474.
-        "0xg3GB_If8tvz7MLS9Vl76": 0.93648474,
+        # piel: 0.12×(1.30×0.015 + 0.0001125) + 0.20×0.15×0.015
+        # = 0.0023535 + 0.00045 = 0.0028035 → 0.938916.
+        "0xg3GB_If8tvz7MLS9Vl76": 0.938916,
     }
     for muro in muros:
         gid = muro.GlobalId
@@ -176,7 +176,7 @@ def test_muros_del_dueno_van_de_0_a_360_y_descuentan_cerramiento_y_losa() -> Non
     muro_y15 = next(m for m in muros if abs(_datos(nucleo, m.GlobalId)["y1"] - 1.5) < 1e-9)
     assert areas[muro_y15.GlobalId] == pytest.approx(0.46, abs=1e-9)
     assert _volumen_malla(nucleo, muro_y15.GlobalId) == pytest.approx(
-        1.539252, abs=1e-6
+        1.54284, abs=1e-6
     )
 
 
@@ -291,10 +291,10 @@ def test_losa_a_media_altura_no_cambia_base_ni_corona_y_se_resta() -> None:
     )
     _x0, _x1, _y0, _y1, z0, z1 = _caja(nucleo, muro)
     assert (z0, z1) == pytest.approx((0.00, 3.60), abs=1e-9)
-    # 3.60 − 0.20 de losa intermedia = 3.40 m de cuerpo, más la piel de 2 mm
-    # en las dos caras que la losa cruza: 2 × 4.00 × 0.002 × 0.20 = 0.0032.
+    # 3.60 − 0.20 de losa intermedia = 3.40 m de cuerpo, más la piel de 0.015 m
+    # en las dos caras que la losa cruza: 2 × 4.00 × 0.015 × 0.20 = 0.024.
     assert _volumen_malla(nucleo, muro) == pytest.approx(
-        _huella_area(nucleo, muro) * 3.40 + 2 * 4.00 * 0.002 * 0.20, abs=1e-6
+        _huella_area(nucleo, muro) * 3.40 + 2 * 4.00 * 0.015 * 0.20, abs=1e-6
     )
 
 
@@ -317,9 +317,9 @@ def test_cerramiento_a_media_altura_no_baja_la_corona_ni_la_base() -> None:
     _x0, _x1, _y0, _y1, z0, z1 = _caja(nucleo, muro)
     assert (z0, z1) == pytest.approx((0.00, 2.60), abs=1e-9)
     # 2.60 − 0.20 del cerramiento 2.20–2.40 = 2.40 m de cuerpo, más la piel
-    # de 2 mm en las dos caras que cruza: 2 × 4.00 × 0.002 × 0.20 = 0.0032.
+    # de 0.015 m en las dos caras que cruza: 2 × 4.00 × 0.015 × 0.20 = 0.024.
     assert _volumen_malla(nucleo, muro) == pytest.approx(
-        _huella_area(nucleo, muro) * 2.40 + 2 * 4.00 * 0.002 * 0.20, abs=1e-6
+        _huella_area(nucleo, muro) * 2.40 + 2 * 4.00 * 0.015 * 0.20, abs=1e-6
     )
 
 
@@ -363,14 +363,14 @@ def test_flujo_completo_cambiar_tope_a_n5_guarda_reabre_y_reporta() -> None:
     # las vigas, así que la banda aporta 0. La losa N4 (contorno a −0.075) deja
     # en 3.08–3.20 una franja de 0.025 en el borde exterior.
     # Muro largo (A = 0.50): franja 0.025×2.675 = 0.066875;
-    # main = 0.50×3.28 + 0.066875×0.12 = 1.648025. O062 suma la piel de 2 mm
-    # del cerramiento (0.20×2×2.50×0.002 = 0.002) y de la losa que cruza la
-    # cara interior (0.12×(2.30×0.002 + 2×0.000002) = 0.00055248): 1.65057748.
+    # main = 0.50×3.28 + 0.066875×0.12 = 1.648025. O062 suma la piel de 0.015 m
+    # del cerramiento (0.20×2×2.50×0.015 = 0.015) y de la losa que cruza la
+    # cara interior (0.12×(2.30×0.015 + 2×0.0001125) = 0.004167): 1.667192.
     # Muro corto (A = 0.30): franja 0.025×1.675 = 0.041875;
     # main = 0.30×3.28 + 0.041875×0.12 = 0.989025. Piel del cerramiento
-    # (0.20×2×1.50×0.002 = 0.0012) y de la losa (0.12×(1.30×0.002
-    # + 2×0.000002) = 0.00031248): 0.99053748.
-    esperados = [1.65057748, 0.99053748, 1.65057748, 0.99053748]
+    # (0.20×2×1.50×0.015 = 0.009) y de la losa (0.12×(1.30×0.015
+    # + 2×0.0001125) = 0.002367): 1.000392.
+    esperados = [1.667192, 1.000392, 1.667192, 1.000392]
     huellas: dict[str, float] = {}
     for muro, esperado in zip(muros, esperados):
         huellas[muro] = _huella_area(nucleo, muro)
@@ -435,10 +435,10 @@ def test_ningun_horizontal_intermedio_cambia_base_ni_corona() -> None:
         assert (base, cima) == pytest.approx((0.00, 3.60), abs=1e-9), nombre
         _x0, _x1, _y0, _y1, z0_malla, z1_malla = _caja(nucleo, muro)
         assert (z0_malla, z1_malla) == pytest.approx((0.00, 3.60), abs=1e-9), nombre
-        # O062: main + piel de 2 mm en las dos caras que cruza el horizontal
-        # (4.00 de largo): 2 � 4.00 � 0.002 � espesor.
+        # O062: main + piel de 0.015 m en las dos caras que cruza el horizontal
+        # (4.00 de largo): 2 x 4.00 x 0.015 x espesor.
         assert _volumen_malla(nucleo, muro) == pytest.approx(
             _huella_area(nucleo, muro) * (3.60 - espesor)
-            + 2 * 4.00 * 0.002 * espesor,
+            + 2 * 4.00 * 0.015 * espesor,
             abs=1e-6,
         ), nombre
