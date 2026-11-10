@@ -25,11 +25,14 @@ from ..modelado import (
 from .. import uniones
 from .comun import LARGOS_REFERENCIA, LIGA, PRIORIDAD
 
+from ..siembra import crea_openrvt
+
 
 class TrabesMixin:
     """Unión de contratrabes y trabes entre piezas."""
 
 
+    @crea_openrvt
     def contratrabes_unir_zapatas(
         self, tipo: str, nivel: str, desfase: float = -0.10
     ) -> dict[str, Any]:
@@ -49,6 +52,7 @@ class TrabesMixin:
             creados, mensaje=f"{len(creados)} contratrabe(s) creado(s)."
         )
 
+    @crea_openrvt
     def trabes_unir_columnas(
         self, tipo: str, nivel: str, espesor_losa: float = 0.10
     ) -> dict[str, Any]:

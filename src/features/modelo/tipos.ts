@@ -266,6 +266,8 @@ export interface RespuestaInfo {
   nombre: string;
   /** O045: línea de bitácora cuando se restauró la altura de muros viejos. */
   migracion?: string;
+  /** O066: el IFC no lo creó OPEN-RVT y aún no se le ha sembrado nada. */
+  ajeno?: boolean;
 }
 
 export interface PropiedadesElemento {

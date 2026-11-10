@@ -9,7 +9,7 @@ import type { EstadoModelo, GetEstado, SetEstado } from "./tipos";
 export function crearEstadoInicial(
   set: SetEstado,
   get: GetEstado,
-): Pick<EstadoModelo, "ruta" | "nombreArchivo" | "esquema" | "conCambios" | "totalElementos" | "conteos" | "niveles" | "elementos" | "mallas" | "caja" | "vistas" | "estilos" | "aberturas" | "arbol" | "arbolObra" | "notas" | "notaSeleccionada" | "arbolObraActivo" | "fijarArbolObraActivo" | "ajustarToken" | "vistaActivaId" | "ejeSeleccionado" | "nivelSeleccionado" | "seleccion" | "seleccionados" | "propiedades" | "cargando" | "error" | "aviso" | "nucleoCaido" | "avisoNucleo" | "pistaTab" | "modoCorte" | "puntoCorte" | "preguntaGuardar" | "tiempoCargaMs" | "vistasPersistidas" | "dialogoEstilos" | "dialogoCotas" | "dialogoAnotacion" | "editorTipos" | "editorTipoInicial" | "herramienta" | "referenciaAlinear" | "alineando" | "modoRecorte" | "referenciaRecorte" | "recorteInicial" | "vistaPreviaRecorte" | "opcionesMuro" | "opcionesLosa" | "opcionesCerramiento" | "opcionesNivel" | "opcionesEspejo" | "opcionesMatriz" | "cotasNivel" | "tiposMuro" | "tiposHerramienta" | "tipoHerramienta" | "rotacionSiguiente" | "columnaConZapata" | "tipoZapata" | "dialogoCastillos" | "preguntaZapata" | "referencias" | "puntosHerramienta" | "ratonHerramienta" | "engancheHerramienta" | "longitudTecleada" | "empujarClasificacion" | "empujarRect" | "empujarAltura" | "empujarZ" | "empujarCara" | "ejeLibre" | "voltearSiguiente" | "etiquetaEje" | "cotasMoverSiguientes"> {
+): Pick<EstadoModelo, "ruta" | "nombreArchivo" | "esquema" | "conCambios" | "totalElementos" | "conteos" | "niveles" | "elementos" | "mallas" | "caja" | "vistas" | "estilos" | "aberturas" | "arbol" | "arbolObra" | "notas" | "notaSeleccionada" | "arbolObraActivo" | "fijarArbolObraActivo" | "ajustarToken" | "vistaActivaId" | "ejeSeleccionado" | "nivelSeleccionado" | "seleccion" | "seleccionados" | "propiedades" | "cargando" | "error" | "aviso" | "nucleoCaido" | "avisoNucleo" | "pistaTab" | "modoCorte" | "puntoCorte" | "preguntaGuardar" | "ajeno" | "preguntaAjeno" | "tiempoCargaMs" | "vistasPersistidas" | "dialogoEstilos" | "dialogoCotas" | "dialogoAnotacion" | "editorTipos" | "editorTipoInicial" | "herramienta" | "referenciaAlinear" | "alineando" | "modoRecorte" | "referenciaRecorte" | "recorteInicial" | "vistaPreviaRecorte" | "opcionesMuro" | "opcionesLosa" | "opcionesCerramiento" | "opcionesNivel" | "opcionesEspejo" | "opcionesMatriz" | "cotasNivel" | "tiposMuro" | "tiposHerramienta" | "tipoHerramienta" | "rotacionSiguiente" | "columnaConZapata" | "tipoZapata" | "dialogoCastillos" | "preguntaZapata" | "referencias" | "puntosHerramienta" | "ratonHerramienta" | "engancheHerramienta" | "longitudTecleada" | "empujarClasificacion" | "empujarRect" | "empujarAltura" | "empujarZ" | "empujarCara" | "ejeLibre" | "voltearSiguiente" | "etiquetaEje" | "cotasMoverSiguientes"> {
   return {
     ruta: null,
     nombreArchivo: "",
@@ -56,6 +56,8 @@ export function crearEstadoInicial(
     modoCorte: false,
     puntoCorte: null,
     preguntaGuardar: null,
+    ajeno: false,
+    preguntaAjeno: null,
     tiempoCargaMs: null,
     vistasPersistidas: false,
     dialogoEstilos: false,

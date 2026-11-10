@@ -25,6 +25,8 @@ from ..modelado import (
 from .. import uniones
 from .comun import LARGOS_REFERENCIA, LIGA, PRIORIDAD
 
+from ..siembra import crea_openrvt
+
 
 class ReticulaMixin:
     """Columnas, zapatas y trabes sobre la retícula de ejes."""
@@ -52,6 +54,7 @@ class ReticulaMixin:
             return niveles[0]
         return mejor[1]
 
+    @crea_openrvt
     def columnas_en_cruces(
         self, tipo: str, nivel: str, ejes: Any = None
     ) -> dict[str, Any]:
@@ -178,6 +181,7 @@ class ReticulaMixin:
         salida.sort(key=lambda c: c[0])
         return salida
 
+    @crea_openrvt
     def zapatas_en_cruces(
         self,
         tipo: str,

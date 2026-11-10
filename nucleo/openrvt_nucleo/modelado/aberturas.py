@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from .comun import *  # noqa: F401,F403
 
+from ..siembra import crea_openrvt
+
 
 class AberturasMixin:
     # ------------------------------------------------------------------ aberturas
@@ -154,6 +156,7 @@ class AberturasMixin:
             matrix=self._matriz_hueco(muro, datos["distancia"], datos["antepecho"]),
         )
 
+    @crea_openrvt
     def abertura_crear(
         self,
         clase: str,

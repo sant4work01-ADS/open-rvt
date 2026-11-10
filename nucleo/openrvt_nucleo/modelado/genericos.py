@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from .comun import *  # noqa: F401,F403
 
+from ..siembra import crea_openrvt
+
 
 class GenericosMixin:
+    @crea_openrvt
     def generico_crear(
         self,
         nivel: str,

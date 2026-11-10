@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from .comun import *  # noqa: F401,F403
 
+from ..siembra import crea_openrvt
+
 
 class NotasMixin:
     # ------------------------------------------------------------------ notas (O055)
@@ -77,6 +79,7 @@ class NotasMixin:
         matriz[2][3] = z
         geometry_api.edit_object_placement(self.modelo, product=nota, matrix=matriz)
 
+    @crea_openrvt
     def nota_crear(
         self,
         texto: str,
