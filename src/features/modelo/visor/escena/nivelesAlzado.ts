@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { DESFASE_NOMBRE_CABEZA } from "../../niveles";
 import { asasCodoVista } from "../../ejesVista";
 import { burbujaEje, orientarAnotacion, textoCota } from "../anotaciones";
-import { calcularLayoutAlzado, segmentosTrazoPunto } from "../../anotacionVista";
+import { calcularLayoutAlzado, enlazarTramosCota, segmentosTrazoPunto } from "../../anotacionVista";
 import { centroCaja, direccionAlzado } from "../../vistas";
 import { crearMaterialLinea, lineaCerrada } from "../lineas";
 import { factorEscala, altoAnotacionMundo, mmAMundo, mmAMundoConMinimoPx, type PatronLinea } from "../../estilos";
@@ -35,7 +35,6 @@ export function construirNivelesAlzado(ctx: CtxEscena) {
     caja,
     ajustesNivelEnCurso,
     estilos,
-    enlazarTramosCota,
     vista,
     niveles,
   } = ctx;
@@ -428,8 +427,7 @@ export function construirNivelesAlzado(ctx: CtxEscena) {
         const todosTramos = [
           // O031 (regresión de O025): la cota parcial vuelve a saber entre qué dos
           // niveles está para que el doble clic edite la elevación (O010/O006).
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ...enlazarTramosCota(layout.parciales, ordenados).map((c: Record<string, any>) => ({
+          ...enlazarTramosCota(layout.parciales, ordenados).map((c) => ({
             ...c,
             tipo: "parcial" as const,
           })),
