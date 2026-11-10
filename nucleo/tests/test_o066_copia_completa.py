@@ -95,7 +95,7 @@ def _nivel(nucleo: ModeloNucleo):
     return nucleo._nivel_por_gid(nucleo.niveles()[0]["globalid"])
 
 
-def test_copia_generica_conserva_nivel_tipo_psets_y_qtos() -> None:
+def test_copia_generica_conserva_nivel_tipo_psets_y_qtos(tmp_path: Path) -> None:
     nucleo = ModeloNucleo()
     nucleo.nuevo("O066 copia")
     nivel = _nivel(nucleo)
@@ -139,6 +139,28 @@ def test_copia_generica_conserva_nivel_tipo_psets_y_qtos() -> None:
     assert nucleo._leer_pset(original, "OPENRVT_Prueba")["Largo"] == pytest.approx(2.5)
     assert nucleo._leer_pset(copia, "OPENRVT_Prueba")["Marca"] == "COPIA"
     assert nucleo._leer_pset(copia, "OPENRVT_Prueba")["Largo"] == pytest.approx(9.0)
+
+    # Flujo completo: guardar, reabrir y comprobar que los psets viajaron al IFC.
+    from openrvt_nucleo.modelo import ModeloNucleo as NucleoReabierto
+
+    ruta = tmp_path / "copia.ifc"
+    nucleo.guardar(str(ruta))
+    otro = NucleoReabierto()
+    otro.abrir(str(ruta))
+    reabierta = otro._entidad_por_gid(copia.GlobalId)
+    original_reabierto = otro._entidad_por_gid(original.GlobalId)
+    assert _propios(reabierta)["OPENRVT_Prueba"] == {
+        "Marca": "COPIA",
+        "Largo": pytest.approx(9.0),
+    }
+    assert _propios(original_reabierto)["OPENRVT_Prueba"] == {
+        "Marca": "ORIGINAL",
+        "Largo": pytest.approx(2.5),
+    }
+    assert _propios(reabierta)["Qto_Prueba"] == {
+        "Longitud": pytest.approx(2.5),
+        "Area": pytest.approx(1.25),
+    }
 
 
 def test_copia_generica_sin_tipo_ni_psets_no_inventa_datos() -> None:

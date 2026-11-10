@@ -129,3 +129,21 @@ def test_es_ifc_ajeno_exige_pset_openrvt_y_aplicacion_propia() -> None:
     assert es_ifc_ajeno(propio) is False
     propio.remove(aplicacion)
     assert es_ifc_ajeno(propio) is True
+
+
+def test_la_puerta_del_servidor_tambien_abre_ajeno_y_deshace_la_siembra() -> None:
+    from openrvt_nucleo.servidor import Servidor
+
+    original = ifcopenshell.open(str(FZK))
+    antes = _conteos(original)
+    servidor = Servidor()
+    info = servidor.despachar("proyecto.abrir", {"ruta": str(FZK)})
+    assert info["ajeno"] is True
+    nivel = servidor.despachar("modelo.niveles", {})[0]["globalid"]
+    servidor.despachar(
+        "muros.crear",
+        {"tipo": "Block 15", "nivel": nivel, "x1": 0, "y1": 0, "x2": 4, "y2": 0},
+    )
+    assert _conteos(servidor.modelo.modelo)["IfcWall"] == antes["IfcWall"] + 1
+    servidor.despachar("historial.deshacer", {})
+    assert _conteos(servidor.modelo.modelo) == antes
