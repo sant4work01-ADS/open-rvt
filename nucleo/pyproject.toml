@@ -17,7 +17,7 @@ dependencies = [
 pruebas = ["pytest"]
 
 [tool.setuptools]
-packages = ["openrvt_nucleo"]
+packages = ["openrvt_nucleo", "openrvt_nucleo.modelado"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
