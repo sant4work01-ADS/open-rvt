@@ -2461,12 +2461,18 @@ export function Visor3D({
     // se ocultan; si no, se cuelan por delante de la piel con el LineBasicMaterial.
     if (vista.tipo === "iso" || vista.tipo === "perspectiva") {
       for (const clave of aristasOcultasSobreMuro(
-        visibles.map((elemento) => ({
-          globalid: elemento.globalid,
-          categoria: elemento.categoria,
-          vertices: elemento.vertices,
-          indices: elemento.indices,
-        })),
+        visibles
+          .filter(
+            (elemento) =>
+              elemento.categoria === "muros" ||
+              CATEGORIAS_ESTRUCTURALES.has(elemento.categoria),
+          )
+          .map((elemento) => ({
+            globalid: elemento.globalid,
+            categoria: elemento.categoria,
+            vertices: elemento.vertices,
+            indices: elemento.indices,
+          })),
       )) {
         internasAristas.add(clave);
       }
