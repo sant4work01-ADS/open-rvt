@@ -27,6 +27,7 @@ import ifcopenshell.api.context as context
 import ifcopenshell.api.project as project
 import ifcopenshell.api.root as root
 import ifcopenshell.api.unit as unit
+import ifcopenshell.util.unit as unit_util
 import ifcopenshell.geom as geom
 import numpy as np
 
@@ -297,6 +298,18 @@ class ModeloNucleo(
             modelo = ifcopenshell.open(str(archivo))
         except Exception as exc:
             raise ErrorNucleo(f"No se pudo abrir el IFC: {exc}", -32003) from exc
+        # O063: todavía no se convierten unidades; se rechaza lo que no esté en metros.
+        try:
+            escala = float(unit_util.calculate_unit_scale(modelo))
+        except Exception:
+            escala = 1.0
+        if abs(escala - 1.0) > 1e-9:
+            raise ErrorNucleo(
+                "El archivo está en "
+                f"{self._nombre_unidad_longitud(modelo)}; "
+                "OPEN-RVT solo abre IFC en metros por ahora.",
+                -32030,
+            )
         self.modelo = modelo
         self.ruta = str(archivo.resolve())
         self.con_cambios = False
@@ -322,6 +335,24 @@ class ModeloNucleo(
         if migracion:
             info["migracion"] = migracion
         return info
+
+    @staticmethod
+    def _nombre_unidad_longitud(modelo: Any) -> str:
+        """O063: nombre legible de la unidad de longitud del proyecto."""
+        nombres = {
+            "METRE": "metros",
+            "MILLIMETRE": "milímetros",
+            "CENTIMETRE": "centímetros",
+            "KILOMETRE": "kilómetros",
+            "INCH": "pulgadas",
+            "FOOT": "pies",
+        }
+        try:
+            unidad = unit_util.get_project_unit(modelo, "LENGTHUNIT")
+            completo = unit_util.get_full_unit_name(unidad) if unidad else ""
+        except Exception:
+            completo = ""
+        return nombres.get(completo or "", (completo or "una unidad distinta").lower())
 
     def _restaurar_altura_muros_embebidos(self) -> str:
         """O045: restaura en una sola pasada la altura de los muros cortados."""
