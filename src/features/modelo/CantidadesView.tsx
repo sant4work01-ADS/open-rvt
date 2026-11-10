@@ -7,6 +7,7 @@ import { elegirDestinoMedicion } from "@/lib/dialogos";
 import { textoDeError } from "@/lib/ipc";
 import { Button } from "@/components/ui/button";
 import { useModelo } from "./estado";
+import { ETIQUETA_UNIDAD, totalesOrdenados } from "./cantidadesUnidad";
 
 export interface RenglonMedicion {
   eje: string;
@@ -28,13 +29,11 @@ export interface PartidaMedicionCalculada {
   renglones: RenglonMedicion[];
 }
 
-const UNIDAD: Record<string, string> = {
-  m: "m",
-  m2: "m²",
-  m3: "m³",
-  kg: "kg",
-  pza: "pza",
-};
+/** O063: losa u otro elemento que no se pudo medir; no suma en los totales. */
+export interface ErrorMedicion {
+  globalid: string;
+  mensaje: string;
+}
 
 function numero(valor: number): string {
   return valor.toLocaleString("es-MX", {
@@ -51,6 +50,7 @@ export function CantidadesView() {
   const fijarAviso = useModelo((s) => s.fijarAviso);
   const [nivel, setNivel] = useState("");
   const [partidas, setPartidas] = useState<PartidaMedicionCalculada[]>([]);
+  const [errores, setErrores] = useState<ErrorMedicion[]>([]);
   const [abiertas, setAbiertas] = useState<Set<string>>(new Set());
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,12 +64,13 @@ export function CantidadesView() {
       if (!vivo) return;
       setCargando(true);
       try {
-        const datos = await llamarConBitacora<{ partidas: PartidaMedicionCalculada[] }>(
-          "medicion.calcular",
-          nivel ? { nivel } : {},
-        );
+        const datos = await llamarConBitacora<{
+          partidas: PartidaMedicionCalculada[];
+          errores?: ErrorMedicion[];
+        }>("medicion.calcular", nivel ? { nivel } : {});
         if (!vivo) return;
         setPartidas(datos.partidas ?? []);
+        setErrores(datos.errores ?? []);
         setError(null);
       } catch (e) {
         if (vivo) setError(textoDeError(e));
@@ -83,10 +84,8 @@ export function CantidadesView() {
     };
   }, [nivel, conCambios]);
 
-  const totalGeneral = useMemo(
-    () => partidas.reduce((suma, partida) => suma + partida.total, 0),
-    [partidas],
-  );
+  // O063: un total por unidad; sumar m² con m³ no dice nada.
+  const totales = useMemo(() => totalesOrdenados(partidas), [partidas]);
 
   const alternar = (clave: string) => {
     setAbiertas((actual) => {
@@ -135,8 +134,14 @@ export function CantidadesView() {
             ))}
           </select>
         </label>
-        <span className="text-xs text-muted-foreground" data-testid="cantidades-total">
-          {partidas.length} partidas · {numero(totalGeneral)} en total
+        <span className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
+          <span data-testid="cantidades-total">{partidas.length} partidas</span>
+          {totales.map(([unidad, total]) => (
+            <span key={unidad} data-testid={`cantidades-total-${unidad}`}>
+              <span className="font-medium text-foreground">{numero(total)}</span>{" "}
+              {ETIQUETA_UNIDAD[unidad] ?? unidad}
+            </span>
+          ))}
         </span>
         <Button
           type="button"
@@ -153,6 +158,20 @@ export function CantidadesView() {
         <p data-testid="cantidades-error" className="px-3 py-2 text-xs text-red-600">
           {error}
         </p>
+      )}
+
+      {errores.length > 0 && (
+        <ul
+          data-testid="cantidades-errores"
+          className="border-b bg-amber-50 px-3 py-2 text-xs text-amber-800"
+        >
+          {errores.map((fallo) => (
+            <li key={fallo.globalid} data-testid={`cantidades-error-${fallo.globalid}`}>
+              <AlertTriangle size={12} className="mr-1 inline" />
+              Elemento {fallo.globalid}: {fallo.mensaje}. No suma en los totales.
+            </li>
+          ))}
+        </ul>
       )}
 
       <div className="min-h-0 flex-1 overflow-auto">
@@ -199,7 +218,9 @@ export function CantidadesView() {
                         </span>
                       )}
                     </td>
-                    <td className="px-2 py-1">{UNIDAD[partida.unidad] ?? partida.unidad}</td>
+                    <td className="px-2 py-1">
+                      {ETIQUETA_UNIDAD[partida.unidad] ?? partida.unidad}
+                    </td>
                     <td className="px-2 py-1 text-right tabular-nums">
                       {numero(partida.total)}
                     </td>

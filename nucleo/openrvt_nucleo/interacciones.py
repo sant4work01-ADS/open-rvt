@@ -2047,6 +2047,8 @@ class InteraccionesMixin:
 
         elementos: list[dict[str, Any]] = []
         piezas: list[dict[str, Any]] = []
+        # O063: cada cálculo empieza sin avisos de losas ilegibles.
+        self._avisos_losa = []
         for elemento in self.modelo.by_type("IfcElement"):
             if not self._es_elemento(elemento):
                 continue
@@ -2145,6 +2147,7 @@ class InteraccionesMixin:
                 "acero_kg": round(sum(i["acero_kg"] for i in elementos), 3),
             },
             "union_m3": round(union_total, 6),
+            "avisos": list(getattr(self, "_avisos_losa", [])),
         }
 
     def _partir_base_muro_por_bajadas(

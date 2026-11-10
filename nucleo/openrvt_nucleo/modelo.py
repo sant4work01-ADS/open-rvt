@@ -10,6 +10,7 @@ import base64
 import json
 import math
 import os
+import shutil
 import uuid
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,7 @@ import ifcopenshell.api.context as context
 import ifcopenshell.api.project as project
 import ifcopenshell.api.root as root
 import ifcopenshell.api.unit as unit
+import ifcopenshell.util.unit as unit_util
 import ifcopenshell.geom as geom
 import numpy as np
 
@@ -171,6 +173,14 @@ class ModeloNucleo(
         self.con_cambios = False
         self._deshacer: list[str] = []
         self._rehacer: list[str] = []
+        # O063: contador monótono de instantáneas y texto de la primera que se
+        # tomó durante el comando en curso. Sirven para revertir aunque el
+        # historial esté lleno y la longitud de ``_deshacer`` no crezca.
+        self._n_instantaneas = 0
+        self._ultima_instantanea_cmd: str | None = None
+        self._en_comando = False
+        # O063: losas sin contorno detectadas al calcular cantidades.
+        self._avisos_losa: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------------ utilidades
     def _exigir_modelo(self) -> ifcopenshell.file:
@@ -182,8 +192,15 @@ class ModeloNucleo(
         """Guarda el modelo antes de un comando que lo modifica (máximo 50)."""
         if self.modelo is None:
             return
-        self._deshacer.append(self.modelo.to_string())
-        if len(self._deshacer) > MAX_HISTORIAL:
+        texto = self.modelo.to_string()
+        self._deshacer.append(texto)
+        self._n_instantaneas += 1
+        if self._ultima_instantanea_cmd is None:
+            self._ultima_instantanea_cmd = texto
+        # Mientras corre un comando no se poda: si falla hay que poder devolver
+        # el historial exacto que habia antes, incluida la instantanea mas vieja
+        # que de otro modo se perderia al llenarse el historial.
+        if not self._en_comando and len(self._deshacer) > MAX_HISTORIAL:
             del self._deshacer[0 : len(self._deshacer) - MAX_HISTORIAL]
         self._rehacer.clear()
 
@@ -294,6 +311,18 @@ class ModeloNucleo(
             modelo = ifcopenshell.open(str(archivo))
         except Exception as exc:
             raise ErrorNucleo(f"No se pudo abrir el IFC: {exc}", -32003) from exc
+        # O063: todavía no se convierten unidades; se rechaza lo que no esté en metros.
+        try:
+            escala = float(unit_util.calculate_unit_scale(modelo))
+        except Exception:
+            escala = 1.0
+        if abs(escala - 1.0) > 1e-9:
+            raise ErrorNucleo(
+                "El archivo está en "
+                f"{self._nombre_unidad_longitud(modelo)}; "
+                "OPEN-RVT solo abre IFC en metros por ahora.",
+                -32030,
+            )
         self.modelo = modelo
         self.ruta = str(archivo.resolve())
         self.con_cambios = False
@@ -319,6 +348,24 @@ class ModeloNucleo(
         if migracion:
             info["migracion"] = migracion
         return info
+
+    @staticmethod
+    def _nombre_unidad_longitud(modelo: Any) -> str:
+        """O063: nombre legible de la unidad de longitud del proyecto."""
+        nombres = {
+            "METRE": "metros",
+            "MILLIMETRE": "milímetros",
+            "CENTIMETRE": "centímetros",
+            "KILOMETRE": "kilómetros",
+            "INCH": "pulgadas",
+            "FOOT": "pies",
+        }
+        try:
+            unidad = unit_util.get_project_unit(modelo, "LENGTHUNIT")
+            completo = unit_util.get_full_unit_name(unidad) if unidad else ""
+        except Exception:
+            completo = ""
+        return nombres.get(completo or "", (completo or "una unidad distinta").lower())
 
     def _restaurar_altura_muros_embebidos(self) -> str:
         """O045: restaura en una sola pasada la altura de los muros cortados."""
@@ -370,10 +417,23 @@ class ModeloNucleo(
         if not destino:
             raise ErrorNucleo("El modelo no tiene ruta; use «Guardar como».", -32602)
         archivo = Path(destino).expanduser()
+        temporal = archivo.with_name(archivo.name + ".tmp")
         try:
             archivo.parent.mkdir(parents=True, exist_ok=True)
-            modelo.write(str(archivo))
+            modelo.write(str(temporal))
+            # El write de IfcOpenShell cierra el archivo; se reabre para asegurar que
+            # el contenido llegó al disco antes de reemplazar el destino.
+            with open(temporal, "rb+") as manejador:
+                manejador.flush()
+                os.fsync(manejador.fileno())
+            if archivo.exists():
+                shutil.copy2(archivo, archivo.with_name(archivo.name + ".bak"))
+            os.replace(temporal, archivo)
         except Exception as exc:
+            try:
+                temporal.unlink(missing_ok=True)
+            except OSError:
+                pass
             raise ErrorNucleo(f"No se pudo guardar el IFC: {exc}", -32004) from exc
         self.ruta = str(archivo.resolve())
         self.con_cambios = False
@@ -1048,6 +1108,30 @@ class ModeloNucleo(
         return datos
 
     # ------------------------------------------------------------------ historial
+    def revertir_comando(self, instantanea: str, cuantas: int) -> None:
+        """O063: restaura la primera instantánea de un comando fallido.
+
+        ``instantanea`` es el texto del modelo tal como estaba al empezar el
+        comando y ``cuantas`` las instantáneas que llegó a tomar. Se quitan del
+        final del historial (nunca más de las que hay) y se restaura el modelo.
+        No depende de que la longitud del historial haya crecido: con el
+        historial lleno la instantánea nueva desplaza a la más vieja.
+        """
+        if self.modelo is None or cuantas <= 0:
+            return
+        cuantas = min(cuantas, len(self._deshacer))
+        if cuantas:
+            del self._deshacer[-cuantas:]
+        self.modelo = ifcopenshell.file.from_string(instantanea)
+        self._rehacer.clear()
+        self._ultima_instantanea_cmd = None
+
+    def cerrar_comando(self) -> None:
+        """O063: fin del comando; poda el historial que se dejó crecer mientras tanto."""
+        self._en_comando = False
+        if len(self._deshacer) > MAX_HISTORIAL:
+            del self._deshacer[0 : len(self._deshacer) - MAX_HISTORIAL]
+
     def deshacer(self) -> dict[str, Any]:
         self._exigir_modelo()
         if not self._deshacer:

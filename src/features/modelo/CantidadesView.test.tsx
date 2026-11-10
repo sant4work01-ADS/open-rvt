@@ -102,6 +102,49 @@ describe("vista Cantidades", () => {
     await waitFor(() => expect(seleccionado).toBe("gid-muro-1"));
   });
 
+  it("muestra el error de una losa sin contorno y no la suma", async () => {
+    preparar();
+    llamar.mockImplementation(async (metodo: string) => {
+      if (metodo === "medicion.calcular") {
+        return {
+          partidas: [PARTIDAS[0]],
+          errores: [{ globalid: "gid-losa", mensaje: "sin contorno legible" }],
+        };
+      }
+      return {};
+    });
+    render(<CantidadesView />);
+    expect(await screen.findByTestId("cantidades-error-gid-losa")).toBeInTheDocument();
+  });
+
+  it("muestra un total por unidad y no un total general mezclado", async () => {
+    preparar();
+    llamar.mockImplementation(async (metodo: string) => {
+      if (metodo === "medicion.calcular") {
+        return {
+          partidas: [
+            { ...PARTIDAS[0], unidad: "m2", total: 18.25 },
+            { ...PARTIDAS[1], unidad: "m2", total: 4.5 },
+            {
+              ...PARTIDAS[0],
+              clave: "LOSA",
+              nombre: "Losa de entrepiso",
+              unidad: "m3",
+              total: 2,
+            },
+          ],
+        };
+      }
+      return {};
+    });
+    render(<CantidadesView />);
+    // A mano: 18.25 + 4.5 = 22.75 m²; la losa son 2 m³.
+    expect(await screen.findByTestId("cantidades-total-m2")).toHaveTextContent("22.75 m²");
+    expect(screen.getByTestId("cantidades-total-m3")).toHaveTextContent("2 m³");
+    expect(screen.getByTestId("cantidades-total")).toHaveTextContent("3 partidas");
+    expect(screen.getByTestId("cantidades-total")).not.toHaveTextContent("en total");
+  });
+
   it("exporta con el diálogo de guardar y la ruta elegida", async () => {
     preparar();
     render(<CantidadesView />);

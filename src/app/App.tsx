@@ -11,6 +11,8 @@ import { useTema, aplicarTema, ESCALA_DEFECTO, bajarEscala, subirEscala } from "
 import { ConfiguracionView } from "@/features/configuracion/ConfiguracionView";
 import { AyudaView } from "@/features/ayuda/AyudaView";
 import { ModeloView } from "@/features/modelo/ModeloView";
+import { AvisoNucleoCaido } from "@/features/modelo/AvisoNucleoCaido";
+import { bloquearComandosDeEdicion } from "@/features/modelo/nucleoCaido";
 import { EditorTipos } from "@/features/tipos/EditorTipos";
 import { NivelesView } from "@/features/modelo/NivelesView";
 import { DialogoNivel } from "@/features/modelo/DialogoNivel";
@@ -52,6 +54,7 @@ export function App() {
   const nombreArchivo = useModelo((s) => s.nombreArchivo);
   const conCambios = useModelo((s) => s.conCambios);
   const herramientaActiva = useModelo((s) => s.herramienta);
+  const nucleoCaido = useModelo((s) => s.nucleoCaido);
   const vistaTipo = useModelo(
     (s) => s.vistas.find((v) => v.id === s.vistaActivaId)?.tipo ?? null,
   );
@@ -123,9 +126,16 @@ export function App() {
     void (async () => {
       try {
         const { listen } = await import("@tauri-apps/api/event");
-        const desuscribir = await listen<string>("nucleo-aviso", (evento) => {
+        const quitarAviso = await listen<string>("nucleo-aviso", (evento) => {
           useModelo.getState().fijarAviso(evento.payload);
         });
+        const quitarPerdido = await listen<string>("nucleo-perdido", (evento) => {
+          useModelo.getState().marcarNucleoCaido(evento.payload);
+        });
+        const desuscribir = () => {
+          quitarAviso();
+          quitarPerdido();
+        };
         if (vivo) quitar = desuscribir;
         else desuscribir();
       } catch {
@@ -342,9 +352,8 @@ export function App() {
     },
   );
 
-  const comandosRibbon = useMemo(
-    () =>
-      construirComandosRibbon({
+  const comandosRibbon = useMemo(() => {
+    const lista = construirComandosRibbon({
         nuevo: () => void useModelo.getState().nuevo(),
         abrir: () => void useModelo.getState().abrir(),
         guardar: () => void useModelo.getState().guardar(),
@@ -417,9 +426,11 @@ export function App() {
         temaClaro: () => fijar("claro"),
         temaOscuro: () => fijar("oscuro"),
         temaActivo: pref,
-      }),
-    [fijar, pref, herramientaActiva, vistaTipo, irAModulo],
-  );
+    });
+    // O063: con el núcleo caído solo quedan Nuevo, Abrir y los temas; toda
+    // herramienta de edición se ve y queda deshabilitada.
+    return nucleoCaido ? bloquearComandosDeEdicion(lista) : lista;
+  }, [fijar, pref, herramientaActiva, vistaTipo, irAModulo, nucleoCaido]);
 
   const comandos = useMemo<Comando[]>(() => {
     const lista: Comando[] = [];
@@ -512,6 +523,7 @@ export function App() {
       {atajos && <DialogoAtajos onCerrar={() => setAtajos(false)} />}
       {dialogoNivel && <DialogoNivel onCerrar={() => setDialogoNivel(false)} />}
       <DialogoActualizacion />
+      <AvisoNucleoCaido />
       <DialogoGuardarCambios />
       <DialogoBorrarZapata />
     </div>

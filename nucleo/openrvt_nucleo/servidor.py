@@ -56,6 +56,32 @@ class Servidor:
         return self.modelo
 
     def despachar(self, metodo: str, params: dict[str, Any]) -> Any:
+        """O063: si un comando mutador falla, el modelo vuelve a su instantánea.
+
+        Se guardan el contador monótono de instantáneas y el texto de la primera
+        que tome el comando. Si lanza, se restaura esa instantánea y se quitan
+        del final del historial las instantáneas que agregó; el error sigue su
+        curso normal. Comparar el contador (no la longitud del historial) hace
+        que funcione también con el historial lleno.
+        """
+        modelo = self.modelo
+        antes = modelo._n_instantaneas if modelo is not None else 0
+        if modelo is not None:
+            modelo._ultima_instantanea_cmd = None
+            modelo._en_comando = True
+        try:
+            return self._despachar(metodo, params)
+        except Exception:
+            if modelo is not None and modelo.modelo is not None:
+                tomadas = modelo._n_instantaneas - antes
+                if tomadas > 0 and modelo._ultima_instantanea_cmd is not None:
+                    modelo.revertir_comando(modelo._ultima_instantanea_cmd, tomadas)
+            raise
+        finally:
+            if modelo is not None:
+                modelo.cerrar_comando()
+
+    def _despachar(self, metodo: str, params: dict[str, Any]) -> Any:
         if metodo == "nucleo.ping":
             if self.modelo is None:
                 return {

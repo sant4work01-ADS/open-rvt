@@ -1003,8 +1003,8 @@ class MedicionMixin:
             if criterio == "area":
                 if datos.get("Area") is not None:
                     return float(datos["Area"]), factores
-                puntos = self._poligono_de_losa(elemento)
-                if len(puntos) < 3:
+                puntos = self._contorno_de_losa(elemento)
+                if puntos is None:
                     return None
                 return abs(_poligono_area(puntos)), factores
             if criterio == "volumen":
@@ -1015,8 +1015,8 @@ class MedicionMixin:
             if criterio == "cimbra_borde":
                 if datos.get("Perimetro") is not None:
                     return float(datos["Perimetro"]) * espesor, factores
-                puntos = self._poligono_de_losa(elemento)
-                if len(puntos) < 3:
+                puntos = self._contorno_de_losa(elemento)
+                if puntos is None:
                     return None
                 perimetro = sum(
                     math.hypot(
@@ -1075,6 +1075,7 @@ class MedicionMixin:
             del self._cache_cantidades_medicion
         filtro = _texto(nivel).strip()
         grupos: dict[tuple[str, str, str], dict[str, Any]] = {}
+        errores: list[dict[str, Any]] = []
         for elemento in self.modelo.by_type("IfcElement"):
             if not self._es_elemento(elemento):
                 continue
@@ -1082,6 +1083,15 @@ class MedicionMixin:
             if filtro:
                 if filtro not in (_gid(nivel_elemento), _nombre(nivel_elemento)):
                     continue
+            if elemento.is_a("IfcSlab") and self._contorno_de_losa(elemento) is None:
+                # O063: sin contorno no se inventa un área ni un volumen.
+                errores.append(
+                    {
+                        "globalid": _gid(elemento),
+                        "mensaje": "sin contorno legible",
+                    }
+                )
+                continue
             partidas, tipo = self._partidas_de_elemento(elemento)
             if not partidas:
                 continue
@@ -1124,7 +1134,7 @@ class MedicionMixin:
             partida["total"] = sum(
                 float(r["resultado"]) for r in partida["renglones"]
             )
-        return {"partidas": partidas}
+        return {"partidas": partidas, "errores": errores}
 
     # ------------------------------------------------------------------ exportación
     def medicion_exportar(self, ruta: str) -> dict[str, Any]:
