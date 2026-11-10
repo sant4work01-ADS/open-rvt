@@ -5,6 +5,11 @@ import { create } from "zustand";
 import { agregarEvento, bitacoraHerramienta, llamarConBitacora } from "@/lib/bitacora";
 import { elegirDestinoIfc, elegirIfcParaAbrir } from "@/lib/dialogos";
 import {
+  MENSAJE_NUCLEO_CAIDO,
+  fijarEstadoNucleoCaido,
+  verificarPuertaNucleo,
+} from "./nucleoCaido";
+import {
   CATEGORIAS_TODAS,
   type Abertura,
   type Caja,
@@ -292,6 +297,13 @@ interface EstadoModelo {
   cargando: boolean;
   error: string | null;
   aviso: string | null;
+  /** O063: el núcleo perdió el modelo en memoria y la edición está bloqueada. */
+  nucleoCaido: boolean;
+  /** O063: texto del aviso modal (se oculta con «Entendido», el bloqueo sigue). */
+  avisoNucleo: string | null;
+  marcarNucleoCaido: (mensaje: string) => void;
+  cerrarAvisoNucleo: () => void;
+  reactivarEdicion: () => void;
   /** O041: pista de Tab bajo el cursor («Tab: siguiente (Cerramiento …)»). */
   pistaTab: string | null;
   modoCorte: boolean;
@@ -598,6 +610,8 @@ interface EstadoModelo {
 }
 
 async function rpc<T>(metodo: string, params: Record<string, unknown> = {}): Promise<T> {
+  // O063: una sola puerta bloquea cualquier edición si el núcleo perdió el modelo.
+  verificarPuertaNucleo(metodo);
   // O006c: cada llamada al núcleo queda como `accion` y su `resultado`.
   return llamarConBitacora<T>(metodo, params);
 }
@@ -816,6 +830,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     }
     const activa =
       vistas.find((v) => v.tipo === "planta") ?? vistas[0] ?? null;
+    // O063: abrir o crear un modelo devuelve la edición.
+    fijarEstadoNucleoCaido(false);
     set({
       ruta: info.ruta,
       nombreArchivo: nombreDeRuta(info.ruta, info.nombre),
@@ -841,6 +857,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
       cargando: false,
       error: null,
       aviso: null,
+      nucleoCaido: false,
+      avisoNucleo: null,
       pistaTab: null,
       modoCorte: false,
       puntoCorte: null,
@@ -1510,6 +1528,8 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     cargando: false,
     error: null,
     aviso: null,
+    nucleoCaido: false,
+    avisoNucleo: null,
     pistaTab: null,
     modoCorte: false,
     puntoCorte: null,
@@ -2002,6 +2022,20 @@ export const useModelo = create<EstadoModelo>((set, get) => {
 
     fijarAviso: (texto) => set({ aviso: texto }),
     fijarPistaTab: (texto) => set({ pistaTab: texto }),
+
+    marcarNucleoCaido: (mensaje) => {
+      fijarEstadoNucleoCaido(true);
+      set({
+        nucleoCaido: true,
+        avisoNucleo: mensaje || MENSAJE_NUCLEO_CAIDO,
+        aviso: mensaje || MENSAJE_NUCLEO_CAIDO,
+      });
+    },
+    cerrarAvisoNucleo: () => set({ avisoNucleo: null }),
+    reactivarEdicion: () => {
+      fijarEstadoNucleoCaido(false);
+      set({ nucleoCaido: false, avisoNucleo: null });
+    },
 
     activarHerramienta: (herramienta) => {
       const vista = get().vistas.find((v) => v.id === get().vistaActivaId);

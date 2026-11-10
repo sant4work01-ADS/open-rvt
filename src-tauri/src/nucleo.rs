@@ -10,7 +10,7 @@ use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
-use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
@@ -18,7 +18,55 @@ use crate::bitacora::Bitacora;
 
 /// Tiempo máximo de una llamada (60 s, como pide la especificación).
 pub const TIMEOUT: Duration = Duration::from_secs(60);
+/// O063: teselar un modelo grande puede tardar más; tiene su propio límite.
+pub const TIMEOUT_TESELAR: Duration = Duration::from_secs(180);
 const MAX_LINEAS_ERROR: usize = 6;
+/// Mensaje único que la interfaz muestra en el aviso modal.
+pub const MENSAJE_NUCLEO_PERDIDO: &str =
+    "El núcleo se reinició; los cambios sin guardar de este modelo se perdieron.      Abre de nuevo el archivo.";
+
+/// Métodos que solo leen, consultan, teselan o miden. Cualquier otro se considera
+/// mutador y no se reintenta si el proceso muere (podría duplicar una edición).
+const METODOS_LECTURA: &[&str] = &[
+    "nucleo.ping",
+    "proyecto.info",
+    "proyecto.validar",
+    "modelo.niveles",
+    "modelo.elementos",
+    "modelo.arbol",
+    "modelo.arbol_obra",
+    "modelo.propiedades",
+    "modelo.referencias",
+    "geometria.teselar",
+    "vistas.leer",
+    "estilos.leer",
+    "ejes.listar",
+    "ejes.reticula",
+    "ejes.separacion",
+    "tipos.listar",
+    "tipos.obtener",
+    "tipos.instancias",
+    "materiales.listar",
+    "acero.varillas",
+    "acero.estimar",
+    "medicion.calcular",
+    "medicion.exportar",
+    "notas.listar",
+];
+
+/// O063: ¿la llamada modifica el modelo o su estado persistido?
+pub fn es_mutador(metodo: &str) -> bool {
+    !METODOS_LECTURA.contains(&metodo)
+}
+
+/// O063: tiempo máximo según el método; teselar tiene 180 s.
+pub fn timeout_del_metodo(metodo: &str, base: Duration) -> Duration {
+    if metodo == "geometria.teselar" {
+        TIMEOUT_TESELAR
+    } else {
+        base
+    }
+}
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ErrorNucleo {
@@ -101,6 +149,8 @@ pub struct Nucleo {
     siguiente_id: AtomicI64,
     generacion: AtomicU64,
     avisos: Mutex<Vec<String>>,
+    /// O063: el proceso murió o dejó de responder con una edición en curso.
+    modelo_perdido: AtomicBool,
     bitacora: Mutex<Option<Arc<Bitacora>>>,
 }
 
@@ -128,6 +178,7 @@ impl Nucleo {
             siguiente_id: AtomicI64::new(1),
             generacion: AtomicU64::new(0),
             avisos: Mutex::new(Vec::new()),
+            modelo_perdido: AtomicBool::new(false),
             bitacora: Mutex::new(None),
         }
     }
@@ -145,6 +196,7 @@ impl Nucleo {
             siguiente_id: AtomicI64::new(1),
             generacion: AtomicU64::new(0),
             avisos: Mutex::new(Vec::new()),
+            modelo_perdido: AtomicBool::new(false),
             bitacora: Mutex::new(None),
         }
     }
@@ -210,6 +262,11 @@ impl Nucleo {
     pub fn tomar_avisos(&self) -> Vec<String> {
         let mut guard = self.avisos.lock().unwrap_or_else(|e| e.into_inner());
         std::mem::take(&mut *guard)
+    }
+
+    /// O063: ¿hubo que descartar el modelo por una muerte o un timeout?
+    pub fn tomar_modelo_perdido(&self) -> bool {
+        self.modelo_perdido.swap(false, Ordering::SeqCst)
     }
 
     /// Cierra el proceso (al salir de la aplicación).
@@ -332,6 +389,10 @@ impl Nucleo {
             "method": metodo,
             "params": params.clone(),
         });
+        // O063: un mutador nunca se reintenta; repetir «crear muro» tras una muerte
+        // podría duplicar la edición. Las lecturas sí se reintentan una vez.
+        let puede_reintentar = reintentar && !es_mutador(metodo);
+        let espera = timeout_del_metodo(metodo, self.timeout);
         let mut texto = serde_json::to_string(&solicitud)
             .map_err(|e| ErrorNucleo::nuevo(format!("no se pudo serializar la llamada: {e}")))?;
         texto.push('\n');
@@ -342,10 +403,11 @@ impl Nucleo {
         {
             let detalle = proceso.ultimos_errores();
             *guard = None;
-            if reintentar {
+            if puede_reintentar {
                 drop(guard);
                 return self.llamar_interno(metodo, params, false);
             }
+            self.modelo_perdido.store(true, Ordering::SeqCst);
             return Err(ErrorNucleo::nuevo(format!(
                 "el núcleo IFC no acepta la llamada: {error}{}",
                 detalle_si_hay(&detalle)
@@ -363,14 +425,15 @@ impl Nucleo {
             let resultado = lector.read_line(&mut linea);
             let _ = tx.send((lector, resultado, linea));
         });
-        let recibido = match rx.recv_timeout(self.timeout) {
+        let recibido = match rx.recv_timeout(espera) {
             Ok(valor) => valor,
             Err(_) => {
                 let _ = proceso.hijo.kill();
                 *guard = None;
+                self.modelo_perdido.store(true, Ordering::SeqCst);
                 return Err(ErrorNucleo::nuevo(format!(
                     "el núcleo IFC no respondió en {} s.",
-                    self.timeout.as_secs()
+                    espera.as_secs()
                 )));
             }
         };
@@ -382,10 +445,11 @@ impl Nucleo {
         if leidos == 0 {
             let detalle = proceso.ultimos_errores();
             *guard = None;
-            if reintentar {
+            if puede_reintentar {
                 drop(guard);
                 return self.llamar_interno(metodo, params, false);
             }
+            self.modelo_perdido.store(true, Ordering::SeqCst);
             return Err(ErrorNucleo::nuevo(format!(
                 "el núcleo IFC terminó inesperadamente.{}",
                 detalle_si_hay(&detalle)
@@ -564,7 +628,7 @@ for linea in sys.stdin:
 "#,
         );
         let nucleo = Nucleo::de_prueba(
-            "python3",
+            resolver_interprete(),
             vec![ruta.into_os_string()],
             Duration::from_secs(5),
         );
@@ -593,14 +657,76 @@ os._exit(0)
 "#,
         );
         let nucleo = Nucleo::de_prueba(
-            "python3",
+            resolver_interprete(),
             vec![ruta.into_os_string()],
             Duration::from_secs(5),
         );
-        assert_eq!(nucleo.llamar("uno", json!({})).unwrap()["vivo"], true);
-        assert_eq!(nucleo.llamar("dos", json!({})).unwrap()["vivo"], true);
+        assert_eq!(nucleo.llamar("modelo.elementos", json!({})).unwrap()["vivo"], true);
+        assert_eq!(nucleo.llamar("proyecto.info", json!({})).unwrap()["vivo"], true);
         let avisos = nucleo.tomar_avisos();
         assert!(avisos.iter().any(|a| a.contains("reiniciado")));
+    }
+
+    #[test]
+    fn clasifica_mutadores_y_lecturas() {
+        for metodo in [
+            "modelo.elementos",
+            "modelo.propiedades",
+            "geometria.teselar",
+            "medicion.calcular",
+            "proyecto.info",
+        ] {
+            assert!(!es_mutador(metodo), "{metodo} es de lectura");
+        }
+        for metodo in [
+            "muros.crear",
+            "elementos.borrar",
+            "proyecto.guardar",
+            "historial.deshacer",
+            "vistas.guardar",
+        ] {
+            assert!(es_mutador(metodo), "{metodo} muta el modelo");
+        }
+        assert_eq!(
+            timeout_del_metodo("geometria.teselar", TIMEOUT),
+            Duration::from_secs(180)
+        );
+        assert_eq!(timeout_del_metodo("muros.crear", TIMEOUT), TIMEOUT);
+    }
+
+    #[test]
+    fn un_mutador_no_se_reintenta_tras_la_muerte() {
+        let ruta = script(
+            "muere-mutador.py",
+            r#"
+import json, os, sys
+marca = sys.argv[1] if len(sys.argv) > 1 else ""
+if marca and not os.path.exists(marca):
+    open(marca, "w").close()
+    os._exit(3)  # primera llamada: muere sin responder
+for linea in sys.stdin:
+    peticion = json.loads(linea)
+    print(json.dumps({"jsonrpc": "2.0", "id": peticion["id"], "result": {"vivo": True}}), flush=True)
+"#,
+        );
+        let marca = std::env::temp_dir().join(format!(
+            "openrvt-nucleo-marca-{}.txt",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&marca);
+        let nucleo = Nucleo::de_prueba(
+            resolver_interprete(),
+            vec![ruta.into_os_string(), marca.clone().into_os_string()],
+            Duration::from_secs(5),
+        );
+        let error = nucleo.llamar("muros.crear", json!({})).unwrap_err();
+        assert!(error.to_string().contains("terminó"));
+        assert!(nucleo.tomar_modelo_perdido());
+        // Una lectura sí puede relanzar y responder.
+        assert_eq!(
+            nucleo.llamar("modelo.elementos", json!({})).unwrap()["vivo"],
+            true
+        );
     }
 
     #[test]
@@ -615,7 +741,7 @@ for linea in sys.stdin:
 "#,
         );
         let nucleo = Nucleo::de_prueba(
-            "python3",
+            resolver_interprete(),
             vec![ruta.into_os_string()],
             Duration::from_millis(300),
         );
@@ -638,7 +764,7 @@ for linea in sys.stdin:
 "#,
         );
         let nucleo = Nucleo::de_prueba(
-            "python3",
+            resolver_interprete(),
             vec![ruta.into_os_string()],
             Duration::from_secs(5),
         );
@@ -661,7 +787,7 @@ for linea in sys.stdin:
 "#,
         );
         let nucleo = Nucleo::de_prueba(
-            "python3",
+            resolver_interprete(),
             vec![ruta.into_os_string()],
             Duration::from_secs(5),
         );

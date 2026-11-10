@@ -277,6 +277,11 @@ fn nucleo_llamar(
     for aviso in estado.0.tomar_avisos() {
         let _ = app.emit("nucleo-aviso", aviso);
     }
+    // O063: una muerte o un timeout descarta el modelo en memoria. La interfaz
+    // muestra un aviso modal y bloquea la edición hasta abrir o crear otro.
+    if estado.0.tomar_modelo_perdido() {
+        let _ = app.emit("nucleo-perdido", nucleo::MENSAJE_NUCLEO_PERDIDO);
+    }
     resultado
 }
 
