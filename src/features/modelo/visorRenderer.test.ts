@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-const { instancias } = vi.hoisted(() => ({ instancias: [] as any[] }));
+const { instancias } = vi.hoisted(() => ({
+  instancias: [] as Record<string, unknown>[],
+}));
 
 vi.mock("three", () => {
   class WebGLRenderer {
@@ -11,7 +13,7 @@ vi.mock("three", () => {
     fondo: unknown;
     constructor(opciones: Record<string, unknown>) {
       this.opciones = opciones;
-      instancias.push(this);
+      instancias.push(this as unknown as Record<string, unknown>);
     }
     setPixelRatio(valor: number) {
       this.pixelRatio = valor;
