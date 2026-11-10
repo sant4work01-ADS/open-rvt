@@ -10,6 +10,7 @@ import base64
 import json
 import math
 import os
+import shutil
 import uuid
 from pathlib import Path
 from typing import Any
@@ -370,10 +371,23 @@ class ModeloNucleo(
         if not destino:
             raise ErrorNucleo("El modelo no tiene ruta; use «Guardar como».", -32602)
         archivo = Path(destino).expanduser()
+        temporal = archivo.with_name(archivo.name + ".tmp")
         try:
             archivo.parent.mkdir(parents=True, exist_ok=True)
-            modelo.write(str(archivo))
+            modelo.write(str(temporal))
+            # El write de IfcOpenShell cierra el archivo; se reabre para asegurar que
+            # el contenido llegó al disco antes de reemplazar el destino.
+            with open(temporal, "rb+") as manejador:
+                manejador.flush()
+                os.fsync(manejador.fileno())
+            if archivo.exists():
+                shutil.copy2(archivo, archivo.with_name(archivo.name + ".bak"))
+            os.replace(temporal, archivo)
         except Exception as exc:
+            try:
+                temporal.unlink(missing_ok=True)
+            except OSError:
+                pass
             raise ErrorNucleo(f"No se pudo guardar el IFC: {exc}", -32004) from exc
         self.ruta = str(archivo.resolve())
         self.con_cambios = False
