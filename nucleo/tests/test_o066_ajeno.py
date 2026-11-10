@@ -84,6 +84,33 @@ def test_crear_muro_siembra_y_un_deshacer_vuelve_al_ajeno(tmp_path: Path) -> Non
     assert _materiales(nucleo.modelo) == materiales_antes
 
 
+def test_una_puerta_de_reticula_siembra_antes_de_crear_columnas() -> None:
+    """O066: no solo «muros.crear» siembra; cualquier puerta que crea lo hace.
+
+    Dos familias de 3 ejes (separaciones 4 y 4) se cruzan en 3×3 = 9 puntos.
+    """
+    nucleo = ModeloNucleo()
+    nucleo.abrir(str(FZK))
+    assert nucleo.ajeno is True
+    nivel = _nivel(nucleo)
+    nucleo.ejes_crear_reticula(
+        {"separaciones": [4, 4], "longitud": 20},
+        {"separaciones": [4, 4], "longitud": 20},
+    )
+    base = _conteos(nucleo.modelo)
+    assert base["IfcColumn"] == 0
+    assert base["IfcColumnType"] == 0
+
+    nucleo.columnas_en_cruces("C-1 Columna 30×30", nivel)
+
+    despues = _conteos(nucleo.modelo)
+    assert despues["IfcColumn"] == base["IfcColumn"] + 9
+    assert despues["IfcColumnType"] > base["IfcColumnType"]
+    assert despues["IfcMaterial"] > base["IfcMaterial"]
+    nucleo.deshacer()
+    assert _conteos(nucleo.modelo) == base
+
+
 def test_un_propio_sigue_sembrando_al_abrir(tmp_path: Path) -> None:
     creador = ModeloNucleo()
     creador.nuevo("O066 propio")

@@ -119,6 +119,7 @@ class CastillosMixin:
             self._recalcular_uniones_estructura()
         return castillo
 
+    @crea_openrvt
     def castillos_automaticos(
         self,
         muros: Any = None,

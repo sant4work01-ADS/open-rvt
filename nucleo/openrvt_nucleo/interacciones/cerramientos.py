@@ -139,6 +139,7 @@ class CerramientosMixin:
             if abs(tramo["corona"] - corona_maxima) <= TOLERANCIA
         ]
 
+    @crea_openrvt
     def cerramiento_crear_en_muro(
         self,
         tipo: str,
@@ -156,6 +157,7 @@ class CerramientosMixin:
             desde_planta=desde_planta,
         )
 
+    @crea_openrvt
     def dala_crear_en_muro(self, tipo: str, muro: str) -> dict[str, Any]:
         return self._lineal_en_muro(tipo, muro, "dala")
 

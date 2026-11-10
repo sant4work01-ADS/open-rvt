@@ -25,11 +25,14 @@ from ..modelado import (
 from .. import uniones
 from .comun import LARGOS_REFERENCIA, LIGA, PRIORIDAD
 
+from ..siembra import crea_openrvt
+
 
 class ZapatasMixin:
     """Zapata bajo columna."""
 
 
+    @crea_openrvt
     def zapata_bajo_columna(
         self,
         tipo: str,
