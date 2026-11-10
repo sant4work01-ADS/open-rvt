@@ -3251,8 +3251,10 @@ class ModeladoMixin:
         Incluye losa, dala, contratrabe, cerramiento y zapata corrida.
         """
         from shapely.geometry import Polygon
+        from shapely.ops import unary_union
 
         salida: list[dict[str, Any]] = []
+        tramos_vigas: dict[str, list[tuple[float, float]]] | None = None
         for elemento in self.modelo.by_type("IfcElement"):
             if elemento is muro:
                 continue
@@ -3311,7 +3313,42 @@ class ModeladoMixin:
                     if barra is None:
                         continue
                     zeta0, zeta1 = barra.z0, barra.z1
-                    recorte = Polygon(uniones.huella(barra))
+                    # O061 regla 4: se resta el sólido que de verdad ocupa la
+                    # viga, ya recortada contra columnas y castillos, no su eje
+                    # nominal de punta a punta. Así el muro conserva las franjas
+                    # que quedan alrededor del castillo cuando el cerramiento
+                    # termina en su cara.
+                    if tramos_vigas is None:
+                        vigas, columnas = self._barras_estructura()
+                        tramos_vigas, _aplicadas = uniones.calcular(
+                            vigas, columnas
+                        )
+                    tramos = tramos_vigas.get(barra.gid) or [
+                        (0.0, barra.largo)
+                    ]
+                    ux, uy = barra.direccion
+                    piezas = []
+                    for lo, hi in tramos:
+                        if hi - lo <= TOLERANCIA_CALCULO:
+                            continue
+                        trozo = uniones.Barra(
+                            gid=barra.gid,
+                            tipo=barra.tipo,
+                            x1=barra.x1 + ux * lo,
+                            y1=barra.y1 + uy * lo,
+                            x2=barra.x1 + ux * hi,
+                            y2=barra.y1 + uy * hi,
+                            ancho=barra.ancho,
+                            z0=barra.z0,
+                            z1=barra.z1,
+                            fondo=barra.fondo,
+                            rotacion=barra.rotacion,
+                            clase=barra.clase,
+                        )
+                        piezas.append(Polygon(uniones.huella(trozo)))
+                    recorte = (
+                        unary_union(piezas) if piezas else Polygon()
+                    )
                     es_losa = False
                 else:
                     continue

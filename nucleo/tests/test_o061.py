@@ -26,9 +26,9 @@ from pathlib import Path
 import ifcopenshell.geom as geom
 import numpy as np
 import pytest
-from shapely import wkt
-from shapely.geometry import Polygon
-from shapely.ops import unary_union
+from shapely import set_precision, wkt
+from shapely.geometry import LineString, Polygon
+from shapely.ops import polygonize, unary_union
 
 RAIZ = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(RAIZ / "nucleo"))
@@ -112,6 +112,51 @@ def _volumen_malla(nucleo: ModeloNucleo, entidad) -> float:
         if not iterador.next():
             break
     raise AssertionError(f"no se teseló {entidad.GlobalId}")
+
+
+def _seccion_horizontal(nucleo: ModeloNucleo, entidad, z: float):
+    """Sección real de la malla teselada del sólido en el plano horizontal z."""
+    ajustes = geom.settings()
+    ajustes.set(ajustes.USE_WORLD_COORDS, True)
+    iterador = geom.iterator(ajustes, nucleo.modelo, 1)
+    iterador.initialize()
+    while True:
+        forma = iterador.get()
+        if forma.id == entidad.id():
+            vertices = np.asarray(forma.geometry.verts, dtype=float).reshape(-1, 3)
+            caras = np.asarray(forma.geometry.faces, dtype=int).reshape(-1, 3)
+            break
+        if not iterador.next():
+            raise AssertionError(f"no se teseló {entidad.GlobalId}")
+    lineas = []
+    for cara in caras:
+        puntos = []
+        for a, b in ((cara[0], cara[1]), (cara[1], cara[2]), (cara[2], cara[0])):
+            za, zb = vertices[a, 2], vertices[b, 2]
+            if (za - z) * (zb - z) < 0:
+                t = (z - za) / (zb - za)
+                puntos.append(vertices[a] + t * (vertices[b] - vertices[a]))
+        if len(puntos) >= 2:
+            p, q = puntos[0], puntos[1]
+            if abs(p[0] - q[0]) > 1e-12 or abs(p[1] - q[1]) > 1e-12:
+                lineas.append(LineString([(p[0], p[1]), (q[0], q[1])]))
+    if not lineas:
+        return Polygon()
+    # El teselado reparte cada arista entre dos triángulos: se sueldan las
+    # coordenadas a 1e-9 para que los anillos cierren y polygonize los arme.
+    nodos = set_precision(unary_union(lineas), 1e-9)
+    poligonos = list(polygonize(nodos))
+    return unary_union(poligonos) if poligonos else Polygon()
+
+
+def _huella_global(nucleo: ModeloNucleo, muro) -> Polygon:
+    datos = nucleo._datos_muro(muro)
+    return unary_union(
+        [
+            Polygon([nucleo._punto_local(datos, u, v) for u, v in anillo])
+            for anillo in nucleo._huellas_muro(muro, datos)
+        ]
+    )
 
 
 def _losa(nucleo: ModeloNucleo, uso: str):
@@ -363,3 +408,30 @@ def test_cambiar_tipo_actualiza_nombre_de_omision_y_ancho() -> None:
     otro.elemento_editar(creado, {"nombre": "Muro de la fachada"})
     otro.elemento_cambiar_tipo(creado, "Block 20")
     assert entidad.Name == "Muro de la fachada"
+
+
+def test_invariante_secciones_cubren_la_huella_del_muro() -> None:
+    """La obra terminada no deja huecos: todo muro queda cubierto por sólidos.
+
+    A z = 0.06 manda el firme; a 1.00 y 3.40 los muros y castillos; a 2.30 la
+    franja del cerramiento; a 3.14 la azotea. En cada altura, la unión de las
+    secciones horizontales reales (malla teselada) de muros, cerramientos,
+    castillos y losas recortada a la huella del muro debe ser la huella misma.
+    """
+    nucleo = ModeloNucleo()
+    nucleo.abrir(str(DUENO))
+    solidos = [
+        elemento
+        for tipo in ("IfcWall", "IfcSlab", "IfcBeam", "IfcColumn")
+        for elemento in nucleo.modelo.by_type(tipo)
+    ]
+    muros = list(nucleo.modelo.by_type("IfcWall"))
+    for z in (0.06, 1.00, 2.30, 3.14, 3.40):
+        union = unary_union([_seccion_horizontal(nucleo, e, z) for e in solidos])
+        for muro in muros:
+            huella = _huella_global(nucleo, muro)
+            diferencia = huella.difference(union).area
+            assert diferencia < 1e-6, (
+                f"z = {z}: el muro {muro.GlobalId} deja un hueco de "
+                f"{diferencia:.9f} m²"
+            )
