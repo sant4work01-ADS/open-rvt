@@ -10,6 +10,11 @@ import type { NivelRef } from "../niveles";
 import type { StoreApi } from "zustand";
 
 export type RespuestaGuardar = "guardar" | "descartar" | "cancelar";
+/** O066: qué hacer al guardar encima de un IFC que no creó OPEN-RVT. */
+export type RespuestaGuardarAjeno =
+  | "guardar_como"
+  | "sobrescribir"
+  | "cancelar";
 export type Herramienta =
   | "muro"
   | "losa"
@@ -150,6 +155,11 @@ interface PreguntaGuardar {
   resolver: (respuesta: RespuestaGuardar) => void;
 }
 
+interface PreguntaAjeno {
+  nombre: string;
+  resolver: (respuesta: RespuestaGuardarAjeno) => void;
+}
+
 export interface EstadoModelo {
   ruta: string | null;
   nombreArchivo: string;
@@ -202,6 +212,10 @@ export interface EstadoModelo {
   modoCorte: boolean;
   puntoCorte: [number, number] | null;
   preguntaGuardar: PreguntaGuardar | null;
+  /** O066: el IFC abierto no lo creó OPEN-RVT. */
+  ajeno: boolean;
+  /** O066: pregunta al guardar encima del IFC ajeno original. */
+  preguntaAjeno: PreguntaAjeno | null;
   tiempoCargaMs: number | null;
   vistasPersistidas: boolean;
   /** O005: diálogo de estilos de objeto abierto. */
@@ -435,6 +449,9 @@ export interface EstadoModelo {
   asegurarSinCambios: () => Promise<boolean>;
   preguntarGuardar: () => Promise<RespuestaGuardar>;
   responderGuardar: (respuesta: RespuestaGuardar) => void;
+  /** O066: tres caminos al guardar sobre un IFC ajeno. */
+  preguntarGuardarAjeno: () => Promise<RespuestaGuardarAjeno>;
+  responderGuardarAjeno: (respuesta: RespuestaGuardarAjeno) => void;
   fijarVista: (id: string) => void;
   actualizarVista: (id: string, cambios: Partial<Vista>) => Promise<void>;
   /** O022: duplica una vista (copia completa con id y nombre nuevos). */

@@ -41,14 +41,14 @@ const nucleo = vi.mocked(ipc.nucleoLlamar);
 const raiz = resolve(process.cwd(), "src/features/modelo");
 const estadoTs = resolve(raiz, "estado.ts");
 
-// Claves exactas de EstadoModelo en main (1492..3765 de estado.ts, 203 claves).
+// Claves exactas de EstadoModelo en main (1492..3765 de estado.ts, 203 claves; O066 agrega 4).
 const CLAVES = [
   "ruta", "nombreArchivo", "esquema", "conCambios", "totalElementos", "conteos",
   "niveles", "elementos", "mallas", "caja", "vistas", "estilos",
   "aberturas", "arbol", "arbolObra", "notas", "notaSeleccionada", "arbolObraActivo",
   "fijarArbolObraActivo", "ajustarToken", "vistaActivaId", "ejeSeleccionado", "nivelSeleccionado", "seleccion",
   "seleccionados", "propiedades", "cargando", "error", "aviso", "nucleoCaido",
-  "avisoNucleo", "pistaTab", "modoCorte", "puntoCorte", "preguntaGuardar", "tiempoCargaMs",
+  "avisoNucleo", "pistaTab", "modoCorte", "puntoCorte", "preguntaGuardar", "ajeno", "preguntaAjeno", "tiempoCargaMs",
   "vistasPersistidas", "dialogoEstilos", "dialogoCotas", "dialogoAnotacion", "editorTipos", "editorTipoInicial",
   "herramienta", "referenciaAlinear", "alineando", "modoRecorte", "referenciaRecorte", "recorteInicial",
   "vistaPreviaRecorte", "opcionesMuro", "opcionesLosa", "opcionesCerramiento", "opcionesNivel", "opcionesEspejo",
@@ -57,7 +57,7 @@ const CLAVES = [
   "ratonHerramienta", "engancheHerramienta", "longitudTecleada", "empujarClasificacion", "empujarRect", "empujarAltura",
   "empujarZ", "empujarCara", "ejeLibre", "voltearSiguiente", "etiquetaEje", "cotasMoverSiguientes",
   "fijarCotasMoverSiguientes", "nuevo", "abrir", "guardar", "guardarComo", "preguntarGuardar",
-  "responderGuardar", "asegurarSinCambios", "fijarVista", "fijarEjeSeleccionado", "fijarNivelSeleccionado", "actualizarVista",
+  "responderGuardar", "preguntarGuardarAjeno", "responderGuardarAjeno", "asegurarSinCambios", "fijarVista", "fijarEjeSeleccionado", "fijarNivelSeleccionado", "actualizarVista",
   "duplicarVista", "eliminarVista", "fijarAjustesEjes", "fijarAjustesNiveles", "guardarEstilos", "abrirDialogoEstilos",
   "cerrarDialogoEstilos", "abrirDialogoAnotacion", "cerrarDialogoAnotacion", "abrirDialogoCotas", "cerrarDialogoCotas", "abrirEditorTipos",
   "cerrarEditorTipos", "aplicarTipoEdicion", "recargarTipos", "seleccionar", "seleccionarVarios", "alternarNodoArbol",
@@ -156,7 +156,7 @@ describe("O065B — partición del store", () => {
     expect(lineas(estadoTs), "estado.ts debe ser el índice, no el store").toBeLessThanOrEqual(600);
   });
 
-  it("el store conserva exactamente las 203 claves de main (ninguna acción se perdió)", () => {
+  it("el store conserva exactamente las 207 claves de main (ninguna acción se perdió)", () => {
     expect(Object.keys(useModelo.getState()).sort()).toEqual([...CLAVES].sort());
   });
 

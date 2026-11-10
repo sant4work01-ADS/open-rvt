@@ -162,6 +162,7 @@ export function crearAyudasCarga(set: SetEstado, get: GetEstado) {
     fijarEstadoNucleoCaido(false);
     set({
       ruta: info.ruta,
+      ajeno: info.ajeno === true,
       nombreArchivo: nombreDeRuta(info.ruta, info.nombre),
       esquema: info.esquema,
       conCambios: info.con_cambios || migradas,

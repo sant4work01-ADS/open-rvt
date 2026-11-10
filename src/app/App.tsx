@@ -16,6 +16,7 @@ import { bloquearComandosDeEdicion } from "@/features/modelo/nucleoCaido";
 import { EditorTipos } from "@/features/tipos/EditorTipos";
 import { NivelesView } from "@/features/modelo/NivelesView";
 import { DialogoNivel } from "@/features/modelo/DialogoNivel";
+import { DialogoGuardarAjeno } from "@/features/modelo/DialogoGuardarAjeno";
 import { esHerramientaPuntual, useModelo } from "@/features/modelo/estado";
 import { bitacoraAviso, bitacoraVista, vaciarBitacora } from "@/lib/bitacora";
 import { Ribbon } from "@/features/ribbon/Ribbon";
@@ -525,6 +526,7 @@ export function App() {
       <DialogoActualizacion />
       <AvisoNucleoCaido />
       <DialogoGuardarCambios />
+      <DialogoGuardarAjeno />
       <DialogoBorrarZapata />
     </div>
   );

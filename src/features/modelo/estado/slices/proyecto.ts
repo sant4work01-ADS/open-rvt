@@ -2,7 +2,7 @@
 import { agregarEvento } from "@/lib/bitacora";
 import { elegirDestinoIfc, elegirIfcParaAbrir } from "@/lib/dialogos";
 import type { RespuestaInfo } from "../../tipos";
-import type { RespuestaGuardar } from "../tipos";
+import type { RespuestaGuardar, RespuestaGuardarAjeno } from "../tipos";
 import { rpc } from "../ipc";
 import type { EstadoModelo, GetEstado, SetEstado } from "../tipos";
 import type { Ayudas } from "../ayudas";
@@ -11,7 +11,7 @@ export function crearSliceProyecto(
   set: SetEstado,
   get: GetEstado,
   h: Ayudas,
-): Pick<EstadoModelo, "nuevo" | "abrir" | "guardar" | "guardarComo" | "preguntarGuardar" | "responderGuardar" | "asegurarSinCambios" | "validar" | "comprobarNucleo"> {
+): Pick<EstadoModelo, "nuevo" | "abrir" | "guardar" | "guardarComo" | "preguntarGuardar" | "responderGuardar" | "preguntarGuardarAjeno" | "responderGuardarAjeno" | "asegurarSinCambios" | "validar" | "comprobarNucleo"> {
   const { cargar, guardarEn } = h;
   return {
     nuevo: async () => {
@@ -56,7 +56,16 @@ export function crearSliceProyecto(
       }
     },
 
-    guardar: async () => guardarEn(null, false),
+    guardar: async () => {
+      const estado = get();
+      if (estado.ajeno && estado.ruta) {
+        // O066: guardar sobre el IFC ajeno original avisa antes de reescribirlo.
+        const respuesta = await get().preguntarGuardarAjeno();
+        if (respuesta === "cancelar") return false;
+        if (respuesta === "guardar_como") return get().guardarComo();
+      }
+      return guardarEn(null, false);
+    },
 
     guardarComo: async (rutaElegida) => {
       const ruta =
@@ -74,6 +83,17 @@ export function crearSliceProyecto(
     responderGuardar: (respuesta) => {
       const pregunta = get().preguntaGuardar;
       set({ preguntaGuardar: null });
+      pregunta?.resolver(respuesta);
+    },
+
+    preguntarGuardarAjeno: () =>
+      new Promise<RespuestaGuardarAjeno>((resolver) => {
+        set({ preguntaAjeno: { nombre: get().nombreArchivo, resolver } });
+      }),
+
+    responderGuardarAjeno: (respuesta) => {
+      const pregunta = get().preguntaAjeno;
+      set({ preguntaAjeno: null });
       pregunta?.resolver(respuesta);
     },
 
