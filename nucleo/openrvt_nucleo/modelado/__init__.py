@@ -37,10 +37,11 @@ from .recortar import RecortarMixin
 from .borrar import BorrarMixin
 from .transformar import TransformarMixin
 from .copiar import CopiarMixin
+from .copiar_generico import CopiarGenericoMixin
 from .empujar import EmpujarMixin
 from .editar import EditarMixin
 from .referencias import ReferenciasMixin
 
 
-class ModeladoMixin(MuroPielMixin, UtilidadesMixin, RestriccionesMixin, TiposMixin, NivelesMixin, AlinearMixin, RestriccionesEditarMixin, EnlacesMixin, EjesMixin, EjesCotasMixin, MurosMixin, MurosCimentacionMixin, MurosGeometriaMixin, MurosEsquinasMixin, EstructuraCuerposMixin, EstructuraUnionesMixin, EstructuraCrearMixin, UnionesMurosMixin, LosasMixin, GenericosMixin, NotasMixin, LosasMurosMixin, AberturasMixin, EdicionMixin, RecortarMixin, BorrarMixin, TransformarMixin, CopiarMixin, EmpujarMixin, EditarMixin, ReferenciasMixin):
+class ModeladoMixin(MuroPielMixin, UtilidadesMixin, RestriccionesMixin, TiposMixin, NivelesMixin, AlinearMixin, RestriccionesEditarMixin, EnlacesMixin, EjesMixin, EjesCotasMixin, MurosMixin, MurosCimentacionMixin, MurosGeometriaMixin, MurosEsquinasMixin, EstructuraCuerposMixin, EstructuraUnionesMixin, EstructuraCrearMixin, UnionesMurosMixin, LosasMixin, GenericosMixin, NotasMixin, LosasMurosMixin, AberturasMixin, EdicionMixin, RecortarMixin, BorrarMixin, TransformarMixin, CopiarMixin, CopiarGenericoMixin, EmpujarMixin, EditarMixin, ReferenciasMixin):
     """Métodos de modelado; se mezclan en ``ModeloNucleo``."""

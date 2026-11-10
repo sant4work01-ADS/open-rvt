@@ -132,15 +132,10 @@ class CopiarMixin:
                     )
                 creados.append(copia)
             else:
-                copia = self._copiar_entidad(original)
-                self._copiar_restricciones(original, copia)
-                geometry_api.edit_object_placement(
-                    self.modelo,
-                    product=copia,
-                    matrix=self._matriz_traslado(copia, dx, dy, dz),
-                    is_si=True,
+                # O066: cualquier clase conserva nivel, tipo, psets y qtos.
+                creados.append(
+                    self._copiar_elemento_generico(original, dx, dy, dz)
                 )
-                creados.append(copia)
         self._recalcular_uniones_estructura()
         self.con_cambios = True
         return self._resultado(creados=creados, mensaje=f"{len(creados)} elemento(s) copiado(s).")
