@@ -15,6 +15,7 @@ import {
   dibujaSiluetaSobreCorte,
   elementoVisibleEnPlanta,
 } from "./vistas";
+import { crearRendererVisor } from "./visorRenderer";
 import { useModelo } from "./estado";
 import {
   calcularPlantaMuros,
@@ -2097,25 +2098,7 @@ export function Visor3D({
     const nodo = contenedor.current;
     if (!nodo) return;
     const escenaLocal = new THREE.Scene();
-    const rendererLocal = new THREE.WebGLRenderer({
-      antialias: true,
-      alpha: false,
-      stencil: true,
-      preserveDrawingBuffer: true,
-      // O062: con la piel de 0.015 las aristas del bolsillo interno quedan a
-      // 15 mm de la cara; el buffer de profundidad logarítmico mantiene la
-      // precisión suficiente de cerca y de lejos para que no se dibujen a
-      // través de la cara exterior.
-      logarithmicDepthBuffer: true,
-    });
-    rendererLocal.localClippingEnabled = true;
-    rendererLocal.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    rendererLocal.setClearColor(colorDeFondo(oscuro), 1);
-    nodo.appendChild(rendererLocal.domElement);
-    rendererLocal.domElement.style.display = "block";
-    rendererLocal.domElement.style.width = "100%";
-    rendererLocal.domElement.style.height = "100%";
-    rendererLocal.domElement.dataset.testid = "visor-canvas";
+    const rendererLocal = crearRendererVisor(nodo, colorDeFondo(oscuro));
 
     const grupoLocal = new THREE.Group();
     escenaLocal.add(grupoLocal);
