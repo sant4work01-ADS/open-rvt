@@ -15,6 +15,7 @@ import {
   dibujaSiluetaSobreCorte,
   elementoVisibleEnPlanta,
 } from "./vistas";
+import { crearRendererVisor } from "./visorRenderer";
 import { useModelo } from "./estado";
 import {
   calcularPlantaMuros,
@@ -171,6 +172,8 @@ import {
   aristasParaElemento,
   mallaConNormalesPlanas,
 } from "./geometria";
+import { agregarAristasOcultasSobreMuro } from "./aristasSobreMuro";
+import { crearMaterialElemento } from "./materialElemento";
 import { crearMallasCapas } from "./capas3d";
 import {
   MAXIMO_CODOS,
@@ -2097,20 +2100,7 @@ export function Visor3D({
     const nodo = contenedor.current;
     if (!nodo) return;
     const escenaLocal = new THREE.Scene();
-    const rendererLocal = new THREE.WebGLRenderer({
-      antialias: true,
-      alpha: false,
-      stencil: true,
-      preserveDrawingBuffer: true,
-    });
-    rendererLocal.localClippingEnabled = true;
-    rendererLocal.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    rendererLocal.setClearColor(colorDeFondo(oscuro), 1);
-    nodo.appendChild(rendererLocal.domElement);
-    rendererLocal.domElement.style.display = "block";
-    rendererLocal.domElement.style.width = "100%";
-    rendererLocal.domElement.style.height = "100%";
-    rendererLocal.domElement.dataset.testid = "visor-canvas";
+    const rendererLocal = crearRendererVisor(nodo, colorDeFondo(oscuro));
 
     const grupoLocal = new THREE.Group();
     escenaLocal.add(grupoLocal);
@@ -2465,6 +2455,11 @@ export function Visor3D({
               })),
           )
         : new Set<string>();
+    // O062: las aristas coplanares de losas y estructura sobre una cara del muro
+    // se ocultan; si no, se cuelan por delante de la piel con el LineBasicMaterial.
+    if (vista.tipo === "iso" || vista.tipo === "perspectiva") {
+      agregarAristasOcultasSobreMuro(internasAristas, visibles);
+    }
 
     // O012: en 3D las capas de acabado se dibujan como franjas con el mismo
     // contorno ingleteado/recortado que la planta.
@@ -2663,21 +2658,16 @@ export function Visor3D({
         vista.estilo,
       );
 
-      const material =
-        diseno
-          ? new THREE.MeshBasicMaterial({
-              color: seleccionado ? color : fondo,
-              side: THREE.DoubleSide,
-              clippingPlanes: planos,
-            })
-          : new THREE.MeshLambertMaterial({
-              color,
-              side: THREE.DoubleSide,
-              transparent: !opaco,
-              opacity: elemento.opacidad,
-              clippingPlanes: planos,
-              emissive: seleccionado ? 0x123a66 : 0x000000,
-            });
+      const material = crearMaterialElemento({
+        diseno,
+        seleccionado,
+        color,
+        fondo,
+        opaco,
+        opacidad: elemento.opacidad,
+        planos,
+        categoria: elemento.categoria,
+      });
       // Lo que queda por encima del corte no se dibuja como cara: solo su silueta
       // discontinua, para que no tape la planta.
       const capas3d =

@@ -27,6 +27,7 @@ import numpy as np
 
 from . import uniones
 from .biblioteca import LINEAS_UBICACION
+from .muro_piel import MuroPielMixin, TOLERANCIA_CALCULO, _limpiar_anillo
 
 LOG = logging.getLogger("openrvt_nucleo.modelado")
 
@@ -44,7 +45,6 @@ ALINEACIONES = ("centro", "interior", "exterior")
 TOLERANCIA = 0.01  # unión automática de muros: ±1 cm
 # O006e: un extremo a menos de 25 cm de la cara o del eje de otro muro se lleva al eje.
 TOLERANCIA_UNION = 0.25
-TOLERANCIA_CALCULO = 1e-6
 
 # O016: restricciones de base y tope por nivel.
 PSET_RESTRICCIONES = "OPENRVT_Restricciones"
@@ -116,34 +116,6 @@ def _redondear(valor: float) -> float:
     return round(float(valor), 6)
 
 
-def _limpiar_anillo(
-    puntos: list[tuple[float, float]], tolerancia: float = 1e-7
-) -> list[tuple[float, float]]:
-    """Anillo sin ruido de coma flotante: redondea a 1e-9, quita vértices repetidos
-    (incluido el cierre) y los que quedan alineados con sus vecinos."""
-    limpios: list[tuple[float, float]] = []
-    for x, y in puntos:
-        p = (round(float(x), 9) + 0.0, round(float(y), 9) + 0.0)
-        if limpios and math.hypot(p[0] - limpios[-1][0], p[1] - limpios[-1][1]) <= tolerancia:
-            continue
-        limpios.append(p)
-    while len(limpios) > 1 and math.hypot(
-        limpios[0][0] - limpios[-1][0], limpios[0][1] - limpios[-1][1]
-    ) <= tolerancia:
-        limpios.pop()
-    cambio = True
-    while cambio and len(limpios) > 3:
-        cambio = False
-        for k in range(len(limpios)):
-            a, b, c = limpios[k - 1], limpios[k], limpios[(k + 1) % len(limpios)]
-            cruz = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
-            if abs(cruz) <= tolerancia * max(1.0, math.hypot(c[0] - a[0], c[1] - a[1])):
-                del limpios[k]
-                cambio = True
-                break
-    return limpios
-
-
 def _poligono_area(puntos: list[tuple[float, float]]) -> float:
     area = 0.0
     for i, (x1, y1) in enumerate(puntos):
@@ -164,7 +136,7 @@ def _distancia_punto_segmento(
     return math.hypot(px - (x1 + t * dx), py - (y1 + t * dy)), t
 
 
-class ModeladoMixin:
+class ModeladoMixin(MuroPielMixin):
     """Métodos de modelado; se mezclan en ``ModeloNucleo``."""
 
     # ------------------------------------------------------------------ utilidades
@@ -2909,27 +2881,58 @@ class ModeladoMixin:
         if base > float(datos["z"]) + TOLERANCIA_CALCULO:
             # El muro ya se apoya en algo por encima de su nivel: no se baja.
             bajadas = []
-        items = []
+        items: list[Any] = []
         temporales = []
+        offset_cuerpo = self._desfase_de_muro(muro, datos["espesor"])
         for poligono in poligonos:
             for pieza, z0 in self._partir_por_bajadas(poligono, base, bajadas):
-                for tramo_z0, tramo_z1, activos in self._tramos_verticales_muro(
-                    z0, cima, intervalos
-                ):
-                    for trozo in self._recortar_tramo_muro(pieza, datos, activos):
-                        offset_z = tramo_z0 - datos["z"]
-                        alto = max(tramo_z1 - tramo_z0, 0.001)
-                        rep = geometry_api.add_slab_representation(
+                alto = cima - z0
+                if alto <= TOLERANCIA_CALCULO:
+                    continue
+                # O062: el muro es un solo prisma de base a corona; los
+                # intermedios se restan como bolsillos que dejan una piel de
+                # 0.015 m en las caras exteriores. Sin tramos apilados no hay
+                # tapas internas ni aristas horizontales sobre la cara plana.
+                rep = geometry_api.add_slab_representation(
+                    self.modelo,
+                    context=self._contexto(),
+                    depth=alto,
+                    direction_sense="POSITIVE",
+                    offset=z0 - datos["z"],
+                    polyline=pieza,
+                )
+                temporales.append(rep)
+                if not rep.Items:
+                    continue
+                item = rep.Items[0]
+                cortes = self._cortes_intermedios_muro(
+                    pieza, datos, intervalos, z0, cima, offset_cuerpo
+                )
+                temporales.extend(cortes[0])
+                if cortes[1]:
+                    try:
+                        creados = geometry_api.add_boolean(
                             self.modelo,
-                            context=self._contexto(),
-                            depth=alto,
-                            direction_sense="POSITIVE",
-                            offset=offset_z,
-                            polyline=trozo,
+                            first_item=item,
+                            second_items=cortes[1],
+                            operator="DIFFERENCE",
                         )
-                        temporales.append(rep)
-                        items.extend(rep.Items)
-        # La representación final es una sola con todos los tramos del muro.
+                    except Exception:
+                        LOG.warning(
+                            "no se pudo restar un intermedio del muro", exc_info=True
+                        )
+                        creados = None
+                    if creados:
+                        item = (
+                            creados[-1]
+                            if isinstance(creados, (list, tuple))
+                            else creados
+                        )
+                items.append(item)
+        # O062: si hay varias piezas (castillos o bajadas) se funden en un solo
+        # sólido compartido.
+        items = self._unir_solidos(items)
+        # La representación final es una sola con el sólido del muro.
         context = self._contexto()
         cuerpo = self.modelo.create_entity(
             "IfcShapeRepresentation",
@@ -3403,49 +3406,6 @@ class ModeladoMixin:
             ]
             salida.append((a, b, activos))
         return salida or [(z0, z1, [])]
-
-    def _recortar_tramo_muro(
-        self,
-        pieza: list[tuple[float, float]],
-        datos: dict[str, Any],
-        activos: list[dict[str, Any]],
-    ) -> list[list[tuple[float, float]]]:
-        """O061 regla 4: resta del tramo solo la huella real de cada intermedio."""
-        if not activos:
-            return [pieza]
-        from shapely.geometry import Polygon
-
-        mundo = Polygon([self._punto_local(datos, u, v) for u, v in pieza])
-        if not mundo.is_valid:
-            mundo = mundo.buffer(0)
-        for intervalo in activos:
-            huella = intervalo.get("huella")
-            if huella is None or huella.is_empty:
-                continue
-            if not huella.is_valid:
-                huella = huella.buffer(0)
-            if huella.is_empty or not mundo.intersects(huella):
-                continue
-            mundo = mundo.difference(huella)
-            if mundo.is_empty:
-                return []
-        piezas = [mundo] if mundo.geom_type == "Polygon" else list(
-            getattr(mundo, "geoms", [])
-        )
-        salida: list[list[tuple[float, float]]] = []
-        for trozo in piezas:
-            if trozo.is_empty or trozo.area <= TOLERANCIA_CALCULO:
-                continue
-            trozo = trozo.simplify(1e-7, preserve_topology=True)
-            anillo = _limpiar_anillo(
-                [
-                    self._punto_en_local(datos, x, y)
-                    for x, y in list(trozo.exterior.coords)[:-1]
-                ]
-            )
-            if len(anillo) >= 3:
-                salida.append(anillo)
-        return salida
 
     def _intervalos_intermedios_muro(
         self, muro: Any, datos: dict[str, Any], base: float, cima: float
@@ -4003,6 +3963,13 @@ class ModeladoMixin:
         rep = geometry_api.add_mesh_representation(
             self.modelo, context=self._contexto(), vertices=[vertices], faces=[caras]
         )
+        # O062: los tramos de un mismo cuerpo se funden en un solo sólido para
+        # que no queden tapas internas entre cajas con la misma sección.
+        if len(cajas) > 1:
+            body = rep.RepresentationIdentifier
+            items = self._unir_solidos(list(rep.Items))
+            rep.Items = items
+            rep.RepresentationIdentifier = body or "Body"
         rep.RepresentationIdentifier = "Body"
         return rep
 
