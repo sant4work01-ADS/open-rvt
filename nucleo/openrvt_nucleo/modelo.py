@@ -1062,6 +1062,19 @@ class ModeloNucleo(
         return datos
 
     # ------------------------------------------------------------------ historial
+    def revertir_comando(self, indice: int) -> None:
+        """O063: descarta las instantáneas de un comando fallido y restaura su estado.
+
+        ``indice`` es la longitud del historial antes de ejecutar el comando; la
+        primera instantánea que agregó contiene exactamente ese estado.
+        """
+        if self.modelo is None or indice >= len(self._deshacer):
+            return
+        instantanea = self._deshacer[indice]
+        del self._deshacer[indice:]
+        self.modelo = ifcopenshell.file.from_string(instantanea)
+        self._rehacer.clear()
+
     def deshacer(self) -> dict[str, Any]:
         self._exigir_modelo()
         if not self._deshacer:

@@ -56,6 +56,25 @@ class Servidor:
         return self.modelo
 
     def despachar(self, metodo: str, params: dict[str, Any]) -> Any:
+        """O063: si un comando mutador falla, el modelo vuelve a su instantánea.
+
+        Se toma la longitud del historial antes de despachar. Si el comando dejó
+        una instantánea y luego lanzó, se restaura esa instantánea y se quita del
+        historial; después el error sigue su curso normal.
+        """
+        modelo = self.modelo
+        antes = 0
+        if modelo is not None and modelo.modelo is not None:
+            antes = len(modelo._deshacer)
+        try:
+            return self._despachar(metodo, params)
+        except Exception:
+            if modelo is not None and modelo.modelo is not None:
+                if len(modelo._deshacer) > antes:
+                    modelo.revertir_comando(antes)
+            raise
+
+    def _despachar(self, metodo: str, params: dict[str, Any]) -> Any:
         if metodo == "nucleo.ping":
             if self.modelo is None:
                 return {
