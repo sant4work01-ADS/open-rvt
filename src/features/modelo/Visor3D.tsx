@@ -172,10 +172,8 @@ import {
   aristasParaElemento,
   mallaConNormalesPlanas,
 } from "./geometria";
-import {
-  CATEGORIAS_ESTRUCTURALES,
-  aristasOcultasSobreMuro,
-} from "./aristasSobreMuro";
+import { agregarAristasOcultasSobreMuro } from "./aristasSobreMuro";
+import { crearMaterialElemento } from "./materialElemento";
 import { crearMallasCapas } from "./capas3d";
 import {
   MAXIMO_CODOS,
@@ -2460,22 +2458,7 @@ export function Visor3D({
     // O062: las aristas coplanares de losas y estructura sobre una cara del muro
     // se ocultan; si no, se cuelan por delante de la piel con el LineBasicMaterial.
     if (vista.tipo === "iso" || vista.tipo === "perspectiva") {
-      for (const clave of aristasOcultasSobreMuro(
-        visibles
-          .filter(
-            (elemento) =>
-              elemento.categoria === "muros" ||
-              CATEGORIAS_ESTRUCTURALES.has(elemento.categoria),
-          )
-          .map((elemento) => ({
-            globalid: elemento.globalid,
-            categoria: elemento.categoria,
-            vertices: elemento.vertices,
-            indices: elemento.indices,
-          })),
-      )) {
-        internasAristas.add(clave);
-      }
+      agregarAristasOcultasSobreMuro(internasAristas, visibles);
     }
 
     // O012: en 3D las capas de acabado se dibujan como franjas con el mismo
@@ -2675,30 +2658,16 @@ export function Visor3D({
         vista.estilo,
       );
 
-      // O062: en un empate de profundidad con una cara del muro (losas y
-      // estructura enrasadas), el offset positivo deja ganar al muro.
-      const desplazaPorMuro = CATEGORIAS_ESTRUCTURALES.has(elemento.categoria);
-      const material =
-        diseno
-          ? new THREE.MeshBasicMaterial({
-              color: seleccionado ? color : fondo,
-              side: THREE.DoubleSide,
-              clippingPlanes: planos,
-              polygonOffset: desplazaPorMuro,
-              polygonOffsetFactor: desplazaPorMuro ? 1 : 0,
-              polygonOffsetUnits: desplazaPorMuro ? 1 : 0,
-            })
-          : new THREE.MeshLambertMaterial({
-              color,
-              side: THREE.DoubleSide,
-              transparent: !opaco,
-              opacity: elemento.opacidad,
-              clippingPlanes: planos,
-              emissive: seleccionado ? 0x123a66 : 0x000000,
-              polygonOffset: desplazaPorMuro,
-              polygonOffsetFactor: desplazaPorMuro ? 1 : 0,
-              polygonOffsetUnits: desplazaPorMuro ? 1 : 0,
-            });
+      const material = crearMaterialElemento({
+        diseno,
+        seleccionado,
+        color,
+        fondo,
+        opaco,
+        opacidad: elemento.opacidad,
+        planos,
+        categoria: elemento.categoria,
+      });
       // Lo que queda por encima del corte no se dibuja como cara: solo su silueta
       // discontinua, para que no tape la planta.
       const capas3d =

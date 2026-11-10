@@ -210,3 +210,19 @@ export function aristasOcultasSobreMuro(
   }
   return ocultas;
 }
+
+/** Añade al conjunto las aristas ocultas de una lista de mallas visibles. */
+export function agregarAristasOcultasSobreMuro(
+  destino: Set<string>,
+  elementos: readonly ElementoParaAristas[],
+): void {
+  for (const clave of aristasOcultasSobreMuro(
+    elementos.filter(
+      (elemento) =>
+        elemento.categoria === "muros" ||
+        CATEGORIAS_ESTRUCTURALES.has(elemento.categoria),
+    ),
+  )) {
+    destino.add(clave);
+  }
+}
