@@ -28,6 +28,12 @@ export interface PartidaMedicionCalculada {
   renglones: RenglonMedicion[];
 }
 
+/** O063: losa u otro elemento que no se pudo medir; no suma en los totales. */
+export interface ErrorMedicion {
+  globalid: string;
+  mensaje: string;
+}
+
 const UNIDAD: Record<string, string> = {
   m: "m",
   m2: "m²",
@@ -51,6 +57,7 @@ export function CantidadesView() {
   const fijarAviso = useModelo((s) => s.fijarAviso);
   const [nivel, setNivel] = useState("");
   const [partidas, setPartidas] = useState<PartidaMedicionCalculada[]>([]);
+  const [errores, setErrores] = useState<ErrorMedicion[]>([]);
   const [abiertas, setAbiertas] = useState<Set<string>>(new Set());
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,12 +71,13 @@ export function CantidadesView() {
       if (!vivo) return;
       setCargando(true);
       try {
-        const datos = await llamarConBitacora<{ partidas: PartidaMedicionCalculada[] }>(
-          "medicion.calcular",
-          nivel ? { nivel } : {},
-        );
+        const datos = await llamarConBitacora<{
+          partidas: PartidaMedicionCalculada[];
+          errores?: ErrorMedicion[];
+        }>("medicion.calcular", nivel ? { nivel } : {});
         if (!vivo) return;
         setPartidas(datos.partidas ?? []);
+        setErrores(datos.errores ?? []);
         setError(null);
       } catch (e) {
         if (vivo) setError(textoDeError(e));
@@ -153,6 +161,20 @@ export function CantidadesView() {
         <p data-testid="cantidades-error" className="px-3 py-2 text-xs text-red-600">
           {error}
         </p>
+      )}
+
+      {errores.length > 0 && (
+        <ul
+          data-testid="cantidades-errores"
+          className="border-b bg-amber-50 px-3 py-2 text-xs text-amber-800"
+        >
+          {errores.map((fallo) => (
+            <li key={fallo.globalid} data-testid={`cantidades-error-${fallo.globalid}`}>
+              <AlertTriangle size={12} className="mr-1 inline" />
+              Elemento {fallo.globalid}: {fallo.mensaje}. No suma en los totales.
+            </li>
+          ))}
+        </ul>
       )}
 
       <div className="min-h-0 flex-1 overflow-auto">

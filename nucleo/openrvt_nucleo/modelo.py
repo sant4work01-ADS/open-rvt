@@ -172,6 +172,8 @@ class ModeloNucleo(
         self.con_cambios = False
         self._deshacer: list[str] = []
         self._rehacer: list[str] = []
+        # O063: losas sin contorno detectadas al calcular cantidades.
+        self._avisos_losa: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------------ utilidades
     def _exigir_modelo(self) -> ifcopenshell.file:

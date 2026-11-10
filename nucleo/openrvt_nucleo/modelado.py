@@ -441,10 +441,19 @@ class ModeladoMixin(MuroPielMixin):
             fondo = elev + desfase - espesor
             if fondo >= tope - 1e-9:
                 continue
-            try:
-                huella = Polygon(self._poligono_de_losa(elemento))
-            except Exception:
+            puntos_losa = self._contorno_de_losa(elemento)
+            if puntos_losa is None:
+                # O063: no se ignora en silencio; el aviso sale con las cantidades.
+                avisos = getattr(self, "_avisos_losa", None)
+                if avisos is not None:
+                    aviso = {
+                        "globalid": _gid(elemento),
+                        "mensaje": "sin contorno legible",
+                    }
+                    if aviso not in avisos:
+                        avisos.append(aviso)
                 continue
+            huella = Polygon(puntos_losa)
             if not huella.is_empty and huella.intersects(huella_dado):
                 techo = min(techo, fondo)
         return techo
@@ -4026,14 +4035,19 @@ class ModeladoMixin(MuroPielMixin):
             if min(tope, z1) - max(base, z0) <= TOLERANCIA_CALCULO:
                 continue
             contorno = datos_losa.get("Contorno")
-            try:
-                huella_losa = (
-                    wkt.loads(str(contorno))
-                    if contorno
-                    else Polygon(self._poligono_de_losa(losa))
-                )
-            except Exception:
-                huella_losa = Polygon(self._poligono_de_losa(losa))
+            if contorno:
+                try:
+                    huella_losa = wkt.loads(str(contorno))
+                except Exception:
+                    puntos_losa = self._contorno_de_losa(losa)
+                    if puntos_losa is None:
+                        continue
+                    huella_losa = Polygon(puntos_losa)
+            else:
+                puntos_losa = self._contorno_de_losa(losa)
+                if puntos_losa is None:
+                    continue
+                huella_losa = Polygon(puntos_losa)
             if not huella_losa.is_valid:
                 huella_losa = huella_losa.buffer(0)
             if huella_losa.is_empty:
@@ -5269,9 +5283,11 @@ class ModeladoMixin(MuroPielMixin):
                     for p in wkt.loads(str(crudo)).exterior.coords[:-1]
                 ]
             except Exception:
-                puntos = self._poligono_de_losa(losa)
+                puntos = self._contorno_de_losa(losa)
         else:
-            puntos = self._poligono_de_losa(losa)
+            puntos = self._contorno_de_losa(losa)
+        if puntos is None:
+            return False
         limpios = _limpiar_anillo(list(puntos))
         if len(limpios) < 3:
             return False
@@ -5349,9 +5365,15 @@ class ModeladoMixin(MuroPielMixin):
                 try:
                     huella = wkt.loads(str(original))
                 except Exception:
-                    huella = Polygon(self._poligono_de_losa(losa))
+                    puntos_losa = self._contorno_de_losa(losa)
+                    if puntos_losa is None:
+                        return
+                    huella = Polygon(puntos_losa)
             else:
-                huella = Polygon(self._poligono_de_losa(losa))
+                puntos_losa = self._contorno_de_losa(losa)
+                if puntos_losa is None:
+                    return
+                huella = Polygon(puntos_losa)
         vigas, columnas = self._barras_estructura()
         # O061: la losa se coloca en su elevación absoluta (nivel + desfase), pero
         # el cuerpo se extruye en coordenadas locales. El recorte debe compararse
@@ -8092,9 +8114,12 @@ class ModeladoMixin(MuroPielMixin):
         modificados.append(muro)
         return modificados
 
-    def _poligono_de_losa(self, losa: Any) -> list[tuple[float, float]]:
-        from ifcopenshell.util.placement import get_local_placement
+    def _contorno_de_losa(self, losa: Any) -> list[tuple[float, float]] | None:
+        """O063: contorno real de la losa, o None si no se puede leer.
 
+        No hay cuadrado de respaldo: inventar 1×1 hacía que una losa ilegible
+        apareciera con área y volumen falsos.
+        """
         datos = self._leer_pset(losa, "OPENRVT_Losa")
         if datos.get("Contorno"):
             try:
@@ -8104,9 +8129,11 @@ class ModeladoMixin(MuroPielMixin):
                     (float(p[0]), float(p[1]))
                     for p in wkt.loads(str(datos["Contorno"])).exterior.coords[:-1]
                 ]
-                return _limpiar_anillo(puntos)
+                limpios = _limpiar_anillo(puntos)
+                if len(limpios) >= 3:
+                    return limpios
             except Exception:
-                pass
+                LOG.debug("no se pudo leer el contorno guardado de la losa", exc_info=True)
         try:
             item = losa.Representation.Representations[0].Items[0]
             perfil = item.SweptArea
@@ -8116,11 +8143,18 @@ class ModeladoMixin(MuroPielMixin):
                 coords = list(getattr(punto, "Coordinates", ()))
                 if len(coords) >= 2:
                     puntos.append((float(coords[0]), float(coords[1])))
-            if len(puntos) >= 3:
-                return _limpiar_anillo(puntos)
+            limpios = _limpiar_anillo(puntos)
+            if len(limpios) >= 3:
+                return limpios
         except Exception:
-            pass
-        return [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+            LOG.debug("no se pudo leer el contorno de la losa", exc_info=True)
+        return None
+
+    def _poligono_de_losa(self, losa: Any) -> list[tuple[float, float]]:
+        puntos = self._contorno_de_losa(losa)
+        if puntos is None:
+            raise self._error("La losa no tiene un contorno legible.", -32029)
+        return puntos
 
     def referencias(self) -> dict[str, Any]:
         """Puntos y ejes para los enganches del dibujo en planta."""

@@ -102,6 +102,21 @@ describe("vista Cantidades", () => {
     await waitFor(() => expect(seleccionado).toBe("gid-muro-1"));
   });
 
+  it("muestra el error de una losa sin contorno y no la suma", async () => {
+    preparar();
+    llamar.mockImplementation(async (metodo: string) => {
+      if (metodo === "medicion.calcular") {
+        return {
+          partidas: [PARTIDAS[0]],
+          errores: [{ globalid: "gid-losa", mensaje: "sin contorno legible" }],
+        };
+      }
+      return {};
+    });
+    render(<CantidadesView />);
+    expect(await screen.findByTestId("cantidades-error-gid-losa")).toBeInTheDocument();
+  });
+
   it("exporta con el diálogo de guardar y la ruta elegida", async () => {
     preparar();
     render(<CantidadesView />);
