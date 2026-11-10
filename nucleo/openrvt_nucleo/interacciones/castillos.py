@@ -25,11 +25,14 @@ from ..modelado import (
 from .. import uniones
 from .comun import LARGOS_REFERENCIA, LIGA, PRIORIDAD
 
+from ..siembra import crea_openrvt
+
 
 class CastillosMixin:
     """Castillos en muros y colocación automática."""
 
 
+    @crea_openrvt
     def castillo_crear_en_muro(
         self, tipo: str, muro: str, distancia: float
     ) -> dict[str, Any]:

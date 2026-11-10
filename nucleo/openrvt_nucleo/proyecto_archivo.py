@@ -20,9 +20,10 @@ import ifcopenshell.api.unit as unit
 import ifcopenshell.util.unit as unit_util
 
 from .modelado.comun import LOG, _texto
+from .siembra import SiembraMixin
 
 
-class ProyectoArchivoMixin:
+class ProyectoArchivoMixin(SiembraMixin):
     """Comandos de proyecto: nuevo, abrir y guardar."""
 
     def nuevo(self, nombre: str = "Modelo sin título") -> dict[str, Any]:
@@ -58,6 +59,9 @@ class ProyectoArchivoMixin:
         self.crear_tipos_ejemplo()
         self.crear_tipos_estructura()
         self._asegurar_capitulos_obra()
+        self.ajeno = False
+        self._siembra_pendiente = False
+        self._comando_crea_openrvt = False
         return self.info()
 
     def abrir(self, ruta: str) -> dict[str, Any]:
@@ -89,23 +93,29 @@ class ProyectoArchivoMixin:
         self.con_cambios = False
         self._deshacer.clear()
         self._rehacer.clear()
-        # O007a: si el archivo no trae biblioteca, se siembra al abrirlo.
-        self._asegurar_biblioteca()
-        self.crear_tipos_estructura()
-        # O054: los castillos de esquina viejos se reparan al abrir el archivo.
-        self._reparar_castillos_esquina()
-        # O061: los cerramientos con AnchoDelMuro recuperan el espesor del muro.
-        self._reparar_ancho_del_muro()
-        # O012: los archivos anteriores pueden traer vigas encimadas; se recortan
-        # al abrir sin perder elementos.
-        self._recalcular_uniones_estructura()
-        # O050: las losas con el punto de cierre repetido se reparan sin aviso.
-        self._reparar_losas_antiguas()
-        # O045: los archivos con la regla vieja (muro cortado por su cerramiento)
-        # recuperan la altura de sus propias restricciones, en un solo paso.
-        migracion = self._restaurar_altura_muros_embebidos()
-        self._asegurar_capitulos_obra()
+        # O066: un IFC ajeno se abre intacto; la siembra y las reparaciones se
+        # aplazan hasta el primer comando que crea un elemento OPEN-RVT.
+        self._preparar_abierto(modelo)
+        migracion = ""
+        if not self.ajeno:
+            # O007a: si el archivo no trae biblioteca, se siembra al abrirlo.
+            self._asegurar_biblioteca()
+            self.crear_tipos_estructura()
+            # O054: los castillos de esquina viejos se reparan al abrir el archivo.
+            self._reparar_castillos_esquina()
+            # O061: los cerramientos con AnchoDelMuro recuperan el espesor del muro.
+            self._reparar_ancho_del_muro()
+            # O012: los archivos anteriores pueden traer vigas encimadas; se recortan
+            # al abrir sin perder elementos.
+            self._recalcular_uniones_estructura()
+            # O050: las losas con el punto de cierre repetido se reparan sin aviso.
+            self._reparar_losas_antiguas()
+            # O045: los archivos con la regla vieja (muro cortado por su cerramiento)
+            # recuperan la altura de sus propias restricciones, en un solo paso.
+            migracion = self._restaurar_altura_muros_embebidos()
+            self._asegurar_capitulos_obra()
         info = self.info()
+        info["ajeno"] = self.ajeno
         if migracion:
             info["migracion"] = migracion
         return info

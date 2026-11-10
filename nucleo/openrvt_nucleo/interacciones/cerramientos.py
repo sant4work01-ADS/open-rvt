@@ -25,6 +25,8 @@ from ..modelado import (
 from .. import uniones
 from .comun import LARGOS_REFERENCIA, LIGA, PRIORIDAD
 
+from ..siembra import crea_openrvt
+
 
 class CerramientosMixin:
     """Cerramientos y dalas: creación y tramos."""
@@ -157,6 +159,7 @@ class CerramientosMixin:
     def dala_crear_en_muro(self, tipo: str, muro: str) -> dict[str, Any]:
         return self._lineal_en_muro(tipo, muro, "dala")
 
+    @crea_openrvt
     def cerramiento_crear(
         self,
         tipo: str,

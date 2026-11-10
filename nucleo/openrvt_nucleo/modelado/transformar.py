@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from .comun import *  # noqa: F401,F403
 
+from ..siembra import crea_openrvt
+
 
 class TransformarMixin:
     # ------------------------------------------------ ED2: espejo y matriz
@@ -396,6 +398,7 @@ class TransformarMixin:
                 vistos.add(_gid(original))
         return salida
 
+    @crea_openrvt
     def elementos_espejo(
         self, globalids: Any, p1: Any, p2: Any, copiar: bool = True
     ) -> dict[str, Any]:
@@ -440,6 +443,7 @@ class TransformarMixin:
             enlaces_quitados=enlaces,
         )
 
+    @crea_openrvt
     def elementos_matriz_lineal(
         self, globalids: Any, vector: Any, numero: int, modo: str = "al_segundo"
     ) -> dict[str, Any]:
@@ -472,6 +476,7 @@ class TransformarMixin:
             mensaje=f"{len(creados)} elemento(s) copiado(s) en matriz lineal.",
         )
 
+    @crea_openrvt
     def elementos_matriz_polar(
         self, globalids: Any, centro: Any, angulo_total: float, numero: int
     ) -> dict[str, Any]:

@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from .comun import *  # noqa: F401,F403
 
+from ..siembra import crea_openrvt
+
 
 class CopiarMixin:
+    @crea_openrvt
     def elementos_copiar(self, globalids: Any, dx: float, dy: float, dz: float) -> dict[str, Any]:
         """ED2: un solo paso de deshacer para todas las copias."""
         self._instantanea()

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from .comun import *  # noqa: F401,F403
 
+from ..siembra import crea_openrvt
+
 
 class MurosMixin:
     # ------------------------------------------------------------------ muros
@@ -261,6 +263,7 @@ class MurosMixin:
         return cuerpo
 
 
+    @crea_openrvt
     def muro_crear(
         self,
         tipo: str,

@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from .comun import *  # noqa: F401,F403
 
+from ..siembra import crea_openrvt
+
 
 class EstructuraCrearMixin:
+    @crea_openrvt
     def columna_crear(
         self,
         tipo: str,
@@ -75,6 +78,7 @@ class EstructuraCrearMixin:
             [columna], mensaje=f"Columna creada ({alto:.2f} m)."
         )
 
+    @crea_openrvt
     def viga_crear(
         self,
         tipo: str,
@@ -194,6 +198,7 @@ class EstructuraCrearMixin:
                 return grid
         return self._grid()
 
+    @crea_openrvt
     def zapata_crear(
         self,
         tipo: str,
@@ -254,6 +259,7 @@ class EstructuraCrearMixin:
         self.con_cambios = True
         return self._resultado([zapata], mensaje="Zapata creada.")
 
+    @crea_openrvt
     def zapata_corrida_crear(
         self,
         tipo: str,

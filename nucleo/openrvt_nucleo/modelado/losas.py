@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from .comun import *  # noqa: F401,F403
 
+from ..siembra import crea_openrvt
+
 
 class LosasMixin:
     # ------------------------------------------------------------------ losas
@@ -442,6 +444,7 @@ class LosasMixin:
             return "firme"
         return "entrepiso"
 
+    @crea_openrvt
     def losa_crear(
         self,
         nivel: str,

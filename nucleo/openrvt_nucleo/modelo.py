@@ -186,6 +186,9 @@ class ModeloNucleo(
         """Guarda el modelo antes de un comando que lo modifica (máximo 50)."""
         if self.modelo is None:
             return
+        # O066: la instantánea de la siembra ya se tomó al entrar al comando.
+        if getattr(self, "_instantanea_de_siembra", False):
+            return
         texto = self.modelo.to_string()
         self._deshacer.append(texto)
         self._n_instantaneas += 1
@@ -197,6 +200,9 @@ class ModeloNucleo(
         if not self._en_comando and len(self._deshacer) > MAX_HISTORIAL:
             del self._deshacer[0 : len(self._deshacer) - MAX_HISTORIAL]
         self._rehacer.clear()
+        # O066: si un comando crea el primer elemento OPEN-RVT de un IFC ajeno,
+        # la siembra va dentro de esta misma instantánea.
+        self._siembra_en_instantanea()
 
     def _nivel_de(self, elemento: Any) -> str:
         for rel in getattr(elemento, "ContainedInStructure", ()) or ():
