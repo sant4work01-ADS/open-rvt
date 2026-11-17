@@ -213,3 +213,16 @@ def test_ifc_guardado_del_flujo_valida_sin_errores() -> None:
         reabierto.abrir(str(ruta))
         assert _contenedor(reabierto, losa) == n2
         assert _z(reabierto, losa) == pytest.approx(5.95, abs=1e-9)
+
+
+# 9 --------------------------------------------------------------------------
+def test_el_uso_no_cambia_solo_al_mover_la_losa() -> None:
+    nucleo, n0, n1, _n2 = _nuevo()
+    losa = nucleo.losa_crear(n0, RECTANGULO, uso="firme")["creados"][0]
+
+    nucleo.elemento_editar(losa, {"nivel": n1})
+
+    datos = _losa_datos(nucleo, losa)
+    assert datos["Uso"] == "firme"
+    assert _entidad(nucleo, losa).PredefinedType == "BASESLAB"
+    assert nucleo.uso_de_losa(_entidad(nucleo, losa)) == "firme"
