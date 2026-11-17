@@ -1,7 +1,7 @@
 // Panel derecho con un elemento seleccionado.
 import { useModelo } from "./estado";
 import { CampoEditable } from "./campoEditable";
-import { BordesLosaElemento } from "./panelLosa";
+import { PropiedadesLosa } from "./panelLosa";
 import { formatear } from "./panelFormato";
 import { describirEnlace } from "./enlaces";
 import {
@@ -168,42 +168,7 @@ export function PropiedadesElemento() {
             />
           </>
         )}
-        {esLosa && (
-          <>
-            <label className="flex items-center justify-between gap-2 text-xs">
-              <span className="text-muted-foreground">Uso</span>
-              <select
-                data-testid="prop-uso-losa"
-                value={
-                  propiedades.uso ??
-                  String(
-                    (propiedades.psets?.OPENRVT_Losa as Record<string, unknown>)
-                      ?.Uso ?? "entrepiso",
-                  )
-                }
-                onChange={(e) => void editar(gid, { uso: e.target.value })}
-                className="w-40 rounded border bg-background px-2 py-1"
-              >
-                <option value="firme">Firme / losa de cimentación</option>
-                <option value="entrepiso">Entrepiso</option>
-                <option value="azotea">Azotea</option>
-              </select>
-            </label>
-            <CampoEditable
-              etiqueta="Espesor (m)"
-              testid="elemento-espesor"
-              numerico
-              paso={0.01}
-              valor={Number((propiedades.psets?.OPENRVT_Losa as Record<string, unknown>)?.Espesor ?? 0.12)}
-              onGuardar={(espesor) => void editar(gid, { espesor })}
-            />
-            <BordesLosaElemento
-              globalid={gid}
-              pset={propiedades.psets?.OPENRVT_Losa as Record<string, unknown> | undefined}
-              editar={editar}
-            />
-          </>
-        )}
+        {esLosa && <PropiedadesLosa propiedades={propiedades} editar={editar} />}
         {esAbertura && (
           <>
             <CampoEditable

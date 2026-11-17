@@ -275,6 +275,8 @@ export interface PropiedadesElemento {
   clase: string;
   nombre: string;
   nivel: string;
+  /** O067: GlobalId del nivel actual (para el select de la losa). */
+  nivel_globalid?: string;
   tipo: string;
   atributos: Record<string, unknown>;
   materiales: Array<{ nombre: string; capas: Array<Record<string, unknown>> }>;

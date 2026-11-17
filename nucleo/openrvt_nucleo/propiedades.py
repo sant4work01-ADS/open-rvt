@@ -38,6 +38,19 @@ def _json_plano(valor: Any) -> Any:
 
 
 class PropiedadesMixin:
+    def _nivel_globalid_de(self, elemento: Any) -> str:
+        """O067: GlobalId del nivel que contiene al elemento (no solo su nombre)."""
+        for rel in getattr(elemento, "ContainedInStructure", ()) or ():
+            estructura = getattr(rel, "RelatingStructure", None)
+            if estructura is not None and estructura.is_a("IfcBuildingStorey"):
+                return _texto(estructura.GlobalId)
+        nombre = self._nivel_de(elemento)
+        if nombre:
+            for nivel in self.modelo.by_type("IfcBuildingStorey"):
+                if _texto(nivel.Name) == nombre:
+                    return _texto(nivel.GlobalId)
+        return ""
+
     def propiedades(self, globalid: str) -> dict[str, Any]:
         from .modelo import ErrorNucleo
 
@@ -115,6 +128,8 @@ class PropiedadesMixin:
             "clase": elemento.is_a(),
             "nombre": _texto(getattr(elemento, "Name", "")),
             "nivel": self._nivel_de(elemento),
+            # O067: el panel necesita el GlobalId del nivel actual, no el nombre.
+            "nivel_globalid": self._nivel_globalid_de(elemento),
             "tipo": self._tipo_de(elemento),
             "atributos": atributos,
             "materiales": materiales,

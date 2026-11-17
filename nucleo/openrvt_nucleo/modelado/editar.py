@@ -131,6 +131,34 @@ class EditarMixin:
                     self._regenerar_relleno(relleno, vano)
                     modificados.append(relleno)
         elif entidad.is_a("IfcSlab"):
+            # O067: nivel y desfase se validan antes de tocar la geometría.
+            nivel_nuevo = None
+            if "nivel" in cambios or "Nivel" in cambios:
+                gid_nivel = _texto(cambios.get("nivel", cambios.get("Nivel"))).strip()
+                nivel_nuevo = next(
+                    (
+                        n
+                        for n in self.modelo.by_type("IfcBuildingStorey")
+                        if _gid(n) == gid_nivel
+                    ),
+                    None,
+                )
+                if nivel_nuevo is None:
+                    raise self._error("El nivel indicado no existe.", -32602)
+            desfase_nuevo = None
+            if "desfase" in cambios or "Desfase" in cambios:
+                try:
+                    desfase_nuevo = float(
+                        cambios.get("desfase", cambios.get("Desfase"))
+                    )
+                except (TypeError, ValueError) as exc:
+                    raise self._error(
+                        "El desfase de la losa no es un número.", -32602
+                    ) from exc
+                if not math.isfinite(desfase_nuevo):
+                    raise self._error(
+                        "El desfase de la losa no es un número.", -32602
+                    )
             # O050: toda edición sanea antes el contorno viejo; si no, un borde
             # de cierre repetido haría fallar «cambio_borde» para siempre.
             self._reparar_contorno_losa(entidad)
@@ -199,6 +227,30 @@ class EditarMixin:
                 geometry_api.assign_representation(self.modelo, product=entidad, representation=nueva)
                 datos["Espesor"] = espesor
                 self._guardar_pset(entidad, "OPENRVT_Losa", datos)
+            # O067: la colocación de la losa es Elevation(nivel) + Desfase; el uso
+            # no cambia solo y el recorte contra trabes y muros se rehace.
+            if nivel_nuevo is not None or desfase_nuevo is not None:
+                destino = nivel_nuevo or self._nivel_que_contiene(entidad)
+                if destino is None:
+                    raise self._error("La losa no tiene nivel.", -32602)
+                if desfase_nuevo is not None:
+                    datos["Desfase"] = desfase_nuevo
+                elevacion = float(destino.Elevation or 0.0) + float(
+                    datos.get("Desfase") or 0.0
+                )
+                matriz = np.identity(4)
+                matriz[2][3] = elevacion
+                geometry_api.edit_object_placement(
+                    self.modelo, product=entidad, matrix=matriz
+                )
+                self._guardar_pset(entidad, "OPENRVT_Losa", datos)
+                if nivel_nuevo is not None:
+                    spatial_api.assign_container(
+                        self.modelo,
+                        products=[entidad],
+                        relating_structure=nivel_nuevo,
+                    )
+                self._regenerar_losa(entidad)
         elif self._es_clase_estructura(entidad.is_a()) and self._leer_pset(
             entidad, "OPENRVT_Estructura"
         ):

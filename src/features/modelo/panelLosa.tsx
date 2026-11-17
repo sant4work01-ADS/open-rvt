@@ -5,7 +5,9 @@ import {
   etiquetaBorde,
   valorComunDesfase,
 } from "./bordesLosa";
-import { useCampoConEnter } from "./campoEditable";
+import { CampoEditable, useCampoConEnter } from "./campoEditable";
+import { useModelo } from "./estado";
+import type { PropiedadesElemento } from "./tipos";
 
 type Editar = (
   globalid: string,
@@ -130,5 +132,78 @@ export function BordesLosaElemento({
         </tbody>
       </table>
     </div>
+  );
+}
+
+export function PropiedadesLosa({
+  propiedades,
+  editar,
+}: {
+  propiedades: PropiedadesElemento;
+  editar: Editar;
+}) {
+  const niveles = useModelo((s) => s.niveles);
+  const gid = propiedades.globalid;
+  const pset = propiedades.psets?.OPENRVT_Losa as
+    | Record<string, unknown>
+    | undefined;
+  const nivelActual = propiedades.nivel_globalid ?? "";
+  return (
+    <>
+      <label className="flex items-center justify-between gap-2 text-xs">
+        <span className="text-muted-foreground">Nivel</span>
+        <select
+          key={nivelActual}
+          data-testid="prop-nivel-losa"
+          defaultValue={nivelActual}
+          onChange={(e) => void editar(gid, { nivel: e.target.value })}
+          className="w-40 rounded border bg-background px-2 py-1"
+        >
+          {niveles.map((nivel) => (
+            <option key={nivel.globalid} value={nivel.globalid}>
+              {nivel.nombre}
+            </option>
+          ))}
+          {!niveles.some((n) => n.globalid === nivelActual) && (
+            <option value={nivelActual}>
+              {propiedades.nivel || "(nivel actual)"}
+            </option>
+          )}
+        </select>
+      </label>
+      <CampoEditable
+        etiqueta="Desfase (m)"
+        testid="elemento-desfase-losa"
+        numerico
+        paso={0.01}
+        valor={Number(pset?.Desfase ?? 0)}
+        onGuardar={(valor) => void editar(gid, { desfase: Number(valor) })}
+      />
+      <label className="flex items-center justify-between gap-2 text-xs">
+        <span className="text-muted-foreground">Uso</span>
+        <select
+          data-testid="prop-uso-losa"
+          value={
+            propiedades.uso ??
+            String(pset?.Uso ?? "entrepiso")
+          }
+          onChange={(e) => void editar(gid, { uso: e.target.value })}
+          className="w-40 rounded border bg-background px-2 py-1"
+        >
+          <option value="firme">Firme / losa de cimentación</option>
+          <option value="entrepiso">Entrepiso</option>
+          <option value="azotea">Azotea</option>
+        </select>
+      </label>
+      <CampoEditable
+        etiqueta="Espesor (m)"
+        testid="elemento-espesor"
+        numerico
+        paso={0.01}
+        valor={Number(pset?.Espesor ?? 0.12)}
+        onGuardar={(espesor) => void editar(gid, { espesor })}
+      />
+      <BordesLosaElemento globalid={gid} pset={pset} editar={editar} />
+    </>
   );
 }
