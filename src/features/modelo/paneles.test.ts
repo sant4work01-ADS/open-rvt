@@ -50,6 +50,20 @@ describe("O070: paneles guardados en el pset", () => {
     });
   });
 
+  it("lo guardado vuelve igual al leerlo del pset (ida y vuelta)", () => {
+    const guardado = {
+      dividida: true,
+      orientacion: "horizontal" as const,
+      proporcion: 0.3,
+      paneles: [{ vistaId: "planta-n0" }, { vistaId: "iso" }] as [
+        { vistaId: string | null },
+        { vistaId: string | null },
+      ],
+      panelActivo: 1 as const,
+    };
+    expect(normalizarPaneles(serializarPaneles(guardado))).toEqual(guardado);
+  });
+
   it("normaliza lo leído y no acepta vistas vacías ni orientaciones raras", () => {
     expect(
       normalizarPaneles({
