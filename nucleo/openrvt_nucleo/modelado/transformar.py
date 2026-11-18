@@ -108,6 +108,11 @@ class TransformarMixin:
             feature_api.add_feature(self.modelo, feature=vano, element=muro)
 
     def _guardar_vano(self, vano: Any, datos: dict[str, Any]) -> None:
+        # O068: al mover, copiar o reflejar se conserva el nivel de referencia y
+        # el antepecho relativo a él; si no, la ficha perdería esos campos.
+        antepecho_nivel = datos.get("antepecho_nivel")
+        if antepecho_nivel is None:
+            antepecho_nivel = datos["antepecho"]
         self._guardar_pset(
             vano,
             "OPENRVT_Abertura",
@@ -116,6 +121,8 @@ class TransformarMixin:
                 "Ancho": datos["ancho"],
                 "Alto": datos["alto"],
                 "Antepecho": datos["antepecho"],
+                "AntepechoNivel": float(antepecho_nivel),
+                "Nivel": str(datos.get("nivel") or ""),
                 "Muro": datos["muro"],
                 "Volteado": bool(datos["volteado"]),
             },

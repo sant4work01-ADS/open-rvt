@@ -168,7 +168,11 @@ def test_mover_la_ventana_1_m_cambia_su_distancia_a_3_00() -> None:
 
     nucleo.elementos_mover([relleno], 1.0, 0.0, 0.0)
 
-    assert _pset_vano(nucleo, vano)["Distancia"] == pytest.approx(3.00, abs=1e-9)
+    datos = _pset_vano(nucleo, vano)
+    assert datos["Distancia"] == pytest.approx(3.00, abs=1e-9)
+    # Mover no debe perder el nivel ni el antepecho relativo (ficha posterior).
+    assert datos["Nivel"] == n1
+    assert datos["AntepechoNivel"] == pytest.approx(0.90, abs=1e-9)
     assert _caja3(nucleo._entidad_por_gid(vano))[0] == pytest.approx(3.00, abs=1e-6)
 
 
