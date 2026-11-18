@@ -1,4 +1,4 @@
-// O068: campo editable con Enter/blur/Escape, compartido por las fichas.
+// Campo editable del panel derecho: guarda con Enter o al perder el foco (O003b).
 import {
   useEffect,
   useRef,
@@ -8,6 +8,10 @@ import {
   type KeyboardEvent,
 } from "react";
 
+/**
+ * O053: comportamiento común de los campos numéricos del panel. Enter guarda y sale,
+ * perder el foco guarda, Escape restaura y nunca se guarda dos veces el mismo valor.
+ */
 export function useCampoConEnter({
   valor,
   convertir,
@@ -107,4 +111,3 @@ export function CampoEditable({
     </label>
   );
 }
-

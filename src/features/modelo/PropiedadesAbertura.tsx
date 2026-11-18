@@ -21,7 +21,7 @@ export function PropiedadesAbertura({
 }) {
   const numero = (valor: unknown, porDefecto: number): number => {
     const n = Number(valor);
-    return Number.isFinite(n) ? n : porDefecto;
+    return Number.isFinite(n) ? Math.round(n * 1000) / 1000 : porDefecto;
   };
   const tieneVano = !!pset && pset.Muro !== undefined;
   const nivel = String(pset?.Nivel ?? "");
