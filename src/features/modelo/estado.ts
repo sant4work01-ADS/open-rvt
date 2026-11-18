@@ -19,6 +19,7 @@ import { crearSliceHerramientas } from "./estado/slices/herramientas";
 import { crearSliceNiveles } from "./estado/slices/niveles";
 import { crearSliceNotas } from "./estado/slices/notas";
 import { crearSliceOpciones } from "./estado/slices/opciones";
+import { crearSlicePaneles } from "./estado/slices/paneles";
 import { crearSliceProyecto } from "./estado/slices/proyecto";
 import { crearSliceSeleccion } from "./estado/slices/seleccion";
 import { crearSliceTipos } from "./estado/slices/tipos";
@@ -35,6 +36,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     ...crearEstadoInicial(set, get),
     ...crearSliceProyecto(set, get, ayudas),
     ...crearSliceVistas(set, get, ayudas),
+    ...crearSlicePaneles(set, get, ayudas),
     ...crearSliceTipos(set, get, ayudas),
     ...crearSliceSeleccion(set, get),
     ...crearSliceArbol(set, get, ayudas),

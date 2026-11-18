@@ -21,6 +21,10 @@ export interface Props {
   onCambiarAnotacion?: (modo: "papel" | "pantalla") => void;
   /** O031: identifica el archivo abierto para no heredar cámaras de otro modelo. */
   claveModelo?: string;
+  /** O070: clave propia de la cámara para que cada panel tenga la suya. */
+  claveCamara?: string;
+  /** O070: índice del panel; los atajos de teclado solo actúan en el activo. */
+  panelIndice?: 0 | 1;
   /** O038: GlobalIds de elementos ocultos por el árbol del proyecto en esta vista. */
   elementosOcultos?: string[];
   /** O038: GlobalIds de elementos bloqueados (visibles pero no seleccionables). */

@@ -39,6 +39,7 @@ const METODOS_LECTURA: &[&str] = &[
     "modelo.referencias",
     "geometria.teselar",
     "vistas.leer",
+    "paneles.leer",
     "estilos.leer",
     "ejes.listar",
     "ejes.reticula",

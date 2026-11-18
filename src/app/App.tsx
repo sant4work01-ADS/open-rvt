@@ -370,6 +370,9 @@ export function App() {
         guardar: () => void useModelo.getState().guardar(),
         guardarComo: () => void useModelo.getState().guardarComo(),
         nuevaVistaCorte: () => useModelo.getState().iniciarCorte(),
+        dividirVertical: () => void useModelo.getState().dividirVistas("vertical"),
+        dividirHorizontal: () => void useModelo.getState().dividirVistas("horizontal"),
+        unaVista: () => void useModelo.getState().unirVistas(),
         estilosObjeto: () => useModelo.getState().abrirDialogoEstilos(),
         estilosAnotacion: () => useModelo.getState().abrirDialogoAnotacion(),
         // OPEN-RVT: herramientas de modelado (spec O003b).

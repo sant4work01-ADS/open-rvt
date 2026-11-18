@@ -724,11 +724,11 @@ class ModeloNucleo(
             "OPENRVT_Estilos", "Estilos de dibujo guardados por OPEN-RVT", crear
         )
 
-    def _leer_datos_pset(self, pset: Any) -> Any:
+    def _leer_datos_pset(self, pset: Any, nombre: str = "Datos") -> Any:
         if pset is None:
             return None
         for propiedad in getattr(pset, "HasProperties", ()) or ():
-            if getattr(propiedad, "Name", "") != "Datos":
+            if getattr(propiedad, "Name", "") != nombre:
                 continue
             valor = getattr(propiedad, "NominalValue", None)
             texto = getattr(valor, "wrappedValue", None)
@@ -742,16 +742,18 @@ class ModeloNucleo(
                 return None
         return None
 
-    def _guardar_datos_pset(self, pset: Any, datos: Any, descripcion: str) -> Any:
+    def _guardar_datos_pset(
+        self, pset: Any, datos: Any, descripcion: str, nombre: str = "Datos"
+    ) -> Any:
         texto = json.dumps(datos, ensure_ascii=False, separators=(",", ":"))
         modelo = self._exigir_modelo()
         for propiedad in list(getattr(pset, "HasProperties", ()) or ()):
-            if getattr(propiedad, "Name", "") == "Datos":
+            if getattr(propiedad, "Name", "") == nombre:
                 modelo.remove(propiedad)
         pset.HasProperties = list(getattr(pset, "HasProperties", ()) or ()) + [
             modelo.create_entity(
                 "IfcPropertySingleValue",
-                Name="Datos",
+                Name=nombre,
                 Description=descripcion,
                 NominalValue=modelo.create_entity("IfcText", texto),
             )
@@ -770,6 +772,23 @@ class ModeloNucleo(
         self._guardar_datos_pset(self._pset_vistas(crear=True), lista, "JSON de las vistas")
         self.con_cambios = True
         return lista
+
+    # O070: la división de la pantalla vive en el mismo pset que las vistas, en su
+    # propia propiedad para no mezclarla con la lista de vistas.
+    def leer_paneles(self) -> Any:
+        datos = self._leer_datos_pset(self._pset_vistas(crear=False), "Paneles")
+        return datos if isinstance(datos, dict) else None
+
+    def guardar_paneles(self, datos: Any) -> Any:
+        if not isinstance(datos, dict):
+            raise ErrorNucleo("Los paneles deben ser un objeto JSON.", -32602)
+        self._exigir_modelo()
+        self._instantanea()
+        self._guardar_datos_pset(
+            self._pset_vistas(crear=True), datos, "JSON de los paneles", "Paneles"
+        )
+        self.con_cambios = True
+        return datos
 
     # ------------------------------------------------------------------ estilos O005
     def leer_estilos(self) -> Any:

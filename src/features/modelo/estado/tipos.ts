@@ -8,6 +8,7 @@ import type { ClasificacionEmpujar, RectanguloEmpujar } from "../empujar";
 import type { CaraEmpujarActiva } from "../empujarCaras";
 import type { NivelRef } from "../niveles";
 import type { StoreApi } from "zustand";
+import type { OrientacionDivision, PanelVista } from "../paneles";
 
 export type RespuestaGuardar = "guardar" | "descartar" | "cancelar";
 /** O066: qué hacer al guardar encima de un IFC que no creó OPEN-RVT. */
@@ -203,6 +204,13 @@ export interface EstadoModelo {
   /** O038: contador que el árbol incrementa para pedir «Ajustar» al visor. */
   ajustarToken: number;
   vistaActivaId: string | null;
+  /** O070: los dos paneles de la pantalla dividida; el activo manda en «vistaActivaId». */
+  paneles: [PanelVista, PanelVista];
+  panelActivo: 0 | 1;
+  dividida: boolean;
+  orientacionDivision: OrientacionDivision;
+  /** Proporción del panel 0 (0.2–0.8). */
+  proporcionDivision: number;
   /** O021: eje seleccionado en el visor (para el panel de propiedades). */
   ejeSeleccionado: string | null;
   /** O029: nivel seleccionado en el alzado para copiar/desfasar. */
@@ -478,6 +486,18 @@ export interface EstadoModelo {
   preguntarGuardarAjeno: () => Promise<RespuestaGuardarAjeno>;
   responderGuardarAjeno: (respuesta: RespuestaGuardarAjeno) => void;
   fijarVista: (id: string) => void;
+  /** O070: divide el área en dos paneles y elige la orientación. */
+  dividirVistas: (orientacion: OrientacionDivision) => Promise<void>;
+  /** O070: vuelve a una sola vista con la del panel activo. */
+  unirVistas: () => Promise<void>;
+  /** O070: activa un panel (y cancela la herramienta a medias, como Esc). */
+  fijarPanelActivo: (indice: 0 | 1) => void;
+  /** O070: abre una vista en un panel concreto sin activarlo. */
+  fijarVistaPanel: (indice: 0 | 1, vistaId: string | null) => Promise<void>;
+  /** O070: abre una vista en el otro panel; si no hay división, la crea. */
+  abrirEnOtroPanel: (vistaId: string) => Promise<void>;
+  /** O070: proporción del separador, limitada al 20–80 %. */
+  fijarProporcionDivision: (proporcion: number) => void;
   actualizarVista: (id: string, cambios: Partial<Vista>) => Promise<void>;
   /** O022: duplica una vista (copia completa con id y nombre nuevos). */
   duplicarVista: (id: string) => Promise<string | null>;

@@ -77,6 +77,7 @@ export function usePunteroVisor(c: ReturnType<typeof useEstadoVisor>) {
     mallas,
     caja,
     claveModelo,
+    claveCamara,
   } = c;
 
   const detenerGrabacion = useCallback(() => {
@@ -885,10 +886,13 @@ export function usePunteroVisor(c: ReturnType<typeof useEstadoVisor>) {
     if (!nodo || !renderer.current) return;
     const aspecto = Math.max(nodo.clientWidth, 1) / Math.max(nodo.clientHeight, 1);
     guardarCamaraActual();
-    vistaDeCamara.current = vista.id;
+    // O070: cada panel guarda su cámara con una clave propia; en una sola vista la
+    // clave sigue siendo el id de la vista (comportamiento de O010).
+    const claveVista = claveCamara ?? vista.id;
+    vistaDeCamara.current = claveVista;
 
     const nav = crearNavegacion(vista, cajaVista, aspecto);
-    const guardada = camarasGuardadas.current.get(vista.id);
+    const guardada = camarasGuardadas.current.get(claveVista);
     if (guardada && guardada.tipo === nav.tipo) {
       nav.objetivo.set(...guardada.objetivo);
       nav.direccion.set(...guardada.direccion).normalize();
@@ -912,7 +916,7 @@ export function usePunteroVisor(c: ReturnType<typeof useEstadoVisor>) {
     aplicarCamara();
     // `aplicarCamara` es estable por referencia del componente; se usa a través de refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vista.id, vista.tipo, vista.orientacion]);
+  }, [vista.id, vista.tipo, vista.orientacion, claveCamara]);
 
   // Al cambiar el tamaño del lienzo (por ejemplo, al redimensionar un panel) se
   // conserva el zoom y el centro: solo se adapta el aspecto.
