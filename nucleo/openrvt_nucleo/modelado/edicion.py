@@ -93,9 +93,12 @@ class EdicionMixin:
                 antepecho + datos["alto"] > info_muro["altura"] + TOLERANCIA
             ):
                 raise self._error("La abertura se sale de la altura del muro.", -32023)
-            cambios_vanos.append(
-                (producto, muro, {**datos, "distancia": distancia, "antepecho": antepecho})
-            )
+            nuevos = {**datos, "distancia": distancia, "antepecho": antepecho}
+            # O069: al mover en vertical también cambia el antepecho relativo al
+            # nivel de referencia; la ficha no debe seguir mostrando el anterior.
+            if datos.get("antepecho_nivel") is not None and abs(dz) > TOLERANCIA_CALCULO:
+                nuevos["antepecho_nivel"] = float(datos["antepecho_nivel"]) + dz
+            cambios_vanos.append((producto, muro, nuevos))
         # Se calculan todas las matrices antes de tocar nada: mover un muro desplaza a
         # sus vanos (que cuelgan de él), pero un relleno puede tener colocación propia.
         matrices = {
