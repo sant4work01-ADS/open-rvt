@@ -64,6 +64,14 @@ export function instalarUtilidadesE2E(
     const impacto = rayo.intersectObjects(meshes.current, false)[0];
     return impacto?.object.userData.globalid ?? null;
   };
+  // O070: GlobalIds que el visor tiene dibujados ahora mismo (los dos paneles
+  // comparten el teselado, pero cada uno filtra sus categorías y su nivel).
+  (nodo as unknown as Record<string, unknown>).__openrvtMallasVisibles = () =>
+    [...new Set(
+      meshes.current
+        .map((malla) => malla.userData.globalid)
+        .filter((gid): gid is string => typeof gid === "string" && gid.length > 0),
+    )];
   (nodo as unknown as Record<string, unknown>).__openrvtZoomEn = (
     factor: number,
     clientX: number,

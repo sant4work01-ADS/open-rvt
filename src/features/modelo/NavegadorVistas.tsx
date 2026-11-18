@@ -6,6 +6,7 @@ import {
   Box,
   ChevronDown,
   ChevronRight,
+  Columns2,
   Copy,
   Layers,
   Pencil,
@@ -32,6 +33,8 @@ interface Props {
   onRenombrar?: (id: string, nombre: string) => void;
   onDuplicar?: (id: string) => void;
   onEliminar?: (id: string) => void;
+  /** O070: abre la vista en el otro panel (divide si hace falta). */
+  onAbrirEnOtroPanel?: (id: string) => void;
 }
 
 const GRUPOS: ReadonlyArray<{ titulo: string; tipos: Vista["tipo"][]; prueba: string }> = [
@@ -134,6 +137,7 @@ export function NavegadorVistas({
   onRenombrar,
   onDuplicar,
   onEliminar,
+  onAbrirEnOtroPanel,
 }: Props) {
   const [consulta, setConsulta] = useState("");
   const [plegados, setPlegados] = useState<string[]>(() => leerGruposPlegados());
@@ -462,6 +466,19 @@ export function NavegadorVistas({
                 className="flex w-full items-center gap-2 px-2 py-1 text-left hover:bg-muted"
               >
                 <Layers size={13} /> Abrir
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="vista-menu-otro-panel"
+                disabled={!onAbrirEnOtroPanel}
+                onClick={() => {
+                  onAbrirEnOtroPanel?.(menuVista.id);
+                  setMenu(null);
+                }}
+                className="flex w-full items-center gap-2 px-2 py-1 text-left hover:bg-muted disabled:opacity-40"
+              >
+                <Columns2 size={13} /> Abrir en el otro panel
               </button>
               <button
                 type="button"

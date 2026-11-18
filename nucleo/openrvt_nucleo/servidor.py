@@ -146,6 +146,12 @@ class Servidor:
             return self._exigir().leer_vistas()
         if metodo == "vistas.guardar":
             return self._exigir().guardar_vistas(params.get("lista", params.get("vistas")))
+        if metodo == "paneles.leer":
+            return self._exigir().leer_paneles()
+        if metodo == "paneles.guardar":
+            return self._exigir().guardar_paneles(
+                params.get("datos", params.get("paneles"))
+            )
         if metodo == "estilos.leer":
             return self._exigir().leer_estilos()
         if metodo == "estilos.guardar":

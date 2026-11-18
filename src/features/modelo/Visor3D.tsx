@@ -29,6 +29,7 @@ import { instalarUtilidadesE2E } from "./visor/eventos/e2e";
 import { OverlaysEdicion } from "./visor/OverlaysEdicion";
 import { OverlaysPaneles } from "./visor/OverlaysPaneles";
 import { type Props } from "./visor/tipos";
+import { useModelo } from "./estado";
 
 /** Distancia de un punto a un segmento (para saber si un cerramiento tiene muro debajo). */
 
@@ -50,6 +51,8 @@ export function Visor3D({
   onEscape,
   onCambiarAnotacion,
   claveModelo = "",
+  claveCamara,
+  panelIndice,
   elementosOcultos = [],
   elementosBloqueados = [],
 }: Props) {
@@ -71,6 +74,8 @@ export function Visor3D({
     onEscape,
     onCambiarAnotacion,
     claveModelo,
+    claveCamara,
+    panelIndice,
     elementosOcultos,
     elementosBloqueados,
   });
@@ -304,16 +309,27 @@ export function Visor3D({
     window.addEventListener("pointerup", alSoltar);
     // O034: en captura para que Escape cancele el arrastre antes de que el atajo
     // global de App (burbuja en el mismo `window`) deseleccione la losa.
-    window.addEventListener("keydown", alTecla, true);
-    window.addEventListener("keyup", alSoltarTecla);
+    // O070: con dos paneles, los atajos solo actúan en el panel activo.
+    const soloActivo = () =>
+      panelIndice === undefined || useModelo.getState().panelActivo === panelIndice;
+    const alTeclaActivo = (e: KeyboardEvent) => {
+      if (!soloActivo()) return;
+      alTecla(e);
+    };
+    const alSoltarTeclaActivo = (e: KeyboardEvent) => {
+      if (!soloActivo()) return;
+      alSoltarTecla(e);
+    };
+    window.addEventListener("keydown", alTeclaActivo, true);
+    window.addEventListener("keyup", alSoltarTeclaActivo);
     return () => {
       nodo.removeEventListener("pointerdown", alBajar);
       nodo.removeEventListener("dblclick", alDobleClic);
       nodo.removeEventListener("contextmenu", alMenuContextual);
       window.removeEventListener("pointermove", alMover);
       window.removeEventListener("pointerup", alSoltar);
-      window.removeEventListener("keydown", alTecla, true);
-      window.removeEventListener("keyup", alSoltarTecla);
+      window.removeEventListener("keydown", alTeclaActivo, true);
+      window.removeEventListener("keyup", alSoltarTeclaActivo);
     };
   }, [
     aplicarCamara,
@@ -356,6 +372,7 @@ export function Visor3D({
     fijarAjustesNiveles,
     referencias.ejes,
     vista.ejes,
+    panelIndice,
     elementosBloqueados,
     mallas,
     empujarRect,
@@ -389,6 +406,7 @@ export function Visor3D({
       data-largo-tecleado={longitudTecleada || undefined}
       data-puntos-herramienta={puntosHerramienta.length}
       data-eje-seleccionado={ejeSeleccionado ?? undefined}
+      data-panel={panelIndice}
       data-seleccion={seleccion ?? undefined}
       data-recorte-preview={vistaPreviaRecorte ? "si" : "no"}
       data-ejes-ajustes={JSON.stringify(vista.ejes ?? {})}

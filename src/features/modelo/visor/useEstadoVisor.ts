@@ -37,6 +37,8 @@ export function useEstadoVisor({
   onEscape,
   onCambiarAnotacion,
   claveModelo = "",
+  claveCamara,
+  panelIndice,
   elementosOcultos = [],
   elementosBloqueados = [],
 }: Props) {
@@ -412,6 +414,8 @@ export function useEstadoVisor({
     onEscape,
     onCambiarAnotacion,
     claveModelo,
+    claveCamara,
+    panelIndice,
     elementosOcultos,
     elementosBloqueados,
     contenedor,
