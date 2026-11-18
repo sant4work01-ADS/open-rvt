@@ -231,6 +231,13 @@ export interface Abertura {
   ancho: number;
   espesor: number;
   antepecho: number;
+  /** O069: cota absoluta del alféizar (base del muro + antepecho). */
+  cota: number;
+  /** O069: alto del vano y nivel de referencia (GlobalId). */
+  alto: number;
+  nivel: string;
+  /** O069: muro que aloja la abertura (GlobalId). */
+  muro: string;
   volteado: boolean;
   /** Categoría del elemento (puertas o ventanas). */
   categoria: Categoria;

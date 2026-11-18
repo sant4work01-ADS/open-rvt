@@ -23,6 +23,7 @@ export function construirAbertura(
 
   if (pset && muro) {
     const ancho = numero(pset.Ancho, 0.9);
+    const alto = numero(pset.Alto, 1.2);
     const distancia = numero(pset.Distancia, 0);
     const dx = muro.x2 - muro.x1;
     const dy = muro.y2 - muro.y1;
@@ -37,6 +38,11 @@ export function construirAbertura(
       ancho,
       espesor: muro.espesor,
       antepecho: numero(pset.Antepecho, 0),
+      cota: (Number.isFinite(muro.base) ? Number(muro.base) : 0) +
+        numero(pset.Antepecho, 0),
+      alto,
+      nivel: typeof pset.Nivel === "string" ? pset.Nivel : "",
+      muro: muro.globalid,
       volteado: Boolean(pset.Volteado),
       categoria,
     };
@@ -65,6 +71,10 @@ export function construirAbertura(
     ancho: Math.max(horizontal ? anchoX : anchoY, 0.1),
     espesor: Math.max(horizontal ? anchoY : anchoX, 0.02),
     antepecho: numero(pset?.Antepecho, 0),
+    cota: numero(pset?.Antepecho, 0),
+    alto: numero(pset?.Alto, 1.2),
+    nivel: typeof pset?.Nivel === "string" ? pset.Nivel : "",
+    muro: typeof pset?.Muro === "string" ? pset.Muro : "",
     volteado: Boolean(pset?.Volteado),
     categoria,
   };

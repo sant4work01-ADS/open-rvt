@@ -1,5 +1,7 @@
 // O065B: slice «seleccion» del store (movido tal cual desde estado.ts).
 import type { PropiedadesElemento } from "../../tipos";
+import type { Punto2 } from "../../herramientas";
+import { aberturaEnPunto } from "../../aberturasVista";
 import { rpc } from "../ipc";
 import type { EstadoModelo, GetEstado, SetEstado } from "../tipos";
 
@@ -8,7 +10,14 @@ let tokenSeleccion = 0;
 export function crearSliceSeleccion(
   set: SetEstado,
   get: GetEstado,
-): Pick<EstadoModelo, "fijarEjeSeleccionado" | "fijarNivelSeleccionado" | "seleccionar" | "seleccionarVarios"> {
+): Pick<
+    EstadoModelo,
+    | "fijarEjeSeleccionado"
+    | "fijarNivelSeleccionado"
+    | "seleccionar"
+    | "seleccionarVarios"
+    | "seleccionarAberturaEnPunto"
+  > {
   return {
     fijarEjeSeleccionado: (globalid) => {
       set({ ejeSeleccionado: globalid });
@@ -49,6 +58,14 @@ export function crearSliceSeleccion(
           set({ propiedades: null, error: e instanceof Error ? e.message : String(e) });
         }
       }
+    },
+
+    seleccionarAberturaEnPunto: (punto: Punto2, agregar = false, tolerancia = 0.05) => {
+      const abertura = aberturaEnPunto(get().aberturas, punto, tolerancia);
+      if (!abertura) return false;
+      set({ ejeSeleccionado: null });
+      void get().seleccionar(abertura.globalid, agregar);
+      return true;
     },
 
     seleccionarVarios: async (globalids) => {

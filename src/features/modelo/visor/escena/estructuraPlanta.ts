@@ -1,10 +1,10 @@
 /* eslint-disable react-hooks/immutability -- la escena es mutable por diseño. */
-import { categoriaOculta, type PatronLinea } from "../../estilos";
-import { categoriaVisible } from "../../vistas";
+import { type PatronLinea } from "../../estilos";
 import { colocarSimbolo, geometriaPuerta, geometriaVentana, type Punto3 } from "../../seccion";
 import { contornoCerramientoPlanta, lineaEjeCerramientoPlanta } from "../../planta";
 import { crearMaterialLinea, esquinasRectangulo, lineaCerrada, rayadoRectangulo } from "../lineas";
 import { muroBajoCerramiento } from "../utilidades";
+import { aberturasVisiblesEnPlanta } from "../../aberturasVista";
 import { type Punto2 } from "../../herramientas";
 import type { CtxEscena } from "./contexto";
 
@@ -198,16 +198,21 @@ export function construirEstructuraPlanta(ctx: CtxEscena) {
       }
     }
 
-    // O005: simbología 2D de puertas y ventanas, solo en plantas.
+    // O005: simbología 2D de puertas y ventanas, solo en plantas. O069: sale
+    // siempre de los datos del núcleo y se resalta como los demás elementos.
     if (vista.tipo === "planta") {
       const z = corteZ + 0.02;
-      for (const abertura of aberturas) {
+      for (const abertura of aberturasVisiblesEnPlanta(aberturas, vista, visibles)) {
         const esPuerta = abertura.clase === "IfcDoor";
-        if (!categoriaVisible(vista, abertura.categoria)) continue;
-        if (categoriaOculta(vista, abertura.categoria)) continue;
         const mm = grosorDe(abertura.categoria, "corte") ?? 0.25;
         const mmFino = grosorDe(abertura.categoria, "proyeccion") ?? 0.13;
-        const colorSimbolo = estilos.categorias[abertura.categoria].color;
+        const resaltada =
+          seleccion === abertura.globalid ||
+          seleccionados.includes(abertura.globalid) ||
+          resaltado === abertura.globalid;
+        const colorSimbolo = resaltada
+          ? "#ff8a00"
+          : estilos.categorias[abertura.categoria].color;
         const a3 = (p: Punto2): [number, number, number] => [p[0], p[1], z];
         if (esPuerta) {
           const { hoja, arco } = geometriaPuerta({
