@@ -5,6 +5,7 @@ import { elevacionDesdeCota } from "../niveles";
 import { rectaDeMalla } from "../alinear";
 import { type Nota } from "../anotaciones3d";
 import { type Punto3 } from "../seccion";
+import { colocarAbertura } from "../herramientas";
 import { useEffect, useState } from "react";
 
 import { useOverlaysVisor } from "./useOverlaysVisor";
@@ -13,6 +14,8 @@ export function useGuiasVisor(c: ReturnType<typeof useOverlaysVisor>) {
     contenedor,
     camara,
     herramienta,
+    puntosHerramienta,
+    opcionesAbertura,
     referenciaAlinear,
     alineando,
     ratonHerramienta,
@@ -105,6 +108,126 @@ export function useGuiasVisor(c: ReturnType<typeof useOverlaysVisor>) {
       bloqueada: !!alineando?.bloqueada,
     });
   }, [referenciaAlinear, alineando, vista, mallas, referencias.ejes, pantallaDePunto]);
+
+  // O068: línea base→cursor con la distancia mientras se mueve o copia.
+  const [guiaMover, setGuiaMover] = useState<{
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    texto: string;
+  } | null>(null);
+  useEffect(() => {
+    if (
+      (herramienta !== "mover" && herramienta !== "copiar") ||
+      puntosHerramienta.length !== 1 ||
+      !ratonHerramienta
+    ) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- la guía depende de la herramienta y la cámara
+      setGuiaMover(null);
+      return;
+    }
+    const rect = contenedor.current?.getBoundingClientRect();
+    const z = vista.tipo === "planta" ? 0.05 : (vista.alturaPlano ?? 1.2);
+    const base = puntosHerramienta[0];
+    const a = pantallaDePunto([base[0], base[1], z]);
+    const b = pantallaDePunto([ratonHerramienta[0], ratonHerramienta[1], z]);
+    if (!rect || !a || !b) {
+      setGuiaMover(null);
+      return;
+    }
+    const metros = Math.hypot(
+      ratonHerramienta[0] - base[0],
+      ratonHerramienta[1] - base[1],
+    );
+    setGuiaMover({
+      x1: a.x - rect.left,
+      y1: a.y - rect.top,
+      x2: b.x - rect.left,
+      y2: b.y - rect.top,
+      texto: `${metros.toFixed(2)} m`,
+    });
+  }, [herramienta, puntosHerramienta, ratonHerramienta, vista, pantallaDePunto, contenedor]);
+
+  // O068: vista previa de la abertura centrada en el cursor, con las cotas a los
+  // dos extremos del muro.
+  const [guiaAbertura, setGuiaAbertura] = useState<{
+    puntos: string;
+    desde: { x: number; y: number; texto: string } | null;
+    hasta: { x: number; y: number; texto: string } | null;
+  } | null>(null);
+  useEffect(() => {
+    if (
+      (herramienta !== "puerta" && herramienta !== "ventana") ||
+      !ratonHerramienta
+    ) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- la vista previa depende del cursor
+      setGuiaAbertura(null);
+      return;
+    }
+    const colocada = colocarAbertura(
+      referencias,
+      ratonHerramienta,
+      opcionesAbertura.ancho,
+    );
+    const rect = contenedor.current?.getBoundingClientRect();
+    if (!colocada || !rect) {
+      setGuiaAbertura(null);
+      return;
+    }
+    const { muro } = colocada;
+    const largo = Math.hypot(muro.x2 - muro.x1, muro.y2 - muro.y1) || 1;
+    const ux = (muro.x2 - muro.x1) / largo;
+    const uy = (muro.y2 - muro.y1) / largo;
+    const nx = -uy;
+    const ny = ux;
+    const z = vista.tipo === "planta" ? 0.05 : (vista.alturaPlano ?? 1.2);
+    const mitad = (muro.espesor || 0.15) / 2;
+    const d0 = colocada.distancia;
+    const d1 = d0 + opcionesAbertura.ancho;
+    const esquina = (d: number, lado: number): [number, number, number] => [
+      muro.x1 + ux * d + nx * mitad * lado,
+      muro.y1 + uy * d + ny * mitad * lado,
+      z,
+    ];
+    const pantallas = [
+      pantallaDePunto(esquina(d0, -1)),
+      pantallaDePunto(esquina(d0, 1)),
+      pantallaDePunto(esquina(d1, 1)),
+      pantallaDePunto(esquina(d1, -1)),
+    ];
+    if (pantallas.some((p) => !p)) {
+      setGuiaAbertura(null);
+      return;
+    }
+    const puntos = pantallas
+      .map((p) => `${p!.x - rect.left},${p!.y - rect.top}`)
+      .join(" ");
+    const etiqueta = (
+      d: number,
+      texto: string,
+    ): { x: number; y: number; texto: string } | null => {
+      const p = pantallaDePunto([
+        muro.x1 + ux * d + nx * (mitad + 0.25),
+        muro.y1 + uy * d + ny * (mitad + 0.25),
+        z,
+      ]);
+      return p ? { x: p.x - rect.left, y: p.y - rect.top, texto } : null;
+    };
+    setGuiaAbertura({
+      puntos,
+      desde: etiqueta(d0 / 2, `${d0.toFixed(2)} m`),
+      hasta: etiqueta((d1 + largo) / 2, `${colocada.hastaFin.toFixed(2)} m`),
+    });
+  }, [
+    herramienta,
+    ratonHerramienta,
+    referencias,
+    opcionesAbertura.ancho,
+    vista,
+    pantallaDePunto,
+    contenedor,
+  ]);
 
   // O029: alzado con la herramienta Nivel. La elevación objetivo es la tecleada
   // (si la hay); con ella se dibujan la línea fantasma y las dos cotas temporales.
@@ -256,6 +379,8 @@ export function useGuiasVisor(c: ReturnType<typeof useOverlaysVisor>) {
     puedeAnotarEje,
     guiaAlinear,
     setGuiaAlinear,
+    guiaMover,
+    guiaAbertura,
     esAlzadoOCorte,
     zNivelHerramienta,
     lineaFantasmaNivel,

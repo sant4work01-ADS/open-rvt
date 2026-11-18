@@ -12,7 +12,7 @@ export function crearSliceClicPlanta(
   get: GetEstado,
   h: Ayudas,
 ): Pick<EstadoModelo, "clicNivel" | "clicEnPlanta" | "dobleClicEnPlanta"> {
-  const { candidatosElevacionNivel, crearNivelDesdeHerramienta, ejecutarResultado, ejecutar, crearMuroEntre, crearCerramientoEntre, tipoEstructural, crearEstructuralPunto, crearEstructuralLineal, limpiarTrazoExtra, crearEjeEntre, moverSeleccion } = h;
+  const { candidatosElevacionNivel, crearNivelDesdeHerramienta, ejecutarResultado, ejecutar, crearMuroEntre, crearCerramientoEntre, tipoEstructural, crearEstructuralPunto, crearEstructuralLineal, limpiarTrazoExtra, crearEjeEntre, crearAberturaEnMuro, moverSeleccion } = h;
   return {
     clicNivel: async (punto) => {
       const herramienta = get().herramienta;
@@ -234,33 +234,53 @@ export function crearSliceClicPlanta(
         return;
       }
       if (herramienta === "puerta" || herramienta === "ventana") {
-        const ancho = herramienta === "puerta" ? 0.9 : 1.2;
-        const alto = herramienta === "puerta" ? 2.1 : 1.2;
-        const antepecho = herramienta === "puerta" ? 0 : 0.9;
-        const colocada = colocarAbertura(get().referencias, p, ancho);
+        const colocada = colocarAbertura(
+          get().referencias,
+          p,
+          get().opcionesAbertura.ancho,
+        );
         if (!colocada) {
           set({ aviso: "Coloque la abertura sobre un muro." });
           return;
         }
-        const ok = await ejecutar("aberturas.crear", {
-          clase: herramienta === "puerta" ? "IfcDoor" : "IfcWindow",
-          muro: colocada.muro.globalid,
-          distancia: colocada.distancia,
-          ancho,
-          alto,
-          antepecho,
-          volteado: get().voltearSiguiente,
-        });
-        if (ok) bitacoraHerramienta(herramienta, "terminar", { x: p[0], y: p[1] });
+        await crearAberturaEnMuro(colocada.muro.globalid, colocada.distancia);
         return;
       }
       if (herramienta === "mover" || herramienta === "copiar") {
-        if (get().seleccionados.length === 0) {
-          set({ aviso: "Seleccione uno o varios elementos antes de mover o copiar." });
+        // La fase «seleccionar» la resuelve el visor (alterna elementos y ejes).
+        if (get().faseMover === "seleccionar") return;
+        if (puntos.length === 0) {
+          set({
+            puntosHerramienta: [p],
+            faseMover: "destino",
+            longitudTecleada: "",
+            aviso: "Mover: punto destino, o escriba la distancia y Enter.",
+          });
           return;
         }
-        if (puntos.length === 0) {
-          set({ puntosHerramienta: [p], aviso: "Indique el punto destino." });
+        const ejeGid =
+          get().seleccionados.length === 0 ? get().ejeSeleccionado : null;
+        if (ejeGid) {
+          const eje = get().referencias.ejes.find((e) => e.globalid === ejeGid);
+          const dx = p[0] - puntos[0][0];
+          const dy = p[1] - puntos[0][1];
+          let desplazamiento = Math.hypot(dx, dy);
+          if (eje) {
+            const largo =
+              Math.hypot(eje.x2 - eje.x1, eje.y2 - eje.y1) || 1;
+            const nx = (eje.y2 - eje.y1) / largo;
+            const ny = -(eje.x2 - eje.x1) / largo;
+            if (dx * nx + dy * ny < 0) desplazamiento = -desplazamiento;
+          }
+          const ok = await get().moverEje(ejeGid, desplazamiento);
+          if (ok) {
+            set({
+              puntosHerramienta: [],
+              faseMover: "base",
+              longitudTecleada: "",
+              aviso: `Eje movido ${Math.abs(desplazamiento).toFixed(2)} m.`,
+            });
+          }
           return;
         }
         await moverSeleccion(puntos[0], p);

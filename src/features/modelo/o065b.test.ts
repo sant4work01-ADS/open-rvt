@@ -56,6 +56,7 @@ const CLAVES = [
   "columnaConZapata", "tipoZapata", "dialogoCastillos", "preguntaZapata", "referencias", "puntosHerramienta",
   "ratonHerramienta", "engancheHerramienta", "longitudTecleada", "empujarClasificacion", "empujarRect", "empujarAltura",
   "empujarZ", "empujarCara", "ejeLibre", "voltearSiguiente", "etiquetaEje", "cotasMoverSiguientes",
+  "faseMover", "opcionesAbertura", "fijarOpcionesAbertura", "listoMover",
   "fijarCotasMoverSiguientes", "nuevo", "abrir", "guardar", "guardarComo", "preguntarGuardar",
   "responderGuardar", "preguntarGuardarAjeno", "responderGuardarAjeno", "asegurarSinCambios", "fijarVista", "fijarEjeSeleccionado", "fijarNivelSeleccionado", "actualizarVista",
   "duplicarVista", "eliminarVista", "fijarAjustesEjes", "fijarAjustesNiveles", "guardarEstilos", "abrirDialogoEstilos",
@@ -156,7 +157,7 @@ describe("O065B — partición del store", () => {
     expect(lineas(estadoTs), "estado.ts debe ser el índice, no el store").toBeLessThanOrEqual(600);
   });
 
-  it("el store conserva exactamente las 207 claves de main (ninguna acción se perdió)", () => {
+  it("el store conserva las claves de main más las de O068 (ninguna acción se perdió)", () => {
     expect(Object.keys(useModelo.getState()).sort()).toEqual([...CLAVES].sort());
   });
 

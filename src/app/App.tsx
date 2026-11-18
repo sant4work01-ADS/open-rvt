@@ -232,6 +232,16 @@ export function App() {
         return;
       }
       if (enTexto) return;
+      // O068: Enter cierra la selección de Mover/Copiar y pasa al punto base.
+      if (
+        (estado.herramienta === "mover" || estado.herramienta === "copiar") &&
+        estado.faseMover === "seleccionar" &&
+        e.key === "Enter"
+      ) {
+        e.preventDefault();
+        estado.listoMover();
+        return;
+      }
       if (estado.herramienta === "recortar_extender" && e.key === "Enter") {
         e.preventDefault();
         estado.terminarRecorteExtender();
@@ -271,10 +281,10 @@ export function App() {
       }
       if (
         estado.herramienta &&
-        estado.herramienta !== "puerta" &&
-        estado.herramienta !== "ventana" &&
         (estado.puntosHerramienta.length > 0 ||
           !!estado.empujarCara ||
+          ((estado.herramienta === "puerta" || estado.herramienta === "ventana") &&
+            !!estado.ratonHerramienta) ||
           ((estado.herramienta === "copiar" || estado.herramienta === "mover") &&
             !!estado.nivelSeleccionado &&
             estado.seleccionados.length === 0))

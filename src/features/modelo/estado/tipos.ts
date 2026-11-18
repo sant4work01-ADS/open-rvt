@@ -94,6 +94,19 @@ export interface OpcionesMuro {
   desfaseUbicacion: number;
 }
 
+/** O068: fase de la herramienta Mover/Copiar. */
+export type FaseMover = "seleccionar" | "base" | "destino";
+
+/** O068: barra de opciones de Ventana y Puerta. */
+export interface OpcionesAbertura {
+  ancho: number;
+  alto: number;
+  /** Altura del alféizar medida desde el nivel de referencia. */
+  antepecho: number;
+  /** GlobalId del nivel de referencia (vacío = base del muro). */
+  nivel: string;
+}
+
 /** O032: borde de losa al crear desde muros. */
 export type UsoLosa = "firme" | "entrepiso" | "azotea";
 
@@ -248,6 +261,11 @@ export interface EstadoModelo {
   previsualizarRecorte: (globalid: string, punto: Punto2) => void;
   terminarRecorteExtender: () => void;
   opcionesMuro: OpcionesMuro;
+  /** O068: fase del Mover/Copiar y opciones de Ventana/Puerta. */
+  faseMover: FaseMover | null;
+  opcionesAbertura: OpcionesAbertura;
+  fijarOpcionesAbertura: (cambios: Partial<OpcionesAbertura>) => void;
+  listoMover: () => void;
   /** O029: nombre automático, vista de planta y elevación exacta del nivel nuevo. */
   opcionesNivel: OpcionesNivel;
   fijarOpcionesNivel: (cambios: Partial<OpcionesNivel>) => void;

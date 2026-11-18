@@ -545,6 +545,33 @@ export function crearAyudasEdicion(
     return ok;
   };
 
+  // O068: una sola puerta de entrada crea el vano con las opciones de la barra
+  // (ancho, alto, antepecho desde el nivel de referencia y volteo).
+  const crearAberturaEnMuro = async (
+    muro: string,
+    distancia: number,
+  ): Promise<boolean> => {
+    const herramienta = get().herramienta;
+    if (herramienta !== "puerta" && herramienta !== "ventana") return false;
+    const opciones = get().opcionesAbertura;
+    const vista = get().vistas.find((v) => v.id === get().vistaActivaId);
+    const ok = await ejecutar("aberturas.crear", {
+      clase: herramienta === "puerta" ? "IfcDoor" : "IfcWindow",
+      muro,
+      distancia,
+      ancho: opciones.ancho,
+      alto: opciones.alto,
+      antepecho: opciones.antepecho,
+      nivel: opciones.nivel || vista?.nivel || "",
+      volteado: get().voltearSiguiente,
+    });
+    if (ok) {
+      set({ ...limpiarTrazoExtra() });
+      bitacoraHerramienta(herramienta, "terminar", { x: 0, y: 0 });
+    }
+    return ok;
+  };
+
   const moverSeleccion = async (origen: Punto2, destino: Punto2): Promise<boolean> => {
     const herramienta = get().herramienta;
     if (herramienta !== "mover" && herramienta !== "copiar") return false;
@@ -560,7 +587,12 @@ export function crearAyudasEdicion(
       dz: 0,
     });
     if (ok) {
-      set({ puntosHerramienta: [], ...limpiarTrazoExtra() });
+      // O068: Mover queda activo para mover otra vez; se conserva la selección.
+      set({
+        puntosHerramienta: [],
+        faseMover: get().seleccionados.length > 0 ? "base" : "seleccionar",
+        ...limpiarTrazoExtra(),
+      });
       bitacoraHerramienta(herramienta, "terminar", { x: destino[0], y: destino[1] });
     }
     return ok;
@@ -585,6 +617,7 @@ export function crearAyudasEdicion(
     crearEstructuralLineal,
     limpiarTrazoExtra,
     crearEjeEntre,
+    crearAberturaEnMuro,
     moverSeleccion,
   };
 }
