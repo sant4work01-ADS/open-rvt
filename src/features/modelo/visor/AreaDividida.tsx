@@ -75,6 +75,8 @@ export function AreaDividida({ vista, vistas, ...comunes }: PropsArea) {
   const segunda = vistaDePanel(1);
   const mostrada = arrastrando ? proporcion : proporcionGuardada;
   const tamano = `${(mostrada * 100).toFixed(3)}%`;
+  // El segundo panel ocupa el resto; antes ambos usaban `tamano` y quedaba un hueco vacío.
+  const tamanoResto = `${((1 - mostrada) * 100).toFixed(3)}%`;
   const columna = orientacion === "vertical";
 
   return (
@@ -131,8 +133,8 @@ export function AreaDividida({ vista, vistas, ...comunes }: PropsArea) {
               }}
               style={
                 columna
-                  ? { width: `calc(${tamano} - 2px)`, flexShrink: 0 }
-                  : { height: `calc(${tamano} - 2px)`, flexShrink: 0 }
+                  ? { width: `calc(${i === 0 ? tamano : tamanoResto} - 2px)`, flexShrink: 0 }
+                  : { height: `calc(${i === 0 ? tamano : tamanoResto} - 2px)`, flexShrink: 0 }
               }
               className={`flex min-h-0 min-w-0 flex-col border-2 ${
                 activo ? "border-primary" : "border-transparent"
