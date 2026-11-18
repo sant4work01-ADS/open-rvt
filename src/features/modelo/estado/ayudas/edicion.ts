@@ -568,6 +568,8 @@ export function crearAyudasEdicion(
     if (ok) {
       set({ ...limpiarTrazoExtra() });
       bitacoraHerramienta(herramienta, "terminar", { x: 0, y: 0 });
+    } else {
+      set({ aviso: get().error ?? "No se pudo colocar la abertura." });
     }
     return ok;
   };
@@ -594,6 +596,8 @@ export function crearAyudasEdicion(
         ...limpiarTrazoExtra(),
       });
       bitacoraHerramienta(herramienta, "terminar", { x: destino[0], y: destino[1] });
+    } else {
+      set({ aviso: get().error ?? "No se pudo mover la selección." });
     }
     return ok;
   };
