@@ -84,6 +84,7 @@ export function AreaDividida({ vista, vistas, ...comunes }: PropsArea) {
       data-dividida="si"
       data-orientacion={orientacion}
       data-proporcion={mostrada.toFixed(4)}
+      data-arrastrando={arrastrando ? "si" : "no"}
       className={`flex min-h-0 flex-1 ${columna ? "flex-row" : "flex-col"}`}
     >
       {[0, 1].map((indice) => {
