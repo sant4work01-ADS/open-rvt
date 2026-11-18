@@ -94,6 +94,11 @@ export interface AccionesRibbon {
   temaActivo: "sistema" | "claro" | "oscuro";
   /** Nueva vista de corte (pestaña Vista). */
   nuevaVistaCorte: () => void;
+  /** O070: dividir el área en dos paneles. */
+  dividirVertical?: () => void;
+  dividirHorizontal?: () => void;
+  /** O070: volver a una sola vista con la del panel activo. */
+  unaVista?: () => void;
   /** O005: diálogo de estilos de objeto (pestaña Vista). */
   estilosObjeto: () => void;
   /** O024: editor de estilos de anotación (niveles, ejes y cotas). */
@@ -203,6 +208,40 @@ export function construirComandosRibbon(a: AccionesRibbon): ComandoRibbon[] {
     },
 
     // ---------- Modelo / vistas ----------
+    // ---------- O070: pantalla dividida ----------
+    {
+      id: "dividir-vertical",
+      texto: "Dividir vertical",
+      icono: Columns2,
+      grupo: "Vistas",
+      pestana: "vista",
+      tamano: "grande",
+      habilitado: true,
+      descripcion: "Dos paneles lado a lado, cada uno con su vista",
+      accion: () => a.dividirVertical?.(),
+    },
+    {
+      id: "dividir-horizontal",
+      texto: "Dividir horizontal",
+      icono: PanelTop,
+      grupo: "Vistas",
+      pestana: "vista",
+      tamano: "grande",
+      habilitado: true,
+      descripcion: "Dos paneles uno encima de otro, cada uno con su vista",
+      accion: () => a.dividirHorizontal?.(),
+    },
+    {
+      id: "una-vista",
+      texto: "Una vista",
+      icono: Square,
+      grupo: "Vistas",
+      pestana: "vista",
+      tamano: "grande",
+      habilitado: true,
+      descripcion: "Cerrar el segundo panel y quedarse con el activo",
+      accion: () => a.unaVista?.(),
+    },
     {
       id: "estilos",
       texto: "Estilos de objeto",

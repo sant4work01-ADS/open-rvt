@@ -3,6 +3,8 @@ import type { Vista } from "../../tipos";
 import { normalizarAjusteEje } from "../../ejesVista";
 import { normalizarAjusteNivel } from "../../niveles";
 import { plantaUnicaDeNivel } from "../utilidades";
+import { conVistaEnPanel } from "../../paneles";
+import { panelesSaneados } from "./paneles";
 import type { EstadoModelo, GetEstado, SetEstado } from "../tipos";
 import type { Ayudas } from "../ayudas";
 
@@ -11,23 +13,32 @@ export function crearSliceVistas(
   get: GetEstado,
   h: Ayudas,
 ): Pick<EstadoModelo, "fijarVista" | "actualizarVista" | "duplicarVista" | "eliminarVista" | "fijarAjustesEjes" | "fijarAjustesNiveles" | "guardarEstilos" | "abrirDialogoEstilos" | "cerrarDialogoEstilos" | "abrirDialogoAnotacion" | "cerrarDialogoAnotacion" | "abrirDialogoCotas" | "cerrarDialogoCotas"> {
-  const { persistirVistas, persistirEstilos } = h;
+  const { persistirVistas, persistirPaneles, persistirEstilos } = h;
   return {
     fijarVista: (id) => {
       const vista = get().vistas.find((v) => v.id === id);
       const opciones = get().opcionesCerramiento;
+      // O070: el navegador abre la vista en el panel activo. «Cantidades» no es una
+      // vista IFC: se recuerda la anterior del panel para volver a ella.
+      const estado = get();
+      const paneles =
+        id === "cantidades"
+          ? estado.paneles
+          : conVistaEnPanel(estado.paneles, estado.panelActivo, id);
       // O043: la elección de nivel de cerramiento solo manda en planta; al pasar
       // a alzado, corte o 3D vuelve la regla de O041 (tope del muro).
       const limpiarNivel =
         vista !== undefined && vista.tipo !== "planta" && opciones.nivel !== "";
       set({
         vistaActivaId: id,
+        paneles,
         modoCorte: false,
         puntoCorte: null,
         ejeSeleccionado: null,
         nivelSeleccionado: null,
         ...(limpiarNivel ? { opcionesCerramiento: { ...opciones, nivel: "" } } : {}),
       });
+      if (id !== "cantidades") void persistirPaneles(get());
     },
 
     actualizarVista: async (id, cambios) => {
@@ -63,8 +74,10 @@ export function crearSliceVistas(
       const indice = estado.vistas.findIndex((v) => v.id === id);
       const vistas = [...estado.vistas];
       vistas.splice(indice + 1, 0, copia);
-      set({ vistas, vistaActivaId: nuevoId, conCambios: true, modoCorte: false, puntoCorte: null });
+      const paneles = conVistaEnPanel(estado.paneles, estado.panelActivo, nuevoId);
+      set({ vistas, vistaActivaId: nuevoId, paneles, conCambios: true, modoCorte: false, puntoCorte: null });
       await persistirVistas(vistas);
+      await persistirPaneles(get());
       return nuevoId;
     },
 
@@ -85,9 +98,20 @@ export function crearSliceVistas(
         return !get().vistas.some((v) => v.id === id);
       }
       const vistas = estado.vistas.filter((v) => v.id !== id);
-      const activa = estado.vistaActivaId === id ? (vistas[0]?.id ?? null) : estado.vistaActivaId;
-      set({ vistas, vistaActivaId: activa, conCambios: true, modoCorte: false, puntoCorte: null });
+      // O070: ninguna puerta puede dejar un panel apuntando a una vista borrada.
+      const saneado = panelesSaneados({ paneles: estado.paneles, panelActivo: estado.panelActivo, vistas });
+      const activa =
+        saneado.vistaActivaId === id ? (vistas[0]?.id ?? null) : saneado.vistaActivaId;
+      set({
+        vistas,
+        paneles: saneado.paneles,
+        vistaActivaId: activa,
+        conCambios: true,
+        modoCorte: false,
+        puntoCorte: null,
+      });
       await persistirVistas(vistas);
+      await persistirPaneles(get());
       return true;
     },
 

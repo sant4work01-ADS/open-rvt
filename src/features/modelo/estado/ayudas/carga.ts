@@ -8,6 +8,7 @@ import { cajaDeMallas, completarVistasEstandar, crearVistas, migrarNivelesVisibl
 import { referenciasAlDia } from "../../herramientas";
 import type { Punto2, Referencias } from "../../herramientas";
 import { normalizarEstilos } from "../../estilos";
+import { normalizarPaneles, serializarPaneles, type PanelVista } from "../../paneles";
 import type { Estilos } from "../../estilos";
 import type { Nota } from "../../anotaciones3d";
 import { construirAberturas } from "../../aberturas";
@@ -119,7 +120,7 @@ export function crearAyudasCarga(set: SetEstado, get: GetEstado) {
   const cargar = async (info: RespuestaInfo) => {
     const inicio = performance.now();
     const [niveles, elementos, teselado, vistasCrudas, tipos, referenciasCrudas, estilosCrudos,
-      tiposEstructura, arbol, arbolObra, notas] = await Promise.all([
+      tiposEstructura, arbol, arbolObra, notas, panelesCrudos] = await Promise.all([
         rpc<Nivel[]>("modelo.niveles"),
         rpc<Elemento[]>("modelo.elementos"),
         rpc<RespuestaTeselado>("geometria.teselar", { globalids: null }),
@@ -135,6 +136,9 @@ export function crearAyudasCarga(set: SetEstado, get: GetEstado) {
           ? rpc<ArbolObra>("modelo.arbol_obra").catch(() => null)
           : Promise.resolve(null),
         rpc<Nota[]>("notas.listar").catch(() => []),
+        // O070: la división de la pantalla y la vista de cada panel viven en el mismo
+        // pset de vistas; si el archivo no las trae, arranca sin dividir.
+        rpc<unknown>("paneles.leer").catch(() => null),
       ]);
     const mallas = teselado.elementos.map(decodificarMalla);
     const caja = cajaDeMallas(mallas);
@@ -156,8 +160,26 @@ export function crearAyudasCarga(set: SetEstado, get: GetEstado) {
       // con plantas; no marca la obra como modificada.
       vistas = completarVistasEstandar(vistas, niveles).vistas;
     }
-    const activa =
+    const planta =
       vistas.find((v) => v.tipo === "planta") ?? vistas[0] ?? null;
+    // O070: los paneles guardados se sanean contra las vistas que existen; si el
+    // archivo no traía paneles, el panel 0 arranca con la planta activa.
+    const idsVistas = new Set(vistas.map((v) => v.id));
+    const guardados = normalizarPaneles(panelesCrudos);
+    const paneles: [PanelVista, PanelVista] = [
+      guardados.paneles[0].vistaId && idsVistas.has(guardados.paneles[0].vistaId)
+        ? guardados.paneles[0]
+        : { vistaId: planta?.id ?? null },
+      guardados.paneles[1].vistaId && idsVistas.has(guardados.paneles[1].vistaId)
+        ? guardados.paneles[1]
+        : { vistaId: null },
+    ];
+    const panelActivo =
+      guardados.dividida && paneles[guardados.panelActivo].vistaId
+        ? guardados.panelActivo
+        : 0;
+    const activa =
+      vistas.find((v) => v.id === paneles[panelActivo].vistaId) ?? planta;
     // O063: abrir o crear un modelo devuelve la edición.
     fijarEstadoNucleoCaido(false);
     set({
@@ -180,6 +202,11 @@ export function crearAyudasCarga(set: SetEstado, get: GetEstado) {
       notas,
       vistasPersistidas: persistidas,
       vistaActivaId: activa?.id ?? null,
+      paneles,
+      panelActivo,
+      dividida: guardados.dividida,
+      orientacionDivision: guardados.orientacion,
+      proporcionDivision: guardados.proporcion,
       seleccion: null,
       seleccionados: [],
       propiedades: null,
@@ -229,6 +256,30 @@ export function crearAyudasCarga(set: SetEstado, get: GetEstado) {
     }
   };
 
+  // O070: guarda la división y la vista de cada panel en la propiedad «Paneles».
+  // No marca la obra como modificada: es disposición de pantalla, no geometría.
+  const persistirPaneles = async (estado: {
+    dividida: boolean;
+    orientacionDivision: "vertical" | "horizontal";
+    proporcionDivision: number;
+    paneles: [PanelVista, PanelVista];
+    panelActivo: 0 | 1;
+  }) => {
+    try {
+      await rpc("paneles.guardar", {
+        datos: serializarPaneles({
+          dividida: estado.dividida,
+          orientacion: estado.orientacionDivision,
+          proporcion: estado.proporcionDivision,
+          paneles: estado.paneles,
+          panelActivo: estado.panelActivo,
+        }),
+      });
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : String(e) });
+    }
+  };
+
   const persistirEstilos = async (estilos: Estilos) => {
     await rpc("estilos.guardar", { estilos });
     set({ estilos, conCambios: true, error: null });
@@ -245,6 +296,15 @@ export function crearAyudasCarga(set: SetEstado, get: GetEstado) {
       set({ cargando: true, error: null });
       // Las vistas automáticas también se escriben en el pset al guardar.
       await rpc("vistas.guardar", { lista: estado.vistas });
+      await rpc("paneles.guardar", {
+        datos: serializarPaneles({
+          dividida: estado.dividida,
+          orientacion: estado.orientacionDivision,
+          proporcion: estado.proporcionDivision,
+          paneles: estado.paneles,
+          panelActivo: estado.panelActivo,
+        }),
+      });
       await rpc("estilos.guardar", { estilos: estado.estilos });
       const info = await rpc<RespuestaInfo>("proyecto.guardar", {
         ruta: como || !estado.ruta ? ruta : null,
@@ -275,6 +335,7 @@ export function crearAyudasCarga(set: SetEstado, get: GetEstado) {
     crearNivelDesdeHerramienta,
     cargar,
     persistirVistas,
+    persistirPaneles,
     persistirEstilos,
     guardarEn,
   };

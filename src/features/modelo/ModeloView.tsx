@@ -5,7 +5,7 @@ import { PanelLeft, PanelRight, Layers, ListTree } from "lucide-react";
 import { useMemo, useState } from "react";
 import { tr } from "@/i18n";
 import { useModelo } from "./estado";
-import { Visor3D } from "./Visor3D";
+import { AreaDividida } from "./visor/AreaDividida";
 import { NavegadorVistas } from "./NavegadorVistas";
 import { ArbolProyecto } from "./ArbolProyecto";
 import { PanelPropiedades } from "./PanelPropiedades";
@@ -64,6 +64,7 @@ export function ModeloView() {
   const borrarCapituloObra = useModelo((s) => s.borrarCapituloObra);
   const seleccionarVarios = useModelo((s) => s.seleccionarVarios);
   const pedirAjustar = useModelo((s) => s.pedirAjustar);
+  const abrirEnOtroPanel = useModelo((s) => s.abrirEnOtroPanel);
   const fijarEjeSeleccionado = useModelo((s) => s.fijarEjeSeleccionado);
   const fijarNivelSeleccionado = useModelo((s) => s.fijarNivelSeleccionado);
   // O011: los paneles laterales se pliegan y su estado se recuerda entre sesiones.
@@ -190,6 +191,7 @@ export function ModeloView() {
                 onRenombrar={(id, nombre) => void actualizarVista(id, { nombre })}
                 onDuplicar={(id) => void duplicarVista(id)}
                 onEliminar={(id) => void eliminarVista(id)}
+                onAbrirEnOtroPanel={(id) => void abrirEnOtroPanel(id)}
               />
             )}
           </div>
@@ -245,7 +247,7 @@ export function ModeloView() {
           {esCantidades ? (
             <CantidadesView />
           ) : vista ? (
-            <Visor3D
+            <AreaDividida
               vista={vista}
               claveModelo={ruta ?? ""}
               vistas={vistas}
