@@ -727,6 +727,13 @@ export function crearAlMover(
     ) {
       const punto = puntoVistaDesdeEvento(evento.clientX, evento.clientY);
       if (punto) fijarRaton(punto, evento.shiftKey, metrosPorPixelActual());
+    } else if (
+      (herramienta === "mover" || herramienta === "copiar") &&
+      (vista.tipo === "alzado" || vista.tipo === "corte")
+    ) {
+      // O069: vista previa y cota en vivo de Mover/Copiar en alzados y cortes.
+      const punto = puntoVistaDesdeEvento(evento.clientX, evento.clientY);
+      if (punto) fijarRaton(punto, evento.shiftKey, metrosPorPixelActual());
     } else if (herramienta && vista.tipo === "planta") {
       const punto = puntoPlanta(evento);
       if (punto) fijarRaton(punto, evento.shiftKey, metrosPorPixelActual());

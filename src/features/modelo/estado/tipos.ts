@@ -349,6 +349,13 @@ export interface EstadoModelo {
     metrosPorPixel?: number,
   ) => Promise<void>;
   dobleClicEnPlanta: () => Promise<void>;
+  /** O069: clic de Mover/Copiar en alzados y cortes: [horizontal, cota]. */
+  clicEnAlzado: (
+    punto: Punto2,
+    shift?: boolean,
+    agregar?: boolean,
+    metrosPorPixel?: number,
+  ) => Promise<void>;
   voltearAbertura: () => void;
   borrarSeleccion: () => Promise<void>;
   deshacer: () => Promise<void>;
@@ -502,6 +509,12 @@ export interface EstadoModelo {
   ) => Promise<boolean>;
   recargarTipos: () => Promise<void>;
   seleccionar: (globalid: string | null, agregar?: boolean) => Promise<void>;
+  /** O069: si el punto cae sobre una abertura en planta, la selecciona. */
+  seleccionarAberturaEnPunto: (
+    punto: Punto2,
+    agregar?: boolean,
+    tolerancia?: number,
+  ) => boolean;
   /** O038: selecciona varios elementos a la vez (clic en tipo/categoría/nivel). */
   seleccionarVarios: (globalids: string[]) => Promise<void>;
   /** O038: alterna el ojo o el candado de un nodo en la vista activa. */
