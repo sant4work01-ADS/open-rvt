@@ -7,30 +7,72 @@ from .comun import *  # noqa: F401,F403
 
 class ReferenciasMixin:
     def _aplicar_medidas_abertura(
-        self, entidad: Any, ancho: float, alto: float
+        self,
+        entidad: Any,
+        ancho: float | None = None,
+        alto: float | None = None,
+        antepecho: float | None = None,
+        distancia: float | None = None,
+        nivel: str | None = None,
     ) -> list[Any]:
-        """Cambia el ancho/alto de un vano y regenera vano, relleno y muro."""
+        """Cambia medidas, antepecho, distancia o nivel de un vano y lo regenera.
+
+        O068: `antepecho` llega relativo a `nivel` (o a la base del muro si no hay
+        nivel); se guarda también el valor relativo al muro que usa la geometría.
+        """
         datos = self._datos_abertura(entidad) or {}
         muro = self._entidad_por_gid(datos["muro"], ("IfcWall",))
         info_muro = self._datos_muro(muro)
-        if datos["distancia"] + ancho > info_muro["longitud"] + TOLERANCIA:
+        ancho = float(datos["ancho"] if ancho is None else ancho)
+        alto = float(datos["alto"] if alto is None else alto)
+        distancia = float(datos["distancia"] if distancia is None else distancia)
+        nivel_gid = str(datos.get("nivel") or "" if nivel is None else nivel)
+        antepecho_nivel = datos.get("antepecho_nivel")
+        if antepecho is not None:
+            antepecho_nivel = float(antepecho)
+        elif antepecho_nivel is None:
+            antepecho_nivel = float(datos["antepecho"])
+        if antepecho is not None or nivel is not None:
+            antepecho_muro = self._antepecho_en_muro(
+                muro, nivel_gid, float(antepecho_nivel)
+            )
+        else:
+            antepecho_muro = float(datos["antepecho"])
+        if distancia < -TOLERANCIA_CALCULO or (
+            distancia + ancho > info_muro["longitud"] + TOLERANCIA
+        ):
             raise self._error("La abertura no cabe en el muro.", -32023)
-        if datos["antepecho"] + alto > info_muro["altura"] + TOLERANCIA:
+        if antepecho_muro < -TOLERANCIA_CALCULO:
+            raise self._error(
+                "La abertura queda por debajo del muro con ese nivel.", -32023
+            )
+        if antepecho_muro + alto > info_muro["altura"] + TOLERANCIA:
             raise self._error("La abertura no cabe en altura.", -32023)
         for _otro, otros in self._aberturas_del_muro(muro, excluir=entidad):
-            if datos["distancia"] < otros["distancia"] + otros["ancho"] - TOLERANCIA and (
-                datos["distancia"] + ancho > otros["distancia"] + TOLERANCIA
+            if distancia < otros["distancia"] + otros["ancho"] - TOLERANCIA and (
+                distancia + ancho > otros["distancia"] + TOLERANCIA
             ):
                 raise self._error("La abertura se traslapa con otra.", -32024)
-        datos.update({"ancho": ancho, "alto": alto})
+        datos.update(
+            {
+                "ancho": ancho,
+                "alto": alto,
+                "distancia": distancia,
+                "antepecho": antepecho_muro,
+                "nivel": nivel_gid,
+                "antepecho_nivel": float(antepecho_nivel),
+            }
+        )
         self._guardar_pset(
             entidad,
             "OPENRVT_Abertura",
             {
-                "Distancia": datos["distancia"],
+                "Distancia": distancia,
                 "Ancho": ancho,
                 "Alto": alto,
-                "Antepecho": datos["antepecho"],
+                "Antepecho": antepecho_muro,
+                "AntepechoNivel": float(antepecho_nivel),
+                "Nivel": nivel_gid,
                 "Muro": datos["muro"],
                 "Volteado": datos.get("volteado", False),
             },
@@ -43,10 +85,15 @@ class ReferenciasMixin:
                 ancho,
                 alto,
                 info_muro["espesor"],
-                datos["antepecho"],
-                datos["distancia"],
+                antepecho_muro,
+                distancia,
                 self._desfase_de_muro(muro, info_muro["espesor"]),
             ),
+        )
+        geometry_api.edit_object_placement(
+            self.modelo,
+            product=entidad,
+            matrix=self._matriz_hueco(muro, distancia, antepecho_muro),
         )
         modificados = [entidad]
         relleno = self._relleno_de(entidad)
