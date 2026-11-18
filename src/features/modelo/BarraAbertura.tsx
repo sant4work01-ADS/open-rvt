@@ -1,11 +1,17 @@
 // O068: barra de opciones de Ventana y Puerta (medidas y nivel de referencia).
+import { validarAberturaEnPunto } from "./aberturasVista";
 import { useModelo } from "./estado";
 
 export function BarraAbertura() {
   const opciones = useModelo((s) => s.opcionesAbertura);
   const fijar = useModelo((s) => s.fijarOpcionesAbertura);
   const niveles = useModelo((s) => s.niveles);
+  const referencias = useModelo((s) => s.referencias);
+  const raton = useModelo((s) => s.ratonHerramienta);
   const voltear = useModelo((s) => s.voltearSiguiente);
+  const motivo = raton
+    ? validarAberturaEnPunto(referencias, raton, opciones, niveles).motivo
+    : null;
   return (
     <>
       <label className="flex items-center gap-1">
@@ -71,9 +77,15 @@ export function BarraAbertura() {
           ))}
         </select>
       </label>
-      <span className="text-muted-foreground" data-testid="abertura-volteo">
-        Clic sobre un muro · Espacio {voltear ? "restaura" : "voltea"} el lado
-      </span>
+      {motivo ? (
+        <span className="text-destructive" data-testid="abertura-motivo" role="status">
+          {motivo}
+        </span>
+      ) : (
+        <span className="text-muted-foreground" data-testid="abertura-volteo">
+          Clic sobre un muro · Espacio {voltear ? "restaura" : "voltea"} el lado
+        </span>
+      )}
     </>
   );
 }
