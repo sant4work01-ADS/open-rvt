@@ -7,6 +7,7 @@ import { crearEstadoInicial } from "./estado/estadoInicial";
 import type { EstadoModelo } from "./estado/tipos";
 import { crearSliceArbol } from "./estado/slices/arbol";
 import { crearSliceAvisos } from "./estado/slices/avisos";
+import { crearSliceClicAlzado } from "./estado/slices/clicAlzado";
 import { crearSliceClicPlanta } from "./estado/slices/clicPlanta";
 import { crearSliceCorte } from "./estado/slices/corte";
 import { crearSliceEdicion } from "./estado/slices/edicion";
@@ -47,6 +48,7 @@ export const useModelo = create<EstadoModelo>((set, get) => {
     ...crearSliceEstructuraHerramientas(set, get, ayudas),
     ...crearSliceTrazos(set, get, ayudas),
     ...crearSliceClicPlanta(set, get, ayudas),
+    ...crearSliceClicAlzado(set, get, ayudas),
     ...crearSliceEdicion(set, get, ayudas),
     ...crearSliceNotas(set, get),
     ...crearSliceNiveles(set, get, ayudas),

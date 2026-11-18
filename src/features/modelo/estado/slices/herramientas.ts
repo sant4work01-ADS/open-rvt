@@ -1,6 +1,7 @@
 // O065B: slice «herramientas» del store (movido tal cual desde estado.ts).
 import { bitacoraHerramienta } from "@/lib/bitacora";
 import { colocarAbertura, ejeConDistancia, puntoConLongitud, puntoDibujo } from "../../herramientas";
+import { desplazamientoEnVista, motivoNoCabe, nivelPorDefectoAbertura } from "../../aberturasVista";
 import { acumularNumero, distanciaDesdeExtremo, opcionesAberturaPorOmision } from "../../aberturasHerramienta";
 import type { Punto2 } from "../../herramientas";
 import { parsearAltura, parsearDimensiones, rectanguloDesdeDimensiones } from "../../empujar";
@@ -19,7 +20,7 @@ export function crearSliceHerramientas(
   get: GetEstado,
   h: Ayudas,
 ): Pick<EstadoModelo, "activarHerramienta" | "cancelarHerramienta" | "girar90" | "fijarEtiquetaEje" | "fijarRatonHerramienta" | "teclearLongitud" | "confirmarLongitud" | "cancelarLongitud" | "voltearAbertura" | "listoMover"> {
-  const { candidatosElevacionNivel, crearNivelDesdeHerramienta, crearMuroEntre, crearCerramientoEntre, crearEstructuralLineal, crearEjeEntre, moverSeleccion, crearAberturaEnMuro } = h;
+  const { candidatosElevacionNivel, crearNivelDesdeHerramienta, crearMuroEntre, crearCerramientoEntre, crearEstructuralLineal, crearEjeEntre, moverSeleccion, moverSeleccionDesplazamiento, crearAberturaEnMuro } = h;
   return {
     activarHerramienta: (herramienta) => {
       const vista = get().vistas.find((v) => v.id === get().vistaActivaId);
@@ -28,12 +29,32 @@ export function crearSliceHerramientas(
       // del muro; las medidas se recuerdan mientras la herramienta siga activa.
       const esAbertura =
         herramienta === "puerta" || herramienta === "ventana";
+      const nivelVista = vista?.nivel ?? "";
+      const nivelPrevio = get().opcionesAbertura.nivel;
+      const baseAbertura =
+        anterior === herramienta
+          ? get().opcionesAbertura
+          : herramienta === "puerta" || herramienta === "ventana"
+            ? opcionesAberturaPorOmision(herramienta, nivelVista)
+            : get().opcionesAbertura;
+      // O069: el nivel por omisión es el de la vista; si con él la abertura no
+      // cabe en el muro, pasa a «Base del muro». Una elección explícita del
+      // usuario (otro nivel) se conserva y se valida antes de cada clic.
+      const nivelSugerido = nivelPorDefectoAbertura(
+        vista,
+        get().niveles,
+        get().referencias,
+        baseAbertura,
+      );
       const opcionesAbertura = esAbertura
         ? {
-            ...(anterior === herramienta
-              ? get().opcionesAbertura
-              : opcionesAberturaPorOmision(herramienta, vista?.nivel ?? "")),
-            nivel: vista?.nivel ?? get().opcionesAbertura.nivel,
+            ...baseAbertura,
+            nivel:
+              anterior !== herramienta &&
+              nivelPrevio &&
+              nivelPrevio !== nivelVista
+                ? nivelPrevio
+                : nivelSugerido,
           }
         : get().opcionesAbertura;
       const faseMover =
@@ -52,6 +73,13 @@ export function crearSliceHerramientas(
           set({ aviso: "Empujar/Tirar: solo en 3D." });
           return;
         }
+      } else if (
+        (herramienta === "mover" || herramienta === "copiar") &&
+        vista &&
+        (vista.tipo === "iso" || vista.tipo === "perspectiva")
+      ) {
+        set({ aviso: "Mover trabaja en plantas, alzados y cortes" });
+        return;
       } else if (
         !vista ||
         (vista.tipo !== "planta" &&
@@ -192,6 +220,17 @@ export function crearSliceHerramientas(
         set({ ratonHerramienta: punto, engancheHerramienta: null });
         return;
       }
+      // O069: en alzados y cortes Mover/Copiar miden en el plano de la vista
+      // (horizontal de pantalla y cota); el enganche de planta no aplica.
+      const vista = get().vistas.find((v) => v.id === get().vistaActivaId);
+      if (
+        (herramienta === "mover" || herramienta === "copiar") &&
+        vista &&
+        (vista.tipo === "alzado" || vista.tipo === "corte")
+      ) {
+        set({ ratonHerramienta: punto, engancheHerramienta: null });
+        return;
+      }
       const enganche = puntoDibujo(
         punto,
         get().referencias,
@@ -314,6 +353,16 @@ export function crearSliceHerramientas(
             return;
           }
           distancia = medida;
+        }
+        const motivo = motivoNoCabe(
+          colocada.muro,
+          distancia,
+          get().opcionesAbertura,
+          get().niveles,
+        );
+        if (motivo) {
+          set({ aviso: motivo });
+          return;
         }
         await crearAberturaEnMuro(colocada.muro.globalid, distancia);
         return;
@@ -492,6 +541,12 @@ export function crearSliceHerramientas(
         return;
       }
       if (herramienta === "mover" || herramienta === "copiar") {
+        const vista = get().vistas.find((v) => v.id === get().vistaActivaId);
+        if (vista && (vista.tipo === "alzado" || vista.tipo === "corte")) {
+          const { dx, dy, dz } = desplazamientoEnVista(vista, puntos[0], destino);
+          await moverSeleccionDesplazamiento(dx, dy, dz);
+          return;
+        }
         await moverSeleccion(puntos[0], destino);
       }
     },

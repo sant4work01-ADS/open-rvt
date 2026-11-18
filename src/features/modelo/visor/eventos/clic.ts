@@ -21,6 +21,7 @@ export function crearAccionesClic(
     camara,
     clicEmpujar,
     clicEnPlanta,
+    clicEnAlzado,
     clicNivel,
     clicRecorte,
     confirmarEmpujar,
@@ -88,6 +89,13 @@ export function crearAccionesClic(
       (herramienta === "mover" || herramienta === "copiar") &&
       useModelo.getState().faseMover === "seleccionar"
     ) {
+      if (vista.tipo === "planta") {
+        const punto = puntoPlanta(falso);
+        if (punto && useModelo.getState().seleccionarAberturaEnPunto(punto, true)) {
+          setEjeSeleccionado(null);
+          return;
+        }
+      }
       const linea = lineaEjeEn(clientX, clientY);
       if (linea) {
         setEjeSeleccionado(linea);
@@ -292,6 +300,14 @@ export function crearAccionesClic(
       if (objetivo) void clicRecorte({ ...objetivo, punto });
       return;
     }
+    if (
+      (herramienta === "mover" || herramienta === "copiar") &&
+      (vista.tipo === "alzado" || vista.tipo === "corte")
+    ) {
+      const punto = puntoVistaDesdeEvento(clientX, clientY);
+      if (punto) void clicEnAlzado(punto, shift, agregar, metrosPorPixelActual());
+      return;
+    }
     if (herramienta && vista.tipo === "planta") {
       const punto = puntoPlanta(falso);
       if (punto) {
@@ -347,6 +363,14 @@ export function crearAccionesClic(
       setMenuEje(null);
       onSeleccionar(null, agregar);
       return;
+    }
+    // O069: en planta el símbolo de la abertura gana sobre el muro.
+    if (vista.tipo === "planta") {
+      const punto = puntoPlanta(falso);
+      if (punto && useModelo.getState().seleccionarAberturaEnPunto(punto, agregar)) {
+        setEjeSeleccionado(null);
+        return;
+      }
     }
     setEjeSeleccionado(null);
     const impacto = rayo.intersectObjects(meshes.current, false)[0];

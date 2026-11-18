@@ -131,6 +131,7 @@ export function useEstadoVisor({
   const ejeLibre = useModelo((s) => s.ejeLibre);
   const fijarRaton = useModelo((s) => s.fijarRatonHerramienta);
   const clicEnPlanta = useModelo((s) => s.clicEnPlanta);
+  const clicEnAlzado = useModelo((s) => s.clicEnAlzado);
   const clicNivel = useModelo((s) => s.clicNivel);
   const vistaPreviaRecorte = useModelo((s) => s.vistaPreviaRecorte);
   const clicRecorte = useModelo((s) => s.clicRecorte);
@@ -458,6 +459,7 @@ export function useEstadoVisor({
     ejeLibre,
     fijarRaton,
     clicEnPlanta,
+    clicEnAlzado,
     clicNivel,
     vistaPreviaRecorte,
     clicRecorte,

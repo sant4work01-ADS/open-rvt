@@ -1,7 +1,8 @@
 /* eslint-disable react-hooks/immutability -- los refs del visor son mutables por diseño. */
 import * as THREE from "three";
 import { clasificarEmpujar, crearRectangulo, puntosRectangulo } from "../empujar";
-import { colocarAbertura, describirEnganche, distanciaAEjeParalelo, ejeOrtogonal, restringirEje, type Punto2 } from "../herramientas";
+import { describirEnganche, distanciaAEjeParalelo, ejeOrtogonal, restringirEje, type Punto2 } from "../herramientas";
+import { validarAberturaEnPunto } from "../aberturasVista";
 import { diagonalCaja } from "../vistas";
 import { etiquetaCota } from "./anotaciones";
 import { type Vec3 } from "../inferencias3d";
@@ -17,6 +18,8 @@ export function useHerramientaVisor(c: ReturnType<typeof useAnotacionesVisor>) {
     ratonHerramienta,
     engancheHerramienta,
     referencias,
+    niveles,
+    opcionesAbertura,
     voltearSiguiente,
     ejeLibre,
     vistaPreviaRecorte,
@@ -227,11 +230,17 @@ export function useHerramientaVisor(c: ReturnType<typeof useAnotacionesVisor>) {
       }
     }
 
-    // Vista previa de puerta/ventana sobre el muro.
+    // Vista previa de puerta/ventana sobre el muro. O069: usa las medidas de la
+    // barra y se pinta en rojo cuando la abertura no cabe con el nivel elegido.
     if ((herramienta === "puerta" || herramienta === "ventana") && ratonHerramienta) {
-      const ancho = herramienta === "puerta" ? 0.9 : 1.2;
-      const colocada = colocarAbertura(referencias, ratonHerramienta, ancho);
+      const { colocada, motivo } = validarAberturaEnPunto(
+        referencias,
+        ratonHerramienta,
+        opcionesAbertura,
+        niveles,
+      );
       if (colocada) {
+        const ancho = opcionesAbertura.ancho;
         const { muro } = colocada;
         const largo = Math.hypot(muro.x2 - muro.x1, muro.y2 - muro.y1) || 1;
         const ux = (muro.x2 - muro.x1) / largo;
@@ -256,7 +265,10 @@ export function useHerramientaVisor(c: ReturnType<typeof useAnotacionesVisor>) {
         );
         const linea = new THREE.Line(
           geometria,
-          new THREE.LineBasicMaterial({ color: 0x2563eb, depthTest: false }),
+          new THREE.LineBasicMaterial({
+            color: motivo ? 0xdc2626 : 0x2563eb,
+            depthTest: false,
+          }),
         );
         linea.renderOrder = 14;
         grupoLocal.add(linea);
@@ -346,6 +358,8 @@ export function useHerramientaVisor(c: ReturnType<typeof useAnotacionesVisor>) {
     ratonHerramienta,
     engancheHerramienta,
     referencias,
+    niveles,
+    opcionesAbertura,
     voltearSiguiente,
     vista,
     cajaVista,

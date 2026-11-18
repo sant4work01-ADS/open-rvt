@@ -1,6 +1,7 @@
 // O065B: slice «clicPlanta» del store (movido tal cual desde estado.ts).
 import { bitacoraHerramienta } from "@/lib/bitacora";
-import { areaPoligono, colocarAbertura, ejeBajoPunto, esCierreLosa, muroBajoPunto, proyectarSobreSegmento, puntoDibujo } from "../../herramientas";
+import { areaPoligono, ejeBajoPunto, esCierreLosa, muroBajoPunto, proyectarSobreSegmento, puntoDibujo } from "../../herramientas";
+import { validarAberturaEnPunto } from "../../aberturasVista";
 import type { Punto2 } from "../../herramientas";
 import { cotasTemporalesNivel, engancheElevacionNivel, nombreNivelAutomatico } from "../../niveles";
 import { esHerramientaLineal, esHerramientaPuntual } from "../catalogo";
@@ -48,6 +49,8 @@ export function crearSliceClicPlanta(
       const herramienta = get().herramienta;
       const vista = get().vistas.find((v) => v.id === get().vistaActivaId);
       if (!herramienta) {
+        // O069: en planta la abertura gana sobre el muro que la aloja.
+        if (get().seleccionarAberturaEnPunto(punto, agregar)) return;
         await get().seleccionar(null);
         return;
       }
@@ -234,13 +237,16 @@ export function crearSliceClicPlanta(
         return;
       }
       if (herramienta === "puerta" || herramienta === "ventana") {
-        const colocada = colocarAbertura(
+        // O069: se valida en la capa compartida antes de llamar al núcleo; así el
+        // clic, la medida tecleada y la importación rechazan lo mismo.
+        const { colocada, motivo } = validarAberturaEnPunto(
           get().referencias,
           p,
-          get().opcionesAbertura.ancho,
+          get().opcionesAbertura,
+          get().niveles,
         );
-        if (!colocada) {
-          set({ aviso: "Coloque la abertura sobre un muro." });
+        if (!colocada || motivo) {
+          set({ aviso: motivo ?? "Coloque la abertura sobre un muro." });
           return;
         }
         await crearAberturaEnMuro(colocada.muro.globalid, colocada.distancia);
