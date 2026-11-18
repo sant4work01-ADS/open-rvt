@@ -10,6 +10,8 @@ import {
   type UsoLosa,
 } from "./estado";
 import { plantaTomaNivelPropio } from "./herramientas";
+import { BarraAbertura } from "./BarraAbertura";
+import { BarraMover } from "./BarraMover";
 import { textoDimensiones, type ClasificacionEmpujar } from "./empujar";
 import type { LineaUbicacion } from "./tipos";
 
@@ -26,7 +28,6 @@ export function BarraHerramienta() {
   const puntos = useModelo((s) => s.puntosHerramienta);
   const longitud = useModelo((s) => s.longitudTecleada);
   const seleccionados = useModelo((s) => s.seleccionados);
-  const voltear = useModelo((s) => s.voltearSiguiente);
   const cancelar = useModelo((s) => s.cancelarHerramienta);
   const doble = useModelo((s) => s.dobleClicEnPlanta);
   const losaDesdeMuros = useModelo((s) => s.losaDesdeMuros);
@@ -407,15 +408,9 @@ export function BarraHerramienta() {
         </>
       )}
       {(herramienta === "puerta" || herramienta === "ventana") && (
-        <span className="text-muted-foreground" data-testid="abertura-volteo">
-          Clic sobre un muro · Espacio {voltear ? "restaura" : "voltea"} el lado
-        </span>
+        <BarraAbertura />
       )}
-      {(herramienta === "mover" || herramienta === "copiar") && (
-        <span className="text-muted-foreground">
-          Selección: {seleccionados.length} · {puntos.length === 0 ? "punto base" : "punto destino"}
-        </span>
-      )}
+      {(herramienta === "mover" || herramienta === "copiar") && <BarraMover />}
       {herramienta === "espejo" && (
         <>
           <label className="flex items-center gap-1">

@@ -221,6 +221,15 @@ export function crearAccionesSoltar(
     void dobleClicEnPlanta();
   };
   const alMenuContextual = (evento: MouseEvent) => {
+    // O068: clic derecho cierra la fase de selección de Mover/Copiar.
+    if (
+      (herramienta === "mover" || herramienta === "copiar") &&
+      useModelo.getState().faseMover === "seleccionar"
+    ) {
+      evento.preventDefault();
+      useModelo.getState().listoMover();
+      return;
+    }
     // O020: en 3D el botón derecho orbita y no debe abrir el menú del navegador.
     if (vista.tipo === "iso" || vista.tipo === "perspectiva") {
       evento.preventDefault();

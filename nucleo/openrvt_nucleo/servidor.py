@@ -330,6 +330,7 @@ class Servidor:
                 params.get("alto"),
                 params.get("antepecho"),
                 bool(params.get("volteado", False)),
+                str(params.get("nivel") or "") or None,
             )
         if metodo == "elementos.mover":
             return self._exigir().elementos_mover(

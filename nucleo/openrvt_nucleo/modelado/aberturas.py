@@ -20,7 +20,58 @@ class AberturasMixin:
             "antepecho": float(datos.get("Antepecho") or 0.0),
             "muro": str(datos.get("Muro") or ""),
             "volteado": bool(datos.get("Volteado") or False),
+            # O068: nivel de referencia de la abertura y antepecho medido desde él.
+            "nivel": str(datos.get("Nivel") or ""),
+            "antepecho_nivel": (
+                float(datos["AntepechoNivel"])
+                if datos.get("AntepechoNivel") is not None
+                else None
+            ),
         }
+
+    @staticmethod
+    def _cambios_abertura(
+        cambios: dict[str, Any], datos: dict[str, Any]
+    ) -> dict[str, Any]:
+        """O068: traduce los cambios de la ficha a los campos del vano.
+
+        Solo se devuelven los campos presentes; `None` significa «conservar».
+        """
+        def de(*nombres: str) -> Any:
+            for nombre in nombres:
+                if nombre in cambios:
+                    return cambios[nombre]
+            return None
+
+        salida: dict[str, Any] = {}
+        ancho = de("ancho", "Ancho")
+        alto = de("alto", "Alto")
+        antepecho = de("antepecho", "Antepecho")
+        distancia = de("distancia", "Distancia")
+        nivel = de("nivel", "Nivel")
+        if ancho is not None:
+            salida["ancho"] = float(ancho)
+        if alto is not None:
+            salida["alto"] = float(alto)
+        if antepecho is not None:
+            salida["antepecho"] = float(antepecho)
+        if distancia is not None:
+            salida["distancia"] = float(distancia)
+        if nivel is not None:
+            salida["nivel"] = str(nivel)
+        return salida
+
+    def _antepecho_en_muro(self, muro: Any, nivel: str, antepecho: float) -> float:
+        """O068: pasa un antepecho relativo al nivel a la base del muro.
+
+        Sin nivel de referencia, el antepecho ya viene medido desde la base del
+        muro (compatibilidad con los IFC y llamadas anteriores a O068).
+        """
+        info = self._datos_muro(muro)
+        if not nivel:
+            return float(antepecho)
+        nivel_entidad = self._nivel_por_gid(nivel)
+        return float(nivel_entidad.Elevation or 0.0) + float(antepecho) - float(info["z"])
 
     def _aberturas_del_muro(self, muro: Any, excluir: Any = None) -> list[tuple[Any, dict[str, Any]]]:
         salida = []
@@ -166,6 +217,7 @@ class AberturasMixin:
         alto: float | None = None,
         antepecho: float | None = None,
         volteado: bool = False,
+        nivel: str | None = None,
     ) -> dict[str, Any]:
         self._exigir_modelo()
         if clase not in ("IfcDoor", "IfcWindow"):
@@ -187,6 +239,11 @@ class AberturasMixin:
         except (TypeError, ValueError) as exc:
             raise self._error("Las medidas de la abertura no son números.", -32602) from exc
         datos_muro = self._datos_muro(muro_entidad)
+        nivel_gid = str(nivel or "")
+        antepecho_nivel = float(antepecho)
+        # O068: el usuario mide el antepecho desde el nivel de referencia; la
+        # geometría del vano se sigue resolviendo contra la base del muro.
+        antepecho = self._antepecho_en_muro(muro_entidad, nivel_gid, antepecho_nivel)
         if distancia < -TOLERANCIA_CALCULO:
             raise self._error("La distancia no puede ser negativa.", -32602)
         if distancia + ancho > datos_muro["longitud"] + TOLERANCIA:
@@ -195,7 +252,13 @@ class AberturasMixin:
                 f"y el muro mide {datos_muro['longitud']:.2f} m.",
                 -32023,
             )
-        if antepecho < -TOLERANCIA_CALCULO or antepecho + alto > datos_muro["altura"] + TOLERANCIA:
+        if antepecho < -TOLERANCIA_CALCULO:
+            raise self._error(
+                f"La abertura queda por debajo del muro: el nivel de referencia "
+                f"está {(-antepecho):.2f} m sobre la base.",
+                -32023,
+            )
+        if antepecho + alto > datos_muro["altura"] + TOLERANCIA:
             raise self._error(
                 f"La abertura no cabe en altura: {antepecho + alto:.2f} m "
                 f"para un muro de {datos_muro['altura']:.2f} m.",
@@ -258,6 +321,8 @@ class AberturasMixin:
                 "Ancho": ancho,
                 "Alto": alto,
                 "Antepecho": antepecho,
+                "AntepechoNivel": antepecho_nivel,
+                "Nivel": nivel_gid,
                 "Muro": _gid(muro_entidad),
                 "Volteado": bool(volteado),
             },

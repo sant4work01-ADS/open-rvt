@@ -394,9 +394,10 @@ class EditarMixin:
                         modificados.append(zapata)
         elif entidad.is_a("IfcOpeningElement"):
             datos = self._datos_abertura(entidad) or {}
-            ancho = float(cambios.get("ancho", cambios.get("Ancho", datos.get("ancho", 0.9))))
-            alto = float(cambios.get("alto", cambios.get("Alto", datos.get("alto", 2.1))))
-            modificados.extend(self._aplicar_medidas_abertura(entidad, ancho, alto))
+            opciones = self._cambios_abertura(cambios, datos)
+            modificados.extend(
+                self._aplicar_medidas_abertura(entidad, **opciones)
+            )
         elif entidad.is_a("IfcDoor") or entidad.is_a("IfcWindow"):
             for clave in ("ancho", "Ancho"):
                 if clave in cambios:
@@ -407,12 +408,10 @@ class EditarMixin:
             for rel in getattr(entidad, "FillsVoids", ()) or ():
                 vano = getattr(rel, "RelatingOpeningElement", None)
                 if vano is not None:
+                    datos = self._datos_abertura(vano) or {}
+                    opciones = self._cambios_abertura(cambios, datos)
                     modificados.extend(
-                        self._aplicar_medidas_abertura(
-                            vano,
-                            float(entidad.OverallWidth),
-                            float(entidad.OverallHeight),
-                        )
+                        self._aplicar_medidas_abertura(vano, **opciones)
                     )
         else:
             raise self._error("Este elemento no tiene propiedades editables.", -32025)

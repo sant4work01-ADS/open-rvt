@@ -145,6 +145,7 @@ export function useEstadoVisor({
   const moverEmpujarCara = useModelo((s) => s.moverEmpujarCara);
   const confirmarEmpujarCara = useModelo((s) => s.confirmarEmpujarCara);
   const opcionesNivel = useModelo((s) => s.opcionesNivel);
+  const opcionesAbertura = useModelo((s) => s.opcionesAbertura);
   const cotasNivel = useModelo((s) => s.cotasNivel);
   const dobleClicEnPlanta = useModelo((s) => s.dobleClicEnPlanta);
   const notas = useModelo((s) => s.notas);
@@ -469,6 +470,7 @@ export function useEstadoVisor({
     moverEmpujarCara,
     confirmarEmpujarCara,
     opcionesNivel,
+    opcionesAbertura,
     cotasNivel,
     dobleClicEnPlanta,
     notas,

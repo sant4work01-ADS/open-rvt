@@ -2,6 +2,7 @@
 import { useModelo } from "./estado";
 import { CampoEditable } from "./campoEditable";
 import { PropiedadesLosa } from "./panelLosa";
+import { PropiedadesAbertura } from "./PropiedadesAbertura";
 import { formatear } from "./panelFormato";
 import { describirEnlace } from "./enlaces";
 import {
@@ -19,6 +20,7 @@ export function PropiedadesElemento() {
   const soltarEnlace = useModelo((s) => s.soltarEnlace);
   const voltearMuro = useModelo((s) => s.voltearMuro);
   const ejes = useModelo((s) => s.referencias.ejes);
+  const niveles = useModelo((s) => s.niveles);
   if (!propiedades) {
     return <div className="p-3 text-xs text-muted-foreground">Cargando propiedades…</div>;
   }
@@ -170,24 +172,17 @@ export function PropiedadesElemento() {
         )}
         {esLosa && <PropiedadesLosa propiedades={propiedades} editar={editar} />}
         {esAbertura && (
-          <>
-            <CampoEditable
-              etiqueta="Ancho (m)"
-              testid="elemento-ancho"
-              numerico
-              paso={0.05}
-              valor={ancho || (propiedades.clase === "IfcDoor" ? 0.9 : 1.2)}
-              onGuardar={(valor) => void editar(gid, { ancho: valor })}
-            />
-            <CampoEditable
-              etiqueta="Alto (m)"
-              testid="elemento-alto"
-              numerico
-              paso={0.05}
-              valor={alto || (propiedades.clase === "IfcDoor" ? 2.1 : 1.2)}
-              onGuardar={(valor) => void editar(gid, { alto: valor })}
-            />
-          </>
+          <PropiedadesAbertura
+            globalid={gid}
+            clase={propiedades.clase}
+            ancho={ancho}
+            alto={alto}
+            pset={propiedades.psets?.OPENRVT_Abertura as
+              | Record<string, unknown>
+              | undefined}
+            niveles={niveles}
+            editar={(globalid, cambios) => editar(globalid, cambios)}
+          />
         )}
         {esEstructural && esZapata && (
           <>

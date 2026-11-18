@@ -26,7 +26,9 @@ export function OverlaysEdicion({
     empujarClasificacion,
     empujarRect,
     guiaArrastre,
+    guiaAbertura,
     guiaCodo,
+    guiaMover,
     guiaEmpujar,
     herramienta,
     marcadorEmpujar,
@@ -421,6 +423,68 @@ export function OverlaysEdicion({
             </g>
           ))}
         </svg>
+      )}
+      {guiaMover && (
+        <>
+          <svg
+            data-testid="mover-guia"
+            className="pointer-events-none absolute inset-0 z-10 h-full w-full"
+          >
+            <line
+              x1={guiaMover.x1}
+              y1={guiaMover.y1}
+              x2={guiaMover.x2}
+              y2={guiaMover.y2}
+              stroke="#2563eb"
+              strokeWidth={1.5}
+              strokeDasharray="6 4"
+            />
+          </svg>
+          <div
+            data-testid="mover-distancia"
+            className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-1/2 rounded bg-background/95 px-1.5 py-0.5 text-[11px] font-medium shadow"
+            style={{
+              left: (guiaMover.x1 + guiaMover.x2) / 2,
+              top: (guiaMover.y1 + guiaMover.y2) / 2,
+            }}
+          >
+            {guiaMover.texto}
+          </div>
+        </>
+      )}
+      {guiaAbertura && (
+        <>
+          <svg
+            data-testid="abertura-previa"
+            className="pointer-events-none absolute inset-0 z-10 h-full w-full"
+          >
+            <polygon
+              points={guiaAbertura.puntos}
+              fill="rgba(37, 99, 235, 0.15)"
+              stroke="#2563eb"
+              strokeWidth={2}
+              strokeDasharray="5 3"
+            />
+          </svg>
+          {guiaAbertura.desde && (
+            <div
+              data-testid="abertura-cota-inicio"
+              className="pointer-events-none absolute z-10 -translate-x-1/2 text-[10px] font-medium text-blue-700"
+              style={{ left: guiaAbertura.desde.x, top: guiaAbertura.desde.y }}
+            >
+              {guiaAbertura.desde.texto}
+            </div>
+          )}
+          {guiaAbertura.hasta && (
+            <div
+              data-testid="abertura-cota-fin"
+              className="pointer-events-none absolute z-10 -translate-x-1/2 text-[10px] font-medium text-blue-700"
+              style={{ left: guiaAbertura.hasta.x, top: guiaAbertura.hasta.y }}
+            >
+              {guiaAbertura.hasta.texto}
+            </div>
+          )}
+        </>
       )}
       {guiaCodo && (
         <svg

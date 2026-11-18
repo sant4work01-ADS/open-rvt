@@ -177,6 +177,39 @@ export function crearSliceTrazos(
     cancelarTrazo: () => {
       const herramienta = get().herramienta;
       if (!herramienta) return false;
+      // O068: Esc a medias de Mover vuelve a la fase de selección; el segundo Esc
+      // sale de la herramienta.
+      if (herramienta === "mover" || herramienta === "copiar") {
+        const fase = get().faseMover;
+        // Esc a medias vuelve al punto base; en el punto base sale de la
+        // herramienta; en la selección limpia la selección.
+        if (fase === "destino" || get().puntosHerramienta.length > 0) {
+          set({
+            faseMover: "base",
+            puntosHerramienta: [],
+            longitudTecleada: "",
+            aviso: "Mover: indique el punto base.",
+          });
+          return true;
+        }
+        if (fase === "base") return false;
+        if (
+          get().seleccionados.length === 0 &&
+          !get().ejeSeleccionado
+        ) {
+          return false;
+        }
+        set({
+          seleccion: null,
+          seleccionados: [],
+          propiedades: null,
+          ejeSeleccionado: null,
+          puntosHerramienta: [],
+          longitudTecleada: "",
+          aviso: "Mover: seleccione al menos un elemento.",
+        });
+        return true;
+      }
       // O050: Esc en la losa quita sólo el último vértice; sin vértices sale de
       // la herramienta (nunca borra el contorno completo de golpe).
       if (herramienta === "losa") {

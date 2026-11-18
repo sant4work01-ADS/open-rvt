@@ -82,6 +82,37 @@ export function crearAccionesClic(
       onSeleccionar(gidTocado, agregar);
       return;
     }
+    // O068: Mover/Copiar sin selección previa empieza eligiendo elementos. Cada
+    // clic alterna el elemento en la selección; los ejes se eligen como tales.
+    if (
+      (herramienta === "mover" || herramienta === "copiar") &&
+      useModelo.getState().faseMover === "seleccionar"
+    ) {
+      const linea = lineaEjeEn(clientX, clientY);
+      if (linea) {
+        setEjeSeleccionado(linea);
+        setCandados({ inicio: false, fin: false });
+        onSeleccionar(null);
+        return;
+      }
+      const rect = nodo.getBoundingClientRect();
+      const raton = new THREE.Vector2(
+        ((clientX - rect.left) / rect.width) * 2 - 1,
+        -((clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      const rayo = new THREE.Raycaster();
+      rayo.setFromCamera(raton, camera);
+      const impacto = rayo.intersectObjects(meshes.current, false)[0];
+      const gidTocado = impacto?.object.userData.globalid ?? null;
+      if (!gidTocado) {
+        if (!agregar) onSeleccionar(null);
+        return;
+      }
+      if (elementosBloqueados.includes(gidTocado)) return;
+      setEjeSeleccionado(null);
+      onSeleccionar(gidTocado, true);
+      return;
+    }
     if (herramienta === "alinear") {
       // O026: primer clic en la referencia; el segundo en la cara a mover.
       const rectAlinear = nodo.getBoundingClientRect();

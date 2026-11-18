@@ -8,7 +8,7 @@ export function crearSliceOpciones(
   set: SetEstado,
   get: GetEstado,
   h: Ayudas,
-): Pick<EstadoModelo, "fijarCotasMoverSiguientes" | "fijarOpcionesMuro" | "fijarOpcionesLosa" | "fijarOpcionesEspejo" | "fijarOpcionesMatriz" | "fijarOpcionesCerramiento" | "voltearMuro" | "fijarTipoHerramienta" | "fijarOpcionesNivel"> {
+): Pick<EstadoModelo, "fijarCotasMoverSiguientes" | "fijarOpcionesMuro" | "fijarOpcionesLosa" | "fijarOpcionesEspejo" | "fijarOpcionesMatriz" | "fijarOpcionesCerramiento" | "voltearMuro" | "fijarTipoHerramienta" | "fijarOpcionesNivel" | "fijarOpcionesAbertura"> {
   const { ejecutar } = h;
   return {
     fijarCotasMoverSiguientes: (valor) => set({ cotasMoverSiguientes: valor }),
@@ -17,6 +17,9 @@ export function crearSliceOpciones(
       set({ opcionesMuro: { ...get().opcionesMuro, ...cambios } }),
     fijarOpcionesLosa: (cambios) =>
       set({ opcionesLosa: { ...get().opcionesLosa, ...cambios } }),
+    // O068: las medidas y el nivel de Ventana/Puerta se recuerdan entre colocaciones.
+    fijarOpcionesAbertura: (cambios) =>
+      set({ opcionesAbertura: { ...get().opcionesAbertura, ...cambios } }),
     fijarOpcionesEspejo: (cambios) =>
       set({ opcionesEspejo: { ...get().opcionesEspejo, ...cambios } }),
     fijarOpcionesMatriz: (cambios) =>

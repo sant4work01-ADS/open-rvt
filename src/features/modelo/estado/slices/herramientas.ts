@@ -1,6 +1,7 @@
 // O065B: slice «herramientas» del store (movido tal cual desde estado.ts).
 import { bitacoraHerramienta } from "@/lib/bitacora";
-import { ejeConDistancia, puntoConLongitud, puntoDibujo } from "../../herramientas";
+import { colocarAbertura, ejeConDistancia, puntoConLongitud, puntoDibujo } from "../../herramientas";
+import { acumularNumero, distanciaDesdeExtremo, opcionesAberturaPorOmision } from "../../aberturasHerramienta";
 import type { Punto2 } from "../../herramientas";
 import { parsearAltura, parsearDimensiones, rectanguloDesdeDimensiones } from "../../empujar";
 import { cotasTemporalesNivel, elevacionDesdeCota, engancheElevacionNivel, nombreNivelAutomatico } from "../../niveles";
@@ -9,15 +10,38 @@ import { esHerramientaLineal } from "../catalogo";
 import type { EstadoModelo, GetEstado, SetEstado } from "../tipos";
 import type { Ayudas } from "../ayudas";
 
+function nombreDeHerramienta(herramienta: Herramienta): string {
+  return herramienta.charAt(0).toUpperCase() + herramienta.slice(1);
+}
+
 export function crearSliceHerramientas(
   set: SetEstado,
   get: GetEstado,
   h: Ayudas,
-): Pick<EstadoModelo, "activarHerramienta" | "cancelarHerramienta" | "girar90" | "fijarEtiquetaEje" | "fijarRatonHerramienta" | "teclearLongitud" | "confirmarLongitud" | "cancelarLongitud" | "voltearAbertura"> {
-  const { candidatosElevacionNivel, crearNivelDesdeHerramienta, crearMuroEntre, crearCerramientoEntre, crearEstructuralLineal, crearEjeEntre, moverSeleccion } = h;
+): Pick<EstadoModelo, "activarHerramienta" | "cancelarHerramienta" | "girar90" | "fijarEtiquetaEje" | "fijarRatonHerramienta" | "teclearLongitud" | "confirmarLongitud" | "cancelarLongitud" | "voltearAbertura" | "listoMover"> {
+  const { candidatosElevacionNivel, crearNivelDesdeHerramienta, crearMuroEntre, crearCerramientoEntre, crearEstructuralLineal, crearEjeEntre, moverSeleccion, crearAberturaEnMuro } = h;
   return {
     activarHerramienta: (herramienta) => {
       const vista = get().vistas.find((v) => v.id === get().vistaActivaId);
+      const anterior = get().herramienta;
+      // O068: el nivel de referencia por omisión es el de la vista, no la base
+      // del muro; las medidas se recuerdan mientras la herramienta siga activa.
+      const esAbertura =
+        herramienta === "puerta" || herramienta === "ventana";
+      const opcionesAbertura = esAbertura
+        ? {
+            ...(anterior === herramienta
+              ? get().opcionesAbertura
+              : opcionesAberturaPorOmision(herramienta, vista?.nivel ?? "")),
+            nivel: vista?.nivel ?? get().opcionesAbertura.nivel,
+          }
+        : get().opcionesAbertura;
+      const faseMover =
+        herramienta === "mover" || herramienta === "copiar"
+          ? get().seleccionados.length > 0 || get().ejeSeleccionado
+            ? "base"
+            : "seleccionar"
+          : null;
       if (herramienta === "nivel") {
         if (!vista || (vista.tipo !== "alzado" && vista.tipo !== "corte")) {
           set({ aviso: "Abre un alzado o corte" });
@@ -77,6 +101,8 @@ export function crearSliceHerramientas(
         herramienta === "matriz";
       set({
         herramienta,
+        faseMover,
+        opcionesAbertura,
         referenciaAlinear: null,
         alineando: null,
         referenciaRecorte: null,
@@ -97,7 +123,12 @@ export function crearSliceHerramientas(
         ...(conservarSeleccion
           ? {}
           : { seleccion: null, seleccionados: [], propiedades: null }),
-        aviso: nombres[herramienta],
+        aviso:
+          faseMover === "seleccionar"
+            ? `${nombreDeHerramienta(herramienta)}: clic en los elementos y Enter, clic derecho o «Listo».`
+            : esAbertura
+              ? `${nombreDeHerramienta(herramienta)}: clic sobre un muro. Espacio voltea el lado.`
+              : nombres[herramienta],
       });
       bitacoraHerramienta(herramienta, "activar");
     },
@@ -106,6 +137,7 @@ export function crearSliceHerramientas(
       const herramienta = get().herramienta;
       set({
         herramienta: null,
+        faseMover: null,
         nivelSeleccionado: null,
         referenciaAlinear: null,
         alineando: null,
@@ -173,7 +205,14 @@ export function crearSliceHerramientas(
 
     teclearLongitud: (tecla) => {
       const herramienta = get().herramienta;
-      if (!herramienta || herramienta === "puerta" || herramienta === "ventana") return;
+      if (!herramienta) return;
+      // O068: con el cursor sobre un muro, la medida tecleada es el borde de la
+      // abertura respecto del extremo más cercano (como la longitud de Muro).
+      if (herramienta === "puerta" || herramienta === "ventana") {
+        if (!get().ratonHerramienta) return;
+        set({ longitudTecleada: acumularNumero(get().longitudTecleada, tecla) });
+        return;
+      }
       // O029: con un nivel seleccionado en el alzado, Copiar/Mover acepta el
       // desfase vertical tecleado sin pedir puntos en planta.
       if (
@@ -247,6 +286,38 @@ export function crearSliceHerramientas(
     confirmarLongitud: async (shift = false) => {
       const herramienta = get().herramienta;
       const puntos = get().puntosHerramienta;
+      if (herramienta === "puerta" || herramienta === "ventana") {
+        const raton = get().ratonHerramienta;
+        if (!raton) {
+          set({ aviso: "Coloque la abertura sobre un muro." });
+          return;
+        }
+        const ancho = get().opcionesAbertura.ancho;
+        const colocada = colocarAbertura(get().referencias, raton, ancho);
+        if (!colocada) {
+          set({ aviso: "Coloque la abertura sobre un muro." });
+          return;
+        }
+        const texto = get().longitudTecleada.replace(",", ".");
+        let distancia = colocada.distancia;
+        if (texto !== "") {
+          const medida = distanciaDesdeExtremo(
+            colocada,
+            Number(texto),
+            ancho,
+          );
+          if (medida === null) {
+            set({
+              aviso:
+                "Esa distancia deja la abertura fuera del muro; escriba otra.",
+            });
+            return;
+          }
+          distancia = medida;
+        }
+        await crearAberturaEnMuro(colocada.muro.globalid, distancia);
+        return;
+      }
       // O046: Enter con «ancho,largo» cierra el contorno; con la altura tecleada
       // confirma el sólido. Sin texto, Enter usa la altura que sigue al ratón.
       if (herramienta === "empujar") {
@@ -423,6 +494,25 @@ export function crearSliceHerramientas(
       if (herramienta === "mover" || herramienta === "copiar") {
         await moverSeleccion(puntos[0], destino);
       }
+    },
+
+    // O068: Enter, clic derecho o «Listo» cierran la fase de selección de Mover.
+    listoMover: () => {
+      const herramienta = get().herramienta;
+      if (herramienta !== "mover" && herramienta !== "copiar") return;
+      if (
+        get().seleccionados.length === 0 &&
+        !get().ejeSeleccionado
+      ) {
+        set({ aviso: "Mover: seleccione al menos un elemento." });
+        return;
+      }
+      set({
+        faseMover: "base",
+        puntosHerramienta: [],
+        longitudTecleada: "",
+        aviso: "Mover: indique el punto base.",
+      });
     },
 
     cancelarLongitud: () => set({ longitudTecleada: "" }),
