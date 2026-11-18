@@ -2,7 +2,6 @@
 // con borde de acento y reparte el ancho con el separador (20 % mínimo).
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ipc } from "@/lib/ipc";
 import { AreaDividida } from "./visor/AreaDividida";
 import { useModelo } from "./estado";
 import { CATEGORIAS_TODAS, type Caja, type Vista } from "./tipos";

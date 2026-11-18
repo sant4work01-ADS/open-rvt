@@ -134,7 +134,7 @@ describe("O070: proporción del separador", () => {
     expect(useModelo.getState().proporcionDivision).toBe(0.8);
     await Promise.resolve();
     const guardado = nucleo.mock.calls.filter(([metodo]) => metodo === "paneles.guardar");
-    const ultimo = guardado.at(-1)?.[1] as { datos: { proporcion: number } };
+    const ultimo = guardado[guardado.length - 1]?.[1] as { datos: { proporcion: number } };
     expect(ultimo.datos.proporcion).toBe(0.8);
   });
 });
